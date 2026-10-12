@@ -24,8 +24,9 @@ internal static class LdapObjectTypeMatcher
         IEnumerable<ConnectedSystemObjectType> objectTypes)
     {
         var selected = objectTypes.Where(objectType => objectType.Selected).ToList();
+        var listed = objectClasses as IReadOnlyList<string> ?? objectClasses.ToList();
 
-        var candidates = objectClasses
+        var candidates = listed
             .Select(objectClass => selected.FirstOrDefault(objectType =>
                 objectType.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase)))
             .OfType<ConnectedSystemObjectType>()
@@ -33,11 +34,56 @@ internal static class LdapObjectTypeMatcher
 
         // A structural class is what an entry is; an auxiliary class is only something it also carries. Settling
         // that by class kind rather than by position is what makes an entry resolve to the same Object Type
-        // whatever order the directory lists its classes in, which RFC 4512 leaves entirely open.
-        //
-        // Among structural classes the first still wins: Active Directory returns them most specific first, and
-        // that ordering is the only statement of specificity JIM holds.
-        return candidates.FirstOrDefault(candidate => !candidate.IsAuxiliary()) ?? candidates.FirstOrDefault();
+        // whatever order the directory lists its classes in, which RFC 4512 leaves entirely open. With only
+        // auxiliary classes to choose from, nothing in the schema ranks them, so the first listed stands.
+        var structural = candidates.Where(candidate => !candidate.IsAuxiliary()).ToList();
+        if (structural.Count == 0)
+            return candidates.FirstOrDefault();
+
+        // Every candidate another one takes the entry from is out (TakesEntriesFrom, which the schema selection
+        // preview predicts by as well, #2049): each auxiliary class, since a structural one is present, and each
+        // structural class a more specific selected one inherits from. An entry's structural classes form one
+        // inheritance chain, so what is left is the most specific of them: user rather than the person it inherits
+        // from, computer rather than user (#2043). The schema says which that is wherever discovery recorded
+        // inheritance, whatever the order.
+        var mostSpecific = candidates
+            .Where(candidate => !candidates.Any(other => !ReferenceEquals(other, candidate) && other.TakesEntriesFrom(candidate)))
+            .ToList();
+
+        // Where it did not (Object Types discovered before JIM recorded inheritance), the order decides, read from
+        // the entry itself.
+        var remaining = mostSpecific.Count > 0 ? mostSpecific : structural;
+        return TopIsListedFirst(listed, remaining) ? remaining[^1] : remaining[0];
+    }
+
+    /// <summary>
+    /// Whether the entry lists its classes from the general end, which <c>top</c> marks: every structural chain ends
+    /// at it. Windows Server and Samba AD always list top first and the most specific class last; an RFC 4512
+    /// directory returns them in the order they were written, which is commonly the reverse, top last.
+    /// </summary>
+    /// <remarks>
+    /// False when top is listed last, which makes the first candidate the most specific, and also when top is absent
+    /// or between the candidates, where the order says nothing and the first candidate stands. Only Object Types
+    /// whose schema recorded no inheritance reach this; discovery records it for every class it finds.
+    /// </remarks>
+    private static bool TopIsListedFirst(IReadOnlyList<string> objectClasses, List<ConnectedSystemObjectType> candidates)
+    {
+        var topIndex = IndexOf(objectClasses, objectClass => objectClass.Equals("top", StringComparison.OrdinalIgnoreCase));
+        var firstCandidateIndex = IndexOf(objectClasses, objectClass =>
+            candidates.Any(candidate => candidate.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase)));
+
+        return topIndex >= 0 && topIndex < firstCandidateIndex;
+    }
+
+    private static int IndexOf(IReadOnlyList<string> values, Func<string, bool> predicate)
+    {
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (predicate(values[i]))
+                return i;
+        }
+
+        return -1;
     }
 
     /// <summary>

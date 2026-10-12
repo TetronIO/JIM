@@ -681,6 +681,7 @@ function Show-ScenarioMenu {
                 22 { "OpenLDAP password policy (discovered as published; generated Initial Passwords satisfy an enforcing ppolicy overlay)" }
                 24 { "Active Directory password policy (domain policy and Fine-Grained Password Policy discovered; generated Initial Passwords satisfy it; lab only)" }
                 25 { "Active Directory delta import integrity (Recycle Bin on and off; a checkpoint revert fails a Delta Import fast; lab only)" }
+                27 { "Your First Synchronisation (the tested tutorial, run from its docs page)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1406,7 +1407,8 @@ $templateIrrelevantScenarioNumbers = @(
     21,  # Run Profile Safeguards - limits are asserted relative to the population; a larger template only lengthens the runs
     22,  # OpenLDAP Password Policy - asserts against one Micro export
     24,  # Active Directory Password Policy - asserts against one Micro export (Active Directory lab only)
-    25   # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
+    25,  # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
+    27   # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
 )
 
 function Test-TemplateRelevant {
@@ -3770,8 +3772,9 @@ if ($SetupOnly) {
             $setupParams.MaxExportParallelism = $MaxExportParallelism
         }
         # The switches the scenario itself passes to its setup (Scenario 001: generated and derived
-        # identifiers), so the environment left for exploration is the one the scenario runs against.
-        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber
+        # identifiers, plus an Initial Password on the Active Directory lab), so the environment left for
+        # exploration is the one the scenario runs against.
+        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber -DirectoryType $script:DirectoryConfig.DirectoryType
         foreach ($key in $scenarioSetupParams.Keys) {
             $setupParams[$key] = $scenarioSetupParams[$key]
         }

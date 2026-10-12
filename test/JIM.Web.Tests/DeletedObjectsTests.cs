@@ -8,6 +8,7 @@ using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Staging;
@@ -143,6 +144,34 @@ public class DeletedObjectsTests : JimComponentTestContext
         tabs[1].Click();
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("User in the Metaverse")));
+    }
+
+    [Test]
+    public void DeletedObjects_DeletedByAPerson_LinksTheirMetaverseObject()
+    {
+        // Deleted By used to link a person to /users/{id}, a route that does not exist (#2066).
+        var personId = Guid.NewGuid();
+        SetupMvoChanges(
+        [
+            new MetaverseObjectChange
+            {
+                Id = Guid.NewGuid(),
+                ChangeTime = DateTime.UtcNow,
+                DeletedObjectDisplayName = "Jane Smith",
+                DeletedObjectType = new MetaverseObjectType { Name = "User" },
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = personId,
+                InitiatedByName = "Jay Example"
+            }
+        ]);
+
+        var cut = Render<DeletedObjects>();
+
+        // Deleted By is on the Deleted Metaverse Objects tab.
+        cut.FindAll(".mud-tab")[1].Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Find("[data-testid=jim-initiator-user] a").GetAttribute("href"), Is.EqualTo($"/t/users/v/{personId}")));
     }
 
     private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory

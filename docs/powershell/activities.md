@@ -73,7 +73,7 @@ An Activity that a [Schedule](../configuration/schedules.md) produced also carri
 
 All four are empty for work nobody scheduled.
 
-An Activity for a [Connector Space clear](../configuration/connected-systems.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
+An Activity for a [Connector Space clear](../configuration/connector-space.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
 
 | Property | Type | Description |
 |---|---|---|
@@ -195,7 +195,7 @@ Get-JIMActivityStats -Id <guid>
 
 Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, and `TotalObjectTypes`, plus per-operation breakdowns (`TotalCsoAdds`, `TotalJoins`, `TotalAttributeFlows`, `TotalExported`, and similar).
 
-An import that read entries and discarded them because a [Container Scope exclusion](../connectors/jim-ldap-connector.md#excluding-a-container) carved them out also carries `TotalEntriesDiscardedByExclusion` and `EntriesDiscardedByExcludedContainer`, the latter keyed by the excluded Container's ID. Both are absent, or zero and empty, for every run that discarded nothing. Resolve a Container ID to a name with [`Get-JIMConnectedSystemPartition`](connected-systems.md#get-jimconnectedsystempartition); the counts are keyed by ID because the Container can be renamed after the run.
+An import that read entries and discarded them because a [Container Scope exclusion](../connectors/jim-ldap-connector-topology.md#excluding-a-container) carved them out also carries `TotalEntriesDiscardedByExclusion` and `EntriesDiscardedByExcludedContainer`, the latter keyed by the excluded Container's ID. Both are absent, or zero and empty, for every run that discarded nothing. Resolve a Container ID to a name with [`Get-JIMConnectedSystemPartition`](connected-systems.md#get-jimconnectedsystempartition); the counts are keyed by ID because the Container can be renamed after the run.
 
 ### Examples
 
@@ -274,13 +274,16 @@ Returns a `PSCustomObject` describing the item:
 | `ErrorMessage` | What went wrong, in words; empty when the object did not fail. |
 | `ErrorStackTrace` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
-| `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling) mode. The values themselves are on the Connected System Object. |
+| `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/unresolved-references.md) mode. The values themselves are on the Connected System Object. |
+| `AttributeValueErrors` | Every value the import found on the object but could not read as its attribute's type, each with `AttributeName`, `AttributeType`, `Value` (as received) and `Reason`; empty when there were none. JIM left each attribute as it already held it. |
+| `AttributeValueErrorTotal` | How many values could not be read; more than `AttributeValueErrors` holds where the item keeps only the first thousand. Empty when there were none. |
+| `SourceLocation` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
-| `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
+| `MatchCandidates` | For an `AmbiguousMatch` or `AmbiguousProvisioningMatch`, the objects the match found; empty otherwise. See below. |
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 
-An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name:
+An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object, and its `AmbiguousProvisioningMatch` item lists them in `MatchCandidates`:
 
 | Property | Description |
 |----------|-------------|
@@ -338,7 +341,18 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 
 This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
 
-```powershell title="List the identities an ambiguous match found"
+```powershell title="List every value an import could not read, and where"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+    Where-Object { $_.ErrorType -eq 'ImportAttributeValueError' } |
+    Get-JIMActivityExecutionItem |
+    ForEach-Object {
+        $item = $_
+        $item.AttributeValueErrors | Select-Object @{ Name = 'Object'; Expression = { $item.DisplayNameSnapshot } },
+            @{ Name = 'Source'; Expression = { $item.SourceLocation } }, AttributeName, Value, Reason
+    }
+```
+
+```powershell title="List the objects an ambiguous match found"
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
     Select-Object DisplayNameSnapshot, MatchedValue, Exists,
         @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }

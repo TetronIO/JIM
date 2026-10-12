@@ -62,12 +62,28 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// </summary>
     public int? UnresolvedReferenceCount { get; set; }
 
+    /// <summary>
+    /// Every value the import found on the object but could not read as its attribute's type (#2066), in the order the
+    /// Connector reported them; JIM left each attribute as it already held it. Empty when there were none.
+    /// </summary>
+    public List<AttributeValueErrorDto> AttributeValueErrors { get; set; } = [];
+
+    /// <summary>
+    /// How many values could not be read, which can exceed <see cref="AttributeValueErrors"/> where the item keeps only
+    /// the first thousand; null when there were none.
+    /// </summary>
+    public int? AttributeValueErrorTotal { get; set; }
+
+    /// <summary>Where in the Connected System the object was read from, such as a file and row, where the Connector says.</summary>
+    public string? SourceLocation { get; set; }
+
     /// <summary>Outcome types with counts, for example <c>Projected:1,AttributeFlow:12</c>.</summary>
     public string? OutcomeSummary { get; set; }
 
     /// <summary>
-    /// For an <c>AmbiguousMatch</c>, the objects the match found (#2052): up to 10, ordered by display name, each with
-    /// whether it still exists and what is joined to it now. Empty for any other item.
+    /// For an <c>AmbiguousMatch</c>, the Metaverse Objects the match found, and for an <c>AmbiguousProvisioningMatch</c>,
+    /// the Connected System Objects (#2052): up to 10, ordered by display name, each with whether it still exists and,
+    /// for a Metaverse Object, what is joined to it now. Empty for any other item.
     /// </summary>
     public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
 
@@ -76,6 +92,8 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// </summary>
     public static ActivityRunProfileExecutionItemDetailDto FromEntity(ActivityRunProfileExecutionItem entity)
     {
+        var attributeValueErrors = ImportedAttributeValueErrors.FromJson(entity.AttributeValueErrorsJson);
+
         return new ActivityRunProfileExecutionItemDetailDto
         {
             Id = entity.Id,
@@ -93,6 +111,9 @@ public class ActivityRunProfileExecutionItemDetailDto
             ErrorStackTrace = entity.ErrorStackTrace,
             AttributeFlowCount = entity.AttributeFlowCount,
             UnresolvedReferenceCount = entity.UnresolvedReferenceCount,
+            AttributeValueErrors = attributeValueErrors?.Values.Select(AttributeValueErrorDto.FromModel).ToList() ?? [],
+            AttributeValueErrorTotal = attributeValueErrors?.Total,
+            SourceLocation = entity.SourceLocation,
             OutcomeSummary = entity.OutcomeSummary
         };
     }

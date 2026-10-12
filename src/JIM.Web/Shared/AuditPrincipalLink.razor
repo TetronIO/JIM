@@ -5,40 +5,29 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
-{
-    @if (_mvoHref != null)
-    {
-        <MudLink Href="@_mvoHref" Typo="Typo.inherit">@(PrincipalName ?? PrincipalId.ToString())</MudLink>
-    }
-    else
-    {
-        <span>@(PrincipalName ?? PrincipalId.ToString())</span>
-    }
-}
-else if (PrincipalType == ActivityInitiatorType.ApiKey && PrincipalId.HasValue)
-{
-    <MudLink Href="@($"/admin/apikeys/{PrincipalId}")" Typo="Typo.inherit">@(PrincipalName ?? "API Key")</MudLink>
-}
-else if (PrincipalType == ActivityInitiatorType.System)
-{
-    <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-1" Style="vertical-align: middle;" />
-    <span>System</span>
-}
-else if (PrincipalType == ActivityInitiatorType.Anonymous)
-{
-    @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
-    <span>Anonymous</span>
-}
-else
-{
-    <span class="mud-text-secondary">--</span>
-}
+@* Who did something, resolved so a person links to their Metaverse Object under its own Object Type, and drawn by
+   <ActivityInitiator /> so it reads the same as an Activity's initiator everywhere else (#2066). *@
+<ActivityInitiator InitiatedByType="@PrincipalType"
+                   InitiatedById="@PrincipalId"
+                   InitiatedByName="@PrincipalName"
+                   UserHref="@_mvoHref"
+                   ScheduleName="@ScheduleName"
+                   ScheduleExecutionId="@ScheduleExecutionId"
+                   Dense="@Dense" />
 
 @code {
     [Parameter] public ActivityInitiatorType PrincipalType { get; set; }
     [Parameter] public Guid? PrincipalId { get; set; }
     [Parameter] public string? PrincipalName { get; set; }
+
+    /// <summary>The Schedule that produced the work, as named when it was recorded; null when none did.</summary>
+    [Parameter] public string? ScheduleName { get; set; }
+
+    /// <summary>The Schedule Execution that produced the work, which the Schedule's name links to.</summary>
+    [Parameter] public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>Smaller icons for a dense row.</summary>
+    [Parameter] public bool Dense { get; set; }
 
     private string? _mvoHref;
 

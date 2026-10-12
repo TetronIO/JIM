@@ -131,6 +131,20 @@ public class ActivityRunProfileExecutionItem
     public int? UnresolvedReferenceCount { get; set; }
 
     /// <summary>
+    /// Every value the import found on the object but could not read as its attribute's type (#2066), as an
+    /// <see cref="ImportedAttributeValueErrors"/> JSON document: each value as received, its attribute and type, and why
+    /// it was refused. Null when there were none.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? AttributeValueErrorsJson { get; set; }
+
+    /// <summary>
+    /// Where in the Connected System the Connector read the object from, in words an administrator can follow to find
+    /// it, such as a file and row (#2066). Recorded where the Connector gives one; null otherwise.
+    /// </summary>
+    public string? SourceLocation { get; set; }
+
+    /// <summary>
     /// Denormalised summary of sync outcome types for fast list-view rendering.
     /// Comma-separated outcome types with counts, e.g., "Projected:1,AttributeFlow:12,PendingExportCreated:2".
     /// Populated during outcome tree construction — no separate maintenance path.

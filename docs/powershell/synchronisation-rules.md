@@ -365,7 +365,7 @@ Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
 
 ### Derived Attribute Flow warnings
 
-Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
+Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/derived-attributes.md) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
 
 ```text
 WARNING: This change left 2 Attribute Flow(s) deriving Metaverse attributes with a missing input. The change went ahead; each flow's Missing Input Behaviour now decides what it contributes.
@@ -408,7 +408,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int>
 
 Returns one or more mapping objects representing Attribute Flow Rules. Each mapping includes the source attribute(s) or expression, the target attribute, and the flow direction.
 
-`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes)), and is `$null` on every other mapping:
+`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/derived-attributes.md)), and is `$null` on every other mapping:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -416,15 +416,15 @@ Returns one or more mapping objects representing Attribute Flow Rules. Each mapp
 | `Derived.StepCount` | `int` | How many steps the Metaverse Object Type's evaluation has |
 | `Derived.MetaverseInputs` | `string[]` | The Metaverse attributes the Expression reads, as written |
 
-`Generation` is present on a [generated mapping](../configuration/synchronisation-rules.md#generated-values), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/synchronisation-rules.md#checking-availability-in-target-systems):
+`Generation` is present on a [generated mapping](../configuration/generated-values.md), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems):
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)) |
+| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value)) |
 | `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
 | `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
 | `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
-| `Generation.BuiltValues` | `object[]` | Every [value built from](../configuration/synchronisation-rules.md#values-built-from-a-generated-value) this generated value, on any Synchronisation Rule, each shaped as `BuiltFromGeneratedValue` below. Import generated mappings only |
+| `Generation.BuiltValues` | `object[]` | Every [value built from](../configuration/generated-values.md#values-built-from-a-generated-value) this generated value, on any Synchronisation Rule, each shaped as `BuiltFromGeneratedValue` below. Import generated mappings only |
 
 Each entry in `Generation.Participants` has:
 
@@ -441,7 +441,7 @@ Each entry in `Generation.Participants` has:
 | `Reason` | `string` | Why the check is less than `JimRecordsAndProbe`: `ConnectorCannotProbe`, `AttributeNotProbed`, `NotTextValue`, `ExportedThroughExpression`, `CombinedWithOtherSources` or `Excluded`; `None` when it is not |
 | `ReportsCollisions` | `bool` | Whether the Connected System's Connector reports a value as already in use, so Collision Remediation can act on a rejection there; elsewhere a collision is an ordinary export error |
 
-`KeepUnique` (`bool`) is on every mapping: the **Keep unique** switch of an Expression mapping whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value), `$true` unless switched off. `BuiltFromGeneratedValue` is present on such a mapping, and is `$null` on every other mapping:
+`KeepUnique` (`bool`) is on every mapping: the **Keep unique** switch of an Expression mapping whose value is [built from a generated value](../configuration/generated-values.md#values-built-from-a-generated-value), `$true` unless switched off. `BuiltFromGeneratedValue` is present on such a mapping, and is `$null` on every other mapping:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -458,7 +458,7 @@ Each entry in `Generation.Participants` has:
 | `BuiltFromGeneratedValue.KeepUnique` | `bool` | The value's **Keep unique** switch |
 | `BuiltFromGeneratedValue.CollisionRemediation` | `bool` | The generated Attribute Flow's own Collision Remediation switch; while it is `$false`, nothing built from the generated value is corrected, whatever `KeepUnique` says |
 | `BuiltFromGeneratedValue.ExportedTo` | `object[]` | Every Connected System attribute the value is written to unchanged, each with `ConnectedSystemId`, `ConnectedSystemName`, `AttributeId` and `AttributeName` |
-| `BuiltFromGeneratedValue.CheckedBeforeIssuing` | `bool` | Whether the value is [checked before the generated value is issued](../configuration/synchronisation-rules.md#values-built-from-a-generated-value) |
+| `BuiltFromGeneratedValue.CheckedBeforeIssuing` | `bool` | Whether the value is [checked before the generated value is issued](../configuration/generated-values.md#values-built-from-a-generated-value) |
 | `BuiltFromGeneratedValue.ProbedIn` | `string[]` | The Connected Systems it is probed in then, besides JIM's records |
 | `BuiltFromGeneratedValue.MoveToSyncRuleName` | `string` | For a value built on another Synchronisation Rule from Metaverse attributes alone, the rule to move its flow to so it is checked; `$null` otherwise |
 
@@ -554,7 +554,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets); optional (ImportGenerated, ExportGenerated sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. For a generated mapping this is the base value the uniqueness token is appended to; a Sequence or Random mapping can omit it entirely. |
 | `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 | `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
-| `KeepUnique` | `bool` | No (ImportExpression, ExportExpression sets) | `$true` | For an Expression whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value) (an Email built from a generated Account Name): whether the value is checked before the generated value is issued, and a target's refusal of it corrected by correcting the generated value. Supply `$false` to have it neither checked nor corrected: a refusal is then an ordinary export error. Has no effect on an Expression that reads no generated value. |
+| `KeepUnique` | `bool` | No (ImportExpression, ExportExpression sets) | `$true` | For an Expression whose value is [built from a generated value](../configuration/generated-values.md#values-built-from-a-generated-value) (an Email built from a generated Account Name): whether the value is checked before the generated value is issued, and a target's refusal of it corrected by correcting the generated value. Supply `$false` to have it neither checked nor corrected: a refusal is then an ordinary export error. Has no effect on an Expression that reads no generated value. |
 | `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this a "Generated Value" mapping: the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
 | `TokenKind` | `string` | No | `OnlyIfTaken` | Which uniqueness token to append: `OnlyIfTaken` (try the base value; suffix only if taken; needs `-Expression`), `Sequence` (always append the next counter number, never reused) or `Random` (always append a cryptographic random token). |
 | `SuffixStyle` | `string` | No | `Number` | `OnlyIfTaken` only: `Number` or `Letter` for the collision suffix. |
@@ -568,8 +568,8 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
 | `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit. |
 | `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
-| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
-| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
+| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
+| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
 
 ### Output
 
@@ -681,7 +681,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
 | `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
 | `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
-| `KeepUnique` | `bool` | No | | The **Keep unique** switch of an Expression whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value): `$true` checks the built value before the generated value is issued and corrects the generated value when a target refuses it; `$false` does neither, so a refusal is an ordinary export error. Changing it releases values of the generated value [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Expression mappings only; refused for a direct or generated mapping |
+| `KeepUnique` | `bool` | No | | The **Keep unique** switch of an Expression whose value is [built from a generated value](../configuration/generated-values.md#values-built-from-a-generated-value): `$true` checks the built value before the generated value is issued and corrects the generated value when a target refuses it; `$false` does neither, so a refusal is an ordinary export error. Changing it releases values of the generated value [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Expression mappings only; refused for a direct or generated mapping |
 | `TokenKind` | `string` | No | | Changes which uniqueness token a generated mapping appends: `OnlyIfTaken`, `Sequence` or `Random`. Generated mappings only |
 | `SuffixStyle` | `string` | No | | `Number` or `Letter`. `OnlyIfTaken` mappings only |
 | `SuffixStart` | `int` | No | | The first suffix value tried once the base value is taken. `OnlyIfTaken` mappings only |
@@ -695,7 +695,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit |
 | `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
 | `CollisionRemediation` | `bool` | No | | Whether JIM corrects a value a target rejects as already in use. Changing it releases this Attribute Flow's values [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Generated mappings only |
-| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
+| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
@@ -807,7 +807,7 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 "Start again" (Unique Value Generation). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
 "back" is the common case, but a lower configured start is honoured too), and forgets the attribute's
-[retired values](../configuration/synchronisation-rules.md#retired-values) so they can be issued again.
+[retired values](../configuration/generated-values.md#retired-values) so they can be issued again.
 For every other token kind (`OnlyIfTaken`, `Random`) this is a documented no-op that still succeeds.
 
 **It changes nothing else.** No existing generated value on any object is changed, nothing is exported,
@@ -853,7 +853,7 @@ Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
 
 ## Generated value decisions
 
-When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
+When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
 
 ### Get-JIMGeneratedValueDecision
 
@@ -1292,8 +1292,8 @@ With `-PassThru`, returns the created scoping criterion object. Without it, retu
 
 - Export rules only support metaverse attributes. Import rules only support Connected System attributes.
 - Exactly one comparison value parameter should be provided; the correct parameter depends on the attribute's data type.
-- For a Date/Time attribute, set `-ValueMode Relative` with `-RelativeCount`/`-RelativeUnit`/`-RelativeDirection` to compare against a date resolved relative to now (re-evaluated each run); this is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters).
-- On a multi-valued attribute the criterion tests every value: a positive operator is met when any value matches, a `Not...` operator when none does. See [multi-valued attributes](../configuration/synchronisation-rules.md#multi-valued-attributes-in-scope).
+- For a Date/Time attribute, set `-ValueMode Relative` with `-RelativeCount`/`-RelativeUnit`/`-RelativeDirection` to compare against a date resolved relative to now (re-evaluated each run); this is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/scoping-criteria.md#relative-dates-in-scope-filters).
+- On a multi-valued attribute the criterion tests every value: a positive operator is met when any value matches, a `Not...` operator when none does. See [multi-valued attributes](../configuration/scoping-criteria.md#multi-valued-attributes-in-scope).
 
 ### Examples
 

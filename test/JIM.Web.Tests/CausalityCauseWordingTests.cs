@@ -301,6 +301,59 @@ public class CausalityCauseWordingTests
     }
 
     /// <summary>
+    /// An export carrying changes from two synchronisations of one object (#2100): a cohort of two runs, not of two
+    /// objects. The sentence names the object once and says how many runs staged the change.
+    /// </summary>
+    private static CausalChainCohort QueueingCohortStagedTwice(CausalReasonCode reasonCode)
+    {
+        var mvoId = Guid.NewGuid();
+        return new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ReasonCode = reasonCode,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "Glitterband EMEA",
+            ObjectTypeName = "User",
+            ObjectTypePluralName = "Users",
+            Members =
+            [
+                new CausalChainMember { DisplayName = "Sam Scott (S8-198)", MetaverseObjectId = mvoId, RunProfileExecutionItemId = Guid.NewGuid() },
+                new CausalChainMember { DisplayName = "Sam Scott (S8-198)", MetaverseObjectId = mvoId, RunProfileExecutionItemId = Guid.NewGuid() }
+            ]
+        };
+    }
+
+    [Test]
+    public void Sentence_QueueingCohortStagedByTwoRuns_NamesTheObjectOnceAndCountsTheRuns()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohortStagedTwice(CausalReasonCode.ExportUpdateStaged), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Sam Scott (S8-198)'s Metaverse Object changed in 2 synchronisations, so this run applied the changes to the Connected System Object"));
+    }
+
+    [Test]
+    public void Sentence_QueueingCohortStagedByTwoRunsBeforeReasonsWereRecorded_CountsTheRuns()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohortStagedTwice(CausalReasonCode.NotSet), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "2 synchronisations of Sam Scott (S8-198) staged this change, and this run exported it"));
+    }
+
+    [Test]
+    public void MembersLabel_QueueingCohortStagedByTwoRuns_CountsTheRunsNotTheObjects()
+    {
+        var cohort = QueueingCohortStagedTwice(CausalReasonCode.ExportUpdateStaged);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CausalityCauseWording.MembersLabel(cohort), Is.EqualTo("Show the 2 synchronisations"));
+            Assert.That(CausalityCauseWording.HideMembersLabel(cohort), Is.EqualTo("Hide the 2 synchronisations"));
+        }
+    }
+
+    /// <summary>
     /// The sentence an export item leads with. It has to answer "why did this run change anything", which is
     /// the question an export item could not previously answer at all.
     /// </summary>

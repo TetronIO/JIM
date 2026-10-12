@@ -36,6 +36,19 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
         return new JimDbContext(options);
     }
 
+    /// <summary>
+    /// A context that tracks what it queries, as the worker's does for the whole of a run.
+    /// </summary>
+    private JimDbContext NewTrackingContext()
+    {
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        return new JimDbContext(options);
+    }
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -114,6 +127,7 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
         var lastExportedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-2));
         var sourceMvoId = s.SourceMvoId;
         var provisioningSyncRuleId = s.ProvisioningSyncRuleId;
+        var earlierStagerId = Guid.NewGuid();
         var queueingItemId = Guid.NewGuid();
         var dateTimeValue = TruncateToMicroseconds(DateTime.UtcNow.AddDays(-3));
         var byteValue = new byte[] { 4, 5, 6 };
@@ -135,9 +149,10 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             SourceMetaverseObjectId = sourceMvoId,
             HasUnresolvedReferences = true,
             CreatedAt = createdAt,
-            ProvisioningSyncRuleId = provisioningSyncRuleId,
-            QueuedByRunProfileExecutionItemId = queueingItemId
+            ProvisioningSyncRuleId = provisioningSyncRuleId
         };
+        pendingExport.RecordStager(earlierStagerId);
+        pendingExport.RecordStager(queueingItemId);
         pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -198,6 +213,7 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedExport.CreatedAt, Is.EqualTo(createdAt));
             Assert.That(storedExport.ProvisioningSyncRuleId, Is.EqualTo(provisioningSyncRuleId));
             Assert.That(storedExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(queueingItemId));
+            Assert.That(storedExport.StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { earlierStagerId, queueingItemId }));
         }
 
         var storedChanges = await readContext.PendingExportAttributeValueChanges
@@ -253,6 +269,64 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
     /// attribute value change rows in one transaction, so a foreign key violation on the child write
     /// must roll back the parent row already written earlier in the same transaction.
     /// </summary>
+    /// <summary>
+    /// A later run's change merges with an export still queued by deleting it and staging a replacement (#2100). While
+    /// nothing has been sent, the replacement keeps the original's id, so every earlier run's outcome still names a
+    /// live export. That means the delete and the insert of the same key happen on one long-lived worker context,
+    /// which must neither refuse the insert nor resurrect the original's changes.
+    /// </summary>
+    [Test]
+    public async Task DeletePendingExportAsync_ThenAReplacementWithTheSameId_StoresTheReplacementAsync()
+    {
+        var s = await SeedGraphAsync();
+        var firstRunId = Guid.NewGuid();
+        var secondRunId = Guid.NewGuid();
+        var exportId = Guid.NewGuid();
+
+        var original = new PendingExport
+        {
+            Id = exportId, ConnectedSystemId = s.SystemId, ConnectedSystemObjectId = s.ConnectedSystemObjectId,
+            ChangeType = PendingExportChangeType.Update, Status = PendingExportStatus.Pending, CreatedAt = DateTime.UtcNow
+        };
+        original.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ChangeType = PendingExportAttributeChangeType.Update
+        });
+        original.RecordStager(firstRunId);
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([original]);
+
+        await using (var worker = NewTrackingContext())
+        {
+            var repository = new PostgresDataRepository(worker);
+            var queued = await repository.Sync.GetPendingExportLightweightByConnectedSystemObjectIdAsync(s.ConnectedSystemObjectId)
+                ?? throw new InvalidOperationException("arrange: the original is queued");
+            await repository.Sync.DeletePendingExportAsync(queued);
+
+            var replacement = new PendingExport
+            {
+                Id = queued.Id, ConnectedSystemId = s.SystemId, ConnectedSystemObjectId = s.ConnectedSystemObjectId,
+                ChangeType = PendingExportChangeType.Update, Status = PendingExportStatus.Pending, CreatedAt = DateTime.UtcNow
+            };
+            replacement.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Smith", ChangeType = PendingExportAttributeChangeType.Update
+            });
+            replacement.InheritStagersFrom(queued);
+            replacement.RecordStager(secondRunId);
+            await repository.Sync.CreatePendingExportsAsync([replacement]);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExports.AsNoTracking().Include(pe => pe.AttributeValueChanges).SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Id, Is.EqualTo(exportId));
+            Assert.That(stored.AttributeValueChanges.Select(c => c.StringValue), Is.EqualTo(new[] { "Jo Smith" }));
+            Assert.That(stored.StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { firstRunId, secondRunId }));
+        }
+    }
+
     [Test]
     public async Task CreatePendingExportsAsync_AttributeValueChangeReferencesNonexistentAttribute_LeavesNoRowsBehindAsync()
     {

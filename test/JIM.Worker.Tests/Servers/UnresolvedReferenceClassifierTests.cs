@@ -157,6 +157,31 @@ public class UnresolvedReferenceClassifierTests
     }
 
     [Test]
+    public void Diagnose_ValueOutsideEveryPartitionUnderWarn_SuggestsIgnoreRatherThanTheSettingAlreadyChosen()
+    {
+        _connectedSystem.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Warn;
+
+        var diagnosis = Classifier().Diagnose("member", "CN=Remote User,OU=Users,DC=partner,DC=org");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(diagnosis.Remedy, Does.Not.Contain("to Warn"), "Warn is already chosen; telling the reader to choose it reads as a fault.");
+            Assert.That(diagnosis.Remedy, Does.Contain("Ignore"));
+        }
+    }
+
+    [Test]
+    public void Diagnose_ValueOutsideEveryPartitionUnderIgnore_SuggestsNoChangeToTheSetting()
+    {
+        _connectedSystem.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Ignore;
+
+        var diagnosis = Classifier().Diagnose("member", "CN=Remote User,OU=Users,DC=partner,DC=org");
+
+        Assert.That(diagnosis.Remedy, Does.Not.Contain("set Unresolved Reference Handling"),
+            "Ignore already stops runs reporting them; there is no further setting to change.");
+    }
+
+    [Test]
     public void Diagnose_AmbiguousValue_TakesPrecedenceAndNamesTheCandidateObjectTypes()
     {
         var diagnosis = Classifier().Diagnose("member", "42", ambiguousWith: ["user", "contact"]);

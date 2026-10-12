@@ -100,5 +100,11 @@ public class ConnectedSystemObjectHeader
     public ConnectedSystemObjectConnectionState State { get; set; }
 
     #endregion
+
+    /// <summary>
+    /// How many of the object's reference values are unresolved now (#959): imported as a reference and not resolved
+    /// to a Connected System Object. Zero when there are none.
+    /// </summary>
+    public int UnresolvedReferenceCount { get; set; }
     #endregion
 }

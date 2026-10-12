@@ -59,7 +59,16 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
 
         // An Object Matching Rule could not be worked out for an object (#2052).
-        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28
+        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28,
+
+        // An imported External ID already belongs to a Connected System Object of another Object Type (#2049).
+        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 29,
+
+        // Active Directory refused to enable an account that has no password (#2039).
+        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 30,
+
+        // Before provisioning, matching found several existing accounts (#2052).
+        [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31
     };
 
     [Test]

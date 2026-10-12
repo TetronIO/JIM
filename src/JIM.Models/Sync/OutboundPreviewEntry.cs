@@ -68,6 +68,12 @@ public class OutboundPreviewEntry
     public Guid? WouldJoinCsoId { get; init; }
 
     /// <summary>
+    /// Why a provisioning verdict would neither join nor provision (#2052): export matching found more than one
+    /// existing object, or a rule could not be worked out. Nothing would be staged; null otherwise.
+    /// </summary>
+    public ProvisioningMatchError? ProvisioningMatchError { get; init; }
+
+    /// <summary>
     /// The attribute changes a real evaluation would stage, unpersisted.
     /// </summary>
     public List<PendingExportAttributeValueChange> AttributeChanges { get; init; } = [];
@@ -87,6 +93,20 @@ public class OutboundPreviewEntry
     /// would report "would now write X" with nothing to compare X against.
     /// </remarks>
     public List<PendingExportAttributeValueChange> NoNetChangeSkippedChanges { get; init; } = [];
+
+    /// <summary>
+    /// The evaluated changes that merely restate a change the target object's queued Pending Export holds until an
+    /// Initial Password is delivered (#2039), unpersisted. A real evaluation drops these rather than stages them, so they
+    /// are in neither <see cref="AttributeChanges"/> nor <see cref="NoNetChangeSkippedChanges"/>, and play no part in what
+    /// the preview proposes or withdraws.
+    /// </summary>
+    /// <remarks>
+    /// The value a restatement asserts is still what this configuration wants the target to hold, even though the
+    /// target holds only an interim value until the password arrives. A configuration change preview needs it for the
+    /// same reason it needs <see cref="NoNetChangeSkippedChanges"/>: without it, a proposal changing the held attribute's
+    /// value would have nothing on the stored configuration's side to compare against.
+    /// </remarks>
+    public List<PendingExportAttributeValueChange> HeldChangeRestatements { get; init; } = [];
 
     /// <summary>
     /// The changes queued on the target object's Pending Export that a real evaluation would withdraw, because the

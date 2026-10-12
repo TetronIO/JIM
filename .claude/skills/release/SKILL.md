@@ -82,7 +82,7 @@ Cross-reference the identified changes against the documentation and update any 
 - **`docs/administration/`** — Configuration env vars, SSO setup, troubleshooting
 - **`docs/connectors/`** — LDAP, File, etc.
 - **`docs/powershell/`** — Cmdlet reference pages
-- **`docs/developer/`** — Architecture, building, testing, contributing
+- **`engineering/developer/`** — Architecture, building, testing, contributing
 - **`docs/api/`** — REST endpoint docs
 - **`docs/reference/`** — Roadmap, glossary
 - **Any other `.md` files in `docs/`** that are affected by the changes
@@ -124,7 +124,7 @@ The C4 views (System Context, Containers, and the component views) are **hand-au
 
 #### Mermaid Process Diagrams
 
-Review each Mermaid diagram in `docs/developer/diagrams/` against the current codebase behaviour:
+Review each Mermaid diagram in `engineering/developer/diagrams/` against the current codebase behaviour:
 
 - `FULL_IMPORT_FLOW.md` — Object import, duplicate detection, deletion detection
 - `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree
@@ -227,7 +227,22 @@ Now that the changelog is complete and validated, the user can make an informed 
 3. If a version was provided via `$ARGUMENTS`, propose it. Otherwise, suggest a version based on the scope of changes (patch for fixes only, minor for new features, major for breaking changes)
 4. **Ask the user to confirm or choose the version** before proceeding
 
-Do NOT proceed to Step 1 until the user has confirmed the version number.
+Do NOT proceed until the user has confirmed the version number.
+
+## Re-validate the Priority Pages
+
+Each priority docs page records the release it was last checked against, as `validated: vX.Y.Z` in its front matter (PRI-1 in `engineering/DOCUMENTATION_STANDARD.md`). They are the pages that decide whether JIM is adopted, installed and trusted, so none ships unchecked. List the ones due for this release:
+
+```
+pwsh ./scripts/Get-DocsDueForValidation.ps1 -Version <version>
+```
+
+For each page listed, do one of two things, and record which in the release PR's **Priority pages** section (Step 7):
+
+- **Re-validate it.** Read it against the product as this release ships it: every setting and its default, cmdlet and parameter, REST route, portal label, and claim about behaviour (ACC-4), paying most attention to what this release's changelog entries changed. Correct what is wrong in place (MNT-1, MNT-2), then set `validated: v<version>`. Commit these on `release/v<version>` with the other documentation changes.
+- **Defer it,** with a one-line reason, when re-validating it would hold the release up for no good reason (the page is untouched by anything in this release, say, and was validated one release ago). It keeps its older `validated:`, so the next release lists it again. Never defer a page that this release's changes touch.
+
+`Test-DocsConformance.ps1` refuses a `validated:` later than `VERSION`, so the pages can only name the new version once Step 1 has run; that happens in the same pull request, so CI sees them agree.
 
 ## Step 1: Update VERSION File
 
@@ -279,7 +294,8 @@ Show the user:
 1. The version being released
 2. A diff summary of all changes (`git diff --stat`)
 3. The full changelog section for the new version
-4. Ask for confirmation before committing
+4. The priority pages re-validated, and each one deferred with its reason
+5. Ask for confirmation before committing
 
 ## Step 6: Commit on a Release Branch
 
@@ -310,6 +326,11 @@ Updates:
 - `VERSION`: <previous> → <version>
 - `CHANGELOG.md`: new `[<version>] - <date>` section + comparison links
 - `src/JIM.PowerShell/JIM.psd1`: `ModuleVersion` → `<version>`
+
+## Priority pages
+
+- Re-validated against v<version>: <pages>
+- Deferred: <page>: <reason> (one line each; "none" if none)
 
 ## Test plan
 

@@ -1,3 +1,10 @@
+---
+title: Attribute Priority
+description: How JIM decides which Connected System's value wins when several feed one Metaverse Attribute, and how to set the order.
+type: concept
+audience: administrator
+---
+
 # Attribute Priority
 
 When more than one Connected System feeds the same Metaverse attribute, JIM has to decide which value wins. **Attribute Priority** makes that decision deterministic: each contributing Synchronisation Rule has a priority for the attribute, and the highest-priority contributor that has an opinion wins. The result no longer depends on the order your synchronisations happen to run in.
@@ -32,13 +39,13 @@ An object inside the scoped rule's criteria is contributed by that rule and wins
 Two consequences are worth stating plainly:
 
 - **Scoping Criteria are evaluated against Connected System Object attributes, so an object can move in and out of a rule's scope as its own attributes change.** Renaming a group so it matches an exceptions pattern transfers authority for it on the next synchronisation. That is the intended behaviour, and it is quiet: nothing announces it beyond the resolution decision itself.
-- **The losing system is not corrected automatically.** A change made directly in a system that loses resolution never reaches the Metaverse, but it stays in that system until an export Synchronisation Rule with **Enforce State** targets it, at which point export re-evaluation stages a corrective Pending Export and puts the winning value back. Without such a rule the losing system simply remains divergent; the Metaverse and every other system are protected either way.
+- **The losing system is not corrected automatically.** A change made directly in a system that loses resolution never reaches the Metaverse, but it stays in that system until an export Synchronisation Rule with **Enforce State** targets it, at which point export re-evaluation stages a corrective Pending Export and puts the winning value back. Without such a rule the losing system stays divergent; the Metaverse and every other system are protected either way.
 
 ## ⛔ "Null is a value"
 
 By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. Sometimes that is wrong: when the authoritative source clears a value, you want the clear to propagate, not to be back-filled from a stale secondary copy.
 
-Enabling **"Null is a value"** on a contributor changes that. If that contributor is connected and in scope but supplies no value, JIM stops there and asserts "no value" for the attribute: it is cleared everywhere downstream, and lower-priority sources are not consulted. This is distinct from the contributor simply not applying to the object (a rule with no opinion is always skipped, regardless of this setting).
+Enabling **"Null is a value"** on a contributor changes that. If that contributor is connected and in scope but supplies no value, JIM stops there and asserts "no value" for the attribute: it is cleared everywhere downstream, and lower-priority sources are not consulted. This is distinct from the contributor not applying to the object at all (a rule with no opinion is always skipped, regardless of this setting).
 
 Typical uses:
 
@@ -55,7 +62,7 @@ When you add a new import mapping to an attribute that already has contributors,
 
 ## 🔁 When the winning source disconnects or withdraws
 
-If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one.
+If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one.
 
 Where no other contributor supplies the attribute, one principle decides what happens to it: **JIM recalls a value only while a source remains to stand behind the object; otherwise it preserves the object's last known state or completes the deletion.** Three situations follow from it, checked in this order:
 
@@ -67,9 +74,9 @@ A deliberate removal is different from a disappearance: deleting an Attribute Fl
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 
-Re-election covers every attribute type, including references: a manager or group membership recalled from a departing source is handed to the surviving contributor within the same synchronisation run, not left blank until that source next synchronises. It also holds when the surviving source carries the identical value; the value simply remains, now attributed to the surviving contributor.
+Re-election covers every attribute type, including references: a manager or group membership recalled from a departing source is handed to the surviving contributor within the same synchronisation run, not left blank until that source next synchronises. It also holds when the surviving source carries the identical value; the value stays, now attributed to the surviving contributor.
 
-The same hand-over applies when the winning source stays connected but simply stops supplying a value, without "Null is a value" set: for example, an expression that starts evaluating to null, or a source attribute that becomes unpopulated. The next-priority contributor takes over in the same synchronisation run, exactly as it would if the winning source had disconnected. Only when no other source contributes is the attribute cleared.
+The same hand-over applies when the winning source stays connected but stops supplying a value, without "Null is a value" set: for example, an expression that starts evaluating to null, or a source attribute that becomes unpopulated. The next-priority contributor takes over in the same synchronisation run, exactly as it would if the winning source had disconnected. Only when no other source contributes is the attribute cleared.
 
 Removing the flow itself behaves the same way, with one deliberate distinction between deleting and disabling. When the Attribute Flow mapping that contributed a value is **deleted**, nothing asserts that value any more, and JIM asks what should happen to the values it contributed. The default, **recall**, is what happened before the choice existed: the next Full Synchronisation of the contributing Connected System recalls the values the mapping contributed and re-elects the next contributor in the same run, or clears the attribute (reported as a **Value cleared** outcome) when no contributor survives. Choosing to **keep** the values instead leaves them in place permanently: their provenance is severed, so nothing records that the mapping contributed them and no future synchronisation will ever recall them; a new inbound Attribute Flow, or manual removal, is then the only way to change them. The confirmation states the consequence before you commit to it.
 
@@ -89,13 +96,13 @@ Synchronisation Activities record notable resolution outcomes against each objec
 
 Together these distinguish the blanks and survivals an administrator may need to investigate: a blank asserted on purpose, a blank that happened because every source fell away, and a value that outlived its source deliberately.
 
-The same provenance is visible per value. In the portal, a Metaverse Object's [Inspect view](../configuration/metaverse.md#where-a-value-comes-from) names each value's source, and its attribute inspector lists every contributing source in priority order with the value each would supply, so you can see why one value won. Retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
+The same provenance is visible per value. In the portal, a Metaverse Object's [Inspect view](../configuration/metaverse-objects.md#where-a-value-comes-from) names each value's source, and its attribute inspector lists every contributing source in priority order with the value each would supply, so you can see why one value won. Retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that has no contributor; consumers should treat such a row as "no value present", never as a value.
 
 Provenance follows the winner even when the value does not change. Two contributors often hold the same value for an attribute, so a change of winner need not be a change of value: a higher-priority source joining, a priority reorder, or the deletion of the Synchronisation Rule that contributed the value all hand the value to a different rule while the value itself stays exactly as it was. The next synchronisation of the winning contributor records the hand-over, so the contributing rule shown against a value is the rule that would win resolution for it today, not the one that happened to write it first.
 
 ## 🛠️ Configuring priority
 
-Attribute priority is configured per (Metaverse Object Type, Metaverse attribute).
+Attribute Priority is configured per (Metaverse Object Type, Metaverse attribute).
 
 ### 🖥️ In the admin portal
 

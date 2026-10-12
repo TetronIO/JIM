@@ -409,6 +409,12 @@ public interface IActivityRepository
     public Task<bool> HasAnyRunProfileExecutionAsync();
 
     /// <summary>
+    /// Whether any of an Activity's Run Profile Execution Items left reference values unresolved (#959), under any
+    /// Unresolved Reference Handling: what decides whether the Activity's page offers View Affected Objects.
+    /// </summary>
+    public Task<bool> HasUnresolvedReferencesAsync(Guid activityId);
+
+    /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
     /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SynchronisationRule"/>) and
     /// database id, or 0 if none exist yet. Used to assign the next per-object version when capturing a configuration
@@ -529,7 +535,7 @@ public interface IActivityRepository
     /// Used to determine activity completion status (success/warning/failure) without loading
     /// RPEIs into memory.
     /// </summary>
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Atomically increments <c>AttemptCount</c> and advances <c>LastSeen</c> on the aggregated failed-authentication

@@ -3305,6 +3305,13 @@ public abstract class SyncTaskProcessorBase
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
+            // Create error RPEIs where export matching could not settle on an existing Connected System Object before
+            // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
+            // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
+            // the object's other export Rules are unaffected.
+            foreach (var matchError in result.ProvisioningMatchErrors)
+                _activity.RunProfileExecutionItems.Add(BuildProvisioningMatchErrorRpei(mvo, matchError));
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
@@ -3597,7 +3604,7 @@ public abstract class SyncTaskProcessorBase
             item.Id = Guid.NewGuid();
         foreach (var delete in deletes)
         {
-            delete.QueuedByRunProfileExecutionItemId = item.Id;
+            delete.RecordStager(item.Id);
             _scopeExitQueueingStamps.Add((delete.Id, item.Id));
         }
 
@@ -3766,6 +3773,23 @@ public abstract class SyncTaskProcessorBase
             "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
             "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
             "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
+    /// <summary>
+    /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
+    /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
+    /// ambiguous match found.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildProvisioningMatchErrorRpei(MetaverseObject mvo, ProvisioningMatchError error)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = error.ErrorType;
+        rpei.ErrorMessage = error.Message;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.MatchCandidates = [.. error.Candidates];
         return rpei;
     }
 
@@ -4657,7 +4681,7 @@ public abstract class SyncTaskProcessorBase
         var skippedCount = skippedEvaluations.Count;
 
         // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
-        // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
+        // cross-page reference pass, drift, deprovisioning, preview all look their candidates up themselves), so the
         // cache is cleared however the loop below ends, including on an unhandled exception.
         try
         {
@@ -4718,7 +4742,7 @@ public abstract class SyncTaskProcessorBase
             queueingItem.Id = Guid.NewGuid();
 
         foreach (var pendingExport in pendingExports)
-            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
+            pendingExport.RecordStager(queueingItem.Id);
     }
 
     /// <summary>
@@ -5594,7 +5618,7 @@ public abstract class SyncTaskProcessorBase
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
                     mvoDeletedNode.Rpei.Id = Guid.NewGuid();
-                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
@@ -5644,7 +5668,7 @@ public abstract class SyncTaskProcessorBase
                         .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
-            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            pendingExport.RecordStager(cascadeRpei.Id);
             queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
@@ -5994,7 +6018,7 @@ public abstract class SyncTaskProcessorBase
             // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
             // fix-up below rather than a pre-persist stamp.
             recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
-            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
+            stagedPendingExport.RecordStager(recallRpei.Id);
 
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
@@ -6261,7 +6285,7 @@ public abstract class SyncTaskProcessorBase
     /// distinct CLR instance of the same row. On real PostgreSQL, JIM's single tracking DbContext already
     /// resolves both loads to one instance via EF's own identity map, so this is hardening against a future
     /// change to how Metaverse Objects are loaded, not a fix for an observed production defect (see
-    /// <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening). Resolving here means every downstream use of the returned Metaverse Object (join
     /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
     /// tracking state on, regardless of how it was loaded.
@@ -7137,12 +7161,43 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
+            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
                 EvaluateDriftAndEnforceState(cso, mvo);
+
+            if (heldConnectedSystemObjectIds.Count > 0)
+            {
+                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
+                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
+            }
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
+    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
+    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
+    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
+    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
+    /// partial index on the flag, and none at all when this run detects no drift.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+            return new HashSet<Guid>();
+
+        var connectedSystemObjectIds = _pendingDriftEvaluations
+            .Select(pending => pending.Cso.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (connectedSystemObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7240,7 +7295,7 @@ public abstract class SyncTaskProcessorBase
             if (runProfileExecutionItem.Id == Guid.Empty)
                 runProfileExecutionItem.Id = Guid.NewGuid();
             foreach (var correctiveExport in result.CorrectiveExports)
-                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
+                correctiveExport.RecordStager(runProfileExecutionItem.Id);
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

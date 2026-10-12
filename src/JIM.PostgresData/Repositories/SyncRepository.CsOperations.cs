@@ -900,6 +900,7 @@ public partial class SyncRepository
                         trackedAttr.LastImportedValue = attrChange.LastImportedValue;
                         trackedAttr.ExportAttemptCount = attrChange.ExportAttemptCount;
                         trackedAttr.LastExportedAt = attrChange.LastExportedAt;
+                        trackedAttr.AwaitsInitialPassword = attrChange.AwaitsInitialPassword;
                     }
                 }
             }
@@ -1001,7 +1002,8 @@ public partial class SyncRepository
                         "Status" int,
                         "LastImportedValue" text,
                         "ExportAttemptCount" int,
-                        "LastExportedAt" timestamptz
+                        "LastExportedAt" timestamptz,
+                        "AwaitsInitialPassword" boolean
                     ) ON COMMIT PRESERVE ROWS;
                     TRUNCATE _peavc_bulk_update
                     """;
@@ -1026,6 +1028,7 @@ public partial class SyncRepository
                         await writer.WriteAsync(avc.LastExportedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                     else
                         await writer.WriteNullAsync();
+                    await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
                 }
                 await writer.CompleteAsync();
             }
@@ -1086,8 +1089,10 @@ public partial class SyncRepository
     /// <summary>
     /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223): the
     /// set-once fix-up for the deletion-cascade and reference-recall paths, whose Pending Exports are persisted
-    /// before the item reporting each one is built. A deliberately narrow single-column statement rather than a
-    /// PendingExportBulkColumns writer, per the raw-SQL column-list rules' targeted-mutation exemption.
+    /// before the item reporting each one is built. The item becomes the latest stager and joins the export's
+    /// stagers (#2100) as <see cref="PendingExport.RecordStager"/> does in memory: once, last, and keeping only
+    /// the most recent <see cref="PendingExport.MaxRecordedStagers"/>. A deliberately narrow statement rather
+    /// than a PendingExportBulkColumns writer, per the raw-SQL column-list rules' targeted-mutation exemption.
     /// </summary>
     public async Task SetPendingExportQueueingItemsAsync(
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
@@ -1098,13 +1103,110 @@ public partial class SyncRepository
         var pendingExportIds = stamps.Select(stamp => stamp.PendingExportId).ToArray();
         var queueingItemIds = stamps.Select(stamp => stamp.QueuedByRunProfileExecutionItemId).ToArray();
 
+        // The list with the item appended unless already present, then sliced to its most recent entries:
+        // PostgreSQL arrays are 1-based, so the slice starts at max(1, length - cap + 1).
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""PendingExports"" AS pe
-              SET ""QueuedByRunProfileExecutionItemId"" = stamp.queueing_item_id
+              SET ""QueuedByRunProfileExecutionItemId"" = stamp.queueing_item_id,
+                  ""StagedByRunProfileExecutionItemIds"" = CASE
+                      WHEN stamp.queueing_item_id = ANY(pe.""StagedByRunProfileExecutionItemIds"")
+                          THEN pe.""StagedByRunProfileExecutionItemIds""
+                      ELSE (array_append(pe.""StagedByRunProfileExecutionItemIds"", stamp.queueing_item_id))
+                          [GREATEST(1, cardinality(pe.""StagedByRunProfileExecutionItemIds"") + 2 - {2}):]
+                  END
               FROM unnest({0}, {1}) AS stamp(pending_export_id, queueing_item_id)
               WHERE pe.""Id"" = stamp.pending_export_id",
             new Npgsql.NpgsqlParameter { Value = pendingExportIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
-            new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
+            new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
+            new Npgsql.NpgsqlParameter { Value = PendingExport.MaxRecordedStagers, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Integer });
+    }
+
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        // Raw SQL, asked once per synchronisation page with drift to evaluate (#2039). Led by the partial index on the
+        // flag (IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword), which holds only the
+        // changes awaiting an Initial Password, so the probe is near-free where none exists; each hit joins to its
+        // Pending Export by primary key.
+        const string sql = """
+            SELECT DISTINCT pe."ConnectedSystemObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            WHERE avc."AwaitsInitialPassword"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ConnectedSystemObjectId" = ANY(@connectedSystemObjectIds)
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId },
+            new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
+    }
+
+    public async Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+    {
+        // Raw SQL, asked once per import after reconciliation (#2039), so a held change is judged even when the import
+        // did not return its account. Led by the same partial index on the flag as the lookup above, which holds only
+        // the changes awaiting an Initial Password: where none exists the probe reads an empty index and returns
+        // nothing. Each hit joins to its Pending Export and Connected System Object by primary key. A read-side
+        // projection, so exempt from the bulk column list rule.
+        const string sql = """
+            SELECT avc."Id", pe."Id", pe."ConnectedSystemObjectId", cso."MetaverseObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            WHERE avc."AwaitsInitialPassword"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer)
+        {
+            Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+
+        var held = new List<InitialPasswordHoldSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            held.Add(new InitialPasswordHoldSummary
+            {
+                AttributeValueChangeId = reader.GetGuid(0),
+                PendingExportId = reader.GetGuid(1),
+                ConnectedSystemObjectId = reader.GetGuid(2),
+                MetaverseObjectId = await reader.IsDBNullAsync(3) ? null : reader.GetGuid(3)
+            });
+        }
+
+        return held;
+    }
+
+    /// <summary>
+    /// Runs a single-column uuid SELECT on the context's own connection and transaction and returns its rows as a set.
+    /// </summary>
+    private async Task<HashSet<Guid>> ReadGuidSetAsync(string sql, params NpgsqlParameter[] parameters)
+    {
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddRange(parameters);
+
+        var ids = new HashSet<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ids.Add(reader.GetGuid(0));
+        return ids;
     }
 
     #region Private Pending Export Bulk Helpers
@@ -1170,6 +1272,8 @@ public partial class SyncRepository
                 await writer.WriteAsync(pe.QueuedByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(pe.StagedByRunProfileExecutionItemIds.ToArray(),
+                NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid);
         }
 
         await writer.CompleteAsync();
@@ -1258,6 +1362,7 @@ public partial class SyncRepository
                 await writer.WriteAsync(avc.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();

@@ -26,7 +26,11 @@
         @* Page Title - must come before breadcrumbs for consistency *@
         @* No status icon after the title: the title already says what happened ("Person Deletion Detected"),
            and the Operation field below states it again with its own icon. *@
-        <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
+        <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()
+            <PageInfo Title="Execution Item" DocsPage="configuration/activity-execution-items.md">
+                What one Run Profile run did to one object: what happened, what it went on to cause, and any error it met.
+            </PageInfo>
+        </MudText>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
         @* The item's own story (what it did, why, and what it changed) is one subject; the Pending Export
@@ -84,58 +88,20 @@
                 @* Initiated By *@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
-                    @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
+                    @if (_activity != null)
                     {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" />
-                            @if (_activity.InitiatedById.HasValue && _initiatorMetaverseObjectHeader != null)
-                            {
-                                <MudLink Href="@Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader)">
-                                    @_activity.InitiatedByName
-                                </MudLink>
-                            }
-                            else
-                            {
-                                <MudText>@_activity.InitiatedByName</MudText>
-                            }
-                        </MudStack>
-                    }
-                    else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
-                    {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mud-text-secondary" />
-                            @if (_activity.InitiatedById.HasValue)
-                            {
-                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">
-                                    @_activity.InitiatedByName
-                                </MudLink>
-                            }
-                            else
-                            {
-                                <MudText>@_activity.InitiatedByName</MudText>
-                            }
-                        </MudStack>
-                    }
-                    else if (_activity is { InitiatedByType: ActivityInitiatorType.System })
-                    {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
-                            <MudText>@(_activity.InitiatedByName ?? "System")</MudText>
-                        </MudStack>
-                    }
-                    else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
-                    {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mud-text-secondary" />
-                            <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
-                        </MudStack>
+                        <MudText>
+                            <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                                               InitiatedById="@_activity.InitiatedById"
+                                               InitiatedByName="@_activity.InitiatedByName"
+                                               UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
+                                               ScheduleName="@_activity.ScheduledByScheduleName"
+                                               ScheduleExecutionId="@_activity.ScheduleExecutionId" />
+                        </MudText>
                     }
                     else
                     {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mud-text-secondary" />
-                            <MudText Typo="Typo.body1">System (Automated)</MudText>
-                        </MudStack>
+                        <EmptyValue />
                     }
                 </MudItem>
 
@@ -266,6 +232,18 @@
                         <MudText Class="mud-text-secondary">The Connected System Object has been deleted.</MudText>
                     }
                 </MudItem>
+
+                @* Where the Connector read the object from, such as a file and row (#2066), where it said. *@
+                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.SourceLocation))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Source</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Outlined.Description" Class="mud-text-secondary" />
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.SourceLocation</MudText>
+                        </MudStack>
+                    </MudItem>
+                }
             </MudGrid>
         </MudPaper>
 
@@ -335,7 +313,8 @@
            Export it produced is a separate subject and has its own tab. *@
         @if (_activityRunProfileExecutionItem.ErrorType is { } errorType
              and not ActivityRunProfileExecutionItemErrorType.NotSet
-             && _unresolvedReferenceTone != UnresolvedReferenceTone.Error)
+             && _unresolvedReferenceTone != UnresolvedReferenceTone.Error
+             && _attributeValueErrors == null)
         {
             <MudText Typo="Typo.h6" Class="mb-3">
                 Error Details
@@ -354,6 +333,18 @@
             <MatchCandidatesPanel Candidates="@_matchCandidates" />
 
             <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
+        }
+
+        @* Values the Connector could not read (#2066), laid out one per row, in place of the Error Details above. An
+           item without them recorded (from before they were kept, or a Connector that reports a message alone) keeps
+           its Error Details. *@
+        @if (_attributeValueErrors is { } attributeValueErrors)
+        {
+            <AttributeValuesNotImportedSection Errors="@attributeValueErrors"
+                                               SourceLocation="@_activityRunProfileExecutionItem.SourceLocation"
+                                               ConnectedSystemId="@_connectedSystemHeader?.Id"
+                                               ObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                                               Class="mb-5" />
         }
 
         @* References the import left unresolved (#959), listed with the likely cause of each. Red where the run
@@ -513,6 +504,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // How the Unresolved References section presents itself (#959); None outside an import, and where the run left
     // every reference resolved.
     private UnresolvedReferenceTone _unresolvedReferenceTone;
+
+    // The values the Connector could not read (#2066), or null where the item recorded none.
+    private ImportedAttributeValueErrors? _attributeValueErrors;
 
     // The Identity this item acted on, looked up once by id (#1495). A header answers both of the panel's
     // questions in one read: it carries the type plural name the Metaverse Object route is keyed on, and its
@@ -698,6 +692,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _unresolvedReferenceTone = IsImportContext()
             ? UnresolvedReferenceDisplay.ToneFor(_activityRunProfileExecutionItem.ErrorType, _activityRunProfileExecutionItem.UnresolvedReferenceCount)
             : UnresolvedReferenceTone.None;
+
+        _attributeValueErrors = AttributeValueErrorDisplay.ForItem(_activityRunProfileExecutionItem.AttributeValueErrorsJson);
 
         // Parse the decision-time deletion policy snapshot (#119); null for legacy records (which fall
         // back to current-configuration rendering) and for items with no deletion rule evaluation.
@@ -1003,14 +999,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
     }
 
-    private string GetStatusIcon()
-    {
-        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return Icons.Material.Filled.Error;
-
-        return Helpers.GetOperationIcon(
-            _activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
-    }
+    // The operation's own icon, error or not (#2066): an object that was added shows "+" even when a value on it
+    // failed. The outcome is the heading's and the error section's to tell; conflating the two made "+" read as "!".
+    private string GetStatusIcon() => Helpers.GetOperationIcon(
+        _activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
 
     private string GetStatusTitle()
     {
@@ -1143,7 +1135,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             return GetUnresolvedReferenceStatusDescription();
 
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return "An error occurred while synchronising the Connected System Object.";
+        {
+            // An item recording a Metaverse Object and no Connected System Object (matching before provisioning, #2052)
+            // is about the Metaverse Object.
+            return _activityRunProfileExecutionItem is { ConnectedSystemObjectId: null, MetaverseObjectId: not null }
+                ? "An error occurred while synchronising the Metaverse Object."
+                : "An error occurred while synchronising the Connected System Object.";
+        }
 
         var description = GetOperationStatusDescription();
         return _unresolvedReferenceTone == UnresolvedReferenceTone.Warning

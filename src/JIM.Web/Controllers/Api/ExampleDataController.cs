@@ -251,7 +251,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Creating Data Generation Template: {Name}", LogSanitiser.Sanitise(request.Name));
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template creation");
@@ -319,7 +319,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Updating Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template update");
@@ -398,7 +398,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Deleting Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template deletion");

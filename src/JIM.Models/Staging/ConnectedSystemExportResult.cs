@@ -36,6 +36,17 @@ public class ConnectedSystemExportResult
     public string? RejectedAttributeName { get; set; }
 
     /// <summary>
+    /// The attributes the Connector wrote with an interim value, on a successful Create, because JIM said an Initial
+    /// Password will follow (<see cref="Transactional.PendingExport.InitialPasswordFollows"/>, #2039). Active Directory
+    /// refuses an enabled account with no password, so the LDAP Connector creates the account disabled, adding
+    /// ACCOUNTDISABLE to <c>userAccountControl</c>, and names that attribute here; the account is enabled once the
+    /// password is set. The Pending Export still carries the value the Synchronisation Rule asked for, which is the one the
+    /// confirming import is judged against. Null from every Connector that rewrote nothing, which is every Connector but
+    /// the LDAP Connector against Active Directory.
+    /// </summary>
+    public IReadOnlyList<string>? AttributesAwaitingInitialPassword { get; set; }
+
+    /// <summary>
     /// The primary external ID assigned by the target system.
     /// For LDAP, this would be the objectGUID.
     /// For systems that don't generate IDs, this may be null.
@@ -63,6 +74,19 @@ public class ConnectedSystemExportResult
             Success = true,
             ExternalId = externalId,
             SecondaryExternalId = secondaryExternalId
+        };
+
+    /// <summary>
+    /// Creates a successful result with external ID feedback, naming the attributes written with an interim value
+    /// until an Initial Password is delivered (see <see cref="AttributesAwaitingInitialPassword"/>).
+    /// </summary>
+    public static ConnectedSystemExportResult Succeeded(string? externalId, string? secondaryExternalId, IReadOnlyList<string>? attributesAwaitingInitialPassword) =>
+        new()
+        {
+            Success = true,
+            ExternalId = externalId,
+            SecondaryExternalId = secondaryExternalId,
+            AttributesAwaitingInitialPassword = attributesAwaitingInitialPassword
         };
 
     /// <summary>

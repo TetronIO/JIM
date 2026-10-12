@@ -29,7 +29,8 @@ function Get-JIMMetaverseObjectSyncPreview {
         tree flattened by ConvertTo-JIMSyncPreviewOutcomeRows into a depth-ordered list for
         Format-Table), Inbound (always null for this cmdlet), ProposedExports (the Pending
         Exports a real synchronisation would stage), Errors, Warnings, HasBlockingErrors and
-        AffectedSyncRules.
+        AffectedSyncRules. An AmbiguousProvisioningMatch error carries MatchCandidates: the
+        Connected System Objects matching found in the target before provisioning.
 
     .EXAMPLE
         Get-JIMMetaverseObjectSyncPreview -Id "8f14e45f-ceea-467e-adde-3f8cbb1e4d28"

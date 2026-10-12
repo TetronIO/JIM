@@ -1342,6 +1342,34 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Get a summary of a Connected System's unresolved references
+    /// </summary>
+    /// <remarks>
+    /// Returns how many reference values across the Connected System's Connector Space are unresolved and on how many
+    /// Connected System Objects, how they split by likely cause, every distinct next step with how many values and
+    /// objects it addresses (most values first), and the one change to JIM's configuration that would address the most
+    /// of them (null where every cause lies in the Connected System). Judged against the Connected System's current
+    /// Container Scope. This is what the portal shows as "Where they point" on the filtered Connector Space; to list the
+    /// objects themselves, filter the Connector Space with hasUnresolvedReferences=true.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The summary of the Connected System's unresolved references.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/unresolved-references/summary", Name = "GetConnectedSystemUnresolvedReferenceSummary")]
+    [ProducesResponseType(typeof(ConnectedSystemUnresolvedReferenceSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemUnresolvedReferenceSummaryAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested unresolved reference summary for Connected System {SystemId}", connectedSystemId);
+
+        var summary = await _application.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(connectedSystemId);
+        if (summary == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        return Ok(summary);
+    }
+
+    /// <summary>
     /// Get a deletion preview for a Connected System
     /// </summary>
     /// <remarks>
@@ -1419,6 +1447,9 @@ public class SynchronisationController(
     /// <param name="status">Optional Connected System Object status values to filter by. Repeat the parameter for multiple values.</param>
     /// <param name="objectTypeId">Optional Object Type IDs to filter by. Repeat the parameter for multiple values.</param>
     /// <param name="joinType">Optional join type values to filter by. Repeat the parameter for multiple values.</param>
+    /// <param name="hasUnresolvedReferences">Optional filter: true for only the objects holding a reference value that
+    /// could not be resolved to a Connected System Object, false for only those holding none. Each header's
+    /// unresolvedReferenceCount says how many it holds, whether or not this is given.</param>
     /// <returns>A paginated set of Connected System Object headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space", Name = "GetConnectedSystemObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectHeader>), StatusCodes.Status200OK)]
@@ -1433,7 +1464,8 @@ public class SynchronisationController(
         [FromQuery] bool sortDescending = true,
         [FromQuery] List<ConnectedSystemObjectStatus>? status = null,
         [FromQuery] List<int>? objectTypeId = null,
-        [FromQuery] List<ConnectedSystemObjectJoinType>? joinType = null)
+        [FromQuery] List<ConnectedSystemObjectJoinType>? joinType = null,
+        [FromQuery] bool? hasUnresolvedReferences = null)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
@@ -1444,7 +1476,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var result = await _application.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, search, sortBy, sortDescending, status, objectTypeId, joinType);
+            connectedSystemId, page, pageSize, search, sortBy, sortDescending, status, objectTypeId, joinType, hasUnresolvedReferences);
 
         return Ok(PaginatedResponse<ConnectedSystemObjectHeader>.Create(
             result.Results, result.TotalResults, result.CurrentPage, result.PageSize));
@@ -2528,6 +2560,7 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Connects to the external system and retrieves its Object Types and Attributes. This is required before creating Synchronisation Rules. Existing schema configuration will be replaced; Synchronisation Rules referencing removed Object Types or Attributes will need to be updated.
+    /// When the import changes how the Connected System classifies a selected Object Type (its class kind, or inheritance involving another selected Object Type), the ImportSchema Activity completes with a warning naming each change: it can change which Object Type existing entries resolve to at the next import. Preview first to see such changes before they are applied.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">Optional. Set <c>disableDependents</c> to apply the refresh with its dependents disabled (#1485).</param>
@@ -2627,8 +2660,13 @@ public class SynchronisationController(
     /// <remarks>
     /// Connects to the external system, retrieves its schema and reports what a refresh would change, without
     /// persisting anything or recording an Activity. Removals and attribute definition changes are flagged via
-    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. To commit, call the
-    /// import-schema endpoint after reviewing this result.
+    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. Changes to how the Connected
+    /// System classifies a selected Object Type are listed in <c>changedObjectTypeClassifications</c> and flagged via
+    /// <c>hasObjectTypeClassificationChanges</c>: applying one can change which Object Type existing entries resolve
+    /// to, and by default each object that would change Object Type is refused at the next import and reported as an
+    /// Object Type Changed error, unless a Full Import Run Profile with <c>allowObjectTypeChanges</c> enabled carries
+    /// the change out. Such a change is not destructive and names no dependents. To commit, call the import-schema
+    /// endpoint after reviewing this result.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A result object describing what a schema refresh would change.</returns>
@@ -3212,7 +3250,7 @@ public class SynchronisationController(
     /// <param name="request">The Run Profile creation request.</param>
     /// <returns>The created Run Profile details.</returns>
     /// <response code="201">Run Profile created successfully.</response>
-    /// <response code="400">Invalid request or run type not supported by connector.</response>
+    /// <response code="400">Invalid request, run type not supported by connector, or a setting that is not valid for the Run Type (for example AllowObjectTypeChanges on anything other than a Full Import).</response>
     /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles", Name = "CreateRunProfile")]
@@ -3250,6 +3288,7 @@ public class SynchronisationController(
             PageSize = request.PageSize,
             FilePath = request.FilePath,
             VerifyImportContentHashes = request.VerifyImportContentHashes,
+            AllowObjectTypeChanges = request.AllowObjectTypeChanges,
             MaxCreates = request.Safeguards?.MaxCreates,
             MaxUpdates = request.Safeguards?.MaxUpdates,
             MaxDeletes = request.Safeguards?.MaxDeletes,
@@ -3257,7 +3296,8 @@ public class SynchronisationController(
             MaxDetectedDeletionsPercent = request.Safeguards?.MaxDetectedDeletionsPercent
         };
 
-        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        // Run Profile Safeguards (#1618) and Allow Object Type Changes (#2049): each is valid on one Run Type only,
+        // and a refusal names the offending field.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
         if (safeguardsError != null)
             return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
@@ -3299,7 +3339,7 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Run Profile details.</returns>
     /// <response code="200">Run Profile updated successfully.</response>
-    /// <response code="400">Invalid request.</response>
+    /// <response code="400">Invalid request, or a setting that is not valid for the Run Profile's Run Type (for example AllowObjectTypeChanges on anything other than a Full Import).</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}", Name = "UpdateRunProfile")]
@@ -3350,6 +3390,11 @@ public class SynchronisationController(
             runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
         }
 
+        // Allow Object Type Changes (#2049): omitted leaves the current value unchanged. Validated below with the
+        // other Run-Type-specific settings, against the existing RunType.
+        if (request.AllowObjectTypeChanges.HasValue)
+            runProfile.AllowObjectTypeChanges = request.AllowObjectTypeChanges.Value;
+
         // Run Profile Safeguards (#1618): when present, the safeguards object replaces ALL members; a
         // null member clears that limit, an absent object leaves every limit unchanged.
         if (request.Safeguards != null)
@@ -3359,11 +3404,14 @@ public class SynchronisationController(
             runProfile.MaxDeletes = request.Safeguards.MaxDeletes;
             runProfile.MaxDetectedDeletions = request.Safeguards.MaxDetectedDeletions;
             runProfile.MaxDetectedDeletionsPercent = request.Safeguards.MaxDetectedDeletionsPercent;
-
-            var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
-            if (safeguardsError != null)
-                return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
         }
+
+        // Validated whatever the request carried, not only when it supplied Safeguards: a Run-Type-specific setting
+        // can arrive on its own (Allow Object Type Changes does), and the server would refuse the same Run Profile
+        // anyway. RunType is immutable after create, so this judges each setting against the existing RunType.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+        if (safeguardsError != null)
+            return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
 
         // Update partition if provided
         if (request.PartitionId.HasValue)

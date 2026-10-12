@@ -1,6 +1,11 @@
-# JIM SCIM 2.0 Client Connector
+---
+title: JIM SCIM 2.0 Client Connector
+description: Synchronise identities with any system that publishes a SCIM 2.0 service provider interface, and the settings the Connector takes.
+type: object
+audience: administrator
+---
 
-## Overview
+# JIM SCIM 2.0 Client Connector
 
 The JIM SCIM 2.0 Client Connector synchronises identities with any system that exposes a **SCIM 2.0 service provider** interface, as defined by [RFC 7643](https://datatracker.ietf.org/doc/html/rfc7643) (core schema) and [RFC 7644](https://datatracker.ietf.org/doc/html/rfc7644) (protocol).
 
@@ -70,7 +75,7 @@ The **Change Detection** setting controls the choice:
 Where a Delta Import cannot filter, it reads every resource instead and reports a warning on the Activity rather than failing. This is deliberate: only a completed import can record a watermark, so failing the first Delta Import after a Connected System is configured would leave it permanently unable to import.
 
 !!! important "Deletions are only detected by a Full Import"
-    A deleted SCIM resource simply stops being returned; the protocol offers no way to ask what went. Only a Full Import, which reads everything, can tell that an object has gone. Schedule a Full Import regularly alongside your Delta Imports.
+    A deleted SCIM resource stops being returned; the protocol offers no way to ask what went. Only a Full Import, which reads everything, can tell that an object has gone. Schedule a Full Import regularly alongside your Delta Imports.
 
 The watermark is recorded only when a run finishes, and is deliberately set a minute behind the point the run started reading. A run that fails or is cancelled part way through therefore leaves the watermark where the last completed import put it, and the next run re-reads a small overlap. Re-reading an unchanged resource is harmless; missing a change would not be.
 
@@ -120,7 +125,7 @@ Throttling is recorded in the logs and never fails a run; it is not reported on 
 
 ### Probing for values already in use
 
-When a synchronisation generates a value that is exported unchanged to an attribute of this provider, such as an account name sent to `userName` or an address sent to `emails.work`, JIM asks the provider whether the value is already in use before choosing it. This catches an account JIM has not imported yet: one created in the provider since the last import, by another process or by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems).
+When a synchronisation generates a value that is exported unchanged to an attribute of this provider, such as an account name sent to `userName` or an address sent to `emails.work`, JIM asks the provider whether the value is already in use before choosing it. This catches an account JIM has not imported yet: one created in the provider since the last import, by another process or by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems).
 
 - **One connection per synchronisation**<br /> The connection is made with this Connected System's own settings, credential and certificates, the first time the synchronisation needs it, and closed when the run ends. JIM reads the provider's discovery documents once when it connects, to learn each resource type's endpoint and attributes.
 - **One search per object**<br /> The object's candidate values (up to ten) and a control value JIM already holds for the attribute go in one filtered `GET` to the resource type's endpoint, for example `/Users?filter=userName eq "jbloggs" or userName eq "jbloggs1"`. Each value is written as a quoted string with its quotes and backslashes escaped, so a value can never change what the filter asks. A control value that does not come back means the credential cannot see the attribute, and JIM stops trusting the probe for that attribute for the rest of the run.
@@ -235,7 +240,7 @@ Something changed the resource in the provider between JIM reading it and writin
 JIM shows the certificate the provider presented and which check it failed. An untrusted issuer is fixed by trusting the certificate with **Choose what to trust** (or **Trust this certificate**) on the certificate card; an expired certificate has to be renewed on the provider; a name mismatch means connecting by a name the certificate carries. See [When a connection test fails on the certificate](#when-a-connection-test-fails-on-the-certificate).
 
 **A synchronisation warns that JIM couldn't probe the provider**<br />
-The warning names the reason. A refused credential needs read access to the resource type; a refused filter means the provider will not search that attribute, so JIM relies on its own records for it (and on [Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) should the provider then refuse a value); a provider that returned resources holding none of the values asked for is not applying the filter it advertises. See [Probing for values already in use](#probing-for-values-already-in-use).
+The warning names the reason. A refused credential needs read access to the resource type; a refused filter means the provider will not search that attribute, so JIM relies on its own records for it (and on [Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) should the provider then refuse a value); a provider that returned resources holding none of the values asked for is not applying the filter it advertises. See [Probing for values already in use](#probing-for-values-already-in-use).
 
 **An attribute never receives a value**<br />
 Re-import the schema. A provider that has changed what it publishes, or one whose `/Schemas` document went missing (leaving the connector on the RFC 7643 core schemas), will offer a different attribute set.

@@ -339,6 +339,7 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
@@ -369,6 +370,7 @@ public static class Helpers
             // Raised while evaluating outbound exports during synchronisation, before anything is exported,
             // so it belongs with the synchronisation phase rather than "Export Failed".
             [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = "Synchronisation Failed",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
@@ -380,6 +382,9 @@ public static class Helpers
             // The Connected System refused the export because another object there holds the value; the heading
             // names the conflict, since that is what an administrator has to resolve.
             [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
+            // Active Directory will not enable an account with no password (#2039); the heading names what the
+            // account is missing, since that is what the message's remedies supply.
+            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened
@@ -829,7 +834,9 @@ public static class Helpers
 
     #region Initiator Icon Helpers
     /// <summary>
-    /// Gets the MudBlazor icon for an activity initiator type.
+    /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
+    /// appears (<see cref="Shared.ActivityInitiator"/>, change history). System has its own rather than the Schedule's
+    /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
     /// </summary>
     public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
     {
@@ -837,6 +844,8 @@ public static class Helpers
         {
             ActivityInitiatorType.User => Icons.Material.Filled.Person,
             ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
+            ActivityInitiatorType.System => Icons.Material.Filled.Dns,
+            ActivityInitiatorType.Anonymous => Icons.Material.Filled.QuestionMark,
             _ => Icons.Material.Filled.HelpOutline
         };
     }
@@ -934,7 +943,7 @@ public static class Helpers
 
     /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
-    /// Accepts "User", "ApiKey", "Import", or other values.
+    /// Accepts "User", "ApiKey", "Import", "System", or other values.
     /// </summary>
     public static string GetInitiatorIcon(string? initiatorType)
     {
@@ -943,6 +952,7 @@ public static class Helpers
             "User" => Icons.Material.Filled.Person,
             "ApiKey" => Icons.Material.Filled.Key,
             "Import" => Icons.Material.Filled.Input,
+            "System" => Icons.Material.Filled.Dns,
             _ => Icons.Material.Filled.HelpOutline
         };
     }

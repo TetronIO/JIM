@@ -1,6 +1,8 @@
 ---
 title: Working with Lists
 description: "How the portal's lists behave: continuous scrolling, object counts, search, sorting, and shareable links into a position in a list."
+type: concept
+audience: administrator
 ---
 
 # Working with Lists

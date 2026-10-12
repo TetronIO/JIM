@@ -12,8 +12,12 @@ namespace JIM.Models.Exceptions;
 /// </summary>
 public class ObjectMatchingRuleFailedException : OperationalException
 {
-    public ObjectMatchingRuleFailedException(ObjectMatchingRule rule, MatchValueResolution resolution)
-        : base(BuildMessage(rule, resolution))
+    /// <param name="rule">The rule that could not be worked out.</param>
+    /// <param name="resolution">What the rule computed, carrying the failure message.</param>
+    /// <param name="provisioning">Whether the rule was matching a Metaverse Object before provisioning it, rather than
+    /// a Connected System Object before joining or projecting it; the message names what was stopped.</param>
+    public ObjectMatchingRuleFailedException(ObjectMatchingRule rule, MatchValueResolution resolution, bool provisioning = false)
+        : base(BuildMessage(rule, resolution, provisioning))
     {
         Rule = rule;
         Resolution = resolution;
@@ -25,14 +29,15 @@ public class ObjectMatchingRuleFailedException : OperationalException
     /// <summary>What the rule computed, carrying the failure message and any expression.</summary>
     public MatchValueResolution Resolution { get; }
 
-    private static string BuildMessage(ObjectMatchingRule rule, MatchValueResolution resolution)
+    private static string BuildMessage(ObjectMatchingRule rule, MatchValueResolution resolution, bool provisioning)
     {
         // Named by what it compares rather than by its order: orders keep their gaps after a rule is deleted.
         var described = rule.TargetMetaverseAttribute == null
             ? "An Object Matching Rule"
             : $"The Object Matching Rule on '{rule.TargetMetaverseAttribute.Name}'";
         var expression = resolution.Expression == null ? string.Empty : $" Expression: {resolution.Expression}";
-        return $"{described} could not be evaluated for this object, so it was neither joined nor projected. " +
+        var outcome = provisioning ? "neither joined nor provisioned" : "neither joined nor projected";
+        return $"{described} could not be worked out, so this object was {outcome}. " +
                $"{resolution.FailureMessage}{expression}";
     }
 }

@@ -18,7 +18,7 @@
 
 <PageTitle>@_pageTitle</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@_pageTitle
-    <PageInfo Title="@_pageTitle">
+    <PageInfo Title="@_pageTitle" DocsPage="configuration/activities.md">
         @_pageDescription
     </PageInfo>
 </MudText>
@@ -485,33 +485,12 @@
                 <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
             </HeaderTemplate>
             <CellTemplate>
-                @{
-                    var activity = context.Item;
-                    if (activity.InitiatedByType == ActivityInitiatorType.User)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                        <span>@activity.InitiatedByName</span>
-                    }
-                    else if (activity.InitiatedByType == ActivityInitiatorType.ApiKey)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                        <span>@activity.InitiatedByName</span>
-                    }
-                    else if (activity.InitiatedByType == ActivityInitiatorType.System)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                        <span>@(activity.InitiatedByName ?? "System")</span>
-                    }
-                    else if (activity.InitiatedByType == ActivityInitiatorType.Anonymous)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
-                        <span>Anonymous</span>
-                    }
-                    else if (!string.IsNullOrEmpty(activity.InitiatedByName))
-                    {
-                        <span>@activity.InitiatedByName</span>
-                    }
-                }
+                <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                                   InitiatedById="@context.Item.InitiatedById"
+                                   InitiatedByName="@context.Item.InitiatedByName"
+                                   ScheduleName="@context.Item.ScheduledByScheduleName"
+                                   ScheduleExecutionId="@context.Item.ScheduleExecutionId"
+                                   Dense="true" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Status" Sortable="false">

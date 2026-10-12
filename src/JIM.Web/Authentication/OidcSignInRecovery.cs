@@ -52,7 +52,7 @@ public static class OidcSignInRecovery
     /// <summary>The authentication properties item that counts the restarts in a chain of sign-in attempts.</summary>
     public const string RestartCountItemKey = "jim.signin.restarts";
 
-    public const string TlsAndReverseProxyDocsUrl = "https://docs.junctional.io/administration/deployment/#tls-and-reverse-proxy";
+    public const string TlsAndReverseProxyDocsUrl = "https://docs.junctional.io/administration/tls-and-reverse-proxy/";
     public const string SignInLoopsDocsUrl = "https://docs.junctional.io/administration/troubleshooting/#sign-in-loops-between-jim-and-the-identity-provider";
 
     /// <summary>

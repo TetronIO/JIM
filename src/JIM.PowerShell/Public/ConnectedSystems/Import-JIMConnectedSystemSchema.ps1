@@ -24,6 +24,13 @@ function Import-JIMConnectedSystemSchema {
         If specified, retrieves the schema and returns what a refresh would change without persisting anything.
         The result's HasRemovalsOrDefinitionChanges property flags removals and attribute definition changes,
         which are the changes that can affect existing configuration; additions alone cannot.
+        Its HasObjectTypeClassificationChanges property flags changes to how the Connected System classifies a
+        selected Object Type (its class kind, or inheritance involving another selected Object Type), listed in
+        ChangedObjectTypeClassifications and each also written with Write-Warning. Applying one can change which
+        Object Type existing entries resolve to: by default each object that would change Object Type is refused at
+        the next import and reported as an Object Type Changed error, unless a Full Import Run Profile with Allow
+        Object Type Changes enabled (Set-JIMRunProfile -AllowObjectTypeChanges) carries the change out. Such a
+        change is not destructive, so it never sets HasRemovalsOrDefinitionChanges.
 
     .PARAMETER DisableDependents
         If specified, the refresh is applied with its dependents disabled: Synchronisation Rules bound to a
@@ -53,9 +60,12 @@ function Import-JIMConnectedSystemSchema {
     .OUTPUTS
         With -Preview, returns the schema refresh preview result; its Dependents.DependentDerivedFlows names the
         Attribute Flows deriving Metaverse attributes that disabling or removing the dependents would leave with a
-        missing input, and each is also written with Write-Warning. Otherwise, if -PassThru is specified, returns
-        the updated Connected System object, whose DependentDerivedFlows names those the refresh left with a
-        missing input (empty unless -DisableDependents or -RemoveDependents was supplied).
+        missing input, and each is also written with Write-Warning. Its ChangedObjectTypeClassifications lists, by
+        Object Type name, each classification change (Aspect, OldValues, NewValues), and each is also written with
+        Write-Warning. Otherwise, if -PassThru is specified, returns the updated Connected System object, whose
+        DependentDerivedFlows names those the refresh left with a missing input (empty unless -DisableDependents or
+        -RemoveDependents was supplied). An import that changes how a selected Object Type is classified completes
+        its ImportSchema Activity with a warning naming each change.
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1
@@ -142,6 +152,10 @@ function Import-JIMConnectedSystemSchema {
                 # Derived flows that disabling or removing the dependents would leave with a missing input
                 # (#1750, FR 3), worded as a prediction: the preview changes nothing.
                 Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $previewResult.Dependents.DependentDerivedFlows -Prospective
+
+                # Object Type classification changes (#2049): applying one can change which Object Type existing
+                # entries resolve to at the next import, so each is written as a warning a script cannot miss.
+                Write-JIMObjectTypeClassificationWarning -ChangedObjectTypeClassifications $previewResult.ChangedObjectTypeClassifications
 
                 $previewResult
             }

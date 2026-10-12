@@ -253,13 +253,20 @@ internal sealed class ScimConnectorImport
             };
         }
 
-        return new ConnectedSystemImportObject
+        var importObject = new ConnectedSystemImportObject
         {
             ObjectType = objectType,
             // A full import asserts the object exists; JIM decides whether that is a create or an update.
             ChangeType = ObjectChangeType.Added,
             Attributes = read.Attributes
         };
+
+        // Each value that could not be converted is reported, and JIM leaves its attribute as it already held it
+        // (#2066). The rest of the object, its id included, is still imported, so it is matched rather than missed.
+        foreach (var unreadable in read.UnreadableValues)
+            importObject.AddAttributeValueError(unreadable.AttributeName, unreadable.Value, unreadable.Reason);
+
+        return importObject;
     }
 
     /// <summary>

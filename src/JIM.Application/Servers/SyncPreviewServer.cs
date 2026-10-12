@@ -799,7 +799,7 @@ public class SyncPreviewServer
                 {
                     inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
                     DescribeMetaverseObject(inbound, joinedMvo);
-                    AddDriftCorrectionRoot(result, ProposeDriftCorrections(result, cso, CloneForPreview(joinedMvo), context));
+                    AddDriftCorrectionRoot(result, await ProposeDriftCorrectionsAsync(result, cso, CloneForPreview(joinedMvo), context));
                 }
             }
             return result;
@@ -1097,7 +1097,7 @@ public class SyncPreviewServer
 
         // Drift correction, as the run would: this object's own values, where an export rule to this Connected System
         // enforces state, against what the Metaverse Object says they should be.
-        var driftedAttributeCount = asTheRunWould ? ProposeDriftCorrections(result, cso, workingMvo, context) : 0;
+        var driftedAttributeCount = asTheRunWould ? await ProposeDriftCorrectionsAsync(result, cso, workingMvo, context) : 0;
 
         foreach (var rule in inScopeRules.Where(rule => result.AffectedSyncRules.All(r => r.Id != rule.Id)))
             result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = rule.Id, Name = rule.Name });
@@ -1217,10 +1217,12 @@ public class SyncPreviewServer
     /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
     /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
     /// correction for an object the export evaluation already proposes an update for is folded into that update, as
-    /// the run merges the two Pending Exports for one object.
+    /// the run merges the two Pending Exports for one object. An object holding a change until its Initial Password is
+    /// delivered is skipped, as the run skips it (#2039; <c>SyncTaskProcessorBase.EvaluateQueuedDriftAsync</c>).
     /// </summary>
-    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System.</returns>
-    private int ProposeDriftCorrections(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
+    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System, or the
+    /// run would skip the object.</returns>
+    private async Task<int> ProposeDriftCorrectionsAsync(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
         CsoPreviewContext context)
     {
         // Not only for an object already joined: the run evaluates drift for every object it leaves joined, the one
@@ -1232,6 +1234,18 @@ public class SyncPreviewServer
             context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
         if (!drift.HasDrift)
             return 0;
+
+        // The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection
+        // entirely, since a correction for any attribute would replace the Pending Export holding the change. Asked only
+        // once drift is found, so an object with nothing to correct costs no lookup; the run's own per-page lookup reads
+        // the same partial index.
+        if (cso.Id != Guid.Empty &&
+            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0)
+        {
+            Log.Debug("ProposeDriftCorrectionsAsync: CSO {CsoId} holds a change until its Initial Password is delivered; " +
+                "the run skips Drift Detection for it, so no correction is proposed", cso.Id);
+            return 0;
+        }
 
         // Detection stages each change by attribute id alone, which is all the run persists; the preview names the
         // attribute so it can be shown. The changes are fresh to this preview, so nothing shared is touched.
@@ -2453,6 +2467,24 @@ public class SyncPreviewServer
         {
             if (result.AffectedSyncRules.All(r => r.Id != entry.SyncRuleId))
                 result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = entry.SyncRuleId, Name = entry.SyncRuleName });
+
+            // Export matching would stop the Metaverse Object for this rule (#2052): the run records the error and
+            // stages nothing, so the preview reports the error and proposes no export.
+            if (entry.ProvisioningMatchError is { } matchError)
+            {
+                result.Errors.Add(new SyncPreviewMessage
+                {
+                    Code = matchError.ErrorType == ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch
+                        ? SyncPreviewMessageCode.AmbiguousProvisioningMatch
+                        : SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = matchError.Message,
+                    SyncRuleId = matchError.SyncRuleId,
+                    SyncRuleName = matchError.SyncRuleName,
+                    ConnectedSystemId = matchError.ConnectedSystemId,
+                    MatchCandidates = [.. matchError.Candidates]
+                });
+                continue;
+            }
 
             switch (entry.Kind)
             {

@@ -118,6 +118,8 @@ Without `-Wait`, returns a `PSCustomObject` with `ActivityId`, `ValidationFindin
 
 A proposal carrying a blocking validation finding is never evaluated: `IsBlocked` is `$true`, the findings say why, and `-Wait` returns immediately rather than polling for results that will not arrive.
 
+Each validation finding is also written as it arrives: Blocking and Warning findings with `Write-Warning`, Information findings with `Write-Verbose`. A script that runs with `-WarningAction Stop`, or treats any warning as a failure, therefore stops on a Warning finding too, such as the one a schema preview raises when [selecting or deselecting an overlapping Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type) would change the Object Type of objects already imported. Read `ValidationFindings` to tell the severities apart.
+
 ### Examples
 
 ```powershell title="Preview switching a type to automatic deletion"
@@ -410,7 +412,7 @@ Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the 
 
 Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
 
-Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found, with the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 
 ### Examples
 
@@ -469,7 +471,7 @@ $preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it): what previews are and how to read them
 - [Sync Preview](../configuration/sync-preview.md): what `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview` evaluate, including the destructive cascade
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change): what a deletion settings preview evaluates
-- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
+- [Synchronisation Rules](../configuration/deprovisioning.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
 - [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype): applying a previewed change with `-PreviewActivityId`
 - [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule): applying a previewed toggle change with `-PreviewActivityId`
 - [Activities](activities.md): the Activity a preview runs as, and the one the change it informed is recorded under

@@ -710,32 +710,14 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
 
     /// <summary>
-    /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
-    /// This is the export-side counterpart of the import join lookup (FindMetaverseObjectIdsByMatchValuesAsync): it looks up CSOs by MVO attribute values.
-    /// Used during export evaluation to find existing CSOs for provisioning decisions.
-    /// </summary>
-    /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
-    /// <param name="connectedSystem">The target Connected System.</param>
-    /// <param name="connectedSystemObjectType">The target CSO type.</param>
-    /// <param name="objectMatchingRule">The matching rule defining how to match.</param>
-    /// <returns>The matching CSO, or null if no match found.</returns>
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule objectMatchingRule);
-
-    /// <summary>
-    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
-    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
-    /// type in the given Connected System whose named attribute equals one of the given values. Used to
-    /// prefetch export-matching candidates for a whole page of Metaverse Objects in one query per rule,
-    /// instead of one query per object.
+    /// Export matching's lookup (#2052): for a single Object Matching Rule, finds every unjoined,
+    /// Normal-status Connected System Object of the given type in the given Connected System whose named
+    /// attribute equals one of the given values. Used both for one Metaverse Object's values and to
+    /// prefetch the candidates for a whole page of Metaverse Objects in one query per rule.
     /// </summary>
     /// <param name="connectedSystemId">The target Connected System.</param>
     /// <param name="connectedSystemObjectTypeId">The target Connected System Object Type.</param>
-    /// <param name="connectedSystemAttributeName">The Connected System attribute to compare, by name
-    /// (matches <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s name-based predicate).</param>
+    /// <param name="connectedSystemAttributeName">The Connected System attribute to compare, by name.</param>
     /// <param name="dataType">The attribute's data type; determines which typed column is compared and
     /// how the <paramref name="values"/> are interpreted. Only Text, Number, LongNumber, Decimal and
     /// Guid are supported; any other value throws <see cref="ArgumentException"/>.</param>
@@ -757,11 +739,22 @@ public interface IConnectedSystemRepository
         IReadOnlyCollection<object> values);
 
     /// <summary>
+    /// Streams every unjoined, Normal-status Connected System Object of the given type with its values for the given
+    /// attributes, ordered by object (#2052): what an expression-sourced Object Matching Rule's export index is built
+    /// from. An object holding none of the attributes is streamed with no values, since an expression can still be
+    /// worked out for it. Each value carries its <c>AttributeId</c> and typed value; a reference carries the referenced
+    /// object as a stub holding only its id. Attribute navigations are not loaded.
+    /// </summary>
+    /// <param name="connectedSystemId">The target Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type.</param>
+    /// <param name="attributeIds">The attributes whose values to read: those the expression reads.</param>
+    public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
     /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>:
-    /// same query shape (and tracking behaviour: the default tracked, not <c>AsNoTracking</c>, because
-    /// callers fix up the tracked instance after an atomic claim) as
-    /// <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s result, with
-    /// <c>AttributeValues</c> and their <c>Attribute</c> included.
+    /// tracked (not <c>AsNoTracking</c>, because callers fix up the tracked instance after an atomic
+    /// claim), with <c>AttributeValues</c> and their <c>Attribute</c> included.
     /// </summary>
     /// <param name="connectedSystemObjectId">The candidate's Connected System Object Id.</param>
     /// <returns>The Connected System Object, or null when it no longer exists or is no longer eligible
@@ -1108,7 +1101,8 @@ public interface IConnectedSystemRepository
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
-        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool? hasUnresolvedReferences = null);
 
     /// <summary>
     /// Retrieves a window of Connected System Object headers addressed by absolute offset and count, for
@@ -1127,6 +1121,8 @@ public interface IConnectedSystemRepository
     /// <param name="objectTypeFilter">Optional filter by one or more object type ids.</param>
     /// <param name="joinTypeFilter">Optional filter by one or more join types.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    /// <param name="hasUnresolvedReferences">Optional filter (#959): true for only the objects holding an unresolved
+    /// reference value, false for only those holding none.</param>
     public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -1137,7 +1133,8 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
-        bool includeTotalCount = true);
+        bool includeTotalCount = true,
+        bool? hasUnresolvedReferences = null);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
@@ -1579,6 +1576,39 @@ public interface IConnectedSystemRepository
     /// </summary>
     public Task<List<ConnectedSystemObjectUnresolvedReferenceValueGroup>> GetUnresolvedReferenceValueGroupsAsync(Guid connectedSystemObjectId);
 
+    /// <summary>
+    /// How many unresolved reference values a Connected System's objects hold between them, and how many objects hold
+    /// them (#959): what the Connected System page's signpost shows. Zero for both where there are none.
+    /// </summary>
+    public Task<ConnectedSystemUnresolvedReferenceTotals> GetUnresolvedReferenceTotalsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// A whole Connected System's unresolved reference values grouped by their parent in its hierarchy (#959), the
+    /// largest group first, each with how many objects hold its values. The Connected System-wide counterpart of
+    /// <see cref="GetUnresolvedReferenceValueGroupsAsync(Guid)"/>, compared the same way.
+    /// </summary>
+    public Task<List<ConnectedSystemUnresolvedReferenceValueGroup>> GetConnectedSystemUnresolvedReferenceValueGroupsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// How many of a Connected System's objects hold an unresolved reference value under any of the given parents
+    /// (each a <see cref="ConnectedSystemUnresolvedReferenceValueGroup.ParentKey"/>), counting each object once
+    /// however many of the parents its values sit under (#959).
+    /// </summary>
+    public Task<int> GetUnresolvedReferenceObjectCountAsync(int connectedSystemId, IReadOnlyCollection<string> parentKeys);
+
+    /// <summary>
+    /// Every distinct unresolved reference value a Connected System's objects hold on the given attributes (#959): the
+    /// values whose ambiguity across Object Types has to be checked, each checked once however many objects hold it.
+    /// </summary>
+    public Task<List<string>> GetDistinctUnresolvedReferenceValuesAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
+    /// A Connected System's unresolved reference values split between those holding one of
+    /// <paramref name="values"/> on one of <paramref name="attributeIds"/> and the rest, with the objects behind each
+    /// (#959). Values are compared exactly, as they were checked.
+    /// </summary>
+    public Task<UnresolvedReferenceValueSplit> GetUnresolvedReferenceValueSplitAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds, IReadOnlyCollection<string> values);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
@@ -1627,10 +1657,12 @@ public interface IConnectedSystemRepository
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
     /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
-    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
-    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
+    /// record (the export Synchronisation Rule whose matching found it, #348, and the Object Matching Rule and values
+    /// it matched on, #2052) are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
     /// </summary>
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

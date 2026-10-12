@@ -610,7 +610,8 @@ public class SqlConnectorImportTests
 
             var errored = ObjectWithAnchor(run, 2);
             Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-            Assert.That(errored.ErrorMessage, Does.Contain("HEADCOUNT"), "The administrator needs to know which column to look at.");
+            Assert.That(errored.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)), Is.EqualTo(new[] { ("HEADCOUNT", "not a number") }),
+                "The administrator needs to know which column to look at, and what it held.");
             Assert.That(Attribute(errored, "EMPLOYEE_ID").IntValues, Is.EqualTo(new[] { 2 }),
                 "An errored object still carries its anchor, or the error cannot be attributed to an object.");
 
@@ -649,14 +650,89 @@ public class SqlConnectorImportTests
 
             var errored = ObjectWithAnchor(run, 2);
             Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-            Assert.That(errored.ErrorMessage, Does.Contain("FTE"), "The administrator needs to know which column to look at.");
-            Assert.That(errored.ErrorMessage, Does.Contain("fractional"), "And why it was refused, since the column itself is perfectly valid.");
+            Assert.That(errored.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "FTE" }), "The administrator needs to know which column to look at.");
+            Assert.That(errored.AttributeValueErrors?[0].Reason, Does.Contain("fractional"), "And why it was refused, since the column itself is perfectly valid.");
 
             // 1.0 and 2 are whole numbers that happen to be carried as decimals, which is ordinary for an
             // Oracle NUMBER. Refusing those too would make the guard useless.
             Assert.That(Attribute(ObjectWithAnchor(run, 1), "FTE").IntValues, Is.EqualTo(new[] { 1 }));
             Assert.That(Attribute(ObjectWithAnchor(run, 3), "FTE").IntValues, Is.EqualTo(new[] { 2 }));
         }
+    }
+
+    [Test]
+    public async Task ImportAsync_TwoColumnsThatCannotBeConverted_ReportsBothAndReadsTheColumnsAfterThem()
+    {
+        // Before #2066 the first unreadable column stopped the row: every column after it went unread, and JIM, finding
+        // them missing, removed the values it held for them.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "HEADCOUNT", "FTE", "DISPLAY_NAME"],
+            [2, "not a number", 0.6m, "Grace"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                    Attribute("HEADCOUNT", AttributeDataType.Number),
+                    Attribute("FTE", AttributeDataType.Number),
+                    Attribute("DISPLAY_NAME", AttributeDataType.Text))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, PersonDocument, connectedSystem, pageSize: 10);
+        var errored = ObjectWithAnchor(run, 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errored.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("HEADCOUNT", "not a number"), ("FTE", "0.6") }));
+            Assert.That(Attribute(errored, "DISPLAY_NAME").StringValues, Is.EqualTo(new[] { "Grace" }));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedTableValuesThatCannotBeConverted_ReportsEachAgainstTheAttribute()
+    {
+        // Reported against the attribute rather than the related table's value column, since the attribute is what JIM
+        // leaves as it was, and what the administrator sees on the object.
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "schema": "HR",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    { "attributeName": "Grades", "schema": "HR", "table": "EMPLOYEE_GRADES", "valueColumn": "GRADE", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_GRADES", ["EMPLOYEE_ID", "GRADE"], [1, 3], [1, "x"], [1, 5], [1, "y"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                    Attribute("Grades", AttributeDataType.Number, plurality: AttributePlurality.MultiValued))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, document, connectedSystem, pageSize: 10);
+
+        Assert.That(ObjectWithAnchor(run, 1).AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+            Is.EqualTo(new[] { ("Grades", "x"), ("Grades", "y") }));
     }
 
     [Test]

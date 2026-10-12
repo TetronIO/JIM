@@ -450,21 +450,10 @@ public interface ISyncRepository
     Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Finds a CSO that matches an MVO using the specified matching rule.
-    /// Used by object matching during export (MVO→CSO lookup).
-    /// </summary>
-    Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule objectMatchingRule);
-
-    /// <summary>
-    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
-    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
-    /// type whose named attribute equals one of the given values, in one query per rule per page
-    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
-    /// parameter and eligibility documentation.
+    /// Export matching's lookup (MVO→CSO, #2052): for a single Object Matching Rule, finds every unjoined,
+    /// Normal-status Connected System Object of the given type whose named attribute equals one of the
+    /// given values, for one Metaverse Object or a whole page of them. See <c>IConnectedSystemRepository</c>
+    /// for full parameter and eligibility documentation.
     /// </summary>
     Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -473,6 +462,14 @@ public interface ISyncRepository
         AttributeDataType dataType,
         bool caseSensitive,
         IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Streams every unjoined, Normal-status Connected System Object of the given type with its values for the given
+    /// attributes, ordered by object: what an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052). See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
@@ -1156,10 +1153,10 @@ public interface ISyncRepository
 
     /// <summary>
     /// Queries the database for RPEI error counts without loading RPEIs into memory.
-    /// Returns total RPEIs with errors, total RPEIs, and total UnhandledError RPEIs.
+    /// Returns total RPEIs with errors, total RPEIs, total UnhandledError RPEIs and total refused Object Type changes.
     /// UnhandledError RPEIs indicate code/logic bugs and escalate activity status.
     /// </summary>
-    Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records attached to RPEIs.
@@ -1225,6 +1222,46 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Narrows a set of Metaverse Object ids to those still owed a password on a Connected System (#2039): a queued
+    /// password change for the (Metaverse Object, Connected System) pair that is Pending, Delivering or Parked, of
+    /// any origin. Keyed on the pair rather than on an account, so a live user-set or propagated change that won
+    /// coalescing over a provisioned one counts too.
+    /// <para>
+    /// Asked by the confirming import, once per page and only when the page holds a change written with an interim
+    /// value until an Initial Password is delivered, and once more per import for the held changes on objects it did
+    /// not return (<see cref="GetInitialPasswordHoldSummariesAsync"/>): a change whose account is still owed one is
+    /// held, one whose account is not is released. Expired and Cancelled changes are never delivered, so they owe
+    /// nothing.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
+    /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
+    /// those objects entirely, because a correction staged for any of their attributes
+    /// would replace the Pending Export holding the change, and the synchronisation preview skips them too so it
+    /// proposes no correction the run will not make. Answered from a partial index, so it costs nothing where no change
+    /// carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Every change on a Connected System held until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039), one row per change with its
+    /// Pending Export, Connected System Object and that object's Metaverse Object (null when it is joined to none).
+    /// <para>
+    /// Asked once per import, after reconciliation, so a held change is judged even when the import did not return its
+    /// account: a Full Import skips an unchanged account by its content hash, and a Delta Import never returns one, so
+    /// without this a password that expired or was cancelled would leave the change held for ever. Answered from the
+    /// partial index on the flag, so it costs nothing where no change is held.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets the object types (schema) for a Connected System.
@@ -1344,10 +1381,12 @@ public interface ISyncRepository
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
     /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
-    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
-    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
+    /// record (the export Synchronisation Rule whose matching found it, #348, and the Object Matching Rule and values
+    /// it matched on, #2052) are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue);
 
     #endregion
 

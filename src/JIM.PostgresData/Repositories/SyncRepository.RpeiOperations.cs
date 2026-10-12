@@ -1053,6 +1053,14 @@ public partial class SyncRepository
                 await writer.WriteAsync(rpei.UnresolvedReferenceCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
             else
                 await writer.WriteNullAsync();
+            if (rpei.AttributeValueErrorsJson is not null)
+                await writer.WriteAsync(rpei.AttributeValueErrorsJson, NpgsqlTypes.NpgsqlDbType.Jsonb);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.SourceLocation is not null)
+                await writer.WriteAsync(rpei.SourceLocation, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

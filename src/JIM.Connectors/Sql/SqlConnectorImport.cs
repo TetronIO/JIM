@@ -1247,8 +1247,9 @@ internal sealed class SqlConnectorImport
                 }
                 catch (Exception ex) when (IsValueConversionFailure(ex))
                 {
-                    SetValueError(importObject, plan, column.Name, ex);
-                    break;
+                    // Carry on with the row's other columns (#2066): stopping here left every column after this one
+                    // unread, and JIM, finding them missing, removed the values it held for them.
+                    ReportUnreadableValue(importObject, plan, column.Name, value, ex);
                 }
             }
 
@@ -1505,13 +1506,28 @@ internal sealed class SqlConnectorImport
     private static bool IsValueConversionFailure(Exception exception) =>
         exception is FormatException or InvalidCastException or OverflowException or ArgumentException or NotSupportedException;
 
-    private void SetValueError(ConnectedSystemImportObject importObject, SqlImportPlan plan, string columnName, Exception exception)
+    /// <summary>
+    /// Reports one value that could not be converted to its attribute's type (#2066), with the value as the database
+    /// returned it, so the administrator can see what to correct. JIM leaves the attribute as it already held it.
+    /// </summary>
+    /// <param name="value">The value as read, or null where reading it was what failed.</param>
+    private void ReportUnreadableValue(ConnectedSystemImportObject importObject, SqlImportPlan plan, string attributeName, object? value, Exception exception)
     {
-        importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
-        importObject.ErrorMessage = $"Column '{columnName}' could not be read: {exception.Message}";
+        importObject.AddAttributeValueError(attributeName, RawText(value), exception.Message);
 
-        _logger.Warning(exception, "SqlConnectorImport: Object Type {ObjectType} has a row whose column {Column} could not be read", plan.Name, columnName);
+        _logger.Warning(exception, "SqlConnectorImport: Object Type {ObjectType} has a row whose {Attribute} value could not be read", plan.Name, attributeName);
     }
+
+    /// <summary>
+    /// A value as text, for showing the administrator what the database held. Binary has no faithful text form here,
+    /// so it is left out rather than shown as a type name.
+    /// </summary>
+    private static string? RawText(object? value) => value switch
+    {
+        null or DBNull or byte[] => null,
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => value.ToString()
+    };
 
     #endregion
 
@@ -1589,13 +1605,16 @@ internal sealed class SqlConnectorImport
 
             var column = new SqlImportColumn(configuration.AttributeName, relatedTable.AttributeType);
 
+            object? value = null;
             try
             {
-                AddRelatedValue(importObject, relatedTable, column, values.Read(valueOrdinal, configuration.ValueColumn, relatedTable.AttributeType));
+                value = values.Read(valueOrdinal, configuration.ValueColumn, relatedTable.AttributeType);
+                AddRelatedValue(importObject, relatedTable, column, value);
             }
             catch (Exception ex) when (IsValueConversionFailure(ex))
             {
-                SetValueError(importObject, plan, configuration.ValueColumn, ex);
+                // Reported against the attribute, not the value column: the attribute is what JIM leaves as it was.
+                ReportUnreadableValue(importObject, plan, configuration.AttributeName, value, ex);
             }
         }
     }

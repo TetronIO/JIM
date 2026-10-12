@@ -31,12 +31,12 @@ BeforeAll {
             Rules               = @{
                 'STR-1' = 'Block'; 'STR-2' = 'Ratchet'; 'STR-3' = 'Block'; 'STR-4' = 'Block'; 'STR-5' = 'Block'
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
-                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'
+                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
-            AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario')
+            AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
             Audiences           = @('evaluator', 'implementer', 'administrator', 'operator', 'automation-author', 'security-assessor')
             PageTypes           = @{
                 'tutorial'        = @{ RequiredHeadings = @('Before you begin', 'What you achieved'); RequiredFrontMatter = @('scenario'); RequiresNumberedSteps = $true }
@@ -55,6 +55,7 @@ BeforeAll {
             ConformantFolders   = @()
             ConformantPages     = @()
             ScenarioPathFormat  = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
+            PortalLabelSources  = @('src')
             GlossaryPage        = 'reference/glossary.md'
             # The language patterns are the shipped ones, so these tests exercise what CI runs.
             AmericanSpellings   = $script:ShippedConfig.AmericanSpellings
@@ -471,6 +472,62 @@ Describe 'Test-DocsConformance: TYP-1 page shape' {
     }
 }
 
+Describe 'Test-DocsConformance: TUT-2 portal labels a tutorial names exist' {
+    BeforeAll {
+        $script:Portal = @{
+            'src/JIM.Web/Pages/Systems.razor' = "<MudButton>Create Connected System</MudButton>`n<MudTab Text=`"Run Profiles`" />`n"
+            'src/JIM.Connectors/File/FileConnector.cs' = "Name = `"File Path`",`n"
+            'test/Fake.razor' = "<MudButton>Only In A Test</MudButton>`n"
+        }
+        function New-Tutorial {
+            param([string]$Steps)
+            $body = "You will run a synchronisation.`n`n## Before you begin`n`nSign in as an administrator.`n`n## Step 1: Create it`n`n$Steps`n`n## What you achieved`n`nA synchronisation.`n"
+            New-Page -Type 'tutorial' -Title 'First Sync' -Body $body -ExtraFrontMatter @{ scenario = '027-First' }
+        }
+        $script:Scenario = @{ 'test/integration/scenarios/Invoke-Scenario-027-First.ps1' = '# scenario' }
+    }
+
+    It 'passes bold labels in a Portal tab that the portal source has, whatever their case' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Create Connected System**, then the **run profiles** tab.`n    2. Set **File Path**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'TUT-2'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a bold label in a Portal tab that the portal source does not have, naming it and its line' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Create Connected System**.`n    2. Select **Import Schema**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "first\.md:\d+\s+TUT-2\s+.*'Import Schema'"
+        $r.Output | Should -Not -Match "'Create Connected System'"
+    }
+
+    It 'reads only the portal sources it is given, not the tests' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Only In A Test**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        (Invoke-Conformance -Fixture $f).Output | Should -Match "TUT-2.*'Only In A Test'"
+    }
+
+    It 'leaves bold text outside a Portal tab, and on other page types, alone' {
+        $steps = "**Nothing here** is a portal label.`n`n=== `"PowerShell`"`n`n    Run **this** cmdlet.`n"
+        $f = New-Fixture -Pages @{
+            'first.md' = (New-Tutorial $steps)
+            'ref.md'   = (New-Page -Title 'Reference' -Body "A reference page.`n`n=== `"Portal`"`n`n    Select **Not A Label**.`n")
+        } -OtherFiles ($script:Portal + $script:Scenario)
+        (Invoke-Conformance -Fixture $f).Output | Should -Not -Match 'TUT-2'
+    }
+
+    It 'lets a marker excuse a label the portal builds from data' {
+        $steps = "=== `"Portal`"`n`n    <!-- conformance: allow TUT-2 `"the switch names the Metaverse Object Type`" -->`n    1. Turn on **Project Users to the Metaverse?**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'TUT-2'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
 Describe 'Test-DocsConformance: EXC-1 exception markers' {
     It 'suppresses a finding on the next line when the marker gives a reason' {
         $body = "Opening paragraph.`n`n<!-- conformance: allow STR-5 `"terminal output with no language`" -->`n```````noutput`n```````n"
@@ -530,6 +587,66 @@ Describe 'Test-DocsConformance: conformant and priority pages' {
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match 'ERROR.*STR-7'
         $r.Output | Should -Match 'ERROR.*STR-8.*40-word budget'
+    }
+}
+
+Describe 'Test-DocsConformance: PRI-1 priority pages record the release they were checked against' {
+    BeforeAll {
+        $script:Priority = @{ PriorityPages = @('cs.md'); ConformantPages = @('cs.md') }
+        $script:Version = @{ 'VERSION' = "0.16.0`n" }
+    }
+
+    It 'passes a conformant priority page validated against a released version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Match 'Docs conformance passed'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a conformant priority page that records no validation' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "ERROR.*PRI-1.*no 'validated'"
+    }
+
+    It 'does not yet ask a priority page that is not conformant for a validation' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page) } -ConfigOverrides @{ PriorityPages = @('cs.md') } -OtherFiles $script:Version
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'fails a validation recorded on a page that is not a priority page' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*only a priority page'
+    }
+
+    It 'fails a validation that does not name a release as vX.Y.Z' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = '0.16' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*vX\.Y\.Z'
+    }
+
+    It 'fails a validation against a release later than the current version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.17.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*v0\.17\.0.*0\.16\.0'
+    }
+
+    It 'accepts a pre-release version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0-alpha' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'cannot be excused by a marker' {
+        $page = New-Page -Body "<!-- conformance: allow-page PRI-1 `"not checked yet`" -->`n`nA Connected System is an external system JIM synchronises identities with.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = $page } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "PRI-1.*no 'validated'"
     }
 }
 

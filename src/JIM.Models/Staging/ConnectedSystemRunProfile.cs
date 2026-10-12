@@ -91,6 +91,16 @@ public class ConnectedSystemRunProfile : IAuditable
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
+    /// Allow Object Type changes (#2049). Only valid when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.FullImport"/>. By default an import that finds an object's External ID
+    /// already held by a Connected System Object of another Object Type (for a Connector whose External IDs are
+    /// unique across Object Types) records an <c>ObjectTypeChanged</c> error and leaves the existing object as it is.
+    /// When true, the Full Import instead creates a Connected System Object of the new Object Type, and its deletion
+    /// detection retires the old one, subject to the deletion limits. Defaults to false.
+    /// </summary>
+    public bool AllowObjectTypeChanges { get; set; }
+
+    /// <summary>
     /// Run Profile Safeguards (#1618): the maximum number of creates an Export run may attempt
     /// against the Connected System. Only honoured when <see cref="RunType"/> is
     /// <see cref="ConnectedSystemRunType.Export"/>. Null means no limit. Zero is a valid limit:
