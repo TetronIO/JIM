@@ -95,7 +95,10 @@ JIM refuses to save a rule that could never match, naming what is missing. If an
 shape, the Matching tab says so and names it, so it can be removed and recreated.
 
 The active mode also decides which rules the synchronisation engine consults: type-scoped rules in simple mode,
-each Synchronisation Rule's own rules in advanced mode. A rule of the other scope would be silently inert, so JIM
+each Synchronisation Rule's own rules in advanced mode. In simple mode that holds even for an object no import
+Synchronisation Rule applies to: its type's rules still join it, with nothing flowing in, which is how a target
+directory's existing accounts join their identities. [Sync Preview](sync-preview.md) predicts these joins as the
+synchronisation makes them. A rule of the other scope would be silently inert, so JIM
 refuses to create one, naming the active mode and the remedy (create the rule in the scope the mode consults, or
 switch the mode first). Rules of the other scope that already exist, retained by a mode switch, stay editable and
 deletable so a later switch back can restore them.
