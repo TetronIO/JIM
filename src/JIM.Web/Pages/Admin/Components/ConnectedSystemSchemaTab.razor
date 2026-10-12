@@ -204,7 +204,7 @@
                         Ensure the Connected System identity has the permissions needed to read the full schema; a partial
                         read can make entries appear removed when they are not.
                     </InfoPopover>
-                    <MudButton Color="Color.Primary"
+                    <MudButton
                                Variant="Variant.Outlined"
                                Size="Size.Small"
                                Class="text-no-wrap"
@@ -730,7 +730,6 @@
            administrator needs before saving, not afterwards. *@
         <MudButton data-testid="jim-preview-schema-selection"
                    Variant="Variant.Outlined"
-                   Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Visibility"
                    OnClick="PreviewSchemaSelectionAsync"
                    Disabled="@_startingSchemaPreview"

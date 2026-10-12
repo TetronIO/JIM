@@ -30,7 +30,7 @@
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+            <MudButton Variant="Variant.Outlined"
                        StartIcon="@Icons.Material.Filled.Storage"
                        DropShadow="false"
                        Size="Size.Small"
@@ -38,7 +38,7 @@
                 Connector Space
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+            <MudButton Variant="Variant.Outlined"
                        StartIcon="@Icons.Material.Filled.Outbox"
                        DropShadow="false"
                        Size="Size.Small"
@@ -55,7 +55,7 @@
                 var amber = UnresolvedReferenceDisplay.SignpostTone(_connectedSystem.UnresolvedReferenceHandling) == UnresolvedReferenceTone.Warning;
                 <MudTooltip Arrow="true" Placement="Placement.Top">
                     <ChildContent>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                        <MudButton Variant="Variant.Outlined"
                                    StartIcon="@Icons.Material.Filled.LinkOff"
                                    DropShadow="false"
                                    Size="Size.Small"

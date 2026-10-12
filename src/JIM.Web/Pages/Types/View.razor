@@ -114,7 +114,6 @@
                     {
                         <div class="d-flex justify-center mt-3">
                             <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -254,7 +253,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                            <MudButton Variant="Variant.Outlined" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
