@@ -101,7 +101,7 @@ Get-JIMServiceHealth -Summary
 
 ### Output
 
-One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to null. With -Summary, one object whose Services holds those three.
+One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to empty. With `-Summary`, one object whose Services holds those three.
 
 **`ServiceHealth`** (Services):
 
@@ -111,15 +111,15 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `Status` | `ServiceHealthStatus` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). |
 | `Condition` | `ServiceHealthCondition` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. |
 | `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
-| `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or null when the service has never reported. |
-| `HostName` | `string` | The host the reporting instance runs on, or null when the service has never reported. |
-| `Version` | `string` | The JIM version the reporting instance runs, or null when the service has never reported. |
-| `StartedAt` | `datetime` | When (UTC) the reporting instance started, or null when the service has never reported. |
-| `LastSeenAt` | `datetime` | When (UTC) the service last reported, or null when it never has. |
-| `CurrentWork` | `string` | What the service said it was doing when it last reported, or null when idle or never seen. |
-| `CurrentWorkStartedAt` | `datetime` | When (UTC) the current work began, or null when idle or never seen. |
-| `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or null when idle, never seen, or when the service cannot tell progress apart from liveness. |
-| `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or null. |
+| `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or empty when the service has never reported. |
+| `HostName` | `string` | The host the reporting instance runs on, or empty when the service has never reported. |
+| `Version` | `string` | The JIM version the reporting instance runs, or empty when the service has never reported. |
+| `StartedAt` | `datetime` | When (UTC) the reporting instance started, or empty when the service has never reported. |
+| `LastSeenAt` | `datetime` | When (UTC) the service last reported, or empty when it never has. |
+| `CurrentWork` | `string` | What the service said it was doing when it last reported, or empty when idle or never seen. |
+| `CurrentWorkStartedAt` | `datetime` | When (UTC) the current work began, or empty when idle or never seen. |
+| `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or empty when idle, never seen, or when the service cannot tell progress apart from liveness. |
+| `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or empty. |
 
 **`ServiceHealthSummary`** (Summary):
 
@@ -279,7 +279,7 @@ None.
 
 ### Output
 
-One object saying who the caller is to JIM. A caller with no JIM identity is answered rather than refused: Authorised is $false and Message says what to do.
+One object saying who the caller is to JIM. A caller with no JIM identity is answered rather than refused: Authorised is `$false` and Message says what to do.
 
 **`UserInfoResponse`**:
 
@@ -289,7 +289,7 @@ One object saying who the caller is to JIM. A caller with no JIM identity is ans
 | `IsAdministrator` | `bool` | Whether the caller holds the Administrator role. |
 | `Name` | `string` | The caller's name: the one their identity provider gives them, or the API key's name. |
 | `AuthMethod` | `string` | How the caller authenticated: oauth or api_key. |
-| `MetaverseObjectId` | `guid` | The caller's Metaverse Object; null when they have no JIM identity. |
+| `MetaverseObjectId` | `guid` | The caller's Metaverse Object; empty when they have no JIM identity. |
 | `Roles` | `string[]` | The names of the roles the caller holds; empty when they have no JIM identity. |
 | `Message` | `string` | Why a caller with no JIM identity cannot use JIM, and what to do about it. Present only when Authorised is false. |
 <!-- END GENERATED: Get-JIMUserInfo -->
@@ -340,8 +340,8 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Force` | `switch` | No |  | Skips the confirmation prompt. |
-| `IncludeAdministrators` | `switch` | No |  | Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true brand-new install. By default these are preserved so you are not locked out of the portal. When set with no initial administrator configured (JIM_SSO_INITIAL_ADMIN), the reset is refused unless -AcknowledgeAdministratorLockout is also supplied. |
-| `AcknowledgeAdministratorLockout` | `switch` | No |  | Acknowledges the portal lockout risk so an administrator-inclusive wipe may proceed even when no initial administrator is configured (for example when access is retained via the infrastructure API key). Ignored unless -IncludeAdministrators is also set. |
+| `IncludeAdministrators` | `switch` | No |  | Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true brand-new install. By default these are preserved so you are not locked out of the portal. When set with no initial administrator configured (JIM_SSO_INITIAL_ADMIN), the reset is refused unless `-AcknowledgeAdministratorLockout` is also supplied. |
+| `AcknowledgeAdministratorLockout` | `switch` | No |  | Acknowledges the portal lockout risk so an administrator-inclusive wipe may proceed even when no initial administrator is configured (for example when access is retained via the infrastructure API key). Ignored unless `-IncludeAdministrators` is also set. |
 
 ### Output
 

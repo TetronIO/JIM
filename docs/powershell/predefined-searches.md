@@ -43,7 +43,7 @@ Get-JIMPredefinedSearch -Uri <string>
 
 ### Output
 
-The list and a wildcard -Uri return a header per search; -Id and a literal -Uri return the search in full, with its attributes and criteria groups.
+The list and a wildcard `-Uri` return a header per search; `-Id` and a literal `-Uri` return the search in full, with its attributes and criteria groups.
 
 **`PredefinedSearchHeader`** (List, ByUri):
 
@@ -73,7 +73,7 @@ The list and a wildcard -Uri return a header per search; -Id and a literal -Uri 
 | `MetaverseObjectTypeName` | `string` | The name of the Metaverse Object Type the search returns results for. |
 | `Created` | `datetime` | When the search was created (UTC). |
 | `CreatedByName` | `string` | The display name of the principal that created the search. |
-| `LastUpdated` | `datetime` | When the search was last modified (UTC). Null if never modified after creation. |
+| `LastUpdated` | `datetime` | When the search was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the search. |
 | `Attributes` | `PredefinedSearchAttributeDto[]` | The attributes surfaced as columns in the search results, ordered by Position. |
 | `CriteriaGroups` | `PredefinedSearchCriteriaGroupDto[]` | The criteria groups that filter which objects match the search, ordered by Position. |
@@ -119,13 +119,13 @@ Set-JIMPredefinedSearch -Id <int> [-IsEnabled <bool>] [-ChangeReason <string>] [
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes |  | The ID of the Predefined Search to update. Accepts pipeline input by property name. |
-| `IsEnabled` | `bool` | No |  | Whether end users can see and run the search: $true to enable it, $false to disable it. Left as it is when omitted. |
+| `IsEnabled` | `bool` | No |  | Whether end users can see and run the search: `$true` to enable it, `$false` to disable it. Left as it is when omitted. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the search's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated search. |
 
 ### Output
 
-With -PassThru, the updated search in full, as Get-JIMPredefinedSearch -Id returns it; otherwise nothing.
+With `-PassThru`, the updated search in full, as `Get-JIMPredefinedSearch -Id` returns it; otherwise nothing.
 
 **`PredefinedSearchDetailDto`**: as under [Get-JIMPredefinedSearch](#get-jimpredefinedsearch).
 <!-- END GENERATED: Set-JIMPredefinedSearch -->
@@ -201,7 +201,7 @@ Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
+| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name, `PredefinedSearchId` or `Id`. |
 
 ### Output
 
@@ -241,7 +241,7 @@ New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
+| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name, `PredefinedSearchId` or `Id`. |
 | `ParentGroupId` | `int` | No |  | The ID of an existing group to nest this one in. A top-level group when omitted. |
 | `Type` | `string` | No | `'All'` | How the group combines what it holds: All (AND) or Any (OR). One of `All` or `Any`. |
 | `Position` | `int` | No | `0` | The group's place among its siblings. |
@@ -250,7 +250,7 @@ New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <
 
 ### Output
 
-With -PassThru, the created group, with a PredefinedSearchId property added naming its search; otherwise nothing.
+With `-PassThru`, the created group, with a PredefinedSearchId property added naming its search; otherwise nothing.
 
 **`PredefinedSearchCriteriaGroupDto`**: as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
 <!-- END GENERATED: New-JIMPredefinedSearchCriteriaGroup -->
@@ -283,7 +283,7 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
-| `GroupId` | `int` | Yes |  | The ID of the criteria group to update. Accepts pipeline input by property name. |
+| `GroupId` | `int` | Yes |  | The ID of the criteria group to update. Accepts pipeline input by property name, `GroupId` or `Id`. |
 | `Type` | `string` | No |  | How the group combines what it holds: All (AND) or Any (OR). One of `All` or `Any`. |
 | `Position` | `int` | No |  | The group's place among its siblings. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
@@ -291,7 +291,7 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-
 
 ### Output
 
-With -PassThru, the updated group, with a PredefinedSearchId property added naming its search; otherwise nothing.
+With `-PassThru`, the updated group, with a PredefinedSearchId property added naming its search; otherwise nothing.
 
 **`PredefinedSearchCriteriaGroupDto`**: as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
 <!-- END GENERATED: Set-JIMPredefinedSearchCriteriaGroup -->
@@ -322,7 +322,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
-| `GroupId` | `int` | Yes |  | The ID of the criteria group to remove, with everything in it. Accepts pipeline input by property name. |
+| `GroupId` | `int` | Yes |  | The ID of the criteria group to remove, with everything in it. Accepts pipeline input by property name, `GroupId` or `Id`. |
 | `ChangeReason` | `string` | No |  | Why the group was removed, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 
 ### Output
@@ -371,17 +371,17 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Metav
 | `DateTimeValue` | `datetime` | No |  | The value to compare a DateTime attribute with, read as UTC. |
 | `BoolValue` | `bool` | No |  | The value to compare a Boolean attribute with. |
 | `GuidValue` | `guid` | No |  | The value to compare a Guid attribute with. |
-| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. $false ignores case; it does when omitted. |
-| `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with -DateTimeValue, and is the default; Relative compares with a date worked out from now, given by -RelativeCount, -RelativeUnit and -RelativeDirection, and cannot be combined with -DateTimeValue. One of `Absolute` or `Relative`. |
+| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. `$false` ignores case; it does when omitted. |
+| `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with `-DateTimeValue`, and is the default; Relative compares with a date worked out from now, given by `-RelativeCount`, `-RelativeUnit` and `-RelativeDirection`, and cannot be combined with `-DateTimeValue`. One of `Absolute` or `Relative`. |
 | `RelativeCount` | `int` | No |  | How many units from now, for a Relative comparison; zero or more. |
-| `RelativeUnit` | `string` | No |  | The unit of -RelativeCount. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
+| `RelativeUnit` | `string` | No |  | The unit of `-RelativeCount`. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
 | `RelativeDirection` | `string` | No |  | Whether the date is in the past (Ago) or the future (FromNow). One of `Ago` or `FromNow`. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the created criterion. |
 
 ### Output
 
-With -PassThru, the created criterion, with a GroupId property added naming its group; otherwise nothing.
+With `-PassThru`, the created criterion, with a GroupId property added naming its group; otherwise nothing.
 
 **`PredefinedSearchCriteriaDto`**:
 
@@ -447,7 +447,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the criteria group that holds the criterion. Accepts pipeline input by property name. |
-| `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name. |
+| `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name, `CriterionId` or `Id`. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
 | `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
@@ -458,17 +458,17 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 | `DateTimeValue` | `datetime` | No |  | The value to compare a DateTime attribute with, read as UTC. |
 | `BoolValue` | `bool` | No |  | The value to compare a Boolean attribute with. |
 | `GuidValue` | `guid` | No |  | The value to compare a Guid attribute with. |
-| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. $false ignores case; it does when omitted. |
-| `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with -DateTimeValue, and is the default; Relative compares with a date worked out from now, given by -RelativeCount, -RelativeUnit and -RelativeDirection, and cannot be combined with -DateTimeValue. One of `Absolute` or `Relative`. |
+| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. `$false` ignores case; it does when omitted. |
+| `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with `-DateTimeValue`, and is the default; Relative compares with a date worked out from now, given by `-RelativeCount`, `-RelativeUnit` and `-RelativeDirection`, and cannot be combined with `-DateTimeValue`. One of `Absolute` or `Relative`. |
 | `RelativeCount` | `int` | No |  | How many units from now, for a Relative comparison; zero or more. |
-| `RelativeUnit` | `string` | No |  | The unit of -RelativeCount. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
+| `RelativeUnit` | `string` | No |  | The unit of `-RelativeCount`. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
 | `RelativeDirection` | `string` | No |  | Whether the date is in the past (Ago) or the future (FromNow). One of `Ago` or `FromNow`. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated criterion. |
 
 ### Output
 
-With -PassThru, the updated criterion, with a GroupId property added naming its group; otherwise nothing.
+With `-PassThru`, the updated criterion, with a GroupId property added naming its group; otherwise nothing.
 
 **`PredefinedSearchCriteriaDto`**: as under [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion).
 <!-- END GENERATED: Set-JIMPredefinedSearchCriterion -->
@@ -501,7 +501,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the criteria group that holds the criterion. Accepts pipeline input by property name. |
-| `CriterionId` | `int` | Yes |  | The ID of the criterion to remove. Accepts pipeline input by property name. |
+| `CriterionId` | `int` | Yes |  | The ID of the criterion to remove. Accepts pipeline input by property name, `CriterionId` or `Id`. |
 | `ChangeReason` | `string` | No |  | Why the criterion was removed, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 
 ### Output

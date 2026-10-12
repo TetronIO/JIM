@@ -335,7 +335,7 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId <guid> -All [-GroupId <guid>]
 
 Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey`, `MatchCandidates` and the identifiers of the objects concerned.
 
-`MatchCandidates` is empty unless the row is `WouldMatchAmbiguously`. There it lists up to 10 of the objects the match would find, in the same shape as an Activity item's `MatchCandidates` (see [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem)). Each carries `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `MatchedValue` and `CandidateTotal`, the full count.
+`MatchCandidates` is empty unless the row is `WouldMatchAmbiguously`. There it lists up to 10 of the objects the match would find, in the same shape as an Activity item's `MatchCandidates` (see [`Get-JIMActivityExecutionItem`](execution-items.md#get-jimactivityexecutionitem)). Each carries `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `MatchedValue` and `CandidateTotal`, the full count.
 
 `PatternKey` takes the same values as on a group (see [`Get-JIMConfigurationChangePreview`](#get-jimconfigurationchangepreview) above). It is per row here, so a group covering a mixture of edits can still be sorted by the kind each object makes.
 
@@ -423,7 +423,7 @@ Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's d
 
 On a join made by matching, `ObjectMatchingRule` says what the [Object Matching Rule](../configuration/object-matching-rules.md) compares (falling back to its id) and `MatchedValue` the value the join would match on; both are empty on every other row. `Inbound` carries the same two facts as `WouldJoinObjectMatchingRuleDescription` and `WouldJoinMatchedValue`, with the rule's id in `WouldJoinObjectMatchingRuleId`.
 
-Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](execution-items.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 
 ### Examples
 

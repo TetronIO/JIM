@@ -19,13 +19,14 @@
 
     - Syntax: one line per parameter set, from Get-Command.
     - Parameters: name, type, where it is required, default and description. The description is the
-      parameter's .PARAMETER help, followed by what its attributes say (pipeline input, ValidateSet,
-      ValidateRange, SupportsWildcards).
+      parameter's .PARAMETER help, followed by what its attributes say (pipeline input and the property
+      names that bind it, other aliases, ValidateSet, ValidateRange, SupportsWildcards).
     - Output: the cmdlet's .OUTPUTS help, then each type it declares with
       [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], the sets that return it, and the
       properties of that schema in the OpenAPI document, in the PascalCase the module returns them in.
       A JIM type that is not an OpenAPI schema (a cmdlet that builds its own object) must be listed in
-      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help;
+      the config's NonApiOutputTypes with its reason, and its properties are tabled from the list its
+      .OUTPUTS help gives (a paragraph whose first line is the type's name, then "Name (type): description");
       one the module names itself but whose properties are an API schema's is listed in
       OutputTypeSchemas with that schema, whose properties are tabled for it.
 
@@ -75,6 +76,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:Culture = [System.Globalization.CultureInfo]::GetCultureInfo('en-GB')
 $script:AllSets = '__AllParameterSets'
+# One property of a type the module builds, as its .OUTPUTS help lists it.
+$script:PropertyLinePattern = '^(?<name>[A-Za-z_]\w*) \((?<type>[^)]+)\): (?<description>.+)$'
 $script:BeginPattern = '<!-- BEGIN GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 $script:EndPattern = '<!-- END GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 
@@ -120,6 +123,51 @@ function ConvertTo-Paragraphs {
         Where-Object { $_ })
 }
 
+# A cmdlet's .OUTPUTS help, split into its prose and the property lists of the types the module builds itself:
+# a paragraph whose first line names a JIM type and whose other lines read "Name (type): description", a line
+# that does not starting another being the previous description running on.
+function Split-OutputsHelp {
+    param([string[]]$Sections)
+
+    $prose = [System.Collections.Generic.List[string]]::new()
+    $lists = @{}
+    foreach ($section in @($Sections | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        foreach ($paragraph in (($section -replace "`r", '').Trim() -split "\n\s*\n")) {
+            $lines = @($paragraph -split '\n' | ForEach-Object Trim | Where-Object { $_ })
+            if ($lines.Count -eq 0) { continue }
+            if ($lines.Count -ge 2 -and $lines[0] -cmatch '^JIM\.\w+$' -and $lines[1] -cmatch $script:PropertyLinePattern) {
+                $properties = [System.Collections.Generic.List[object]]::new()
+                foreach ($line in $lines[1..($lines.Count - 1)]) {
+                    $match = [regex]::Match($line, $script:PropertyLinePattern)
+                    if ($match.Success) {
+                        $properties.Add([pscustomobject]@{ Name = $match.Groups['name'].Value; Type = $match.Groups['type'].Value; Description = $match.Groups['description'].Value })
+                    }
+                    else { $properties[$properties.Count - 1].Description += " $line" }
+                }
+                $lists[$lines[0]] = $properties
+            }
+            else { $prose.Add($lines -join ' ') }
+        }
+    }
+    [pscustomobject]@{ Prose = @($prose); Lists = $lists }
+}
+
+# Text from help or a DTO comment, made fit for the page: a cmdlet with its parameters, a parameter, and $true,
+# $false and $null in code, which Get-Help cannot show and so the help leaves plain; and "empty" for null, a word
+# from the source the page does not use (VOI-1). Text already in code is left as it is.
+function ConvertTo-PageText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $code = '(?<![\w-])[A-Z][a-z]+-JIM[A-Za-z0-9]*(?:\s+-[A-Z][A-Za-z0-9]*(?::\$\w+)?)*|(?<![\w-])-[A-Z][A-Za-z0-9]*(?::\$\w+)?(?![\w-])|(?<!\w)\$(?:true|false|null)\b'
+    $parts = foreach ($part in [regex]::Split($Text, '(`[^`]*`)')) {
+        if ($part.StartsWith('`')) { $part; continue }
+        $part = $part -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        [regex]::Replace($part, $code, { param($match) '`' + $match.Value + '`' })
+    }
+    $parts -join ''
+}
+
 function ConvertTo-TableCell {
     param([AllowNull()][string]$Text)
     if ($null -eq $Text) { return '' }
@@ -162,9 +210,18 @@ function Get-AttributeSentences {
 
     $byValue = @($SetMetadata | Where-Object ValueFromPipeline).Count -gt 0
     $byProperty = @($SetMetadata | Where-Object ValueFromPipelineByPropertyName).Count -gt 0
-    if ($byValue -and $byProperty) { $sentences.Add('Accepts pipeline input, by value or by property name.') }
+    # An alias on a parameter bound by property name is what lets a parent object pipe in (a Connected
+    # System carries Id, not ConnectedSystemId), so it is named as a property that binds, never offered as
+    # a spelling to type: on a child-noun cmdlet, -Id reads as the child's id. Any other alias is a spelling.
+    $aliases = @($Parameter.Aliases)
+    $properties = if ($aliases.Count -gt 0) { ', ' + ((@($Parameter.Name) + $aliases | ForEach-Object { "``$_``" }) -join ' or ') } else { '' }
+    if ($byValue -and $byProperty) { $sentences.Add("Accepts pipeline input, by value or by property name$properties.") }
     elseif ($byValue) { $sentences.Add('Accepts pipeline input.') }
-    elseif ($byProperty) { $sentences.Add('Accepts pipeline input by property name.') }
+    elseif ($byProperty) { $sentences.Add("Accepts pipeline input by property name$properties.") }
+    if ($aliases.Count -gt 0 -and -not $byProperty) {
+        $spellings = @($aliases | ForEach-Object { "``-$_``" }) -join ' or '
+        $sentences.Add("Also accepted as $spellings.")
+    }
 
     foreach ($attribute in $Parameter.Attributes) {
         if ($attribute -is [System.Management.Automation.ValidateSetAttribute]) {
@@ -223,6 +280,8 @@ function Get-CmdletReference {
                 $node.Parent.TypeName.Name -in 'Parameter', 'System.Management.Automation.Parameter', 'ParameterAttribute'
         }, $true)
 
+    $outputsHelp = Split-OutputsHelp -Sections @(if ($help) { $help.Outputs })
+
     $outputTypes = [ordered]@{}
     foreach ($attribute in @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
         foreach ($type in $attribute.Type) {
@@ -241,7 +300,8 @@ function Get-CmdletReference {
         DeclaresPositions = $declaresPositions
         SupportsShouldProcess = $Command.Parameters.ContainsKey('WhatIf')
         ConfirmImpact = @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } | ForEach-Object ConfirmImpact | Select-Object -First 1)
-        Outputs     = @(if ($help) { $help.Outputs | ForEach-Object { ConvertTo-Paragraphs $_ } })
+        Outputs     = $outputsHelp.Prose
+        OutputProperties = $outputsHelp.Lists
         OutputTypes = $outputTypes
     }
 }
@@ -325,7 +385,7 @@ function Format-Parameters {
         }
         $default = if ($parameter.Default) { "``$($parameter.Default)``" } else { '' }
         '| `{0}` | `{1}` | {2} | {3} | {4} |' -f $parameter.Name, (Get-FriendlyTypeName $parameter.Type),
-            (Format-Required $Reference $parameter), (ConvertTo-TableCell $default), (ConvertTo-TableCell $description)
+            (Format-Required $Reference $parameter), (ConvertTo-TableCell $default), (ConvertTo-TableCell (ConvertTo-PageText $description))
     }
     "### Parameters`n`n| Name | Type | Required | Default | Description |`n|------|------|----------|---------|-------------|`n" + ($rows -join "`n")
 }
@@ -487,7 +547,23 @@ function Format-Output {
             $label += ' (' + (@($everySet | Where-Object { $sets -contains $_ }) -join ', ') + ')'
         }
 
-        if (-not $schemaName) {
+        if (-not $schemaName -and $NonApiOutputTypes.ContainsKey($typeName)) {
+            # A type the module builds: its properties come from its .OUTPUTS help.
+            $key = "module:$typeName"
+            if ($TabledOnPage.ContainsKey($key)) {
+                $first = $TabledOnPage[$key]
+                $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
+            }
+            elseif ($Reference.OutputProperties.ContainsKey($typeName)) {
+                $TabledOnPage[$key] = $Reference.Name
+                $sections.Add((Format-PropertyTable -Label $label -Properties $Reference.OutputProperties[$typeName]))
+            }
+            else {
+                $Problems.Add("$($Reference.Name) declares $typeName, a type the module builds, but its .OUTPUTS help lists none of its properties; add a paragraph whose first line is $typeName and whose others read 'Name (type): description'")
+                $sections.Add($label)
+            }
+        }
+        elseif (-not $schemaName) {
             $sections.Add($label)
         }
         elseif ($TabledOnPage.ContainsKey($schemaName)) {
@@ -496,27 +572,30 @@ function Format-Output {
         }
         else {
             $TabledOnPage[$schemaName] = $Reference.Name
-            $properties = @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)
-            # A Description column the schema leaves wholly empty says nothing; its descriptions come from
-            # the DTO's XML comments, so documenting the DTO is what fills it.
-            if (@($properties | Where-Object Description).Count -gt 0) {
-                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell $property.Description) }
-                $sections.Add("${label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n"))
-            }
-            else {
-                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
-                $sections.Add("${label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n"))
-            }
+            $sections.Add((Format-PropertyTable -Label $label -Properties @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)))
         }
     }
 
     $text = "### Output"
-    if ($Reference.Outputs.Count -gt 0) { $text += "`n`n" + ($Reference.Outputs -join "`n`n") }
+    if ($Reference.Outputs.Count -gt 0) { $text += "`n`n" + (@($Reference.Outputs | ForEach-Object { ConvertTo-PageText $_ }) -join "`n`n") }
     if ($sections.Count -eq 0) {
         if ($Reference.Outputs.Count -eq 0) { $text += "`n`nNone." }
         return $text
     }
     $text + "`n`n" + ($sections -join "`n`n")
+}
+
+# A type's label and its properties' table. A Description column wholly empty says nothing, so it is left out;
+# a schema's descriptions come from the DTO's XML comments, so documenting the DTO is what fills it.
+function Format-PropertyTable {
+    param([string]$Label, [object[]]$Properties)
+
+    if (@($Properties | Where-Object Description).Count -gt 0) {
+        $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell (ConvertTo-PageText $property.Description)) }
+        return "${Label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n")
+    }
+    $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
+    "${Label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n")
 }
 
 function Format-Block {

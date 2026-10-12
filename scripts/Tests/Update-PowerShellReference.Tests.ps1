@@ -183,6 +183,27 @@ function Get-JIMHealth {
         Gets JIM's health.
 
     .OUTPUTS
+        A summary of JIM's health.
+
+        JIM.HealthSummary
+        Status (string): Healthy or Unhealthy.
+        CheckedAt (datetime): When the check ran, which
+            is UTC.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.HealthSummary')]
+    param()
+}
+'@
+
+    # Builds its own object but lists none of its properties.
+    $script:GetHealthUnlisted = @'
+function Get-JIMHealth {
+    <#
+    .SYNOPSIS
+        Gets JIM's health.
+
+    .OUTPUTS
         A summary with Status and CheckedAt.
     #>
     [CmdletBinding()]
@@ -231,6 +252,54 @@ function Set-JIMWidgetName {
 
         [switch]$PassThru
     )
+}
+'@
+
+    # A child-noun cmdlet that takes its parent from the pipeline: a piped Widget carries Id, not WidgetId, so
+    # the alias is what binds it. And an alias kept only so an old spelling still works.
+    $script:GetWidgetPart = @'
+function Get-JIMWidgetPart {
+    <#
+    .SYNOPSIS
+        Gets a Widget's parts.
+
+    .PARAMETER WidgetId
+        The Widget whose parts to get.
+
+    .PARAMETER Kind
+        The kind of part.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetHeader')]
+    param(
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Alias('Id')]
+        [int]$WidgetId,
+
+        [Alias('PartKind')]
+        [string]$Kind
+    )
+}
+'@
+
+    # Help written for Get-Help, which renders no Markdown: names a cmdlet, its parameters and PowerShell's
+    # constants in plain text, and says "null", which the page must not (VOI-1).
+    $script:GetWidgetNote = @'
+function Get-JIMWidgetNote {
+    <#
+    .SYNOPSIS
+        Gets a Widget's note.
+
+    .PARAMETER Kind
+        Pipe it from Get-JIMWidget -Name "x", or give it with -Kind; $true keeps it. Null when the Widget has none,
+        which `Clear-Thing -Now` sets, as $null does.
+
+    .OUTPUTS
+        Each note, or null where there is none; see Get-JIMWidget -Id.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param([string]$Kind)
 }
 '@
 
@@ -591,8 +660,26 @@ function Disconnect-JIMWidget {
         ($remove | Where-Object Name -eq 'Id').Description | Should -Not -Match 'by property name'
     }
 
+    It 'names the properties a parameter binds from the pipeline, and an alias that does not' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetPart) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetPart') }
+        Invoke-Generator $fixture | Out-Null
+        $rows = ConvertFrom-MarkdownTable (Get-Subsection (Get-Block (Get-Page $fixture) 'Get-JIMWidgetPart') 'Parameters')
+        ($rows | Where-Object Name -eq 'WidgetId').Description | Should -Match 'pipeline input by property name, WidgetId or Id\.'
+        ($rows | Where-Object Name -eq 'Kind').Description | Should -Match 'Also accepted as -PartKind\.'
+    }
+
+    It 'puts cmdlets, parameters and PowerShell''s constants in code, and writes empty for null' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetNote) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetNote') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMWidgetNote'
+        $block | Should -Match 'Pipe it from `Get-JIMWidget -Name` "x", or give it with `-Kind`; `\$true` keeps it\.'
+        $block | Should -Match 'Empty when the Widget has none, which `Clear-Thing -Now` sets, as `\$null` does\.'
+        $block | Should -Match 'Each note, or empty where there is none; see `Get-JIMWidget -Id`\.'
+        $block | Should -Not -Match '(?<!`)``(?!`)' -Because 'text already in code is left as it is'
+    }
+
     It 'gives the .OUTPUTS help as prose' {
-        Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; -Id returns the whole Widget\."
+        Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; ``-Id`` returns the whole Widget\."
     }
 
     It 'tables each output type with the sets that return it, and its properties in PascalCase with their types' {
@@ -771,14 +858,26 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'JIM\.HealthSummary'
     }
 
-    It 'accepts an allowed output type that is not an OpenAPI schema, and lists it by name' {
+    It 'tables a type the module builds from the properties its .OUTPUTS help lists, and keeps the list out of the prose' {
         $fixture = New-Fixture -Functions @($script:GetHealth) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet from several API calls' }
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMHealth'))
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMHealth'
+        $types = @(Get-OutputTypes $block)
         $types[0].Type | Should -Be 'HealthSummary'
-        $types[0].Table.Count | Should -Be 0
+        @($types[0].Table | ForEach-Object Property) | Should -Be @('Status', 'CheckedAt')
+        ($types[0].Table | Where-Object Property -eq 'CheckedAt').Type | Should -Be 'datetime'
+        ($types[0].Table | Where-Object Property -eq 'CheckedAt').Description | Should -Be 'When the check ran, which is UTC.'
+        Get-Subsection $block 'Output' | Should -Match "A summary of JIM's health\."
+        Get-Subsection $block 'Output' | Should -Not -Match 'JIM\.HealthSummary|Status \(string\)'
+    }
+
+    It 'fails when a type the module builds lists none of its properties' {
+        $fixture = New-Fixture -Functions @($script:GetHealthUnlisted) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet from several API calls' }
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'JIM\.HealthSummary'
     }
 
     It 'fails on an allowed output type that no cmdlet declares' {

@@ -93,8 +93,8 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `RoleId` | `int` | Yes (ById) |  | The ID of the Role. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Role from the pipeline, for example from Get-JIMRole. Accepts pipeline input. |
+| `RoleId` | `int` | Yes (ById) |  | The ID of the Role. Accepts pipeline input by property name, `RoleId` or `Id`. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Role from the pipeline, for example from `Get-JIMRole`. Accepts pipeline input. |
 
 ### Output
 
@@ -202,8 +202,8 @@ Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <st
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes |  | The ID of the Role to add the member to. |
-| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to add. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject. Accepts pipeline input. |
+| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to add. Accepts pipeline input by property name, `MetaverseObjectId` or `Id`. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from `Get-JIMMetaverseObject`. Accepts pipeline input. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change History. |
 
 ### Output
@@ -254,8 +254,8 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes |  | The ID of the Role to remove the member from. |
-| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to remove. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject. Accepts pipeline input. |
+| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to remove. Accepts pipeline input by property name, `MetaverseObjectId` or `Id`. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from `Get-JIMMetaverseObject`. Accepts pipeline input. |
 | `Force` | `switch` | No |  | Skips the confirmation prompt. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change History. |
 

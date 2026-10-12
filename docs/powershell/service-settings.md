@@ -46,7 +46,7 @@ Each service setting, with its default, its stored value and the value in effect
 | `Category` | `string` | Category for grouping (e.g., "SSO", "Synchronisation", "Maintenance"). |
 | `ValueType` | `string` | Data type of the setting value (e.g., "String", "Boolean", "Integer"). |
 | `DefaultValue` | `string` | The default value as a string. |
-| `Value` | `string` | The current overridden value, or null if using the default. |
+| `Value` | `string` | The current overridden value, or empty if using the default. |
 | `EffectiveValue` | `string` | The effective value (Value if set, otherwise DefaultValue). |
 | `IsReadOnly` | `bool` | Whether this setting is read-only (e.g., mirrored from environment variables). |
 | `IsOverridden` | `bool` | Whether the current value differs from the default. |
@@ -94,7 +94,7 @@ Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>]
 
 ### Output
 
-With -PassThru, the setting as updated; otherwise nothing.
+With `-PassThru`, the setting as updated; otherwise nothing.
 
 **`ServiceSettingDto`**: as under [Get-JIMServiceSetting](#get-jimservicesetting).
 <!-- END GENERATED: Set-JIMServiceSetting -->
@@ -146,7 +146,7 @@ Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru] [-W
 
 ### Output
 
-With -PassThru, the setting as reverted; otherwise nothing.
+With `-PassThru`, the setting as reverted; otherwise nothing.
 
 **`ServiceSettingDto`**: as under [Get-JIMServiceSetting](#get-jimservicesetting).
 <!-- END GENERATED: Reset-JIMServiceSetting -->

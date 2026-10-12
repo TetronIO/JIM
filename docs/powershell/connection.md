@@ -37,16 +37,27 @@ Connect-JIM [-Url] <string> [-ApiKey] <string>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Url` | `string` | Yes |  | The JIM instance's base URL, for example https://jim.example.com or http://localhost:5200. Can be given by position, as the first argument. |
-| `ApiKey` | `string` | Yes (ApiKey) |  | An API key, for non-interactive authentication; create one in the portal under Admin > API Keys. With a key, Connect-JIM does not open a browser, and never reads or writes the credential store. Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has no record of, or one that is disabled or has expired. An infrastructure key, set in JIM_INFRASTRUCTURE_API_KEY, exists only once JIM has started with it set, and expires 24 hours later. Can be given by position, as the second argument. |
+| `ApiKey` | `string` | Yes (ApiKey) |  | An API key, for non-interactive authentication; create one in the portal under Admin > API Keys. With a key, `Connect-JIM` does not open a browser, and never reads or writes the credential store. `Connect-JIM` checks that JIM accepts the key, and stops if it does not: a key JIM has no record of, or one that is disabled or has expired. An infrastructure key, set in JIM_INFRASTRUCTURE_API_KEY, exists only once JIM has started with it set, and expires 24 hours later. Can be given by position, as the second argument. |
 | `Force` | `switch` | No (Interactive) |  | Signs in again even when a valid session exists, ignoring any persisted refresh token and overwriting it with the new one. |
 | `NoPersist` | `switch` | No (Interactive) |  | Signs in for this session only, without reading from or writing to the operating system's credential store. Useful on shared machines. |
 | `TimeoutSeconds` | `int` | No (Interactive) | `300` | How long to wait, in seconds, for the browser sign-in to complete. From 30 to 600. |
 
 ### Output
 
-The connection: Url, the JIM instance's address; AuthMethod, OAuth or ApiKey; Connected, $true; ServerVersion, the JIM version the instance reported; Authorised, whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM, always $true for an API key; Status, JIM's health status; ExpiresAt, when the access token expires, for OAuth only; and ApiKey, the key's first eight and last four characters, for an API key only.
+The connection made.
 
-**`Connection`**
+**`Connection`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Url` | `string` | The JIM instance's address. |
+| `AuthMethod` | `string` | How the connection authenticated: OAuth or ApiKey. |
+| `Connected` | `bool` | Always `$true`; a connection that fails throws instead. |
+| `ServerVersion` | `string` | The JIM version the instance reported. |
+| `Authorised` | `bool` | Whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM; always `$true` for an API key. |
+| `Status` | `string` | JIM's health status. |
+| `ExpiresAt` | `datetime` | When the access token expires; OAuth only. |
+| `ApiKey` | `string` | The key's first eight and last four characters; API key only. |
 <!-- END GENERATED: Connect-JIM -->
 
 ### Examples
@@ -160,13 +171,23 @@ Test-JIMConnection [-Quiet]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Quiet` | `switch` | No |  | Returns only $true or $false instead of the connection's status. |
+| `Quiet` | `switch` | No |  | Returns only `$true` or `$false` instead of the connection's status. |
 
 ### Output
 
-The connection's status: Connected, whether a connection exists and JIM answered; Url, the JIM instance's address; AuthMethod, ApiKey or OAuth; ServerVersion, the JIM version it reported; Status, JIM's health status; Message, a sentence describing the result; and TokenExpiresAt, when the access token expires, for OAuth only. With -Quiet, $true if connected; otherwise $false.
+The connection's status; with `-Quiet`, `$true` if connected and otherwise `$false`.
 
-**`ConnectionStatus`**
+**`ConnectionStatus`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Connected` | `bool` | Whether a connection exists and JIM answered. |
+| `Url` | `string` | The JIM instance's address. |
+| `AuthMethod` | `string` | How the connection authenticated: ApiKey or OAuth. |
+| `ServerVersion` | `string` | The JIM version the instance reported. |
+| `Status` | `string` | JIM's health status. |
+| `Message` | `string` | A sentence describing the result. |
+| `TokenExpiresAt` | `datetime` | When the access token expires; OAuth only. |
 
 **`bool`**
 <!-- END GENERATED: Test-JIMConnection -->

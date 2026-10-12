@@ -44,11 +44,18 @@ function Connect-JIM {
         How long to wait, in seconds, for the browser sign-in to complete.
 
     .OUTPUTS
-        The connection: Url, the JIM instance's address; AuthMethod, OAuth or ApiKey; Connected, $true;
-        ServerVersion, the JIM version the instance reported; Authorised, whether the signed-in user has a JIM
-        identity (a Metaverse Object) and so can use JIM, always $true for an API key; Status, JIM's health status;
-        ExpiresAt, when the access token expires, for OAuth only; and ApiKey, the key's first eight and last four
-        characters, for an API key only.
+        The connection made.
+
+        JIM.Connection
+        Url (string): The JIM instance's address.
+        AuthMethod (string): How the connection authenticated: OAuth or ApiKey.
+        Connected (bool): Always $true; a connection that fails throws instead.
+        ServerVersion (string): The JIM version the instance reported.
+        Authorised (bool): Whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM;
+            always $true for an API key.
+        Status (string): JIM's health status.
+        ExpiresAt (datetime): When the access token expires; OAuth only.
+        ApiKey (string): The key's first eight and last four characters; API key only.
 
     .EXAMPLE
         Connect-JIM -Url "https://jim.company.com"
