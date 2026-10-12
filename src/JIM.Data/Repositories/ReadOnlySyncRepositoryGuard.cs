@@ -266,6 +266,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
         => _inner.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
 
+    public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+        => _inner.GetObjectMatchingRuleModeAsync(connectedSystemId);
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
         => _inner.GetSyncRuleIdsWithInitialPasswordEnabledAsync(syncRuleIds);
 
