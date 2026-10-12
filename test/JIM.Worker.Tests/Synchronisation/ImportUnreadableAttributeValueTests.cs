@@ -192,6 +192,50 @@ public class ImportUnreadableAttributeValueTests
     }
 
     [Test]
+    public async Task FullImport_FlaggedObjectWhoseReadableContentIsUnchanged_CountsItUnchangedAndInErrorAsync()
+    {
+        // A flagged object is always compared in full, never skipped by its content hash; finding its readable content
+        // unchanged is not an update (#2129), but the value it could not read is still an error.
+        var hrId = Guid.NewGuid();
+        await RunFullImportAsync(Person(hrId, "Sam Okafor"));
+
+        var unreadable = Person(hrId, "Sam Okafor");
+        unreadable.AddAttributeValueError(StartDate, "31/02/2026", "Not a valid date and time.");
+        var activity = await RunFullImportAsync(unreadable);
+
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged, 1 error)"));
+    }
+
+    [Test]
+    public async Task FullImport_ValueUnreadableOnANewObject_CountsItCreatedAndInErrorAsync()
+    {
+        // Guard, not a red test: a joiner with a value the Connector could not read is still created.
+        var joiner = Person(Guid.NewGuid(), "Sam Okafor");
+        joiner.AddAttributeValueError(StartDate, "31/02/2026", "Not a valid date and time.");
+        var activity = await RunFullImportAsync(joiner);
+
+        Assert.That(activity.Message, Does.Contain("1 object (1 created, 0 updated, 1 error)"));
+    }
+
+    [Test]
+    public async Task FullImport_FlaggedObjectWithAnotherValueChanged_CountsItUpdatedAndInErrorAsync()
+    {
+        // Guard, not a red test: one object can be both updated and in error.
+        var hrId = Guid.NewGuid();
+        await RunFullImportAsync(Person(hrId, "Sam Okafor"));
+
+        var unreadable = Person(hrId, "Sam Okafor-Byrne");
+        unreadable.AddAttributeValueError(StartDate, "31/02/2026", "Not a valid date and time.");
+        var activity = await RunFullImportAsync(unreadable);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Message, Does.Contain("1 object (0 created, 1 updated, 1 error)"));
+            Assert.That(activity.Message, Does.Not.Contain("unchanged"));
+        }
+    }
+
+    [Test]
     public async Task FullImport_ValueUnreadableWhileAnotherIsRemoved_TheNextImportStillComparesTheObjectAsync()
     {
         // The second import removes a qualification and cannot read the start date, so JIM stores the removal and keeps

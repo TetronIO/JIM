@@ -474,6 +474,10 @@ public class OptimisticExportApplyWorkflowTests
         // Pending Export.
         Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null,
             "the confirmed Pending Export must have been deleted by reconciliation");
+
+        // Assert 4 (guard, #2129): the import changed nothing on the object, so the Activity's message counts it as
+        // unchanged, although reconciliation gave it an execution item for the confirmation.
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
     }
 
     /// <summary>

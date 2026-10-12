@@ -727,11 +727,13 @@
                         AttributeName = ac.AttributeName,
                         ChangeType = vc.ValueChangeType,
                         Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        // The repository loads every reference value's Type, which both the type chip and the
+                        // link to the referenced Metaverse Object are built from (#2146).
                         ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
                         {
-                            TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                            TypeName = vc.ReferenceValue.Type.Name,
                             DisplayName = vc.ReferenceValue.NameOrId ?? vc.ReferenceValue.Id.ToString(),
-                            Href = $"/users/{vc.ReferenceValue.Id}"
+                            Href = JIM.Utilities.Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
                         } : null,
                         IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
                         AttributeType = ac.AttributeType
