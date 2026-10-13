@@ -1,10 +1,13 @@
 ---
 title: Worker Tasks
+description: "The cmdlets that list the background tasks queued or running in JIM, and cancel them."
+type: reference
+audience: automation-author
 ---
 
 # Worker Tasks
 
-Worker Task cmdlets let you monitor and cancel queued and in-progress background operations (synchronisation runs, connector space clears, example data generation, and similar). Worker Tasks are ephemeral: once a task completes, its record is deleted and the associated [Activity](activities.md) becomes the durable audit record, so these cmdlets only ever return in-flight work.
+Worker Task cmdlets let you monitor and cancel queued and in-progress background operations (synchronisation runs, Connector Space clears, example data generation, and similar). Worker Tasks are ephemeral: once a task completes, its record is deleted and the associated [Activity](activities.md) becomes the durable audit record, so these cmdlets only ever return in-flight work.
 
 ---
 

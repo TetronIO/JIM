@@ -1,5 +1,8 @@
 ---
 title: API Keys
+description: "The cmdlets that create, read, change and delete API keys, including their roles and whether they are enabled."
+type: reference
+audience: automation-author
 ---
 
 # API Keys

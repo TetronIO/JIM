@@ -1,10 +1,11 @@
 # Public Documentation Standard
 
-- **Status:** Doing (Phases 0 and 1 complete: factual corrections, link and example checks, the standard, and the conformance check with its baseline)
+- **Status:** Done
+- **Note:** STR-7 and STR-8 stay Warn until a release has run with them clean; tracked under [#2247](https://github.com/TetronIO/JIM/issues/2247).
 - **Created:** 2026-10-11
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
-- **Plan:** [`PUBLIC_DOCUMENTATION_STANDARD.md`](../../plans/doing/PUBLIC_DOCUMENTATION_STANDARD.md)
+- **Plan:** [`PUBLIC_DOCUMENTATION_STANDARD.md`](../../plans/done/PUBLIC_DOCUMENTATION_STANDARD.md)
 - **Evidence:** [`engineering/notes/docs-audit-2026-10/`](../../notes/docs-audit-2026-10/README.md) (every page read in full; product surfaces inventoried from source)
 
 ## Problem Statement
