@@ -15,14 +15,14 @@ function Get-JIMMetaverseAttributeDeletionPreview {
         Remove-JIMMetaverseAttribute.
 
     .PARAMETER Id
-        The unique identifier of the Attribute to preview.
+        The ID of the attribute to assess.
 
     .PARAMETER InputObject
-        Attribute object to preview (from pipeline).
+        An attribute from the pipeline, for example from Get-JIMMetaverseAttribute.
 
     .OUTPUTS
-        PSCustomObject describing the deletion impact (BlockedByValues, RequiresConfirmation,
-        TotalObjectsWithValues, ObjectTypeValueCounts, References, and so on).
+        What deleting the attribute would do: whether stored values block it, how many Metaverse Objects of each
+        Object Type hold one, and the configuration that would be removed with it.
 
     .EXAMPLE
         Get-JIMMetaverseAttributeDeletionPreview -Id 42
@@ -39,7 +39,7 @@ function Get-JIMMetaverseAttributeDeletionPreview {
         Get-JIMMetaverseAttribute
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AttributeDeletionImpact')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

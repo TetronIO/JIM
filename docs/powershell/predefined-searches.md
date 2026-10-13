@@ -515,6 +515,6 @@ Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -Criterion
 
 ## See also
 
-- [Search-JIMMetaverseObject](metaverse.md): run a Predefined Search to return matching objects
-- [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects and schema
+- [Search-JIMMetaverseObject](metaverse.md#search-jimmetaverseobject): run a Predefined Search to return matching objects
+- [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects
 - [History](history.md): retrieve a Predefined Search's Configuration Change History with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch`

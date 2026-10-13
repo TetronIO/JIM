@@ -1407,7 +1407,12 @@ Describe 'Get-JIMMetaverseObjectProvenance' {
         It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
         It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
         It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
-        It 'Should document its output shape' { $help.returnValues | Out-String | Should -Match 'MetaverseObjectId' }
+        It 'Should declare the shape each parameter set returns' {
+            # The declared output types generate the published property tables (ACC-5), so they are the documentation.
+            $outputs = (Get-Command Get-JIMMetaverseObjectProvenance).OutputType.Name
+            $outputs | Should -Contain 'JIM.MetaverseObjectProvenanceDto'
+            $outputs | Should -Contain 'JIM.MetaverseAttributeProvenanceDto'
+        }
     }
 }
 

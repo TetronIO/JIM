@@ -24,18 +24,17 @@ function Remove-JIMMetaverseObjectTypeAttribute {
         Built-in attributes cannot be unassigned.
 
     .PARAMETER AttributeId
-        The unique identifier of the Metaverse Attribute to unassign.
+        The ID of the attribute to unbind.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Metaverse Object Type to unassign the attribute from.
+        The ID of the Metaverse Object Type to unbind it from.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the attribute's Configuration Change History.
 
     .PARAMETER Force
-        Skips the confirmation prompt. The server-side type-the-name safeguard is still satisfied
-        by the cmdlet; -Force only suppresses the interactive PowerShell prompt.
+        Suppresses the confirmation prompt. The cmdlet still gives the name confirmation JIM requires before it
+        removes configuration that uses the attribute on that Object Type.
 
     .OUTPUTS
         None.
@@ -57,6 +56,7 @@ function Remove-JIMMetaverseObjectTypeAttribute {
         Remove-JIMMetaverseAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

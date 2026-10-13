@@ -14,13 +14,19 @@ function Get-JIMSchedule {
         The unique identifier (GUID) of a specific Schedule to retrieve.
 
     .PARAMETER Name
-        Filter schedules by name. Supports wildcards (* and ?).
+        Returns the Schedules whose name matches.
 
     .PARAMETER IncludeSteps
-        If specified, includes the full step details for each schedule.
+        Returns each Schedule in full, steps included.
 
     .OUTPUTS
-        PSCustomObject representing Schedule(s).
+        The list returns each Schedule's configuration and the outcome of its last run. -Id returns the Schedule in
+        full, with its steps, but leaves the last-run fields empty; -IncludeSteps returns each listed Schedule in
+        full and keeps them.
+
+        JIM.ScheduleDto: By default
+
+        JIM.ScheduleDetailDto: With -Id or -IncludeSteps
 
     .EXAMPLE
         Get-JIMSchedule
@@ -51,7 +57,9 @@ function Get-JIMSchedule {
         Disable-JIMSchedule
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDto', ParameterSetName = 'List')]
+    [OutputType('JIM.ScheduleDetailDto', ParameterSetName = 'List')]
+    [OutputType('JIM.ScheduleDetailDto', ParameterSetName = 'ById')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]
