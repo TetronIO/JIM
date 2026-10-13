@@ -13,6 +13,12 @@ function Test-JIMExpression {
         Expressions use DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"]
         for attribute access.
 
+        With -SyncRuleId and -MappingId, the expression is tested as that Attribute Flow, by the same code
+        a synchronisation runs: each sample value is converted to its attribute's type, then the Attribute
+        Flow's Missing Input Behaviour, the expression, value processing and conversion to the target
+        attribute's type apply in turn. Outcome then says whether the target would be given values, no value,
+        or an error, and ValueLines gives the values it would hold.
+
     .PARAMETER Expression
         The expression to test.
         Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
@@ -20,14 +26,23 @@ function Test-JIMExpression {
     .PARAMETER MvAttributes
         A hashtable of sample Metaverse attribute values.
         Keys are attribute names, values are the attribute values.
+        With an Attribute Flow, $null is no value (distinct from empty text) and an array gives a multi-valued attribute several values.
 
     .PARAMETER CsAttributes
         A hashtable of sample Connected System attribute values.
         Keys are attribute names, values are the attribute values.
+        With an Attribute Flow, $null is no value (distinct from empty text) and an array gives a multi-valued attribute several values.
+
+    .PARAMETER SyncRuleId
+        The ID of the Synchronisation Rule whose Attribute Flow to test the expression as. Give it with MappingId.
+
+    .PARAMETER MappingId
+        The ID of the Attribute Flow to test the expression as. The expression tested is Expression, so an edit can be tried before it is saved.
 
     .OUTPUTS
         The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester
-        shows it, one value per line.
+        shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what
+        a synchronisation would give the target attribute.
 
     .EXAMPLE
         Test-JIMExpression -Expression '"Hello, " + mv["Display Name"] + "!"' -MvAttributes @{ "Display Name" = "John Doe" }
@@ -50,6 +65,12 @@ function Test-JIMExpression {
         Tests a conditional expression that prefixes account names for IT users.
 
     .EXAMPLE
+        Test-JIMExpression -Expression 'FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")' -SyncRuleId 12 -MappingId 40 -CsAttributes @{ "hireDate" = "2026-03-02" }
+
+        Tests an expression as Attribute Flow 40 on Synchronisation Rule 12: the sample is converted to a date, as the
+        Connected System Object would hold it, and the result is converted for the Attribute Flow's target attribute.
+
+    .EXAMPLE
         Test-JIMExpression -Expression 'RandomPassword(16, true)'
 
         Tests random password generation (result will vary on each run).
@@ -63,7 +84,7 @@ function Test-JIMExpression {
         New-JIMSyncRuleMapping
         Get-JIMSyncRuleMapping
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Expression')]
     [OutputType('JIM.TestExpressionResponse')]
     param(
         [Parameter(Mandatory, Position = 0)]
@@ -73,7 +94,13 @@ function Test-JIMExpression {
         [hashtable]$MvAttributes,
 
         [Parameter()]
-        [hashtable]$CsAttributes
+        [hashtable]$CsAttributes,
+
+        [Parameter(Mandatory, ParameterSetName = 'AttributeFlow')]
+        [int]$SyncRuleId,
+
+        [Parameter(Mandatory, ParameterSetName = 'AttributeFlow')]
+        [int]$MappingId
     )
 
     process {
@@ -96,6 +123,11 @@ function Test-JIMExpression {
             $body.csAttributes = $CsAttributes
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'AttributeFlow') {
+            $body.syncRuleId = $SyncRuleId
+            $body.mappingId = $MappingId
+        }
+
         Write-Verbose "Testing expression: $Expression"
 
         try {
@@ -108,15 +140,8 @@ function Test-JIMExpression {
                 Write-Verbose "Expression is invalid: $($result.errorMessage)"
             }
 
-            # Return a formatted object
-            [PSCustomObject]@{
-                IsValid = $result.isValid
-                Result = $result.result
-                ResultLines = $result.resultLines
-                ResultType = $result.resultType
-                ErrorMessage = $result.errorMessage
-                ErrorPosition = $result.errorPosition
-            }
+            # The API's own object, so every property it reports reaches the caller.
+            $result
         }
         catch {
             Write-Error "Failed to test expression: $_"
