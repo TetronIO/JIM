@@ -43,7 +43,7 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Exporting | Export confirmation (did the value JIM sent arrive?) | Changed? | Exact | ❌ No |
 | Exporting | Drift Detection | Changed? | Exact | ❌ No |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
-| Expressions | `Eq`, `StartsWith`, `EndsWith`, `Contains`, `CollectionContains` | Condition? | Exact | ✅ Wrap both sides in `Lower()` |
+| Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains`, `Where` | Condition? | Exact | ✅ Wrap both sides in `Lower()` |
 | Expressions | `Replace`, `Split` | Changes text rather than comparing it | Exact | ❌ No |
 | Searching | Predefined Search criteria | Condition? | Exact | ✅ Per criterion |
 | Searching | Portal search boxes and list filters, log search | Finding? | Ignore case | ❌ No |
@@ -98,10 +98,10 @@ Build the identifiers JIM generates in lower case for the same reason, as in `Lo
 Two different questions are asked inside an [expression](expressions.md), and keeping them straight avoids most surprises:
 
 - **Attribute names identify an attribute, so they ignore case.**<br /> `mv["Department"]` and `mv["department"]` refer to the same attribute.
-- **Comparing a value is a condition, so it is exact.**<br /> `Eq()` is an exact, case-sensitive match. To compare without regard to case, lower-case both sides first:
+- **Comparing a value is a condition, so it is exact.**<br /> `==` and `Eq()` are exact, case-sensitive matches. To compare without regard to case, lower-case both sides first:
 
 ```csharp
 Eq(Lower(mv["Status"]), "active")
 ```
 
-This is why [Expressions](expressions.md) recommends `Eq()` (never `==`) for text, and `Lower()` when you want a case-insensitive check.
+Use `Lower()` whenever you want a case-insensitive check; [Expressions](expressions.md#string-comparison) covers where `==` and `Eq()` differ.
