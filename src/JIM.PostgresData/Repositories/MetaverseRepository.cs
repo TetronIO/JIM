@@ -2803,7 +2803,8 @@ public class MetaverseRepository : IMetaverseRepository
                 if (sortAttrId == null)
                 {
                     await using var lookupCmd = connection.CreateCommand();
-                    lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE "Name" = @name LIMIT 1""";
+                    // Attribute names ignore case (#2051); an exact name wins where two differ only in case.
+                    lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE lower("Name") = lower(@name) ORDER BY ("Name" = @name) DESC, "Id" LIMIT 1""";
                     lookupCmd.Parameters.Add(new NpgsqlParameter("name", sortBy));
                     var result = await lookupCmd.ExecuteScalarAsync();
                     sortAttrId = result as int?;
@@ -2978,11 +2979,9 @@ public class MetaverseRepository : IMetaverseRepository
             attributeNames = new HashSet<string> { Constants.BuiltInAttributes.DisplayName };
             if (attributes != null)
             {
-                foreach (var attr in attributes)
-                {
-                    if (!string.IsNullOrWhiteSpace(attr))
-                        attributeNames.Add(attr);
-                }
+                // Attribute names ignore case (#2051), so each is resolved to the name JIM stores.
+                foreach (var attr in attributes.Where(a => !string.IsNullOrWhiteSpace(a)))
+                    attributeNames.Add(await ResolveMetaverseAttributeNameAsync(attr));
             }
         }
 
@@ -3013,9 +3012,10 @@ public class MetaverseRepository : IMetaverseRepository
 
         // filter by specific attribute name and value (exact match, case-insensitive; not
         // EF.Functions.ILike, which treats %, _ and \ in the value as wildcards. EF translates
-        // ToLower() to PostgreSQL's lower().)
+        // ToLower() to PostgreSQL's lower().) The attribute name ignores case too (#2051).
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
+            filterAttributeName = await ResolveMetaverseAttributeNameAsync(filterAttributeName);
             objects = objects.Where(q =>
                 q.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
@@ -3766,6 +3766,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Exact match, case-insensitive; see the comment in GetMetaverseObjectsAsync's equivalent filter above.
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
+            filterAttributeName = await ResolveMetaverseAttributeNameAsync(filterAttributeName);
             query = query.Where(mo =>
                 mo.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
@@ -4285,6 +4286,21 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
+    /// Resolves a Metaverse Attribute name as given (an API filter, a PowerShell parameter) to the name JIM stores, so
+    /// configuration names ignore case (#2051) while the query that follows still compares the indexed column exactly.
+    /// A name no attribute answers to is returned unchanged, so it simply matches nothing.
+    /// </summary>
+    private async Task<string> ResolveMetaverseAttributeNameAsync(string name)
+    {
+        var nameLower = name.ToLowerInvariant();
+        var candidates = await Repository.Database.MetaverseAttributes
+            .Where(a => a.Name.ToLower() == nameLower)
+            .Select(a => a.Name)
+            .ToListAsync();
+        return ConfigurationName.Resolve(candidates, name) ?? name;
+    }
+
+    /// <summary>
     /// Shared core for the paged and range Metaverse Object attribute value reads: one object's values for one
     /// attribute, optionally narrowed by a case-insensitive search over the stored value and the referenced
     /// object's own values, ordered by id and windowed by absolute <paramref name="offset"/> and
@@ -4300,6 +4316,8 @@ public class MetaverseRepository : IMetaverseRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051).
+        attributeName = await ResolveMetaverseAttributeNameAsync(attributeName);
         var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
             .Where(av => av.MetaverseObject.Id == metaverseObjectId
                          && av.Attribute.Name == attributeName);
