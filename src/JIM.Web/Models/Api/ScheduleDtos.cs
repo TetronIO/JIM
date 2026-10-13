@@ -117,51 +117,49 @@ public class ScheduleDto
     public DateTime? LastUpdated { get; set; }
 
     /// <summary>
-    /// The unique identifier of the most recent Schedule Execution, if the Schedule has ever run.
-    /// Only populated by the list endpoint; the single-Schedule, enable, disable, create and update responses
-    /// leave every LastExecution field null, because they describe the Schedule's configuration rather than its
-    /// run history. Use the Schedule Executions endpoints for the full history.
+    /// The unique identifier of the most recent Schedule Execution, if the Schedule has ever run. The LastExecution
+    /// fields are filled in only when Schedules are listed: reading a single Schedule, or creating, changing,
+    /// enabling or disabling one, leaves them all null, because that describes the Schedule's configuration rather
+    /// than its run history. The Schedule Executions hold the full history.
     /// </summary>
     public Guid? LastExecutionId { get; set; }
 
     /// <summary>
-    /// The outcome of the most recent Schedule Execution. Null when the Schedule has never run, and on the
-    /// endpoints listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// The outcome of the most recent Schedule Execution. Null when the Schedule has never run, or where the
+    /// LastExecution fields are not filled in (see LastExecutionId).
     /// </summary>
     public ScheduleExecutionStatus? LastExecutionStatus { get; set; }
 
     /// <summary>
-    /// The step the most recent Schedule Execution reached (0-based). Read with <see cref="LastExecutionTotalSteps"/>
-    /// to see how far a failed run got before it stopped. Null when the Schedule has never run, and on the endpoints
-    /// listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// The step the most recent Schedule Execution reached (0-based). Read with LastExecutionTotalSteps to see how
+    /// far a failed run got before it stopped. Null when the Schedule has never run, or where the LastExecution
+    /// fields are not filled in (see LastExecutionId).
     /// </summary>
     public int? LastExecutionCurrentStepIndex { get; set; }
 
     /// <summary>
-    /// How many steps the most recent Schedule Execution set out to run. Null when the Schedule has never run, and on
-    /// the endpoints listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// How many steps the most recent Schedule Execution set out to run. Null when the Schedule has never run, or
+    /// where the LastExecution fields are not filled in (see LastExecutionId).
     /// </summary>
     public int? LastExecutionTotalSteps { get; set; }
 
     /// <summary>
     /// The steps (0-based, ascending, each listed once) that failed in the most recent Schedule Execution and let it
-    /// carry on, when that execution is <c>CompleteWithError</c>; empty for any other outcome. Null on every endpoint
-    /// except the list, which alone populates the last-execution fields.
+    /// carry on, when that execution is <c>CompleteWithError</c>; empty for any other outcome. Null where the
+    /// LastExecution fields are not filled in (see LastExecutionId).
     /// </summary>
     public int[]? LastExecutionFailedStepIndices { get; set; }
 
     /// <summary>
     /// When the most recent Schedule Execution finished (UTC). Null while it is still running, when the Schedule has
-    /// never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
-    /// last-execution fields.
+    /// never run, or where the LastExecution fields are not filled in (see LastExecutionId).
     /// </summary>
     public DateTime? LastExecutionCompletedAt { get; set; }
 
     /// <summary>
     /// The error reported by the most recent Schedule Execution, if it failed, or the message naming each failed step
-    /// when it is <c>CompleteWithError</c>. Null when the run succeeded, when the
-    /// Schedule has never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
-    /// last-execution fields.
+    /// when it is <c>CompleteWithError</c>. Null when the run succeeded, when the Schedule has never run, or where
+    /// the LastExecution fields are not filled in (see LastExecutionId).
     /// </summary>
     public string? LastExecutionErrorMessage { get; set; }
 
