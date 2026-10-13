@@ -611,3 +611,233 @@ Get-ChildItem -Recurse -Filter *.csv | Where-Object { $_.Length -gt 0 } | Get-Th
         $r.ExitCode | Should -Be 0
     }
 }
+
+# ACC-6: a property an example reads from a JIM cmdlet's output must be one the cmdlet returns for the
+# parameter set the invocation binds. The motivating defect: generation made the Output tables match the
+# module, but the examples beside them were still written by hand, and an example reading a property that
+# does not exist prints nothing and raises no error, so a reader who copies it gets blank output.
+Describe 'Lint-DocExamples output property check (ACC-6)' {
+
+    BeforeAll {
+        # Two cmdlets with declared output, one whose output type the module builds itself, and one that
+        # declares nothing (which ACC-6 must leave alone).
+        $script:OutputCmdlets = @{
+            'Get-JIMWidget.ps1' = @'
+function Get-JIMWidget {
+    <#
+    .SYNOPSIS
+        Gets Widgets.
+
+    .PARAMETER Id
+        The ID of the Widget to get.
+
+    .EXAMPLE
+        Get-JIMWidget -Id 1 | Select-Object Name
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    [OutputType('JIM.WidgetHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.WidgetDetail', ParameterSetName = 'ById')]
+    param(
+        [Parameter(Mandatory, ParameterSetName = 'ById')]
+        [int]$Id
+    )
+}
+'@
+            'Get-JIMGadgetSummary.ps1' = @'
+function Get-JIMGadgetSummary {
+    <#
+    .SYNOPSIS
+        Summarises Gadgets.
+
+    .OUTPUTS
+        How many Gadgets there are.
+
+        JIM.GadgetSummary
+        Total (int): How many Gadgets there are.
+
+    .EXAMPLE
+        Get-JIMGadgetSummary | Select-Object Total
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.GadgetSummary')]
+    param()
+}
+'@
+            'Get-JIMThing.ps1' = @'
+function Get-JIMThing {
+    <#
+    .SYNOPSIS
+        Gets Things.
+
+    .EXAMPLE
+        Get-JIMThing | Select-Object Anything
+    #>
+    [CmdletBinding()]
+    param()
+}
+'@
+        }
+
+        $script:OutputOpenApi = @'
+{
+  "openapi": "3.0.1",
+  "components": {
+    "schemas": {
+      "WidgetHeader": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
+      "WidgetDetail": {
+        "allOf": [ { "$ref": "#/components/schemas/WidgetHeader" } ],
+        "type": "object",
+        "properties": { "description": { "type": "string" } }
+      }
+    }
+  }
+}
+'@
+
+        $script:OutputConfig = @'
+@{
+    NonApiOutputTypes = @{ 'JIM.GadgetSummary' = 'built by the cmdlet' }
+    OutputTypeSchemas = @{}
+}
+'@
+
+        # A fixture as Invoke-Lint builds one, plus what ACC-6 reads: a module to import (every cmdlet in
+        # one .psm1), the OpenAPI document, and the output type configuration.
+        function New-OutputFixture {
+            param([hashtable]$DocFiles = @{}, [hashtable]$ModuleFiles = $script:OutputCmdlets)
+
+            $fixture = New-LintFixture -ModuleFiles $ModuleFiles -DocFiles $DocFiles
+            $root = Split-Path $fixture.ModuleRoot -Parent
+            $suffix = Split-Path $fixture.ModuleRoot -Leaf
+            $psm1 = Join-Path $root "$suffix.psm1"
+            Set-Content -Path $psm1 -Value (($ModuleFiles.Values) -join "`n`n") -Encoding utf8
+            $openApi = Join-Path $root "$suffix.openapi.json"
+            Set-Content -Path $openApi -Value $script:OutputOpenApi -Encoding utf8
+            $config = Join-Path $root "$suffix.psd1"
+            Set-Content -Path $config -Value $script:OutputConfig -Encoding utf8
+            [pscustomobject]@{ ModuleRoot = $fixture.ModuleRoot; DocsRoot = $fixture.DocsRoot; Psm1 = $psm1; OpenApi = $openApi; Config = $config }
+        }
+
+        function Invoke-OutputLint {
+            param($Fixture, [switch]$WithoutOpenApi)
+            $arguments = @('-NoProfile', '-File', $script:ScriptPath, '-ModulePath', $Fixture.ModuleRoot, '-DocsPath', $Fixture.DocsRoot,
+                '-ModuleScriptPath', (Join-Path $Fixture.ModuleRoot 'no-module-script.psm1'), '-ModuleImportPath', $Fixture.Psm1,
+                '-ConfigPath', $Fixture.Config)
+            if (-not $WithoutOpenApi) { $arguments += @('-OpenApiPath', $Fixture.OpenApi) }
+            $output = pwsh @arguments 2>&1
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
+        }
+
+        function New-Page {
+            param([string]$Code)
+            @{ 'page.md' = "# Page`n`n``````powershell`n$Code`n```````n" }
+        }
+    }
+
+    It 'passes properties the cmdlet returns, read through Select-Object and Sort-Object' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMWidget | Sort-Object Name | Select-Object Id, Name')
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'fails a property the cmdlet does not return, naming the file, line, cmdlet and property' {
+        $fixture = New-OutputFixture -DocFiles (New-Page "Get-JIMWidget |`n    Select-Object Nmae")
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'page\.md:5'
+        $r.Output | Should -Match 'Get-JIMWidget returns no property Nmae'
+        $r.Output | Should -Match 'ACC-6'
+    }
+
+    It 'reads $_ in a script block piped from the cmdlet' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMWidget | ForEach-Object { $_.Nmae }')
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMWidget returns no property Nmae'
+    }
+
+    It 'checks against the parameter set the invocation binds' {
+        $fixture = New-OutputFixture -DocFiles (New-Page "Get-JIMWidget -Id 3 | ForEach-Object { `$_.Description }`nGet-JIMWidget | ForEach-Object { `$_.Description }")
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'page\.md:5'
+        $r.Output | Should -Not -Match 'page\.md:4'
+    }
+
+    It 'follows the output through stages that pass it on unchanged' {
+        $fixture = New-OutputFixture -DocFiles (New-Page "Get-JIMWidget | Where-Object Name -like 'a*' | Sort-Object Id | Select-Object Nmae")
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMWidget returns no property Nmae'
+    }
+
+    It 'stops at a stage that reshapes the output' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMWidget | Select-Object Name | Sort-Object Anything | ForEach-Object { $_.Else }')
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'leaves wildcards, calculated properties and a nested $_ alone' {
+        $code = 'Get-JIMWidget | Select-Object Na*, @{ Name = ''Label''; Expression = { $_.Name } } | Out-Null' + "`n" +
+            'Get-JIMWidget | ForEach-Object { 1..3 | Where-Object { $_.Unrelated } }'
+        $fixture = New-OutputFixture -DocFiles (New-Page $code)
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'checks a property read inside a calculated property' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMWidget | Select-Object @{ Name = ''Label''; Expression = { $_.Nmae } }')
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMWidget returns no property Nmae'
+    }
+
+    It 'reads a variable the cmdlet''s output was assigned to' {
+        $code = '$widget = Get-JIMWidget -Id 1' + "`n" + '$widget.Name' + "`n" + '$widget.Count' + "`n" + '$widget.Nmae'
+        $fixture = New-OutputFixture -DocFiles (New-Page $code)
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'page\.md:7'
+        @([regex]::Matches($r.Output, 'returns no property')).Count | Should -Be 1
+    }
+
+    It 'checks the properties a type the module builds lists in its .OUTPUTS help' {
+        $fixture = New-OutputFixture -DocFiles (New-Page "Get-JIMGadgetSummary | Select-Object Total`nGet-JIMGadgetSummary | Select-Object Missing")
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMGadgetSummary returns no property Missing'
+        @([regex]::Matches($r.Output, 'returns no property')).Count | Should -Be 1
+    }
+
+    It 'checks a JIM cmdlet in the middle of a pipeline against every set its input could choose' {
+        $code = "Get-JIMThing | Get-JIMWidget | Select-Object Description`nGet-JIMThing | Get-JIMWidget | Select-Object Nmae"
+        $fixture = New-OutputFixture -DocFiles (New-Page $code)
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'page\.md:5'
+        $r.Output | Should -Not -Match 'page\.md:4'
+    }
+
+    It 'leaves a cmdlet that declares no output alone' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMThing | Select-Object Anything')
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'checks the module''s own .EXAMPLE help' {
+        $cmdlets = $script:OutputCmdlets.Clone()
+        $cmdlets['Get-JIMWidget.ps1'] = $cmdlets['Get-JIMWidget.ps1'] -replace 'Select-Object Name', 'Select-Object Nmae'
+        $fixture = New-OutputFixture -ModuleFiles $cmdlets
+        $r = Invoke-OutputLint $fixture
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMWidget\.ps1'
+        $r.Output | Should -Match 'Get-JIMWidget returns no property Nmae'
+    }
+
+    It 'does not check properties without an OpenAPI document, and says so' {
+        $fixture = New-OutputFixture -DocFiles (New-Page 'Get-JIMWidget | Select-Object Nmae')
+        $r = Invoke-OutputLint $fixture -WithoutOpenApi
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+        $r.Output | Should -Match 'ACC-6 skipped'
+    }
+}
