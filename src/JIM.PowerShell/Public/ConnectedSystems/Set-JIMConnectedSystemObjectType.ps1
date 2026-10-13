@@ -4,38 +4,34 @@
 function Set-JIMConnectedSystemObjectType {
     <#
     .SYNOPSIS
-        Updates properties of a Connected System Object Type in JIM.
+        Changes a Connected System Object Type.
 
     .DESCRIPTION
-        Updates properties of an object type within a Connected System's schema.
-        Use this to mark object types as selected for management by JIM.
+        Changes whether JIM manages a Connected System Object Type, and what happens to the values its objects
+        contributed when they are deleted.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type to update.
+        The ID of the Object Type to change.
 
     .PARAMETER Selected
-        Whether the object type should be managed by JIM.
-        When set to $true, JIM will synchronise objects of this type.
-        When set to $false, the object type is taken out of management: the next
-        Full Import no longer returns its objects, so it marks them as deleted, and
-        the following synchronisation disconnects them from their Metaverse Objects
-        and applies the Metaverse Object deletion rules, exactly as deselecting a
-        Partition does.
-        Deselecting is refused while an enabled Synchronisation Rule is bound to the
-        object type; disable those Synchronisation Rules first.
+        Whether JIM manages objects of this type. Deselecting it takes the type out of management: the next Full
+        Import no longer returns its objects, so marks them deleted, and the synchronisation after that disconnects
+        them from their Metaverse Objects and applies the Metaverse Object Type's deletion rules, as deselecting a
+        partition does. Refused while an enabled Synchronisation Rule uses the Object Type; disable those rules
+        first.
 
     .PARAMETER RemoveContributedAttributesOnObsoletion
-        Whether to remove contributed attributes from the Metaverse object
-        when a Connected System object is obsoleted.
+        Whether the Metaverse attribute values an object of this type contributed are recalled when the object is
+        deleted from the Connected System.
 
     .PARAMETER PassThru
-        If specified, returns the updated object type.
+        Returns the Object Type as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Object Type object.
+        With -PassThru, the Object Type as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemObjectType -ConnectedSystemId 1 -ObjectTypeId 5 -Selected $true
@@ -71,7 +67,7 @@ function Set-JIMConnectedSystemObjectType {
         New-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectTypeDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,
