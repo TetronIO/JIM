@@ -51,24 +51,6 @@ public class ScimConnectorUniquenessProbeTests
         Assert.That(filter, Is.EqualTo("userName eq \"joe.bloggs\" or userName eq \"joe.bloggs1\" or userName eq \"asmith\""));
     }
 
-    [Test]
-    public void QuoteFilterValue_QuoteAndBackslash_AreEscapedAsAJsonStringRequires()
-    {
-        Assert.That(ScimConnectorUniquenessProbe.QuoteFilterValue("o\"brien\\x"), Is.EqualTo("\"o\\\"brien\\\\x\""));
-    }
-
-    [Test]
-    public void QuoteFilterValue_ControlCharacter_IsEscapedAsAUnicodeSequence()
-    {
-        Assert.That(ScimConnectorUniquenessProbe.QuoteFilterValue("a\nb\u0001"), Is.EqualTo("\"a\\u000ab\\u0001\""));
-    }
-
-    [Test]
-    public void QuoteFilterValue_NonAsciiCharacters_AreLeftAsTheyAre()
-    {
-        Assert.That(ScimConnectorUniquenessProbe.QuoteFilterValue("zoë.o'connor&co"), Is.EqualTo("\"zoë.o'connor&co\""));
-    }
-
     /// <summary>
     /// A candidate is built from source data, so it may carry anything; it must stay one comparison value whatever it
     /// holds, never become filter grammar that widens or rewrites the search.

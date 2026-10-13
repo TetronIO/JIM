@@ -3,6 +3,7 @@
 
 using System.Text.Json.Nodes;
 using JIM.Scim;
+using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 
@@ -300,6 +301,28 @@ public class ScimResourceWriterTests
             Assert.That(resource["members"]!.AsArray(), Has.Count.EqualTo(1));
             Assert.That(resource.ToJsonString(), Does.Contain("bob").And.Not.Contain("alice"));
         }
+    }
+
+    [Test]
+    public void ApplyChanges_AddingOneValueOfAMultiValuedExtensionStringAndRemovingAnother_KeepsEveryOtherValue()
+    {
+        // The whole-resource equivalent of the value-filtered PATCH removal (#2181): one value goes, the rest stay.
+        const string urn = "urn:example:params:scim:schemas:extension:custom:2.0:User";
+        var schema = ScimAttributeMapper.FlattenSchema(new ScimSchema
+        {
+            Id = urn,
+            Name = "Custom",
+            Attributes = [new ScimSchemaAttribute { Name = "badges", Type = ScimAttributeTypes.String, MultiValued = true }]
+        }, "custom");
+        var resource = Resource($$"""{ "id": "alice", "{{urn}}": { "badges": [ "gold", "silver" ] } }""");
+
+        ScimResourceWriter.ApplyChanges(resource,
+        [
+            new ScimAttributeChange("custom.badges", ScimPatchOperations.Add, "platinum"),
+            new ScimAttributeChange("custom.badges", ScimPatchOperations.Remove, "gold")
+        ], schema);
+
+        Assert.That(resource[urn]!["badges"]!.ToJsonString(), Is.EqualTo("""["silver","platinum"]"""));
     }
 
     [Test]
