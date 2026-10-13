@@ -24,8 +24,11 @@
     # no cmdlet declares fails the check.
     OutputTypeSchemas = @{
         'JIM.ExampleDataTemplateExecution' = 'ExampleDataTemplateExecutionResponse'
+        'JIM.ObjectTypeMatchingRule'       = 'ObjectMatchingRuleDto'
         'JIM.ScheduleExecution'            = 'ScheduleExecutionDetailDto'
         'JIM.ScheduleExecutionSummary'     = 'ScheduleExecutionDto'
+        'JIM.ScopingCriteriaGroup'         = 'SyncRuleScopingCriteriaGroupDto'
+        'JIM.ScopingCriterion'             = 'SyncRuleScopingCriteriaDto'
         'JIM.RetiredGeneratedValue'        = 'RetiredGeneratedValueDto'
         'JIM.SetMetaverseObjectPasswordResult' = 'SetMetaverseObjectPasswordResponse'
         'JIM.ServiceHealth'                = 'ServiceHealthEntryResponse'
