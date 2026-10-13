@@ -271,9 +271,10 @@ public class PredefinedSearchCriterionRequest
     public Guid? GuidValue { get; set; }
 
     /// <summary>
-    /// When true (default), text value comparisons are case-sensitive. Only applies to Text attributes.
+    /// Whether text comparisons respect case. True compares exactly; false ignores case differences. Only applies to
+    /// Text attributes. When omitted, a new criterion respects case and an updated one keeps its current setting.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 
     /// <summary>
     /// For DateTime attributes, whether the criterion compares against a fixed date ("Absolute", the default)

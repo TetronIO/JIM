@@ -113,7 +113,7 @@ public class ScopeTesterTests
         StringValue = text
     };
 
-    private static ScopeTestInput Input(string name, params object[] values) => new(name, values);
+    private static AttributeSample Input(string name, params object[] values) => new(name, values);
 
     #region DescribeInputs
 
@@ -128,8 +128,8 @@ public class ScopeTesterTests
 
         Assert.That(inputs, Is.EqualTo(new[]
         {
-            new ScopeTestInputDescriptor("department", AttributeDataType.Text, AttributePlurality.SingleValued),
-            new ScopeTestInputDescriptor("grade", AttributeDataType.Number, AttributePlurality.SingleValued)
+            new AttributeSampleDescriptor("department", AttributeDataType.Text, AttributePlurality.SingleValued),
+            new AttributeSampleDescriptor("grade", AttributeDataType.Number, AttributePlurality.SingleValued)
         }));
     }
 
@@ -140,7 +140,7 @@ public class ScopeTesterTests
 
         var inputs = ScopeTester.DescribeInputs(rule);
 
-        Assert.That(inputs.Single(), Is.EqualTo(new ScopeTestInputDescriptor("Roles", AttributeDataType.Text, AttributePlurality.MultiValued)));
+        Assert.That(inputs.Single(), Is.EqualTo(new AttributeSampleDescriptor("Roles", AttributeDataType.Text, AttributePlurality.MultiValued)));
     }
 
     #endregion

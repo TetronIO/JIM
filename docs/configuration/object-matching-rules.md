@@ -67,9 +67,6 @@ A rule compares for equality, and only equality. "Starts with" or "contains" cou
 not offer them. Put the normalising in the expression instead, so the value it computes is exactly the value the
 Metaverse holds.
 
-**Try it**, under the editor, shows what the rule would match on for an object holding values you type, worked out
-exactly as a synchronisation would. Leave a value empty to see what happens to an object that has none.
-
 JIM refuses to save an expression that does not parse, reads `mv["..."]`, reads no `cs["..."]` attribute, reads an
 attribute the Object Type does not have, or calls a function that returns a different value each time it runs
 (`Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `Guid.NewGuid()`): each would match a different
@@ -79,6 +76,21 @@ When JIM checks, before provisioning, whether a matching account already exists,
 unjoined Connected System Object of that type. If it cannot do so for some of them, a Metaverse Object that finds no
 match stops with an **Object Matching Rule Failed** error naming one of those objects, rather than provisioning an
 account that may already exist. Correct that object's value, or the expression, then synchronise again.
+
+## Testing a rule
+
+**Try it**, under the rule editor, shows what the rule would do for one object before you save it, worked out with the same code a synchronisation runs.
+
+- **Values**<br /> Each attribute the rule reads gets an editor for its type, with several values for a multi-valued attribute. An attribute left untouched, or with **No value** ticked, holds no value. **From an object** loads a real Connected System Object's values instead, which you can then edit to try a variation.
+- **Match values**<br /> The values the rule would compare, in the Metaverse attribute's type. Or that it has no value, so the next rule would be tried, or the **Object Matching Rule Failed** error a synchronisation would stop the object with.
+- **In the Metaverse**<br /> With **Also find the Metaverse Object a synchronisation would join** ticked, the values are looked up as an import join looks them up, and nothing is written. The answer is one of these:
+    - **Would join** a named Metaverse Object;
+    - **Already joined**, when the loaded object is already joined to it;
+    - **Joined to another**, when another object from this Connected System holds the join, so a synchronisation would record that this one could not join;
+    - **No match**;
+    - **Ambiguous**, listing the Metaverse Objects the values identify.
+
+Automation gets the same test of a saved rule through [`Test-JIMMatchingRule`](../powershell/object-matching-rules.md#test-jimmatchingrule) and the REST API's `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-rules/{ruleId}/test` and `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{ruleId}/test` endpoints.
 
 ## Simple vs advanced matching mode
 

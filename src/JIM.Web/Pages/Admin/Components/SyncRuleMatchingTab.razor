@@ -134,6 +134,7 @@
             <ObjectMatchingRuleEditor Draft="_draft"
                                       ObjectType="SyncRule.ConnectedSystemObjectType"
                                       MetaverseAttributes="@(SyncRule.MetaverseObjectType?.Attributes ?? [])"
+                                      LookupMetaverseObjectType="SyncRule.MetaverseObjectType"
                                       ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
                                       OnChanged="StateHasChanged" />
         }

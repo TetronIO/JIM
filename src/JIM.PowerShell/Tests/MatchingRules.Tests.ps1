@@ -208,3 +208,65 @@ Describe 'Set-JIMSyncRuleMatchingRule' {
         }
     }
 }
+
+Describe 'Test-JIMMatchingRule' {
+    It 'Posts the samples to the Connected System rule test endpoint, without a lookup by default' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Values'; valueLines = @('48213') }
+            }
+
+            Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -Attributes @{ employeeNumber = 'EMP-48213' } | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/3/matching-rules/40/test'
+            $script:capturedBody.attributes.employeeNumber | Should -Be 'EMP-48213'
+            $script:capturedBody.lookUp | Should -BeFalse
+        }
+    }
+
+    It 'Posts to the Synchronisation Rule endpoint with the object and the lookup' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Values' }
+            }
+
+            Test-JIMMatchingRule -SyncRuleId 12 -Id 7 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' -LookUp | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/12/matching-rules/7/test'
+            $script:capturedBody.lookUp | Should -BeTrue
+            $script:capturedBody.connectedSystemObjectId | Should -Be ([guid]'0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01')
+        }
+    }
+
+    It 'Refuses a Connected System and a Synchronisation Rule together' {
+        { Test-JIMMatchingRule -ConnectedSystemId 3 -SyncRuleId 12 -Id 7 } | Should -Throw -ErrorId 'AmbiguousParameterSet,Test-JIMMatchingRule'
+    }
+
+    It 'Returns the API object, so the lookup reaches the caller' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    IsValid = $true
+                    Outcome = 'Values'
+                    Lookup  = [PSCustomObject]@{ Outcome = 'WouldJoin'; MetaverseObjectName = 'Jo Bloggs' }
+                }
+            }
+
+            $result = Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -LookUp
+
+            $result.Lookup.Outcome | Should -Be 'WouldJoin'
+            $result.Lookup.MetaverseObjectName | Should -Be 'Jo Bloggs'
+        }
+    }
+}

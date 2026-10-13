@@ -74,7 +74,7 @@ The dialog is built around one rule: **the password is masked from the moment it
 
 Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the Connected System Object at the same time. Leaving the enable switch off leaves the object's enabled state as it was, which is what a reset on a working object should do. Switching it on enables the object whatever its Attribute Flows say; where they disagree, [Enforce State](synchronisation-rules.md#export-outbound) puts their value back.
 
-Leaving the switch off has one exception: where JIM created a new Active Directory account disabled only until it had a password, and its Attribute Flow asks for it enabled, the password enables it whichever way the switch is set ([Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts)).
+Leaving the switch off has one exception: where JIM held an Active Directory account's enable back until it had a password, and its Attribute Flow asks for it enabled, the password enables it whichever way the switch is set ([Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts)).
 
 The dialog waits for the outcome and shows it: **Set**, **Retrying** with the next attempt where the system could not be reached (JIM keeps trying on its own clock, and you can stop it), or **Parked** where the system refused the password, carrying its own words so you can try another one. Every attempt is recorded as an Activity, whether it succeeded or not; the Activity records that a password was set, never the password.
 
