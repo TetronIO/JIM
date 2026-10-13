@@ -53,26 +53,11 @@ pwsh ./scripts/Update-PowerShellReference.ps1 -OpenApiPath /tmp/openapi-v1.json
 pwsh ./scripts/Lint-DocExamples.ps1 -OpenApiPath /tmp/openapi-v1.json   # ACC-6, the examples' property reads
 ```
 
-The sections below still apply to every section that has no block yet; `-Check` lists them.
-
 ## Documenting output
 
-**Check every property name against the DTO before writing it.** An audit found eight of twenty pages in `docs/powershell/` naming properties that do not exist. The Output tables in particular had been written from memory.
+Output is not written by hand any more. Each cmdlet's Output table is generated from what it declares (above), and every property an example reads from its output is checked against those declarations (ACC-6), so a property name written from memory fails the build. When one fails, correct the example or the declaration, never the page.
 
-**Different parameter sets return different shapes, and this is the most common error.** A list or search returns a header DTO; `-Id` returns the full entity or detail DTO. They are not supersets of one another:
-
-| Cmdlet | List / search returns | `-Id` returns |
-|---|---|---|
-| `Get-JIMMetaverseObject` | `MetaverseObjectHeaderDto` (`Attributes`, a dictionary) | `MetaverseObjectDto` (`AttributeValues`, a list) |
-| `Get-JIMConnectedSystem` | `ConnectedSystemHeader` (`ConnectorId`) | `ConnectedSystemDto` (nested `Connector.Id`) |
-| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseAttributeCount`) | `PredefinedSearchDetailDto` (`Attributes`, `CriteriaGroups`) |
-| `Get-JIMExampleDataSet` | `ExampleDataSetHeader` (`ValueCount`) | the entity, with its values |
-
-State which shape an Output section describes, and never document a header's fields for the `-Id` form.
-
-**Casing is not the trap; names are.** `ConvertTo-JIMOutputObject` normalises wire camelCase to PascalCase, and member access is case-insensitive regardless, so `$x.isEnabled` and `$x.IsEnabled` both work. `$x.Enabled` does not. Do not "fix" casing differences; do verify names.
-
-**Do not blanket-replace a property name across the docs.** `SyncRuleHeader` really does name its field `Enabled`, so a global `Enabled` to `IsEnabled` sweep would have broken working examples while fixing others. Check each cmdlet's own DTO.
+A list and `-Id` usually return different shapes, a header DTO and a detail DTO, and neither is a superset of the other. Declare each parameter set's type, and the table and the check both follow it.
 
 ## Destructive examples
 

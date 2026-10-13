@@ -36,8 +36,7 @@
 
     -Check writes nothing, and fails (rule ACC-5 of engineering/DOCUMENTATION_STANDARD.md) when a block
     differs from what this script would write, names a cmdlet the module does not export, or belongs to
-    a cmdlet with an undescribed parameter or undescribed output. Exported cmdlets with no block yet are
-    listed as a warning while the pages migrate.
+    a cmdlet with an undescribed parameter or undescribed output, and when an exported cmdlet has no block.
 
 .PARAMETER ModulePath
     The module manifest to document. Defaults to src/JIM.PowerShell/JIM.psd1.
@@ -806,15 +805,16 @@ foreach ($typeName in $schemaFor.Keys) {
     }
 }
 
-# Exported cmdlets with no block anywhere: the migration still to do (#1083). Counted from the module, not
-# from the pages' headings, so a cmdlet the pages give no section at all is listed too.
-$notGenerated = @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | ForEach-Object {
-        $page = if ($sectionPage.ContainsKey($_)) { $sectionPage[$_] } else { '(no section)' }
-        "${page}: $_"
-    } | Sort-Object)
-if ($notGenerated.Count -gt 0) {
-    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlets have no generated block yet:"
-    foreach ($entry in $notGenerated) { Write-Host "  $entry" }
+# Every exported cmdlet has a block. Counted from the module, not from the pages' headings, so a cmdlet the
+# pages give no section at all fails too.
+foreach ($name in @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | Sort-Object)) {
+    if ($sectionPage.ContainsKey($name)) {
+        Write-Finding $sectionPage[$name] 1 "$name has no generated block; put '<!-- BEGIN GENERATED: $name -->' and '<!-- END GENERATED: $name -->' in its section, where its Syntax, Parameters and Output go, and run scripts/Update-PowerShellReference.ps1"
+    }
+    else {
+        Write-Finding '' 0 "$name has no generated block, and no section on any page; give it a '## $name' section on its docs/powershell/ page, with the markers, and run scripts/Update-PowerShellReference.ps1"
+    }
+    $failures++
 }
 
 if ($Check) {
