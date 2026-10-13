@@ -18,10 +18,10 @@ function Get-JIMConnectedSystemContainerScopeText {
         A Connected System with nothing selected returns empty text.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        System.String. The Container Scope, one statement per line.
+        The Container Scope, one statement per line.
 
     .EXAMPLE
         Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 1

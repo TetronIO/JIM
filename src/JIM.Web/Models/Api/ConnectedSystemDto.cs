@@ -808,11 +808,34 @@ public class ConnectedSystemObjectAttributeValueDto
 /// </summary>
 public class ConnectedSystemPartitionDto
 {
+    /// <summary>
+    /// The ID of the partition.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the partition.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The partition's identifier in the Connected System; on an LDAP directory, its distinguished name.
+    /// </summary>
     public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// Whether JIM imports from the partition.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the partition belongs to.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The partition's top-level containers, each with its child containers.
+    /// </summary>
     public List<ConnectedSystemContainerDto> Containers { get; set; } = new();
 
     public static ConnectedSystemPartitionDto FromEntity(ConnectedSystemPartition entity)
@@ -836,11 +859,34 @@ public class ConnectedSystemPartitionDto
 /// </summary>
 public class ConnectedSystemContainerDto
 {
+    /// <summary>
+    /// The ID of the container.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the container.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The container's identifier in the Connected System; on an LDAP directory, its distinguished name.
+    /// </summary>
     public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's description of the container; null when it gives none.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System hides the container by default, so its objects are not exposed by accident.
+    /// </summary>
     public bool Hidden { get; set; }
+
+    /// <summary>
+    /// Whether JIM imports objects from the container.
+    /// </summary>
     public bool Selected { get; set; }
 
     /// <summary>
@@ -855,9 +901,8 @@ public class ConnectedSystemContainerDto
     public ConnectedSystemContainerScope Scope { get; set; }
 
     /// <summary>
-    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
-    /// retrieval. Null where the Connector cannot report counts, or the hierarchy has not been retrieved since
-    /// counting was introduced.
+    /// How many objects sit directly in the container in the Connected System, as at the last hierarchy import.
+    /// Null where the Connector cannot count them, or the container has not been counted.
     /// </summary>
     /// <remarks>
     /// Zero and null mean different things: zero is a Container the Connector searched and found nothing in, null
@@ -867,13 +912,24 @@ public class ConnectedSystemContainerDto
     public int? ObjectCount { get; set; }
 
     /// <summary>
-    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a Subtree statement over this
-    /// Container reaches. Null where this Container has not been counted.
+    /// ObjectCount plus that of every container beneath it: what a Subtree scope over the container reaches. Null
+    /// where the container has not been counted.
     /// </summary>
     public int? SubtreeObjectCount { get; set; }
 
+    /// <summary>
+    /// The ID of the partition the container is in; null on a Connected System without partitions.
+    /// </summary>
     public int? PartitionId { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the container belongs to.
+    /// </summary>
     public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The containers directly beneath this one, each with its own child containers.
+    /// </summary>
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
 
     public static ConnectedSystemContainerDto FromEntity(ConnectedSystemContainer entity)
