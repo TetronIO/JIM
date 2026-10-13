@@ -120,18 +120,4 @@ internal static class ExpressionWhere
         AttributeDataType.Boolean => "Boolean",
         _ => type.ToString().ToLowerInvariant()
     };
-
-    /// <summary>One value, offered once.</summary>
-    private struct OneValueCursor(ScopingValue value) : IScopingValueCursor
-    {
-        private bool _taken;
-
-        public bool TryGetNext(out ScopingValue next)
-        {
-            next = _taken ? default : value;
-            var had = !_taken;
-            _taken = true;
-            return had;
-        }
-    }
 }

@@ -18,6 +18,7 @@ public class ExpressionEditorTests : JimComponentTestContext
 {
     private const string GetSelection = "jimInterop.getTextSelection";
     private const string SetSelection = "jimInterop.setTextSelection";
+    private const string AssistInsert = "jimExpressionAssist.insert";
 
     [Test]
     public void ExpressionEditor_WithValue_RendersValueInTextareaAndHighlightedOverlay()
@@ -35,6 +36,210 @@ public class ExpressionEditorTests : JimComponentTestContext
             Assert.That(overlay.QuerySelector(".jim-expr-function")?.TextContent, Is.EqualTo("Lower"));
         }
     }
+
+    [Test]
+    public void ExpressionEditor_SyntaxCheckReportsAnError_ShowsItUnderTheField()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "lowr(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, _ => "Unknown identifier 'lowr'."));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("Unknown identifier 'lowr'."));
+            Assert.That(cut.Find("textarea").GetAttribute("aria-invalid"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_SyntaxCheckFindsNothing_ShowsNoError()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "Lower(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, _ => null));
+
+        Assert.That(cut.Find("textarea").GetAttribute("aria-invalid"), Is.EqualTo("false"));
+    }
+
+    [Test]
+    public void ExpressionEditor_WhileFirstTyped_HoldsTheSyntaxErrorBackUntilTheFieldIsLeft()
+    {
+        // Every half-typed expression is a syntax error; reporting each keystroke turns the field red mid-word.
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, string.Empty)
+            .Add(c => c.SyntaxCheck, _ => "Unterminated string literal."));
+
+        cut.Find("textarea").Input("Lower(\"");
+        var whileTyping = cut.Find("textarea").GetAttribute("aria-invalid");
+        cut.Find("textarea").Blur();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(whileTyping, Is.EqualTo("false"));
+            Assert.That(cut.Markup, Does.Contain("Unterminated string literal."));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_OnceLeft_ReportsTheSyntaxErrorAsItIsTyped()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "Lower(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, text => text.EndsWith(')') ? null : "Unterminated call."));
+        cut.Find("textarea").Blur();
+
+        cut.Find("textarea").Input("Lower(cs[\"mail\"]");
+
+        Assert.That(cut.Markup, Does.Contain("Unterminated call."));
+    }
+
+    [Test]
+    public void ExpressionEditor_HostErrorAndSyntaxError_ShowsTheHostsError()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "x(")
+            .Add(c => c.Error, true)
+            .Add(c => c.ErrorText, "The host's own error.")
+            .Add(c => c.SyntaxCheck, _ => "A syntax error."));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("The host's own error."));
+            Assert.That(cut.Markup, Does.Not.Contain("A syntax error."));
+        }
+    }
+
+    #region Suggestions and signature help (#2053)
+
+    private IRenderedComponent<ExpressionEditor> RenderWithAssist(string value, Action<string?>? onChanged = null) =>
+        Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, value)
+            .Add(c => c.ConnectedSystemAttributeNames, new[] { "mail", "proxyAddresses" })
+            .Add(c => c.ValueChanged, (string? v) => onChanged?.Invoke(v)));
+
+    [Test]
+    public void ExpressionEditor_TypingAPartFunctionName_ListsTheFunctionsWithTheirSignatures()
+    {
+        var cut = RenderWithAssist("Sta");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        var list = cut.Find("[data-testid=jim-expression-suggestions]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(list.TextContent, Does.Contain("StartsWith(value, prefix[, ignoreCase])"));
+            Assert.That(cut.Find("textarea").GetAttribute("data-assist-open"), Is.EqualTo("true"));
+            Assert.That(cut.Find("textarea").GetAttribute("aria-activedescendant"), Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_TypingInsideAnAccessor_ListsTheHostsAttributes()
+    {
+        var cut = RenderWithAssist("cs[\"pro");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("cs[\"pro", 7, 7, typed: true));
+
+        Assert.That(cut.Find("[data-testid=jim-expression-suggestions]").TextContent, Does.Contain("proxyAddresses"));
+    }
+
+    [Test]
+    public void ExpressionEditor_EnterOnASuggestion_AsksTheBrowserToInsertItInPlaceOfWhatWasTyped()
+    {
+        // The browser does the insert, so a key typed while the choice travelled to the server and back is kept: the
+        // server writing the whole value would put it back as it stood when Enter was pressed.
+        JSInterop.Setup<bool>(AssistInsert, _ => true).SetResult(true);
+        string? changed = null;
+        var cut = RenderWithAssist("Lower(cs[\"pro", v => changed = v);
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Lower(cs[\"pro", 13, 13, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Enter"));
+
+        var invocation = JSInterop.VerifyInvoke(AssistInsert);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(invocation.Arguments.Skip(1), Is.EqualTo(new object[] { 10, 13, "pro", "proxyAddresses\"]" }));
+            Assert.That(changed, Is.Null, "the browser's input event carries the new value, not the server");
+            Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_EnterOnASuggestionWithoutJavaScript_InsertsItOnTheServer()
+    {
+        JSInterop.Setup<bool>(AssistInsert, _ => true).SetException(new InvalidOperationException("prerendering"));
+        string? changed = null;
+        var cut = RenderWithAssist("Lower(cs[\"pro", v => changed = v);
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Lower(cs[\"pro", 13, 13, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Enter"));
+
+        Assert.That(changed, Is.EqualTo("Lower(cs[\"proxyAddresses\"]"));
+    }
+
+    [Test]
+    public void ExpressionEditor_ArrowDown_MovesToTheNextSuggestion()
+    {
+        var cut = RenderWithAssist("Is");
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Is", 2, 2, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("ArrowDown"));
+
+        var options = cut.FindAll("[role=option]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options[0].GetAttribute("aria-selected"), Is.EqualTo("false"));
+            Assert.That(options[1].GetAttribute("aria-selected"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_Escape_ClosesTheSuggestions()
+    {
+        var cut = RenderWithAssist("Sta");
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Escape"));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    [Test]
+    public void ExpressionEditor_CaretInsideACall_ShowsItsSignatureWithTheParameterItIsOn()
+    {
+        var cut = RenderWithAssist("StartsWith(cs[\"mail\"], ");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("StartsWith(cs[\"mail\"], ", 23, 23, typed: false));
+
+        var signature = cut.Find("[data-testid=jim-expression-signature]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(signature.TextContent, Does.Contain("StartsWith(value, prefix[, ignoreCase])"));
+            Assert.That(signature.QuerySelector(".jim-expression-signature-active")?.TextContent, Is.EqualTo("prefix"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_CaretMovedWithoutTyping_OpensNoSuggestions()
+    {
+        var cut = RenderWithAssist("Sta");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: false));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    [Test]
+    public void ExpressionEditor_AssistOff_NeverSuggests()
+    {
+        var cut = Render<ExpressionEditor>(p => p.Add(c => c.Value, "Sta").Add(c => c.Assist, false));
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    #endregion
 
     [Test]
     public void ExpressionEditor_OverlayTextContent_EqualsValue()

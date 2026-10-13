@@ -1,6 +1,7 @@
 # One Operator Catalogue and Function Library
 
-- **Status:** Doing (PRs A and C complete; PR B outstanding)
+- **Status:** Done
+- **Note:** PR B went ahead without waiting for #2051 PR 2 (#2224): it makes `StartsWith`, `EndsWith` and `Contains` ordinal itself, matching #2224, and whichever lands second reconciles the evaluator.
 - **Issue:** [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2 of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 2: One operator catalogue and function library", Scenarios 8, 9 and 13)
 
@@ -103,7 +104,7 @@ Needs neither in-flight dependency.
 9. `LikePattern` across every free-text `ILIKE` search.
 10. Docs (scoping criteria, Predefined Searches, Example Data, PowerShell, case sensitivity) and changelog (✨ operators, 🐛 escaping, 🔄 Example Data operator names).
 
-### PR B: The function library
+### PR B: The function library ✅
 
 **Waits on #2051 PR 2**, which makes expression `StartsWith`/`EndsWith` ordinal under CA1310 and is in flight in another session. Adding `ignoreCase` to functions whose base comparison is about to change underneath them would be done twice.
 
