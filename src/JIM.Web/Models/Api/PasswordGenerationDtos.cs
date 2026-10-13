@@ -37,8 +37,8 @@ public class ConnectedSystemPasswordPolicyResponse
     public int? RequiredCharacterClassCount { get; set; }
 
     /// <summary>
-    /// The categories this system counts towards its complexity rule. A category a system does not recognise
-    /// cannot help satisfy it, which is what catches the passphrase trap.
+    /// The character categories this system counts towards its complexity rule. A character from a category it does
+    /// not count does nothing to help a password satisfy the rule.
     /// </summary>
     public List<string> RecognisedCharacterClasses { get; set; } = [];
 

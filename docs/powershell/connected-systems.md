@@ -1,10 +1,13 @@
 ---
 title: Connected Systems
+description: "The cmdlets that create, read, change, clear and delete Connected Systems."
+type: reference
+audience: automation-author
 ---
 
 # Connected Systems
 
-The Connected Systems cmdlets manage the full lifecycle of Connected Systems in JIM: creating, configuring, clearing and deleting systems, and their server certificates and connector definitions. Importing a schema and choosing Object Types and attributes are on [Connected System Schema](connected-system-schema.md), auxiliary object classes on [Auxiliary Object Classes](connected-system-auxiliary-classes.md), partitions and containers on [Partitions and Containers](partitions-and-containers.md), the objects in the Connector Space on [Connected System Objects](connected-system-objects.md), and the changes waiting to be exported on [Pending Exports](pending-exports.md). Most cmdlets support pipeline input for scripting and automation workflows.
+The Connected Systems cmdlets manage the full lifecycle of Connected Systems in JIM: creating, configuring, clearing and deleting them. The Connectors a Connected System is created from are on [Connectors](connectors.md), a server's TLS certificate on [Certificates](certificates.md), and which Connected Systems receive passwords on [Password Synchronisation](password-synchronisation.md). Importing a schema and choosing Object Types and attributes are on [Connected System Schema](connected-system-schema.md), auxiliary object classes on [Auxiliary Object Classes](connected-system-auxiliary-classes.md), partitions and containers on [Partitions and Containers](partitions-and-containers.md), the objects in the Connector Space on [Connected System Objects](connected-system-objects.md), and the changes waiting to be exported on [Pending Exports](pending-exports.md). Most cmdlets support pipeline input for scripting and automation workflows.
 
 ---
 
@@ -12,37 +15,117 @@ The Connected Systems cmdlets manage the full lifecycle of Connected Systems in 
 
 Retrieves one or more Connected Systems, their object types, or a deletion impact preview.
 
+<!-- BEGIN GENERATED: Get-JIMConnectedSystem -->
 ### Syntax
 
 ```powershell
 # List (default)
 Get-JIMConnectedSystem [-Name <string>]
 
-# ById
-Get-JIMConnectedSystem -Id <int>
+# DeletionPreview
+Get-JIMConnectedSystem -Id <int> -DeletionPreview
 
 # ObjectTypes
 Get-JIMConnectedSystem -Id <int> -ObjectTypes
 
-# DeletionPreview
-Get-JIMConnectedSystem -Id <int> -DeletionPreview
+# ById
+Get-JIMConnectedSystem -Id <int>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById, ObjectTypes, DeletionPreview) | | Connected System identifier. Accepts pipeline input by property name. |
-| `Name` | `string` | No (List only) | | Filter by name; supports wildcard characters (`*`, `?`) |
-| `ObjectTypes` | `switch` | No | `$false` | Returns the object types configured on the Connected System |
-| `DeletionPreview` | `switch` | No | `$false` | Returns a deletion impact preview for the Connected System |
+| `Id` | `int` | Yes (DeletionPreview, ObjectTypes, ById) |  | The ID of the Connected System to get. Accepts pipeline input by property name. |
+| `Name` | `string` | No (List) |  | Returns only the Connected Systems whose name matches. Supports wildcards. |
+| `ObjectTypes` | `switch` | Yes (ObjectTypes) |  | Returns the Connected System's Object Types, from its imported schema. |
+| `DeletionPreview` | `switch` | Yes (DeletionPreview) |  | Returns what deleting the Connected System would affect. |
 
 ### Output
 
-- **List**: Connected System headers with properties such as `Id`, `Name`, `Description`, `Status`, `ObjectCount`, `ConnectorName`, and `ConnectorId`.
-- **ById**: the full Connected System, including its nested `Connector` (use `$cs.Connector.Id` for the connector definition ID), configuration state, and a nested `ConfigurationDrift` object (see below).
-- **ObjectTypes**: Object type definitions for the specified Connected System.
-- **DeletionPreview**: Deletion impact preview with counts and warnings.
+The Connected Systems, or with `-Id` the one Connected System, its Object Types or its deletion preview. A Connected System read by ID carries ConfigurationDrift: whether its configuration has changed in a way that needs a Full Synchronisation, in HasPendingChanges, IsDeterminable, NeverFullySynchronised, TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass. HasPendingChanges is also `$false` when JIM cannot tell, so test IsDeterminable first.
+
+**By default**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The ID of the Connected System. |
+| `Name` | `string` | The name of the Connected System. |
+| `Description` | `string` | What the Connected System is for, for administrators; empty when none is given. |
+| `Created` | `datetime` | When the Connected System was created (UTC). |
+| `Status` | `string` | Whether the Connected System takes part in synchronisation: Active, Disabled, or Deleting while a deletion is under way. One of `Active`, `Disabled` or `Deleting`. |
+| `ObjectCount` | `int` | How many Connected System Objects the Connected System holds. |
+| `ConnectorsCount` | `int` | How many of those Connected System Objects are joined to a Metaverse Object. |
+| `PendingExportObjectsCount` | `int` | How many Pending Exports are waiting to be exported to the Connected System. |
+| `ConnectorName` | `string` | The name of the Connector the Connected System uses. |
+| `ConnectorId` | `int` | The ID of that Connector. |
+
+**With `-Id`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The ID of the Connected System. |
+| `Name` | `string` | The name of the Connected System. |
+| `Description` | `string` | What the Connected System is for, for administrators; empty when none is given. |
+| `Created` | `datetime` | When the Connected System was created (UTC). |
+| `LastUpdated` | `datetime` | When the Connected System was last changed (UTC); empty if it never has been. |
+| `Status` | `string` | Whether the Connected System takes part in synchronisation: Active, Disabled, or Deleting while a deletion is under way. One of `Active`, `Disabled` or `Deleting`. |
+| `SettingValuesValid` | `bool` | Whether the Connector has validated the Connected System's current settings. False on a new Connected System, and again after any setting changes, until they are validated. |
+| `Connector` | `object` | The Connector the Connected System uses. It has `Id` and `Name`. |
+| `ObjectTypes` | `object[]` | The Connected System's Object Types, from its imported schema. Each has `Id`, `Name`, `Created`, `Selected`, `RemoveContributedAttributesOnObsoletion`, `AttributeCount`, `Tags`, `IsInternal`, `IsAuxiliary`, `ManagesClassMembership`, `MergedAuxiliaryClassObjectTypeIds`, `StructuralCarrierObjectTypeId` and `Attributes`. |
+| `ObjectCount` | `int` | How many Connected System Objects the Connected System holds. |
+| `PendingExportCount` | `int` | How many Pending Exports are waiting to be exported to the Connected System. |
+| `MaxExportParallelism` | `int` | How many export batches run at once, where the Connector supports exporting in parallel; empty or 1 exports one batch at a time. |
+| `InitialPasswordTimeToLive` | `string` | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Empty means JIM's default of seven days, and is reported as empty rather than as the default so a caller can tell a system configured to seven days from one never configured. |
+| `RequireSecureTransport` | `bool` | Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an administrator sets by hand, and a synchronised password change. |
+| `UnresolvedReferenceHandling` | `string` | How an imported reference value that cannot be resolved to a Connected System Object is treated. The default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while still logging the occurrence. One of `Error`, `Warn` or `Ignore`. |
+| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount` and `HighestChangeClass`. |
+| `StrandedValueSweepArmedAt` | `datetime` | When a stranded-value sweep was armed by a Connector Space clear, or empty when no sweep is armed. The sweep runs at the first Full Synchronisation of this Connected System after LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays armed and a Full Synchronisation does nothing beyond ordinary synchronisation. |
+| `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
+| `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
+
+**With `-ObjectTypes`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The ID of the Object Type. |
+| `Name` | `string` | The name of the Object Type, as the Connected System calls it. |
+| `Created` | `datetime` | When JIM first imported the Object Type (UTC). |
+| `Selected` | `bool` | Whether JIM manages objects of this type; objects of an unselected type are not imported. |
+| `RemoveContributedAttributesOnObsoletion` | `bool` | Whether the Metaverse attribute values a Connected System Object of this type contributed are recalled when the object is deleted from the Connected System. True by default. |
+| `AttributeCount` | `int` | How many attributes the Object Type has. |
+| `Tags` | `object[]` | How the Connected System classified this object type, as open key/value tags. A directory connector reports the class kind (structural, auxiliary, abstract) and, for classes the directory keeps for its own configuration or operation, a visibility of "internal". An object type carrying no tags is unclassified, which means "show it". Each has `Key` and `Value`. |
+| `IsInternal` | `bool` | Whether the Connected System reported this object type as one it uses internally. Derived from Tags, and offered here so callers can filter on it without matching tag strings themselves. The portal hides these object types by default. |
+| `IsAuxiliary` | `bool` | Whether the Connected System classified this object type as an auxiliary class: one that augments another rather than standing alone. Derived from Tags, and offered here so callers need not match tag strings themselves. |
+| `ManagesClassMembership` | `bool` | Whether the Connected System hands this object type's class membership to JIM to compose, which is what makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own auxiliary classes into each structural class. |
+| `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs. |
+| `StructuralCarrierObjectTypeId` | `int` | For an auxiliary object type, the structural object type JIM writes alongside it when creating an object, or empty when none has been named and JIM therefore cannot create one. |
+| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `CaseExact`, `CaseExactSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+
+**With `-DeletionPreview`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ConnectedSystemId` | `int` | The ID of the Connected System. |
+| `ConnectedSystemName` | `string` | The name of the Connected System. |
+| `ConnectedSystemObjectCount` | `int` | How many Connected System Objects the deletion removes. |
+| `SyncRuleCount` | `int` | How many Synchronisation Rules the deletion removes. |
+| `RunProfileCount` | `int` | How many Run Profiles the deletion removes. |
+| `PartitionCount` | `int` | How many partitions the deletion removes. |
+| `ContainerCount` | `int` | How many containers the deletion removes. |
+| `PendingExportCount` | `int` | How many Pending Exports the deletion discards. |
+| `ActivityCount` | `int` | How many Activities name the Connected System. They are kept, as history. |
+| `JoinedMvoCount` | `int` | How many Metaverse Objects are joined to one of its Connected System Objects, and so are disconnected by the deletion. |
+| `MvosWithOtherConnectorsCount` | `int` | Of those, how many are also joined in another Connected System, so stay joined there. They can still lose the values this one contributed, and some can still be marked for deletion; MvosWithDeletionRuleCount counts those. |
+| `MvosWithDeletionRuleCount` | `int` | How many Metaverse Objects their Metaverse Object Type's deletion rules will mark for deletion when the Connected System is deleted. |
+| `MvosWithGracePeriodCount` | `int` | Of the objects MvosWithDeletionRuleCount counts, how many have a grace period, so are deleted when it ends rather than at once. |
+| `ContributedValueCount` | `int` | How many Metaverse attribute values the Connected System's Synchronisation Rules contributed: the values the deletion recalls, or hands to another contributor. |
+| `ContributedValueObjectCount` | `int` | How many Metaverse Objects hold at least one of those values. Not the same as JoinedMvoCount: an object can be joined without holding a contributed value. |
+| `Warnings` | `string[]` | Anything that changes how the deletion runs, such as a synchronisation already running, which delays it until that finishes. |
+| `EstimatedDeletionTime` | `string` | Roughly how long the deletion takes. |
+| `WillRunAsBackgroundJob` | `bool` | True if the deletion will be queued as a background job (large system). False if it will execute synchronously. |
+| `HasRunningSyncOperation` | `bool` | Whether a synchronisation is running on the Connected System, in which case the deletion waits for it to finish. |
+<!-- END GENERATED: Get-JIMConnectedSystem -->
 
 ### Examples
 
@@ -86,115 +169,10 @@ and Destructive changes count, so a rename never registers here.
 | `ChangeCount` | `int` | How many qualifying changes there are |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 
-### Get-JIMConnectedSystemPasswordPolicy
-
-Reports what the Connected System itself said it will accept, read during a previous connection. Nothing here
-opens a new connection or changes anything.
-
-```powershell
-Get-JIMConnectedSystemPasswordPolicy -Id 3
-Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
-```
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `discovered` | `datetime?` | When JIM last read this from the system |
-| `minimumLength` | `int?` | The shortest password the system will accept |
-| `complexityRequired` | `bool?` | Whether the system enforces a complexity rule |
-| `requiredCharacterClassCount` | `int?` | How many character categories a password must draw on |
-| `recognisedCharacterClasses` | `string[]` | The categories this system counts towards that rule |
-| `passwordHistoryLength` | `int?` | How many previous passwords it remembers and refuses |
-| `maximumPasswordAgeDays` | `int?` | How long a password may live |
-| `minimumPasswordAgeDays` | `int?` | How soon it may be changed again |
-| `policyOverrideSignal` | `string` | `Absent`, `Present` or `CouldNotDetermine`: whether some accounts may be governed by a policy other than this one |
-| `furtherChecksApply` | `bool` | Whether the directory applies checks JIM cannot see, such as a dictionary check, so a password satisfying every figure can still be refused |
-| `discoveryOutcome` | `string?` | `Read`, `NotPublished`, `ConfigurationNotReadable` or `NoPolicyConfigured`; `$null` when nothing has been read yet |
-| `hasAnyDiscoveredConstraint` | `bool` | Whether JIM discovered anything at all |
-
-!!! warning "A null means JIM could not read that rule, not that no such rule exists"
-    A directory withholds what a caller may not see by omitting it rather than refusing, so a null minimum
-    length does not mean any length is acceptable. Check `hasAnyDiscoveredConstraint` before treating the
-    figures as a description of what the system will accept. Where `policyOverrideSignal` is `Present` or
-    `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
-    by a stricter policy (Active Directory's Fine-Grained Password Policies, OpenLDAP's per-entry policy
-    subentries, 389 Directory Server's subtree policies). Where nothing was discovered, `discoveryOutcome` says
-    why, and whether there is anything to do about it: `NotPublished` means the directory has nothing to read,
-    `ConfigurationNotReadable` means the account JIM connects as needs read access to the server configuration.
-
-### Get-JIMConnectedSystemPasswordSynchronisation
-
-Reports whether a Connected System receives synchronised passwords, and the settings governing how hard JIM
-tries to deliver them. A system that has never been configured is reported with `configured` set to `$false`
-and JIM's defaults in the remaining fields, so a script comparing systems does not have to special-case the
-untouched ones.
-
-```powershell
-Get-JIMConnectedSystemPasswordSynchronisation -Id 3
-Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordSynchronisation
-```
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `Configured` | `bool` | Whether Password Synchronisation has been configured here at all |
-| `ConnectorSupportsPasswordSet` | `bool` | Whether this Connector can set passwords; `$false` means it cannot be configured |
-| `Enabled` | `bool` | Whether queued password changes are delivered |
-| `TargetObjectTypeId` | `int` | The Connected System Object Type that receives passwords |
-| `TargetObjectTypeName` | `string` | Its name |
-| `MaxRetries` | `int` | Attempts before a change is parked; `0` means use JIM's default |
-| `EffectiveMaxRetries` | `int` | The retry count actually applied |
-| `RetryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
-| `EffectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
-| `RequireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused. Reported here, set on the Connected System with `Set-JIMConnectedSystem` |
-| `EffectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
-
-Auditing which systems are switched on:
-
-```powershell
-Get-JIMConnectedSystem | ForEach-Object {
-    $p = Get-JIMConnectedSystemPasswordSynchronisation -Id $_.Id
-    [PSCustomObject]@{ System = $_.Name; Configured = $p.Configured; Enabled = $p.Enabled }
-}
-```
-
-### Set-JIMConnectedSystemPasswordSynchronisation
-
-Creates or updates the configuration. Omitted parameters leave the stored value unchanged; `-TargetObjectType`
-is required when creating one.
-
-```powershell
-# Stage the configuration without switching it on
-Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -TargetObjectType 7 -Enabled $false
-
-# Switch it on during the change window, delivering everything queued while it was off
-Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -Enabled $true -ChangeReason 'CHG0041288'
-
-# Allow ten attempts before a change is parked
-Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `-Id` | `int` | The Connected System (required; also accepts a Connected System from the pipeline as `-InputObject`) |
-| `-Enabled` | `bool` | Whether to deliver queued password changes. Enabling delivers what accumulated while it was off |
-| `-TargetObjectType` | `int` | The Object Type that receives passwords; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
-| `-MaxRetries` | `int` | Attempts before parking a change; `0` uses JIM's default |
-| `-RetryBackoffBase` | `timespan` | The first retry interval; `0` uses JIM's default |
-| `-ChangeReason` | `string` | Recorded against the Connected System's configuration change history |
-| `-PassThru` | `switch` | Return the updated configuration |
-
-!!! note "Require Secure Transport is set on the Connected System"
-    It governs every password JIM sends to the system, not only synchronised ones, so it is set with
-    `Set-JIMConnectedSystem -Id 3 -RequireSecureTransport` and turned off with
-    `-RequireSecureTransport:$false`. It is reported here as well, because it governs this feature too.
-
-!!! note "There is no Remove cmdlet, and that is deliberate"
-    Removing a configuration would discard every password change queued against it. Disabling it keeps them,
-    and is reversible, so `-Enabled $false` is the supported way to stop delivery.
-
 #### Stranded-value sweep (ById only)
 
 Whether a stranded-value sweep is armed following a Connector Space clear, and what it is waiting for. See
-[Clearing the connector space](../configuration/connector-space.md#clearing-the-connector-space).
+[Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space).
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -230,26 +208,29 @@ Get-JIMConnectedSystem -Id 3 -DeletionPreview
 
 Creates a new Connected System.
 
+<!-- BEGIN GENERATED: New-JIMConnectedSystem -->
 ### Syntax
 
 ```powershell
-New-JIMConnectedSystem [-Name] <string> -ConnectorDefinitionId <int>
-    [-Description <string>] [-ChangeReason <string>] [-PassThru]
+New-JIMConnectedSystem [-Name] <string> -ConnectorDefinitionId <int> [-Description <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes (Position 0) | | Display name for the Connected System |
-| `ConnectorDefinitionId` | `int` | Yes | | Identifier of the connector definition to use |
-| `Description` | `string` | No | | Optional description |
-| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
-| `PassThru` | `switch` | No | `$false` | Returns the created Connected System Object |
+| `Name` | `string` | Yes |  | The name of the Connected System. Can be given by position, as the first argument. |
+| `Description` | `string` | No |  | What the Connected System is for, for administrators. |
+| `ConnectorDefinitionId` | `int` | Yes |  | The ID of the Connector the Connected System uses; `Get-JIMConnectorDefinition` lists them. |
+| `ChangeReason` | `string` | No |  | Why the change was made, recorded in the Connected System's change history. |
+| `PassThru` | `switch` | No |  | Returns the Connected System created. |
 
 ### Output
 
-When `-PassThru` is specified, returns the newly created Connected System Object. Otherwise, no output.
+With `-PassThru`, the Connected System created; otherwise nothing.
+
+Properties as under [Get-JIMConnectedSystem](#get-jimconnectedsystem).
+<!-- END GENERATED: New-JIMConnectedSystem -->
 
 ### Examples
 
@@ -271,42 +252,39 @@ $cs = New-JIMConnectedSystem "HR Database" -ConnectorDefinitionId 2 -Description
 
 Updates the configuration of an existing Connected System.
 
+<!-- BEGIN GENERATED: Set-JIMConnectedSystem -->
 ### Syntax
 
 ```powershell
 # ById (default)
-Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
-    [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
-    [-RequireSecureTransport] [-InitialPasswordTimeToLive <timespan>]
-    [-UnresolvedReferenceHandling <string>] [-PassThru]
+Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>] [-SettingValues <hashtable>] [-MaxExportParallelism <int>] [-RequireSecureTransport] [-InitialPasswordTimeToLive <timespan>] [-UnresolvedReferenceHandling <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
-    [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-RequireSecureTransport]
-    [-InitialPasswordTimeToLive <timespan>] [-UnresolvedReferenceHandling <string>]
-    [-ChangeReason <string>] [-PassThru]
+Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>] [-Description <string>] [-SettingValues <hashtable>] [-MaxExportParallelism <int>] [-RequireSecureTransport] [-InitialPasswordTimeToLive <timespan>] [-UnresolvedReferenceHandling <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected System identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `Name` | `string` | No | | New display name |
-| `Description` | `string` | No | | New description |
-| `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
-| `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
-| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on a Connected System Object it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and Connected System Objects stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/password-synchronisation.md). |
-| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long a Connected System Object provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; Connected System Objects provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
-| `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/unresolved-references.md). |
-| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
+| `Id` | `int` | Yes (ById) |  | The ID of the Connected System to change. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
+| `Name` | `string` | No |  | The new name of the Connected System. |
+| `Description` | `string` | No |  | What the Connected System is for, for administrators. |
+| `SettingValues` | `hashtable` | No |  | The Connector settings to change, as a hashtable keyed by setting ID (from `Get-JIMConnectorDefinition`) whose values are hashtables holding a stringValue, intValue or checkboxValue. |
+| `MaxExportParallelism` | `int` | No |  | How many export batches run at once, where the Connector supports exporting in parallel. 1 exports one batch at a time. From 1 to 16. |
+| `RequireSecureTransport` | `switch` | No |  | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Off by default, because a signed and sealed bind is a legitimate encrypted alternative that cannot be detected from the Connected System's settings alone. Pass `-RequireSecureTransport` to turn it on and `-RequireSecureTransport:$false` to turn it off. Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password. |
+| `InitialPasswordTimeToLive` | `timespan` | No |  | How long an account provisioned into the Connected System stays owed an initial password before JIM records an expiry and stops trying, as a TimeSpan. Seven days until one is set. Raise it ahead of an outage longer than the current window, or every account provisioned while the Connected System is unreachable expires without a password. |
+| `UnresolvedReferenceHandling` | `string` | No |  | How an imported reference value that cannot be resolved to a Connected System Object is treated: Error fails the object's Run Profile execution item; Warn completes the Activity with a warning counting them instead; Ignore records neither, though the references are still logged and shown on the Connected System Object. One of `Error`, `Warn` or `Ignore`. |
+| `ChangeReason` | `string` | No |  | Why the change was made, recorded in the Connected System's change history. |
+| `PassThru` | `switch` | No |  | Returns the Connected System as changed. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated Connected System Object. Otherwise, no output.
+With `-PassThru`, the Connected System as changed; otherwise nothing.
+
+Properties as under [Get-JIMConnectedSystem](#get-jimconnectedsystem).
+<!-- END GENERATED: Set-JIMConnectedSystem -->
 
 ### Examples
 
@@ -340,46 +318,57 @@ Set-JIMConnectedSystem -Id 3 -Description "Point at DR domain controller" -Chang
 
 Deletes a Connected System and all its associated data.
 
+<!-- BEGIN GENERATED: Remove-JIMConnectedSystem -->
 ### Syntax
 
 ```powershell
 # ById (default)
-Remove-JIMConnectedSystem -Id <int> [-DeleteImmediately] [-ChangeReason <string>]
-    [-PreviewActivityId <guid>] [-PassThru] [-Force]
+Remove-JIMConnectedSystem -Id <int> [-DeleteImmediately] [-PassThru] [-Force] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-DeleteImmediately] [-ChangeReason <string>]
-    [-PreviewActivityId <guid>] [-PassThru] [-Force]
+Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-DeleteImmediately] [-PassThru] [-Force] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected System identifier. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System object from the pipeline |
-| `DeleteImmediately` | `switch` | No | `$false` | Deletes immediately and **keeps** the attribute values the system contributed, instead of deprovisioning through synchronisation. The kept values lose their provenance, so nothing can ever recall them, and downstream systems are not corrected. |
-| `ChangeReason` | `string` | No | | Reason for the deletion, recorded on its Activity and on the configuration change history tombstone |
-| `PreviewActivityId` | `guid` | No | | The deletion preview this deletion was made after reading, as returned by [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion`](previews.md#new-jimconfigurationchangepreview). Recorded on the deletion's Activity. JIM refuses the deletion, deleting nothing, when the id is not a deletion preview of this same Connected System. A preview that a later run or configuration change has overtaken is still recorded: the deletion goes ahead, its Activity says the preview was out of date, and the cmdlet writes a warning naming what overtook it. |
-| `PassThru` | `switch` | No | `$false` | Returns the deletion result for a deletion that completes immediately |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt, and the lookup of headline counts the prompt uses |
-
-By default the deletion deprovisions the system through synchronisation: the system is fenced and a background run takes every Connected System Object through the same obsoletion a synchronisation disconnect would, so other systems take over the values they also contribute, values nothing else contributes are cleared, Deletion Rules are evaluated, and corrections are staged for the other Connected Systems, before the system itself is deleted. To see all of that before it happens, run [`New-JIMConfigurationChangePreview -Deletion`](previews.md#new-jimconfigurationchangepreview) first and pass its `ActivityId` to `-PreviewActivityId`.
-
-If a deprovisioning run fails partway, the system stays fenced (its Status remains `Deleting`). Running the cmdlet again retries the run from its checkpoint; running it with `-DeleteImmediately` finishes the deletion immediately, abandoning the remaining deprovisioning work.
+| `Id` | `int` | Yes (ById) |  | The ID of the Connected System to delete. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
+| `DeleteImmediately` | `switch` | No |  | Deletes the Connected System immediately instead of deprovisioning through synchronisation. The values the Connected System contributed are kept with no provenance, so nothing can ever recall them; surviving contributors are not re-elected and downstream systems are not corrected. On a system whose deprovisioning run failed partway, this finishes the deletion immediately, abandoning the remaining deprovisioning work. |
+| `PassThru` | `switch` | No |  | Returns the outcome of a deletion that completes at once. A deletion that queues returns its tracking object either way. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt, and the deletion preview it states. |
+| `ChangeReason` | `string` | No |  | Why the Connected System was deleted, recorded on the deletion's Activity and in its change history. |
+| `PreviewActivityId` | `guid` | No |  | The ID of the deletion preview this deletion was made after reading: the Activity that `New-JIMConfigurationChangePreview -Deletion` returns for this Connected System. Recorded on the deletion's Activity so "previewed, then deleted" is auditable rather than a claim. JIM refuses the deletion, deleting nothing, when the id is not a deletion preview of this same Connected System. A preview that a later run or configuration change has overtaken is still recorded, and the deletion's Activity says it was out of date and what overtook it; the cmdlet writes a warning saying so. |
 
 ### Output
 
-When the deletion queues (always the case by default), returns a tracking object:
+Depends on how the deletion runs. One that runs in the background, as every deletion that deprovisions does, returns an object to follow it by. One that completes at once returns nothing, or its outcome with `-PassThru`.
 
-| Property | Description |
-|----------|-------------|
-| `ActivityId` | The deletion Activity's id; monitor it with `Get-JIMActivity` |
-| `WorkerTaskId` | The queued Worker Task's id |
-| `Outcome` | `QueuedAsBackgroundJob`, or `QueuedAfterSync` when a running synchronisation delays it |
-| `ConnectedSystemObjectCount`, `ContributedValueCount`, `ContributedValueObjectCount` | Headline counts from the deletion's impact summary, or `$null` when `-Force` skipped the lookup |
+**When the deletion queues**:
 
-When an immediate deletion completes synchronously, nothing is returned unless `-PassThru` is specified, in which case the deletion result (`Outcome`, `ActivityId`) is returned.
+| Property | Type | Description |
+|----------|------|-------------|
+| `ActivityId` | `guid` | The ID of the deletion's Activity; follow it with `Get-JIMActivity`. |
+| `WorkerTaskId` | `guid` | The ID of the worker task carrying out the deletion. |
+| `Outcome` | `string` | QueuedAsBackgroundJob, or QueuedAfterSync when a running synchronisation delays it. |
+| `ConnectedSystemObjectCount` | `int` | How many Connected System Objects the deletion removes, from the deletion preview; empty with `-Force`, which skips the preview. |
+| `ContributedValueCount` | `int` | How many Metaverse attribute values the Connected System contributed; empty with `-Force`. |
+| `ContributedValueObjectCount` | `int` | How many Metaverse Objects hold those values; empty with `-Force`. |
+
+**With `-PassThru`, when the deletion completes at once**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Success` | `bool` | Whether JIM accepted the deletion; false when it failed, and ErrorMessage says why. |
+| `Outcome` | `string` | How the deletion runs: at once, as a background job, or once a running synchronisation finishes; or Failed. One of `CompletedImmediately`, `QueuedAsBackgroundJob`, `QueuedAfterSync` or `Failed`. |
+| `ErrorMessage` | `string` | Why the deletion failed; empty unless the Outcome is Failed. |
+| `WorkerTaskId` | `guid` | The ID of the worker task carrying out the deletion; empty when it completed at once. |
+| `ActivityId` | `guid` | The ID of the Activity recording the deletion; empty when it failed. |
+| `Warnings` | `string[]` | What the caller should know about a deletion that went ahead, such as the preview it cites having been out of date. Empty when there is nothing to say. |
+<!-- END GENERATED: Remove-JIMConnectedSystem -->
 
 ### Examples
 
@@ -415,176 +404,11 @@ Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Dele
 
 ---
 
-## Get-JIMConnectedSystemServerCertificate
-
-Reads the certificate the Connected System's server is presenting, without storing anything.
-
-JIM connects to the endpoint the Connected System is configured for, purely to look at the certificate the server offers, and refuses the connection. The endpoint is always worked out by the Connected System's own connector from that system's settings; it is never named directly, so this cannot be used to make JIM connect to an address of your choosing.
-
-### Syntax
-
-```powershell
-Get-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> [-SettingValues <hashtable>]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
-| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
-
-### Output
-
-An object with a `certificate` property and a `readAt` timestamp. The certificate carries `host`, `port`, `subject`, `issuer`, `subjectAlternativeNames`, `validFrom`, `validTo`, `thumbprint`, `signatureAlgorithm`, `isSelfSigned`, `issuerThumbprint`, `isIssuerCertificateAvailable`, `chain`, `isChainComplete`, `missingIssuer`, `rootThumbprint`, `rootSubject`, `failureReason` and `remediation`.
-
-`chain` lists the certificate chain JIM found, the server's own certificate first and the root (where JIM reached one) last. Each entry carries `subject`, `issuer`, `thumbprint`, `validFrom`, `validTo`, `isCertificateAuthority`, `isSelfSigned`, `source` and `downloadedFrom`. `source` is `SentByServer`, `Downloaded` (from the address in the certificate below it, given in `downloadedFrom`), `JimCertificateStore` or `OperatingSystem`. When JIM could not reach a root, `isChainComplete` is `$false` and `missingIssuer` names the certificate it could not find.
-
-`failureReason` is one of `None`, `UntrustedIssuer`, `NameMismatch`, `Expired`, `NotYetValid`, `NoCertificatePresented`, `InvalidChain` or `Unknown`. Only `UntrustedIssuer` is fixed by trusting a certificate. `InvalidChain` means a certificate authority in the chain has expired, is not marked as one, or has a signature that does not verify, which has to be fixed on the server.
-
-### Examples
-
-```powershell title="Read the certificate the configured server presents"
-Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-```
-
-```powershell title="Show the identifying details and which check it fails"
-Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 |
-    Select-Object -ExpandProperty certificate |
-    Select-Object host, subject, thumbprint, failureReason
-```
-
-```powershell title="List the certificate chain and where each certificate came from"
-(Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42).certificate.chain |
-    Format-Table subject, source, downloadedFrom
-```
-
-```powershell title="Read an endpoint that has been entered but not saved"
-Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' }
-```
-
-### Notes
-
-- **Why `-SettingValues` exists.** JIM does not save settings that fail validation, and a certificate JIM does not trust is a validation failure. A Connected System being configured for the first time therefore has the address you typed and nothing in the database, so without these JIM would look at the endpoint last saved, or report that the system is not configured for an encrypted connection. Setting identifiers come from `Get-JIMConnectorDefinition`. The values are never persisted, and values for encrypted settings are ignored.
-- Reading stores nothing. Trusting the certificate is a separate call to `Approve-JIMConnectedSystemServerCertificate`.
-
----
-
-## Approve-JIMConnectedSystemServerCertificate
-
-Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
-
-JIM reads the certificate from the server again, checks it against the thumbprint you supply, and adds it through the audited path, so the addition carries an Activity naming who trusted it and why.
-
-### Syntax
-
-```powershell
-Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> -Thumbprint <string>
-    [-ChangeReason <string>] [-SettingValues <hashtable>] [-PassThru]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
-| `Thumbprint` | `string` | Yes | | The thumbprint being trusted, as read from the server: the server's own certificate, or any certificate in its chain. Spaces and colons between the pairs are ignored. |
-| `ChangeReason` | `string` | No | | Reason recorded on the audit Activity. JIM records a sentence naming the Connected System when none is given. |
-| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
-| `PassThru` | `switch` | No | `$false` | Returns the outcome, including the certificate as it now sits in the store. |
-
-### Output
-
-When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `AlreadyTrusted`, `ThumbprintMismatch` or `InvalidChain`), `message`, `certificate`, `storedIntermediates`, `expectedThumbprint` and `presentedThumbprint`. `storedIntermediates` lists any certificate authorities JIM downloaded and stored alongside the one you trusted, because the server does not send them. Otherwise, no output.
-
-### Examples
-
-```powershell title="Trust the certificate you have checked"
-Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
-```
-
-```powershell title="Trust the root of the chain, rather than the server's own certificate"
-$reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-$reading.certificate.chain | Format-Table subject, source, downloadedFrom
-
-Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-    -Thumbprint $reading.certificate.rootThumbprint `
-    -ChangeReason 'Unblocking the HR Cloud connection test.'
-```
-
-```powershell title="Trust an endpoint that has been entered but not saved"
-Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-    -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01' `
-    -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' } -PassThru
-```
-
-### Notes
-
-- **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
-- **Any certificate in the chain works; the root lasts longest.** JIM accepts the server when any certificate in its chain is in the Trusted Certificates store. `rootThumbprint` is populated when JIM reached the root, and trusting it survives the renewal of every certificate beneath it; trusting the server's own certificate has to be repeated at every renewal. Where `isChainComplete` is `$false`, trust the highest certificate JIM found, or add `missingIssuer` under Admin > Certificates. A self-signed certificate is its own root.
-- **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
-- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted.
-- Supports `ShouldProcess`.
-- Remove a certificate later with `Remove-JIMCertificate`.
-
----
-
-## Get-JIMConnectorDefinition
-
-Retrieves available connector definitions, including their settings and capabilities.
-
-### Syntax
-
-```powershell
-# List all (default)
-Get-JIMConnectorDefinition
-
-# By ID
-Get-JIMConnectorDefinition -Id <int>
-
-# By name (exact match)
-Get-JIMConnectorDefinition -Name <string>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connector definition identifier. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName) | | Connector definition name. Must be an exact match. |
-
-### Output
-
-Connector definition objects including name, description, available settings, and supported capabilities (e.g. full import, delta import, export, hierarchy).
-
-### Examples
-
-```powershell title="List all connector definitions"
-Get-JIMConnectorDefinition
-```
-
-```powershell title="Get a connector definition by name"
-Get-JIMConnectorDefinition -Name "JIM File Connector"
-```
-
-```powershell title="Get a specific connector definition by ID"
-Get-JIMConnectorDefinition -Id 1
-```
-
-```powershell title="Find connectors that support delta import"
-# The list form returns headers, which carry no capability flags; fetch each
-# definition by ID to see what it supports.
-Get-JIMConnectorDefinition |
-    ForEach-Object { Get-JIMConnectorDefinition -Id $_.Id } |
-    Where-Object { $_.SupportsDeltaImport }
-```
-
----
-
 ## Get-JIMConnectedSystemCapability
 
 Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
 
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemCapability -->
 ### Syntax
 
 ```powershell
@@ -595,11 +419,17 @@ Get-JIMConnectedSystemCapability -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
 
 ### Output
 
-Zero or more `PSCustomObject` instances, one per detected capability, each with `Name` and `Value` properties. Empty when the Connector does not detect any capabilities, or when nothing has been detected yet (for example, before the first successful connection).
+One entry per fact the Connector detected, such as the directory type or paging support.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Name` | `string` | What the fact is about, such as the directory type, its vendor, or whether it supports paging. |
+| `Value` | `string` | What the Connector found, as text. |
+<!-- END GENERATED: Get-JIMConnectedSystemCapability -->
 
 ### Examples
 
@@ -619,40 +449,44 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapabili
 
 ## Clear-JIMConnectedSystem
 
-Removes all connector space objects (CSOs) and associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
+Removes every Connected System Object and its associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
 
 The clear runs as a queued background task, tracked by an Activity, exactly like the portal: the cmdlet returns as soon as the task is queued rather than running the deletion inline, so the operation is audited and trackable regardless of which surface started it. Use `-Wait` to block until it has finished.
 
+<!-- BEGIN GENERATED: Clear-JIMConnectedSystem -->
 ### Syntax
 
 ```powershell
 # ById (default)
-Clear-JIMConnectedSystem -Id <int> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force]
+Clear-JIMConnectedSystem -Id <int> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force]
+Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected System identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `KeepChangeHistory` | `switch` | No | `$false` | Preserves change history records; by default, change history is also deleted |
-| `Wait` | `switch` | No | `$false` | Waits for the queued clear to finish before returning |
-| `Timeout` | `int` | No | | Maximum seconds to wait when `-Wait` is supplied. Omit to wait indefinitely |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `Id` | `int` | Yes (ById) |  | The ID of the Connected System to clear. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
+| `KeepChangeHistory` | `switch` | No |  | Keeps the deleted objects' change history, no longer linked to them. |
+| `Wait` | `switch` | No |  | Waits for the clear to finish before returning. Without it, an import run straight afterwards races the clear. |
+| `Timeout` | `int` | No |  | How many seconds `-Wait` waits before reporting an error; the clear carries on regardless. Without it, `-Wait` waits until the clear finishes. At least 1. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 
 ### Output
 
-A tracking object for the queued clear:
+The IDs of the Activity and worker task carrying out the clear.
 
 | Property | Type | Description |
-|----------|------|--------------|
-| `ActivityId` | `guid` | The clear Activity's id; monitor it with `Get-JIMActivity` |
-| `TaskId` | `guid` | The queued Worker Task's id |
-| `Message` | `string` | A human-readable confirmation naming the Connected System |
+|----------|------|-------------|
+| `ActivityId` | `guid` | The Activity id for tracking the clear. |
+| `TaskId` | `guid` | The worker task id for the queued clear. |
+| `Message` | `string` | Message describing the result. |
+<!-- END GENERATED: Clear-JIMConnectedSystem -->
 
 ### Examples
 
@@ -675,11 +509,11 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 ### Notes
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
+- Removes every Connected System Object with its attribute values, and the Connected System's Pending Exports and deferred references.
 - Metaverse Objects are **not** deleted by the clear itself; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 - Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
-- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the connector space](../configuration/connector-space.md#clearing-the-connector-space).
+- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space).
 
 ---
 
@@ -687,6 +521,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 Retrieves a preview of the impact of deleting a Connected System, including counts of affected objects and warnings.
 
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemDeletionPreview -->
 ### Syntax
 
 ```powershell
@@ -697,11 +532,14 @@ Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
 
 ### Output
 
-A deletion impact preview object with counts of connector space objects, Pending Exports, Synchronisation Rules, and other dependent data that would be removed.
+What deleting the Connected System would remove, disconnect and recall.
+
+Properties as under [Get-JIMConnectedSystem](#get-jimconnectedsystem).
+<!-- END GENERATED: Get-JIMConnectedSystemDeletionPreview -->
 
 ### Examples
 
@@ -728,7 +566,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## See also
 
-- [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
+- [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the Connector Space, partitions and containers, and common workflows
 - [Connected System Schema](connected-system-schema.md): import a Connected System's schema, and choose its Object Types and attributes
 - [Auxiliary Object Classes](connected-system-auxiliary-classes.md): the auxiliary classes an LDAP Connected System's Object Types carry
 - [Partitions and Containers](partitions-and-containers.md): import a Connected System's hierarchy, and choose which partitions and containers JIM imports from
@@ -736,4 +574,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 - [Pending Exports](pending-exports.md): read the changes waiting to be written to a Connected System
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
 - [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation, including the initial password set on provisioned accounts
+- [Connectors](connectors.md): the Connectors a Connected System is created from
+- [Certificates](certificates.md): read and approve the TLS certificate a Connected System's server presents
+- [Password Synchronisation](password-synchronisation.md): choose which Connected Systems receive passwords
 - [Connection](connection.md): establish a session before using these cmdlets
