@@ -693,24 +693,81 @@ public class ConnectedSystemAttributeDto
 /// </summary>
 public class ConnectedSystemObjectDetailDto
 {
+    /// <summary>
+    /// The ID of the Connected System Object.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// When the object first arrived in the Connector Space (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// When the object was last changed (UTC); null if it never has been.
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// Normal for an object taking part in synchronisation; Obsolete for one the last Full Import did not return;
+    /// PendingProvisioning for one JIM has decided to create and not yet confirmed.
+    /// </summary>
     public ConnectedSystemObjectStatus Status { get; set; }
+
+    /// <summary>
+    /// How the object came to be joined to a Metaverse Object: Projected, Provisioned, Joined, or NotJoined.
+    /// </summary>
     public ConnectedSystemObjectJoinType JoinType { get; set; }
+
+    /// <summary>
+    /// When the object was joined to its Metaverse Object (UTC); null when it is not joined.
+    /// </summary>
     public DateTime? DateJoined { get; set; }
+
+    /// <summary>
+    /// The object's display name, or its external identifier when it has none.
+    /// </summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the object belongs to.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The name of that Connected System.
+    /// </summary>
     public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>
+    /// The ID of the object's Object Type.
+    /// </summary>
     public int TypeId { get; set; }
+
+    /// <summary>
+    /// The name of the object's Object Type.
+    /// </summary>
     public string TypeName { get; set; } = null!;
+
+    /// <summary>
+    /// The ID of the Metaverse Object the object is joined to; null when it is not joined.
+    /// </summary>
     public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// That Metaverse Object's display name; null when it is not joined or has none.
+    /// </summary>
     public string? MetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The object's attribute values, one entry per value. A multi-valued attribute with many values may be cut
+    /// short; AttributeValueSummaries says so.
+    /// </summary>
     public List<ConnectedSystemObjectAttributeValueDto> AttributeValues { get; set; } = new();
 
     /// <summary>
-    /// Per-attribute metadata showing total value counts. Present when the detail was loaded
-    /// with a capped strategy so consumers know when values have been truncated.
+    /// For each attribute whose values were cut short, how many it holds and how many came back; null when nothing
+    /// was cut short. Get-JIMConnectedSystemObjectAttributeValue reads the rest.
     /// </summary>
     public List<AttributeValueSummaryDto>? AttributeValueSummaries { get; set; }
 
@@ -768,9 +825,24 @@ public class ConnectedSystemObjectDetailDto
 /// </summary>
 public class AttributeValueSummaryDto
 {
+    /// <summary>
+    /// The name of the attribute.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// How many values the attribute holds.
+    /// </summary>
     public int TotalCount { get; set; }
+
+    /// <summary>
+    /// How many of them came back.
+    /// </summary>
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Whether there are values that did not come back.
+    /// </summary>
     public bool HasMore { get; set; }
 }
 
@@ -779,13 +851,44 @@ public class AttributeValueSummaryDto
 /// </summary>
 public class ConnectedSystemObjectAttributeValueDto
 {
+    /// <summary>
+    /// The ID of the value.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The ID of the attribute the value belongs to.
+    /// </summary>
     public int AttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that attribute.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The value of a Text attribute; null otherwise.
+    /// </summary>
     public string? StringValue { get; set; }
+
+    /// <summary>
+    /// The value of a DateTime attribute (UTC); null otherwise.
+    /// </summary>
     public DateTime? DateTimeValue { get; set; }
+
+    /// <summary>
+    /// The value of a Number attribute; null otherwise.
+    /// </summary>
     public int? IntValue { get; set; }
+
+    /// <summary>
+    /// The value of a LongNumber attribute; null otherwise.
+    /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The value of a Decimal attribute; null otherwise.
+    /// </summary>
     public decimal? DecimalValue { get; set; }
 
     /// <summary>
@@ -794,8 +897,20 @@ public class ConnectedSystemObjectAttributeValueDto
     /// </summary>
     public byte[]? ByteValue { get; set; }
 
+    /// <summary>
+    /// The value of a Guid attribute; null otherwise.
+    /// </summary>
     public Guid? GuidValue { get; set; }
+
+    /// <summary>
+    /// The value of a Boolean attribute; null otherwise.
+    /// </summary>
     public bool? BoolValue { get; set; }
+
+    /// <summary>
+    /// For a Reference attribute, the ID of the Connected System Object it refers to; null otherwise, or when the
+    /// reference is unresolved.
+    /// </summary>
     public Guid? ReferenceValueId { get; set; }
 
     public static ConnectedSystemObjectAttributeValueDto FromEntity(ConnectedSystemObjectAttributeValue entity)
