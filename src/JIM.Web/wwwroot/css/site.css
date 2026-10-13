@@ -3288,6 +3288,138 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     opacity: 1;
 }
 
+/* ─── Expression assist (#2053): the editor's suggestions and signature help ───
+   Both float under the field, over whatever follows it, so the form below does not jump as the caret moves in and
+   out of a call. The host is the positioning context; the list matches the field's width. Every colour is a theme
+   token, and the kind glyphs reuse the expression highlighter's own function and accessor colours, so fx, MV and CS
+   read in the list as they do in the field. */
+.jim-expression-editor-host {
+    position: relative;
+}
+
+.jim-expression-assist-list,
+.jim-expression-signature {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 2px);
+    z-index: var(--mud-zindex-popover, 1200);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius, 4px);
+}
+
+.jim-expression-assist-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 4px 0 0;
+}
+
+.jim-expression-assist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.jim-expression-assist-item:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-expression-assist-item-active,
+.jim-expression-assist-item-active:hover {
+    background: var(--mud-palette-primary-hover, var(--mud-palette-action-default-hover));
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+.jim-expression-assist-kind {
+    flex: 0 0 auto;
+    min-width: 26px;
+    margin-top: 1px;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+    text-align: center;
+}
+
+.jim-expression-assist-kind-function {
+    color: var(--jim-expr-function);
+}
+
+.jim-expression-assist-kind-mv {
+    color: var(--jim-expr-accessor-mv);
+}
+
+.jim-expression-assist-kind-cs {
+    color: var(--jim-expr-accessor-cs);
+}
+
+.jim-expression-assist-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.jim-expression-assist-label {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    overflow-wrap: anywhere;
+}
+
+.jim-expression-assist-description {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
+.jim-expression-assist-hint {
+    position: sticky;
+    bottom: 0;
+    margin-top: 4px;
+    padding: 4px 12px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+}
+
+.jim-expression-signature {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    box-shadow: var(--mud-elevation-4);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
+.jim-expression-signature-call {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    background: none;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-expression-signature-active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.jim-expression-signature-description,
+.jim-expression-signature-parameter {
+    color: var(--mud-palette-text-secondary);
+}
+
 /* ─── One-line cells (every virtualised row is exactly one line) ───
    The virtualiser positions every row arithmetically from one fixed ItemSize, so a cell that wraps, or that
    stacks two block elements, puts every row below it at an offset nothing else on the page agrees with: the

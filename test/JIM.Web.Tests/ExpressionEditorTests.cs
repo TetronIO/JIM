@@ -76,6 +76,120 @@ public class ExpressionEditorTests : JimComponentTestContext
         }
     }
 
+    #region Suggestions and signature help (#2053)
+
+    private IRenderedComponent<ExpressionEditor> RenderWithAssist(string value, Action<string?>? onChanged = null) =>
+        Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, value)
+            .Add(c => c.ConnectedSystemAttributeNames, new[] { "mail", "proxyAddresses" })
+            .Add(c => c.ValueChanged, (string? v) => onChanged?.Invoke(v)));
+
+    [Test]
+    public void ExpressionEditor_TypingAPartFunctionName_ListsTheFunctionsWithTheirSignatures()
+    {
+        var cut = RenderWithAssist("Sta");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        var list = cut.Find("[data-testid=jim-expression-suggestions]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(list.TextContent, Does.Contain("StartsWith(value, prefix[, ignoreCase])"));
+            Assert.That(cut.Find("textarea").GetAttribute("data-assist-open"), Is.EqualTo("true"));
+            Assert.That(cut.Find("textarea").GetAttribute("aria-activedescendant"), Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_TypingInsideAnAccessor_ListsTheHostsAttributes()
+    {
+        var cut = RenderWithAssist("cs[\"pro");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("cs[\"pro", 7, 7, typed: true));
+
+        Assert.That(cut.Find("[data-testid=jim-expression-suggestions]").TextContent, Does.Contain("proxyAddresses"));
+    }
+
+    [Test]
+    public void ExpressionEditor_EnterOnASuggestion_InsertsItInPlaceOfWhatWasTyped()
+    {
+        string? changed = null;
+        var cut = RenderWithAssist("Lower(cs[\"pro", v => changed = v);
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Lower(cs[\"pro", 13, 13, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Enter"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changed, Is.EqualTo("Lower(cs[\"proxyAddresses\"]"));
+            Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_ArrowDown_MovesToTheNextSuggestion()
+    {
+        var cut = RenderWithAssist("Is");
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Is", 2, 2, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("ArrowDown"));
+
+        var options = cut.FindAll("[role=option]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options[0].GetAttribute("aria-selected"), Is.EqualTo("false"));
+            Assert.That(options[1].GetAttribute("aria-selected"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_Escape_ClosesTheSuggestions()
+    {
+        var cut = RenderWithAssist("Sta");
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Escape"));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    [Test]
+    public void ExpressionEditor_CaretInsideACall_ShowsItsSignatureWithTheParameterItIsOn()
+    {
+        var cut = RenderWithAssist("StartsWith(cs[\"mail\"], ");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("StartsWith(cs[\"mail\"], ", 23, 23, typed: false));
+
+        var signature = cut.Find("[data-testid=jim-expression-signature]");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(signature.TextContent, Does.Contain("StartsWith(value, prefix[, ignoreCase])"));
+            Assert.That(signature.QuerySelector(".jim-expression-signature-active")?.TextContent, Is.EqualTo("prefix"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_CaretMovedWithoutTyping_OpensNoSuggestions()
+    {
+        var cut = RenderWithAssist("Sta");
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: false));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    [Test]
+    public void ExpressionEditor_AssistOff_NeverSuggests()
+    {
+        var cut = Render<ExpressionEditor>(p => p.Add(c => c.Value, "Sta").Add(c => c.Assist, false));
+
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Sta", 3, 3, typed: true));
+
+        Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
+    }
+
+    #endregion
+
     [Test]
     public void ExpressionEditor_OverlayTextContent_EqualsValue()
     {

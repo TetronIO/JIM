@@ -1,4 +1,6 @@
+@using JIM.Web.Models
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -15,6 +17,7 @@
    older value back over text typed while the previous keystroke was in flight. With value plus @oninput, typing at
    speed lost most of what was typed (43 of 125 characters survived in the runtime check). *@
 
+<div class="jim-expression-editor-host">
 <MudField Label="@Label" Variant="Variant.Outlined" HelperText="@HelperText" Error="@ShowError" ErrorText="@EffectiveErrorText"
           Disabled="@Disabled" Class="@FieldClass" InnerPadding="false" Underline="false">
     @* The frame's padding is the band between the border and the scrolling text; a press there focuses the textarea,
@@ -29,14 +32,63 @@
                           placeholder="@Placeholder" disabled="@Disabled"
                           spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
                           aria-label="@Label" aria-invalid="@(ShowError ? "true" : "false")"
-                          aria-required="@(Required ? "true" : null)"></textarea>
+                          aria-required="@(Required ? "true" : null)"
+                          aria-autocomplete="@(Assist ? "list" : null)" aria-controls="@(SuggestionsOpen ? ListId : null)"
+                          aria-activedescendant="@(SuggestionsOpen ? OptionId(_highlighted) : null)"
+                          data-assist-open="@(SuggestionsOpen ? "true" : "false")"></textarea>
             </div>
         </div>
     </div>
 </MudField>
 
+@* ─── Suggestions and signature help (#2053): from the function catalogue and the attributes the host passes ─── *@
+@if (SuggestionsOpen)
+{
+    @* Each option keeps the textarea focused (mousedown is prevented), so choosing one with the pointer leaves the caret
+       where the keyboard would have. *@
+    <div class="jim-expression-assist-list mud-elevation-8" id="@ListId" role="listbox" aria-label="Suggestions"
+         data-testid="jim-expression-suggestions">
+        @for (var i = 0; i < _completion!.Suggestions.Count; i++)
+        {
+            var index = i;
+            var suggestion = _completion.Suggestions[index];
+            <div @key="suggestion.Label" id="@OptionId(index)" role="option" aria-selected="@(index == _highlighted ? "true" : "false")"
+                 class="@($"jim-expression-assist-item{(index == _highlighted ? " jim-expression-assist-item-active" : string.Empty)}")"
+                 @onmousedown:preventDefault="true" @onmousedown="@(() => AcceptAsync(suggestion))">
+                <span class="@($"jim-expression-assist-kind jim-expression-assist-kind-{KindClass(suggestion.Kind)}")" aria-hidden="true">@KindGlyph(suggestion.Kind)</span>
+                <span class="jim-expression-assist-text">
+                    <span class="jim-expression-assist-label">@(suggestion.Detail ?? suggestion.Label)</span>
+                    @if (suggestion.Description != null)
+                    {
+                        <span class="jim-expression-assist-description">@suggestion.Description</span>
+                    }
+                </span>
+            </div>
+        }
+        <div class="jim-expression-assist-hint" aria-hidden="true">↑↓ to choose · Enter or Tab to insert · Esc to close</div>
+    </div>
+}
+else if (_signature != null)
+{
+    var signature = _signature;
+    <div class="jim-expression-signature" aria-live="polite" data-testid="jim-expression-signature">
+        <code class="jim-expression-signature-call">@foreach (var part in SignatureParts(signature)){@if (part.Active){<span class="jim-expression-signature-active">@part.Text</span>}else{@part.Text}}</code>
+        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(signature.Function.Description)</span>
+        @if (signature.Function.Parameters.Count > 0)
+        {
+            var active = signature.Function.Parameters[signature.ParameterIndex];
+            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @active.Description</span>
+        }
+    </div>
+}
+</div>
+
 @code {
     private ElementReference _textarea;
+    private DotNetObjectReference<ExpressionEditor>? _assistReference;
+    private ExpressionCompletion? _completion;
+    private ExpressionSignature? _signature;
+    private int _highlighted;
     private string? _value;
     private string? _lastParameterValue;
     private bool _touched;
@@ -115,6 +167,64 @@
     /// </summary>
     [Parameter]
     public int MaxLines { get; set; } = 8;
+
+    /// <summary>
+    /// Suggests functions and attributes as the expression is typed, and shows the signature of the call the caret is
+    /// in (#2053). On by default.
+    /// </summary>
+    [Parameter]
+    public bool Assist { get; set; } = true;
+
+    /// <summary>
+    /// The Metaverse attribute names suggested inside <c>mv["..."]</c>; none where the host passes none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? MetaverseAttributeNames { get; set; }
+
+    /// <summary>
+    /// The Connected System attribute names suggested inside <c>cs["..."]</c>; none where the host passes none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? ConnectedSystemAttributeNames { get; set; }
+
+    private bool SuggestionsOpen => Assist && _completion is { Suggestions.Count: > 0 };
+
+    private string ListId => $"{Id ?? "jim-expression"}-suggestions";
+
+    private string OptionId(int index) => $"{ListId}-{index}";
+
+    /// <summary>
+    /// The signature as text in parts, the parameter the caret is on marked, so it can be emphasised.
+    /// </summary>
+    private static IEnumerable<(string Text, bool Active)> SignatureParts(ExpressionSignature signature)
+    {
+        var parameters = signature.Function.Parameters;
+        yield return (signature.Function.Name + "(", false);
+        for (var i = 0; i < parameters.Count; i++)
+        {
+            var separator = i == 0 ? string.Empty : ", ";
+            yield return (parameters[i].IsOptional ? $"[{separator}" : separator, false);
+            yield return (parameters[i].Name, i == signature.ParameterIndex);
+            if (parameters[i].IsOptional)
+                yield return ("]", false);
+        }
+
+        yield return (")", false);
+    }
+
+    private static string KindGlyph(ExpressionSuggestionKind kind) => kind switch
+    {
+        ExpressionSuggestionKind.MetaverseAttribute => "MV",
+        ExpressionSuggestionKind.ConnectedSystemAttribute => "CS",
+        _ => "fx"
+    };
+
+    private static string KindClass(ExpressionSuggestionKind kind) => kind switch
+    {
+        ExpressionSuggestionKind.MetaverseAttribute => "mv",
+        ExpressionSuggestionKind.ConnectedSystemAttribute => "cs",
+        _ => "function"
+    };
 
     private bool ShowError => Error || SyntaxError != null || RequiredButEmpty;
 
@@ -231,6 +341,144 @@
     }
 
     private void OnBlur() => _touched = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !Assist)
+            return;
+
+        _assistReference = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("jimExpressionAssist.attach", _textarea, _assistReference);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the field works without suggestions.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available (prerendering, or a test renderer); the field works without suggestions.
+        }
+    }
+
+    /// <summary>
+    /// The caret moved, or the text changed (<paramref name="typed"/>): suggestions open only as text is typed, and the
+    /// signature help follows the caret wherever it goes. A selection shows neither.
+    /// </summary>
+    [JSInvokable]
+    public Task OnCaretMoved(string text, int start, int end, bool typed)
+    {
+        if (start != end)
+        {
+            _completion = null;
+            _signature = null;
+        }
+        else
+        {
+            _completion = typed
+                ? ExpressionAssist.Complete(text, start, MetaverseAttributeNames ?? [], ConnectedSystemAttributeNames ?? [])
+                : null;
+            _highlighted = 0;
+            _signature = ExpressionAssist.SignatureAt(text, start);
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// A key the browser held back while the suggestions were open: the arrows move through them, Enter or Tab inserts
+    /// the one highlighted, Escape closes them.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnAssistKey(string key)
+    {
+        if (!SuggestionsOpen)
+            return;
+
+        var count = _completion!.Suggestions.Count;
+        switch (key)
+        {
+            case "ArrowDown":
+                _highlighted = (_highlighted + 1) % count;
+                break;
+            case "ArrowUp":
+                _highlighted = (_highlighted - 1 + count) % count;
+                break;
+            case "Enter" or "Tab":
+                await AcceptAsync(_completion.Suggestions[Math.Clamp(_highlighted, 0, count - 1)]);
+                return;
+            case "Escape":
+                _completion = null;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// The field lost focus: the suggestions close, the signature help with them.
+    /// </summary>
+    [JSInvokable]
+    public Task OnAssistBlur()
+    {
+        _completion = null;
+        _signature = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task AcceptAsync(ExpressionSuggestion suggestion)
+    {
+        if (_completion == null)
+            return;
+
+        var current = _value ?? string.Empty;
+        var start = Math.Clamp(_completion.ReplaceStart, 0, current.Length);
+        var end = Math.Clamp(_completion.ReplaceEnd, start, current.Length);
+        var updated = string.Concat(current.AsSpan(0, start), suggestion.InsertText, current.AsSpan(end));
+        var caret = start + suggestion.InsertText.Length;
+
+        _completion = null;
+        _signature = ExpressionAssist.SignatureAt(updated, caret);
+        await CommitAsync(updated);
+        StateHasChanged();
+
+        try
+        {
+            await JS.InvokeVoidAsync("jimInterop.setTextSelection", _textarea, caret, caret, updated);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; there is no caret to place.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available; there is no caret to place.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_assistReference == null)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("jimExpressionAssist.detach", _textarea);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the listeners went with the page.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available; nothing was attached.
+        }
+
+        _assistReference.Dispose();
+    }
 
     private async Task FocusFromFrameAsync()
     {

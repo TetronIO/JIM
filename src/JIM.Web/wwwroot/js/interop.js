@@ -511,3 +511,43 @@ window.jimScrollIntoView = function (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 };
+
+// The expression editor's suggestions and signature help (#2053). Reports the caret to the component as the text is
+// typed (typed = true, which may open suggestions) or the caret moves (typed = false, signature help only), and while
+// the component marks its suggestions open (data-assist-open), holds back the keys that work them so the textarea does
+// not also act on them: the arrows, Enter, Tab and Escape.
+window.jimExpressionAssist = {
+    attach: function (textarea, component) {
+        if (!textarea || textarea._jimAssist) return;
+        var report = function (typed) {
+            component.invokeMethodAsync('OnCaretMoved', textarea.value, textarea.selectionStart, textarea.selectionEnd, typed)
+                .catch(function () { /* the component has gone */ });
+        };
+        var handlers = {
+            input: function () { report(true); },
+            click: function () { report(false); },
+            keyup: function (e) {
+                if (textarea.dataset.assistOpen === 'true') return;
+                if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(e.key) >= 0) report(false);
+            },
+            keydown: function (e) {
+                if (textarea.dataset.assistOpen !== 'true' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+                if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].indexOf(e.key) < 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                component.invokeMethodAsync('OnAssistKey', e.key).catch(function () { /* the component has gone */ });
+            },
+            blur: function () {
+                component.invokeMethodAsync('OnAssistBlur').catch(function () { /* the component has gone */ });
+            }
+        };
+        Object.keys(handlers).forEach(function (name) { textarea.addEventListener(name, handlers[name]); });
+        textarea._jimAssist = handlers;
+    },
+    detach: function (textarea) {
+        if (!textarea || !textarea._jimAssist) return;
+        var handlers = textarea._jimAssist;
+        Object.keys(handlers).forEach(function (name) { textarea.removeEventListener(name, handlers[name]); });
+        delete textarea._jimAssist;
+    }
+};
