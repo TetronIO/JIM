@@ -19,7 +19,7 @@ internal static class ExpressionValueSets
     /// <paramref name="transform"/> applied to each value, in order: several values give several results, one value
     /// gives one.
     /// </summary>
-    internal static object? Map(object? input, Func<object?, object?> transform) => input switch
+    internal static object? Map(object? input, Func<object?, object?> transform) => RefuseReflection(input) switch
     {
         ExpressionValues values => new ExpressionValues(values.Select(transform), values.SourceName),
         _ when ExpressionResultValues.IsCollection(input) => new ExpressionValues(ExpressionResultValues.Elements(input).Select(transform), null),
@@ -31,13 +31,13 @@ internal static class ExpressionValueSets
     /// satisfies it.
     /// </summary>
     internal static bool Any(object? input, Func<object?, bool> predicate) =>
-        IsSeveral(input) ? ExpressionResultValues.Elements(input).Any(predicate) : predicate(input);
+        IsSeveral(RefuseReflection(input)) ? ExpressionResultValues.Elements(input).Any(predicate) : predicate(input);
 
     /// <summary>
     /// The one value a one-value position needs: none is null, one is itself, and several are the error naming the
     /// attribute and the count.
     /// </summary>
-    internal static object? One(object? input) => input switch
+    internal static object? One(object? input) => RefuseReflection(input) switch
     {
         ExpressionValues values => values.Single(),
         _ when ExpressionResultValues.IsCollection(input) => new ExpressionValues(ExpressionResultValues.Elements(input), null).Single(),
@@ -49,7 +49,18 @@ internal static class ExpressionValueSets
     /// several, or the one value.
     /// </summary>
     internal static IReadOnlyList<object?> Values(object? input) =>
-        HasNoValue(input) ? [] : ExpressionResultValues.Elements(input).Where(value => value is not null).ToList();
+        HasNoValue(RefuseReflection(input)) ? [] : ExpressionResultValues.Elements(input).Where(value => value is not null).ToList();
+
+    /// <summary>
+    /// <paramref name="value"/> as it is, unless it is a reflection object (a <see cref="Type"/>, member, assembly or
+    /// module) or a delegate, which no attribute expression has a use for: that is an expression error. Every function
+    /// that hands a value on calls this, and so does the evaluator on the result, so a reflection object that slipped
+    /// past the parse-time guards still goes nowhere (see <c>engineering/EXPRESSION_SECURITY.md</c>, "Late binding").
+    /// </summary>
+    internal static object? RefuseReflection(object? value) =>
+        value is Delegate || (value != null && ReflectionRefusingVisitor.IsReflectionType(value.GetType()))
+            ? throw new ExpressionEvaluationException("Reflection is not available in expressions.")
+            : value;
 
     /// <summary>
     /// JIM's one definition of no value: null, empty text, or a list with no values. A Binary value holding no bytes

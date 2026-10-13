@@ -199,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
 

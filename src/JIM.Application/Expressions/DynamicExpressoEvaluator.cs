@@ -79,11 +79,19 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     /// <summary>
     /// The interpreter every expression is parsed by: DynamicExpresso's defaults, late-bound (#2053). An accessor reads
     /// one value or several, so a transform's result is untyped; late binding is what lets <c>Upper(a) + Upper(b)</c>
-    /// parse and <c>Lower(x) == "abc"</c> compare text rather than references. The reflection guard still applies:
-    /// <c>GetType()</c> binds statically to <see cref="Type"/>, so every member chained onto it is refused at parse time
-    /// (see <c>engineering/EXPRESSION_SECURITY.md</c>, "Late binding").
+    /// parse and <c>Lower(x) == "abc"</c> compare text rather than references. Reflection is refused in depth (see
+    /// <c>engineering/EXPRESSION_SECURITY.md</c>, "Late binding"): at parse time by DynamicExpresso's own guard and by
+    /// <see cref="ReflectionRefusingVisitor"/>, which refuses any reflection-typed part of an expression, <c>GetType()</c>
+    /// and <c>typeof</c> included; and at run time by DynamicExpresso's late binder, by every function that hands a
+    /// value on (<see cref="ExpressionValueSets.RefuseReflection"/>) and by <see cref="Evaluate"/> refusing a reflection
+    /// result.
     /// </summary>
-    private static Interpreter CreateInterpreter() => new(InterpreterOptions.Default | InterpreterOptions.LateBindObject);
+    private static Interpreter CreateInterpreter()
+    {
+        var interpreter = new Interpreter(InterpreterOptions.Default | InterpreterOptions.LateBindObject);
+        interpreter.Visitors.Add(new ReflectionRefusingVisitor());
+        return interpreter;
+    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -110,9 +118,9 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         {
             var lambda = GetOrCompileExpression(expression);
 
-            return lambda.Invoke(
+            return ExpressionValueSets.RefuseReflection(lambda.Invoke(
                 new Parameter("mv", context.Mv),
-                new Parameter("cs", context.Cs));
+                new Parameter("cs", context.Cs)));
         }
         // The failures an Expression can cause, from parsing it to running it, each made the one expression error.
         // Anything else (an out-of-memory condition, a JIM fault) propagates unchanged, as does an
@@ -318,8 +326,10 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Where", (Func<object?, object?, object?, bool, object?>)ExpressionWhere.Filter);
 
         // Conditional functions
-        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) => ExpressionValueSets.HasNoValue(a) ? b : a));
-        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) => condition ? trueVal : falseVal));
+        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) =>
+            ExpressionValueSets.RefuseReflection(ExpressionValueSets.HasNoValue(a) ? b : a)));
+        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) =>
+            ExpressionValueSets.RefuseReflection(condition ? trueVal : falseVal)));
 
         // Value equality, true when any value of one side equals any value of the other. Expressions are late-bound, so
         // == compares values too; Eq remains the one that reads text against a typed value as that type.

@@ -93,23 +93,18 @@ public class DynamicExpressoEvaluatorSecurityTests
     }
 
     /// <summary>
-    /// A bare <c>GetType()</c> call is NOT blocked: the visitor only rejects a method call or member access
-    /// whose static receiver type is already <see cref="Type"/> or <see cref="System.Reflection.MemberInfo"/>
-    /// (i.e. chained reflection). <c>mv["a"].GetType()</c> receives on <c>object</c>, so it parses and
-    /// evaluates, returning a <see cref="Type"/> instance. This is documented, not hidden: see
-    /// EXPRESSION_SECURITY.md. It does not itself grant further reflection; any attempt to chain a further
-    /// call or member access onto the result within the same expression is blocked (see the tests above).
+    /// A bare <c>GetType()</c> call is refused when the expression is parsed (#2053), closing the finding this review
+    /// once left open: no expression can hold a <see cref="Type"/>, so nothing can be chained onto one however it is
+    /// re-typed (see EXPRESSION_SECURITY.md, "Late binding").
     /// </summary>
     [Test]
-    public void Evaluate_BareGetType_ParsesAndReturnsTypeInstance()
+    public void Evaluate_BareGetType_IsRefused()
     {
         var context = new ExpressionContext(
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        var result = _evaluator.Evaluate("mv[\"a\"].GetType()", context);
-
-        Assert.That(result, Is.EqualTo(typeof(string)));
+        AssertExpressionError<ReflectionNotAllowedException>(() => _evaluator.Evaluate("mv[\"a\"].GetType()", context));
     }
 
     #endregion
@@ -303,6 +298,46 @@ public class DynamicExpressoEvaluatorSecurityTests
         });
 
         AssertExpressionError<ReflectionNotAllowedException>(() => _evaluator.Evaluate(expression, context));
+    }
+
+    // A Type re-typed as object reaches the runtime binder rather than the parse-time reflection guard: every route by
+    // which an expression can hand on a value it was given (IIF, Coalesce, a cast, the several-values functions) must
+    // still be refused, without ever returning a Type, Assembly, MethodInfo or delegate.
+    private static readonly string[] ReflectionThroughAnUntypedPassThrough =
+    [
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly",
+        "Coalesce(cs[\"a\"].GetType(), null).Assembly",
+        "((object)cs[\"a\"].GetType()).Assembly",
+        "((object)typeof(string)).Assembly",
+        "IIF(true, (object)typeof(string), null).GetMethods()",
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly.GetType(\"System.IO.File\")",
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly.GetType(\"System.IO.File\").GetMethod(\"Exists\").Invoke(null, null)",
+        "Min(cs[\"a\"].GetType()).Assembly",
+        "Max(cs[\"a\"].GetType()).Assembly",
+        "Where(cs[\"a\"].GetType(), \"equals\", \"x\").Assembly",
+        "Coalesce(null, cs[\"a\"].GetType())",
+        "IIF(true, cs[\"a\"].GetType(), null)",
+        "cs[\"a\"].GetType()",
+        "typeof(string)",
+        "Split(\"a\", \",\").GetType()",
+        "Coalesce(cs[\"a\"].GetType().Name, null)",
+    ];
+
+    [TestCaseSource(nameof(ReflectionThroughAnUntypedPassThrough))]
+    public void Evaluate_ReflectionThroughAnUntypedPassThrough_IsAnExpressionErrorReturningNoReflectionObject(string expression)
+    {
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?> { { "a", "some value" } });
+
+        object? result = null;
+        Assert.Throws<ExpressionEvaluationException>(() => result = _evaluator.Evaluate(expression, context));
+        Assert.That(result, Is.Not.InstanceOf<Type>().And.Not.InstanceOf<System.Reflection.MemberInfo>()
+            .And.Not.InstanceOf<System.Reflection.Assembly>().And.Not.InstanceOf<Delegate>());
+    }
+
+    [TestCaseSource(nameof(ReflectionThroughAnUntypedPassThrough))]
+    public void Validate_ReflectionThroughAnUntypedPassThrough_IsRejected(string expression)
+    {
+        Assert.That(_evaluator.Validate(expression).IsValid, Is.False);
     }
 
     [TestCase("cs[\"a\"].Substring(0).GetType().Assembly")]

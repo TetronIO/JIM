@@ -180,20 +180,14 @@ DynamicExpresso's source alone:
   no SQL, shell, or DOM surface at all, so these strings are just data) or evaluate as ordinary nested function
   calls with no special handling required.
 
-**Open finding (not hardened, by design):** `Evaluate_BareGetType_ParsesAndReturnsTypeInstance` shows that
-`mv["a"].GetType()` **does** parse and evaluate successfully, returning a `System.Type` instance, because the
-`DisableReflectionVisitor` only rejects a call or member access whose receiver is *already* statically typed as
-`Type`/`MemberInfo` (chained reflection); the initial `.GetType()` call receives on `object`, so it is not
-itself blocked, only the reflection *chained onto its result* is (proven by the tests above). This matches
-DynamicExpresso's own documented behaviour (`Type.Name` is explicitly the one reflection member left available)
-and grants no further capability within the same expression: every attempt to chain a method call or another
-member access onto the returned `Type` in the tests above was blocked. It is recorded here as an explicit,
-non-hardened finding per this review's brief, rather than patched unilaterally: whether returning a bare `Type`
-value is worth restricting further is a design call for the validator, not something to fix on this branch's own
-initiative.
+**Bare `GetType()` and `typeof` (closed 2026-10-13, #2053).** This review first recorded as an open finding that
+`mv["a"].GetType()` parsed and returned a `System.Type`, because `DisableReflectionVisitor` only rejects a member
+chained onto a receiver already typed `Type`. Late binding made that worth closing (see "Late binding" below), and
+JIM's own `ReflectionRefusingVisitor` now refuses every reflection-typed part of an expression at parse time, so
+`GetType()`, `typeof(...)` and `Type.Name` are all refused (`Evaluate_BareGetType_IsRefused`). Nothing in an attribute
+expression has a use for them.
 
-**Summary: every deliberate escape attempt exercised by this review failed to parse or evaluate**, with the one
-narrow, non-exploitable, explicitly-flagged exception above.
+**Summary: every deliberate escape attempt exercised by this review failed to parse or evaluate.**
 
 ## Late binding
 
@@ -211,15 +205,42 @@ the accessor hands out only `string`, `int`, `long`, `decimal`, `DateTime`, `boo
 has a member reaching the filesystem, a process, the network or another object graph; `ExpressionValues` was written
 for this exposure, with a public surface of its values, its count and its operators only.
 
-**Why the reflection guard still holds.** `DisableReflectionVisitor` refuses a member on a receiver statically typed
-`Type` or `MemberInfo`. Under late binding, `GetType()` is still bound statically (it is a member of `object`), so its
-result is statically `Type` and every member chained onto it is refused at parse time, however the chain reached it.
-Proven by `Evaluate_ReflectionThroughALateBoundValue_ThrowsReflectionNotAllowedException`
-(`DynamicExpressoEvaluatorSecurityTests.cs`), which routes the chain through a late-bound method result
-(`cs["a"].Substring(0).GetType().Assembly`), through a transform's untyped result, through `ExpressionValues` and an
-element of it, through `Split`'s result, and through a late-bound `byte[]` member, and by
-`Validate_ReflectionThroughALateBoundValue_IsRejected` for save time. The whole existing escape suite above runs
-against the late-bound interpreter unchanged and still passes.
+**The attack, and why late binding needed more than DynamicExpresso's guard.** `DisableReflectionVisitor` refuses a
+member on a receiver *statically* typed `Type` or `MemberInfo`. Under late binding, `GetType()` is still bound
+statically, so a member chained straight onto it is refused at parse time. But any route that re-types the `Type` as
+`object` hands it to the runtime binder, where the parse-time visitor sees a dynamic node rather than a member on a
+`Type`: `IIF(true, cs["a"].GetType(), null).Assembly`, `Coalesce(cs["a"].GetType(), null).Assembly`,
+`((object)cs["a"].GetType()).Assembly`, the same through `Where`, `Min` and `Max`, and one level further
+`....Assembly.GetType("System.IO.File").GetMethod("Exists").Invoke(null, null)` (raised in review by the
+orchestrating session). Tested against the branch before any fix: none of these *ran*, because DynamicExpresso's late
+binder also checks the runtime receiver and throws `ReflectionNotAllowedException`. But `Validate` accepted every one
+of them, so an expression that could only fail was savable, and the safety rested on one check inside a third-party
+binder.
+
+**The closure, in depth.** Each layer below refuses the whole set on its own; together they do not depend on any one
+of them.
+
+1. **Parse time, JIM's visitor.** `ReflectionRefusingVisitor` (added to the interpreter's `Visitors` beside
+   DynamicExpresso's) refuses any part of an expression whose type is `Type`, `MemberInfo`, `Assembly` or `Module`.
+   `GetType()` and `typeof` produce exactly such a part, so a reflection object can never enter an expression, and
+   `Validate` refuses every shape above at save time.
+2. **Parse time, DynamicExpresso's visitor**, unchanged: a member on a `Type`-typed receiver.
+3. **Run time, DynamicExpresso's late binder:** a member on a runtime `Type` receiver.
+4. **Run time, JIM's functions.** Every function that hands a value on (`IIF`, `Coalesce`, every transform, `Eq` and
+   the comparisons, `Count`, `Min`, `Max`, `Join`, `Where`) passes it through `ExpressionValueSets.RefuseReflection`,
+   which refuses a reflection object or a delegate.
+5. **Run time, the result.** `Evaluate` refuses a reflection object or a delegate as the expression's result, so none
+   can reach an Attribute Flow, a match value or a tester.
+
+Proven by `Evaluate_ReflectionThroughAnUntypedPassThrough_IsAnExpressionErrorReturningNoReflectionObject` and
+`Validate_ReflectionThroughAnUntypedPassThrough_IsRejected` over sixteen shapes (each pass-through, the cast, the
+`.GetType("System.IO.File").GetMethod(...).Invoke(...)` chain, and a bare `GetType()`/`typeof` returned as the result),
+by `Evaluate_ReflectionThroughALateBoundValue_ThrowsReflectionNotAllowedException` (chains through a late-bound method
+result, a transform's untyped result, `ExpressionValues` and an element of it, `Split`'s result and a `byte[]` member),
+and by `ExpressionValueSetsTests` for layer 4. Each half was proved to stand alone: with JIM's visitor removed, layers
+3 to 5 still refused every shape at run time (only `Type.Name`, plain text, came back); with layers 4 and 5 disabled,
+the visitor alone refused all of them at parse time. The whole existing escape suite above runs against the
+late-bound interpreter unchanged and still passes.
 
 **What changes for an administrator.** A misspelt member on a value (`cs["a"].Lenght`) now fails while the expression
 runs rather than when it is saved; it is still the one expression error, never a JIM fault
@@ -291,10 +312,9 @@ legitimate expression functionality now or in future:
   in future, update the input path inventory table above; no further evaluator-level work is expected to be
   needed, since both guardrails and all "what is blocked" behaviour live in the shared evaluator and apply
   automatically.
-- **Late binding:** adopted 2026-10-13 for #2053 after the review above; the open finding below is unchanged by it.
-- **Open finding:** `mv["a"].GetType()` (bare, unchained) parses and evaluates, returning a `System.Type`
-  instance; see "What is blocked" above for the detail and why it was left as a documented finding rather than
-  patched.
+- **Late binding:** adopted 2026-10-13 for #2053 after the review above, with reflection refused in depth (five
+  layers, two of them at parse time). This also closed the review's one open finding: a bare `GetType()` or `typeof`
+  is now refused.
 - **Out of scope for this review** (explicitly deferred to other OWASP #500 sub-issues per the delivery plan):
   rate limiting, security response headers/CSP, and `Program.cs` changes generally.
 
