@@ -387,7 +387,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(a => EF.Functions.ILike(a.Name, searchPattern));
         }
 
@@ -2444,7 +2444,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
     /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
-    /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
+    /// parameters to <paramref name="parameters"/> (no value parameter for "has a value" and "has no value"). Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
     /// </summary>
     private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters, DateTime nowUtc)
@@ -2469,11 +2469,29 @@ public class MetaverseRepository : IMetaverseRepository
         NotSupportedException Unsupported() =>
             new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
 
+        // The presence operators (#2053) take no value and mean the same for every type: whether the object holds a
+        // value at all, asserted-null markers excluded, exactly as the scoping evaluator counts values.
+        const string heldValue = "NOT cav.\"NullValue\"";
+        switch (criteria.ComparisonType)
+        {
+            case SearchComparisonType.HasValue:
+                return Exists(heldValue);
+            case SearchComparisonType.HasNoValue:
+                return $"NOT {Exists(heldValue)}";
+        }
+
         switch (dataType)
         {
             case AttributeDataType.Text:
             {
-                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
+                // LIKE and ILIKE are given the value with %, _ and \ escaped, so it means what it says (#2053); equality is
+                // given it as it is. Pattern operators are never translated to SQL: the catalogue does not offer them in a
+                // Predefined Search, and Unsupported() refuses them if one is persisted anyway.
+                var isLike = criteria.ComparisonType is SearchComparisonType.StartsWith or SearchComparisonType.NotStartsWith or
+                    SearchComparisonType.EndsWith or SearchComparisonType.NotEndsWith or
+                    SearchComparisonType.Contains or SearchComparisonType.NotContains;
+                var boundValue = isLike && criteria.StringValue != null ? LikePattern.Escape(criteria.StringValue) : criteria.StringValue;
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)boundValue ?? DBNull.Value });
                 const string col = "cav.\"StringValue\"";
                 // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
                 var equalsPredicate = criteria.CaseSensitive
@@ -2711,7 +2729,7 @@ public class MetaverseRepository : IMetaverseRepository
                       AND sav."StringValue" IS NOT NULL
                       AND sav."StringValue" ILIKE @searchPattern)
                 """;
-            sharedParams.Add(new NpgsqlParameter("searchPattern", $"%{searchQuery}%"));
+            sharedParams.Add(new NpgsqlParameter("searchPattern", LikePattern.Contains(searchQuery)));
         }
 
         // Attribute-presence filter (the hasAttribute: search token). Restricts results to objects of the type that
@@ -2985,11 +3003,12 @@ public class MetaverseRepository : IMetaverseRepository
         // filter by search query (searches display name attribute)
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
+            var searchPattern = LikePattern.Contains(searchQuery);
             objects = objects.Where(q =>
                 q.AttributeValues.Any(av =>
                     av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+                    EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // filter by specific attribute name and value (exact match, case-insensitive; not
@@ -3736,11 +3755,12 @@ public class MetaverseRepository : IMetaverseRepository
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(mo =>
                 mo.AttributeValues.Any(av =>
                     av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+                    EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // Exact match, case-insensitive; see the comment in GetMetaverseObjectsAsync's equivalent filter above.
@@ -4004,7 +4024,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Case-insensitive for user convenience, matching the other list searches.
         if (!string.IsNullOrWhiteSpace(displayNameSearch))
         {
-            var searchPattern = $"%{displayNameSearch}%";
+            var searchPattern = LikePattern.Contains(displayNameSearch);
             query = query.Where(c =>
                 c.DeletedObjectDisplayName != null &&
                 EF.Functions.ILike(c.DeletedObjectDisplayName, searchPattern));
