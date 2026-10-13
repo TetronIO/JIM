@@ -72,7 +72,9 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
 | [Connected Systems](connected-systems.md) | 35 | Manage Connected Systems, schemas, partitions and containers, auxiliary classes, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 31 | Define Attribute Flows, Scoping Criteria, Object Matching Rules, initial passwords and generated values |
+| [Synchronisation Rules](synchronisation-rules.md) | 15 | Create and change Synchronisation Rules, their Attribute Flows, initial passwords and generated values |
+| [Scoping Criteria](scoping-criteria.md) | 7 | Decide which objects a Synchronisation Rule processes, with groups of criteria |
+| [Object Matching Rules](object-matching-rules.md) | 9 | Switch a Connected System's matching mode, and manage its Object Matching Rules |
 | [Metaverse](metaverse.md) | 6 | Find and read Metaverse Objects, explain their values and connections, and review pending deletions |
 | [Metaverse Object Types](metaverse-object-types.md) | 4 | List, create, change and delete Object Types, and set their deletion rules |
 | [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |

@@ -4,21 +4,20 @@
 function Get-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Gets Object Matching Rules from a Synchronisation Rule (advanced mode).
+        Gets the Object Matching Rules on a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
-        Retrieves Object Matching Rules defined on a specific Synchronisation Rule.
-        This is used in advanced mode where matching rules are per-Synchronisation Rule
-        rather than per-object type.
+        Gets the Object Matching Rules on a Synchronisation Rule, which apply in advanced mode: every rule on it, in
+        the order JIM tries them, or one rule by ID.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER Id
-        The unique identifier of a specific Matching Rule to retrieve.
+        The ID of the rule to get.
 
     .OUTPUTS
-        PSCustomObject representing Matching Rule(s).
+        The rules, in the order JIM tries them, or the one rule.
 
     .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5
@@ -36,7 +35,7 @@ function Get-JIMSyncRuleMatchingRule {
         Remove-JIMSyncRuleMatchingRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'BySyncRule')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ObjectMatchingRuleDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
