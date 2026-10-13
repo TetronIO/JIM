@@ -577,6 +577,19 @@ public class ConnectedSystemAttributeDto
     public string AttributePlurality { get; set; } = null!;
 
     /// <summary>
+    /// Whether the attribute's values are case-exact: when JIM asks whether two values identify the same thing,
+    /// <c>JBloggs</c> and <c>jbloggs</c> are different values. False means they are the same value. Only Text
+    /// attributes carry the declaration.
+    /// </summary>
+    public bool CaseExact { get; set; }
+
+    /// <summary>
+    /// Whether an administrator set the case-exact declaration, rather than it being discovered from the Connected
+    /// System's schema. A schema refresh keeps an administrator's declaration and restates a discovered one.
+    /// </summary>
+    public bool CaseExactSetByAdministrator { get; set; }
+
+    /// <summary>
     /// Whether JIM imports and exports the attribute.
     /// </summary>
     public bool Selected { get; set; }
@@ -644,6 +657,8 @@ public class ConnectedSystemAttributeDto
             Type = entity.Type.ToString(),
             TypeSetByAdministrator = entity.TypeSetByAdministrator,
             AttributePlurality = entity.AttributePlurality.ToString(),
+            CaseExact = entity.CaseExact,
+            CaseExactSetByAdministrator = entity.CaseExactSetByAdministrator,
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,

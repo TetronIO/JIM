@@ -21,7 +21,7 @@ function Set-JIMConnectedSystemAttribute {
 
     .PARAMETER AttributeUpdates
         The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings
-        to change (selected, isExternalId, isSecondaryExternalId); the examples show one.
+        to change (selected, isExternalId, isSecondaryExternalId, caseExact); the examples show one.
 
     .PARAMETER Selected
         Whether JIM imports and exports the attribute.
@@ -40,6 +40,11 @@ function Set-JIMConnectedSystemAttribute {
         column may be a whole number, a counter or a fractional figure. Refused once a Synchronisation Rule uses the
         attribute or it holds values. Integer is the Number data type, as in New-JIMMetaverseAttribute. Cannot be
         set with -AttributeUpdates.
+
+    .PARAMETER CaseExact
+        Whether the attribute's values are case-exact: $true when values differing only in case identify different
+        things, $false when they are the same value. Only a Text attribute can be declared case-exact. Setting it
+        makes the declaration the administrator's, so a schema refresh keeps it. Offered on every Connector.
 
     .PARAMETER PassThru
         Returns the attribute as changed, or with -AttributeUpdates, the outcome of the change.
@@ -91,6 +96,12 @@ function Set-JIMConnectedSystemAttribute {
         Corrects an Oracle NUMBER column that schema discovery read as a Decimal, so it can flow into
         a built-in whole-number Metaverse Attribute such as Employee Number without an expression.
 
+    .EXAMPLE
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 12 -CaseExact $true
+
+        Declares that an attribute's values are case-exact, so JBloggs and jbloggs are different values. A schema
+        refresh keeps this declaration rather than restating what the Connected System's schema says.
+
     .LINK
         Get-JIMConnectedSystem
         Set-JIMConnectedSystemObjectType
@@ -126,6 +137,9 @@ function Set-JIMConnectedSystemAttribute {
         [Parameter(ParameterSetName = 'Single')]
         [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
+
+        [Parameter(ParameterSetName = 'Single')]
+        [bool]$CaseExact,
 
         [switch]$PassThru
     )
@@ -198,6 +212,10 @@ function Set-JIMConnectedSystemAttribute {
                 # The ValidateSet exposes 'Integer' as a friendly alias for the AttributeDataType member
                 # 'Number'; the API takes the enum member name.
                 $body.type = if ($Type -eq 'Integer') { 'Number' } else { $Type }
+            }
+
+            if ($PSBoundParameters.ContainsKey('CaseExact')) {
+                $body.caseExact = $CaseExact
             }
 
             if ($body.Count -eq 0) {

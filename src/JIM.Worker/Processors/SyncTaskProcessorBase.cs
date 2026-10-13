@@ -7278,6 +7278,12 @@ public abstract class SyncTaskProcessorBase
         await _uniqueValueGenerationServer!.PrefetchAssignmentsAsync([], connectedSystemObjectIds, _uniqueValueResolveOptions!);
     }
 
+    /// <summary>
+    /// Opens the message of an error that stopped Drift Detection checking an object (#2180), so it reads as the reason
+    /// no correction was staged rather than as an export that failed.
+    /// </summary>
+    private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
+
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
     {
         // Skip if no drift detection export rules exist
@@ -7298,15 +7304,69 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoId", cso.Id);
         span.SetTag("mvoId", targetMvo.Id);
 
-        var result = _syncServer.EvaluateDrift(
-            cso,
-            targetMvo,
-            _driftDetectionExportRules,
-            _importMappingCache,
-            _attributePriorityContext,
-            _uniqueValueResolveOptions);
+        DriftDetectionResult result;
+        try
+        {
+            result = _syncServer.EvaluateDrift(
+                cso,
+                targetMvo,
+                _driftDetectionExportRules,
+                _importMappingCache,
+                _attributePriorityContext,
+                _uniqueValueResolveOptions);
+        }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // An enforced export expression failed while working out what this object should hold (#2180). Reported
+            // against the object exactly as export staging reports the same failure, never only logged, and nothing is
+            // staged for it, so the Connected System keeps its values. One object's failure never fails the page.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + BuildExpressionEvaluationErrorMessage(expressionEx, targetMvo.Id);
+            runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-        if (result.HasDrift)
+            Log.Error(expressionEx, "EvaluateDriftAndEnforceState: Expression evaluation error checking CSO {CsoId} for drift. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            // Missing Input Behaviour is Fail the object: as export staging does, nothing is staged for the object and
+            // the fault is reported against it (#2180).
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + missingInputEx.DescribeForAdministrator();
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("EvaluateDriftAndEnforceState: Expression not evaluated checking CSO {CsoId} for drift; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+
+        // Mapping-level errors (#2180): the attribute is left as it is and the error is recorded against the object, in
+        // the words export staging uses for the same fault; the object's other attributes are still corrected.
+        foreach (var attributeFlowError in result.AttributeFlowErrors)
+        {
+            var errorRpei = _activity.PrepareRunProfileExecutionItem();
+            errorRpei.ConnectedSystemObject = cso;
+            errorRpei.ConnectedSystemObjectId = cso.Id;
+            var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
+            errorRpei.ErrorType = errorType;
+            errorRpei.ErrorMessage = errorMessage;
+            _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that
+        // changes nothing.
+        if (result.HasDrift && result.CorrectiveExports.Count > 0)
         {
             Log.Information("EvaluateDriftAndEnforceState: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
                 "staged {ExportCount} corrective Pending Exports for batch save",

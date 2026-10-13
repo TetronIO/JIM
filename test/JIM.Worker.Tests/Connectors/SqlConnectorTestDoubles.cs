@@ -51,6 +51,14 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal object? ConnectivityTestResult { get; init; } = 1;
 
     /// <summary>
+    /// Whether this dialect compares text exactly where a column states no collation. Settable so a test can
+    /// stand in for Oracle Database, which does.
+    /// </summary>
+    internal bool TextComparesExactlyByDefaultOverride { get; init; }
+
+    public override bool TextComparesExactlyByDefault => TextComparesExactlyByDefaultOverride;
+
+    /// <summary>
     /// The command text every command created through this provider was given, in order, so a test can
     /// assert that the Connector ran the dialect's own connectivity query rather than one of its own.
     /// </summary>
@@ -445,7 +453,8 @@ internal sealed record FakeCatalogueColumn(
     int? Precision = null,
     int? Scale = null,
     int? MaxLength = null,
-    bool IsNullable = true);
+    bool IsNullable = true,
+    bool? CaseExact = null);
 
 /// <summary>
 /// A foreign key column as a schema catalogue would report it.
@@ -1484,7 +1493,8 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
             SqlCatalogueColumns.NumericPrecision,
             SqlCatalogueColumns.NumericScale,
             SqlCatalogueColumns.IsNullable,
-            SqlCatalogueColumns.OrdinalPosition
+            SqlCatalogueColumns.OrdinalPosition,
+            SqlCatalogueColumns.CaseExact
         ],
             columns.Select(column => new object?[]
             {
@@ -1494,7 +1504,8 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
                 column.Precision,
                 column.Scale,
                 column.IsNullable ? "YES" : "NO",
-                ++ordinal
+                ++ordinal,
+                column.CaseExact switch { true => "YES", false => "NO", null => null }
             }).ToList());
     }
 

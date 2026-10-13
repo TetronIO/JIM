@@ -128,6 +128,24 @@ public class AuxiliaryClassAttributeMergerTests
     }
 
     [Test]
+    public void Merge_WithASelectedAuxiliaryClass_CarriesTheCaseExactDeclaration()
+    {
+        // The auxiliary class's declaration describes the attribute wherever it is merged: uid compared exactly on
+        // posixAccount is still compared exactly once it sits on person (#2051).
+        var connectedSystem = BuildSystem();
+        connectedSystem.ObjectTypes!.Single(ot => ot.Id == PosixAccountId).Attributes.Single(a => a.Name == "uid").CaseExact = true;
+        Extend(connectedSystem, PersonId, PosixAccountId);
+
+        AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Person(connectedSystem).Attributes!.Single(a => a.Name == "uid").CaseExact, Is.True);
+            Assert.That(Person(connectedSystem).Attributes!.Single(a => a.Name == "uidNumber").CaseExact, Is.False);
+        }
+    }
+
+    [Test]
     public void Merge_WhereTheStructuralTypeAlreadyHasTheAttribute_LeavesTheStructuralOneAlone()
     {
         // posixAccount also declares cn. The structural type's own attribute must survive untouched: its Id is what

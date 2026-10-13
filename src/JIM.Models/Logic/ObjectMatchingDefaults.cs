@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
+
 namespace JIM.Models.Logic;
 
 /// <summary>
@@ -15,4 +17,24 @@ public static class ObjectMatchingDefaults
     /// an administrator asks it to.
     /// </summary>
     public const bool CaseSensitive = false;
+
+    /// <summary>
+    /// The default for a rule reading these sources: respect case when any source attribute is declared case-exact
+    /// (its Connected System treats <c>JBloggs</c> and <c>jbloggs</c> as two identifiers), otherwise
+    /// <see cref="CaseSensitive"/>. An expression source has no declaration, so it ignores case (#2051).
+    /// </summary>
+    /// <remarks>
+    /// Any one case-exact source is enough, because sources are alternatives and joining two different identities
+    /// on a case-insensitive match is worse than failing to join one. The source attribute must be loaded; a source
+    /// carrying only its id counts as having no declaration.
+    /// </remarks>
+    public static bool CaseSensitiveFor(IEnumerable<ObjectMatchingRuleSource> sources) =>
+        CaseSensitiveFor(sources.Select(source => source.ConnectedSystemAttribute));
+
+    /// <summary>
+    /// The default for a rule whose sources read these attributes, where a null stands for a source with no
+    /// declaration (an expression); see the overload taking the sources.
+    /// </summary>
+    public static bool CaseSensitiveFor(IEnumerable<ConnectedSystemObjectTypeAttribute?> sourceAttributes) =>
+        sourceAttributes.Any(attribute => attribute?.CaseExact == true) || CaseSensitive;
 }

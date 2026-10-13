@@ -18,10 +18,15 @@ public class SchemaRefreshPreRefreshType
 
 /// <summary>
 /// One attribute of a pre-refresh Object Type: just enough identity for dependent detection to resolve names
-/// to the ids configuration references.
+/// to the ids configuration references, and the case-exact declaration as it stood before the refresh restated it.
 /// </summary>
 public class SchemaRefreshPreRefreshAttribute
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the attribute was declared case-exact before the refresh.
+    /// </summary>
+    public bool CaseExact { get; set; }
 }
