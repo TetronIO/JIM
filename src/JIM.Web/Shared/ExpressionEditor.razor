@@ -27,7 +27,7 @@
             <div class="jim-expression-editor-stack">
                 <pre class="jim-expression-editor-layer jim-expression-editor-highlight" aria-hidden="true">@((MarkupString)OverlayMarkup)</pre>
                 <textarea @ref="_textarea" id="@Id" class="jim-expression-editor-layer jim-expression-editor-input" rows="1"
-                          @bind:get="_value" @bind:set="CommitAsync" @bind:event="oninput" @onblur="OnBlur"
+                          @bind:get="_value" @bind:set="OnTypedAsync" @bind:event="oninput" @onblur="OnBlur"
                           @onmousedown:stopPropagation="true"
                           placeholder="@Placeholder" disabled="@Disabled"
                           spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
@@ -230,7 +230,22 @@ else if (_signature != null)
 
     private bool RequiredButEmpty => Required && _touched && string.IsNullOrWhiteSpace(_value);
 
-    private string? SyntaxError => SyntaxCheck != null && !string.IsNullOrWhiteSpace(_value) ? SyntaxCheck(_value) : null;
+    /// <summary>
+    /// The syntax check's finding, held back while the field is first typed in (until it is left), since every
+    /// half-typed expression is a syntax error and reporting each keystroke turns the field red mid-word. A value the
+    /// field opened with, or one typed after the field was left, is reported at once.
+    /// </summary>
+    private string? SyntaxError => SyntaxCheck != null && !string.IsNullOrWhiteSpace(_value) && (_touched || !_typed)
+        ? SyntaxCheck(_value)
+        : null;
+
+    private bool _typed;
+
+    private Task OnTypedAsync(string? value)
+    {
+        _typed = true;
+        return CommitAsync(value);
+    }
 
     private string? EffectiveErrorText => Error ? ErrorText : SyntaxError ?? (RequiredButEmpty ? "Required" : null);
 
@@ -437,25 +452,28 @@ else if (_signature != null)
         var current = _value ?? string.Empty;
         var start = Math.Clamp(_completion.ReplaceStart, 0, current.Length);
         var end = Math.Clamp(_completion.ReplaceEnd, start, current.Length);
-        var updated = string.Concat(current.AsSpan(0, start), suggestion.InsertText, current.AsSpan(end));
-        var caret = start + suggestion.InsertText.Length;
-
+        var replaced = current[start..end];
         _completion = null;
-        _signature = ExpressionAssist.SignatureAt(updated, caret);
-        await CommitAsync(updated);
         StateHasChanged();
 
         try
         {
-            await JS.InvokeVoidAsync("jimInterop.setTextSelection", _textarea, caret, caret, updated);
+            // The browser makes the edit and raises input, which commits it through the binding and reports the caret
+            // for the signature help. Writing the whole value from here would undo any key typed while the choice was
+            // on its way; the browser declines (false) when the text it would replace has changed since.
+            await JS.InvokeAsync<bool>("jimExpressionAssist.insert", _textarea, start, end, replaced, suggestion.InsertText);
         }
         catch (JSDisconnectedException)
         {
-            // Circuit disconnected; there is no caret to place.
+            // Circuit disconnected; there is no field to edit.
         }
         catch (InvalidOperationException)
         {
-            // JS interop is not available; there is no caret to place.
+            // JS interop is not available (prerendering, or a test renderer): make the edit here instead.
+            var updated = string.Concat(current.AsSpan(0, start), suggestion.InsertText, current.AsSpan(end));
+            _signature = ExpressionAssist.SignatureAt(updated, start + suggestion.InsertText.Length);
+            await CommitAsync(updated);
+            StateHasChanged();
         }
     }
 

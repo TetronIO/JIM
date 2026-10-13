@@ -18,6 +18,7 @@ public class ExpressionEditorTests : JimComponentTestContext
 {
     private const string GetSelection = "jimInterop.getTextSelection";
     private const string SetSelection = "jimInterop.setTextSelection";
+    private const string AssistInsert = "jimExpressionAssist.insert";
 
     [Test]
     public void ExpressionEditor_WithValue_RendersValueInTextareaAndHighlightedOverlay()
@@ -58,6 +59,38 @@ public class ExpressionEditorTests : JimComponentTestContext
             .Add(c => c.SyntaxCheck, _ => null));
 
         Assert.That(cut.Find("textarea").GetAttribute("aria-invalid"), Is.EqualTo("false"));
+    }
+
+    [Test]
+    public void ExpressionEditor_WhileFirstTyped_HoldsTheSyntaxErrorBackUntilTheFieldIsLeft()
+    {
+        // Every half-typed expression is a syntax error; reporting each keystroke turns the field red mid-word.
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, string.Empty)
+            .Add(c => c.SyntaxCheck, _ => "Unterminated string literal."));
+
+        cut.Find("textarea").Input("Lower(\"");
+        var whileTyping = cut.Find("textarea").GetAttribute("aria-invalid");
+        cut.Find("textarea").Blur();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(whileTyping, Is.EqualTo("false"));
+            Assert.That(cut.Markup, Does.Contain("Unterminated string literal."));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_OnceLeft_ReportsTheSyntaxErrorAsItIsTyped()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "Lower(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, text => text.EndsWith(')') ? null : "Unterminated call."));
+        cut.Find("textarea").Blur();
+
+        cut.Find("textarea").Input("Lower(cs[\"mail\"]");
+
+        Assert.That(cut.Markup, Does.Contain("Unterminated call."));
     }
 
     [Test]
@@ -111,19 +144,37 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_EnterOnASuggestion_InsertsItInPlaceOfWhatWasTyped()
+    public void ExpressionEditor_EnterOnASuggestion_AsksTheBrowserToInsertItInPlaceOfWhatWasTyped()
     {
+        // The browser does the insert, so a key typed while the choice travelled to the server and back is kept: the
+        // server writing the whole value would put it back as it stood when Enter was pressed.
+        JSInterop.Setup<bool>(AssistInsert, _ => true).SetResult(true);
         string? changed = null;
         var cut = RenderWithAssist("Lower(cs[\"pro", v => changed = v);
         cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Lower(cs[\"pro", 13, 13, typed: true));
 
         cut.InvokeAsync(() => cut.Instance.OnAssistKey("Enter"));
 
+        var invocation = JSInterop.VerifyInvoke(AssistInsert);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(changed, Is.EqualTo("Lower(cs[\"proxyAddresses\"]"));
+            Assert.That(invocation.Arguments.Skip(1), Is.EqualTo(new object[] { 10, 13, "pro", "proxyAddresses\"]" }));
+            Assert.That(changed, Is.Null, "the browser's input event carries the new value, not the server");
             Assert.That(cut.FindAll("[data-testid=jim-expression-suggestions]"), Is.Empty);
         }
+    }
+
+    [Test]
+    public void ExpressionEditor_EnterOnASuggestionWithoutJavaScript_InsertsItOnTheServer()
+    {
+        JSInterop.Setup<bool>(AssistInsert, _ => true).SetException(new InvalidOperationException("prerendering"));
+        string? changed = null;
+        var cut = RenderWithAssist("Lower(cs[\"pro", v => changed = v);
+        cut.InvokeAsync(() => cut.Instance.OnCaretMoved("Lower(cs[\"pro", 13, 13, typed: true));
+
+        cut.InvokeAsync(() => cut.Instance.OnAssistKey("Enter"));
+
+        Assert.That(changed, Is.EqualTo("Lower(cs[\"proxyAddresses\"]"));
     }
 
     [Test]

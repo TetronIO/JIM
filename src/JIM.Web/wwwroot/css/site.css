@@ -3390,7 +3390,10 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     font-size: 0.75rem;
 }
 
+/* Information only, and it floats over the Insert attribute and Insert function buttons under the field: a press
+   goes through it to them, and the field's blur then closes it. */
 .jim-expression-signature {
+    pointer-events: none;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -3411,8 +3414,6 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
 .jim-expression-signature-active {
     color: var(--mud-palette-primary);
     font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 3px;
 }
 
 .jim-expression-signature-description,

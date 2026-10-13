@@ -544,6 +544,18 @@ window.jimExpressionAssist = {
         Object.keys(handlers).forEach(function (name) { textarea.addEventListener(name, handlers[name]); });
         textarea._jimAssist = handlers;
     },
+    // Puts a chosen suggestion in place of what was typed for it, keeping anything typed since, and raises input so
+    // the binding commits the result. False, and nothing changed, when the text it would replace is no longer there.
+    insert: function (textarea, start, end, expected, text) {
+        if (!textarea || textarea.value.substring(start, end) !== expected) return false;
+        // The caret goes after the insert, or where it was if keys typed since have moved it on.
+        var caret = Math.max(textarea.selectionEnd, end) + text.length - (end - start);
+        textarea.focus();
+        textarea.setRangeText(text, start, end);
+        textarea.setSelectionRange(caret, caret);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+    },
     detach: function (textarea) {
         if (!textarea || !textarea._jimAssist) return;
         var handlers = textarea._jimAssist;
