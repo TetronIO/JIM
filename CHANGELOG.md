@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A DN, External ID or member reference a directory stores in its own case (`DC=PANOPLY` for JIM's `DC=panoply`) is now confirmed, no longer re-exported every run, and no longer reported as drift. Identifiers declared case-exact still compare exactly. (#2195)
 - 🐛 `==` in an expression now compares an attribute's text by its characters, so `mv["Status"] == "Active"` is true when it should be rather than always false. (#2053)
 - 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box now match themselves, so "starts with svc_" no longer also finds "svcX…" and a search agrees with a scoping criterion holding the same value. (#2053)
 - 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)

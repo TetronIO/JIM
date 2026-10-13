@@ -1256,10 +1256,11 @@ public partial class SyncEngine
         }
 
         // Compare based on which value type is set
-        // String comparison (case-sensitive for regular attributes)
+        // String comparison: exact for ordinary attributes; an identifier ignores case unless declared case-exact,
+        // because the directory reports a name in the case it stored (#2195, #2051)
         if (pendingChange.StringValue != null || existingValue.StringValue != null)
         {
-            return string.Equals(pendingChange.StringValue, existingValue.StringValue, StringComparison.Ordinal);
+            return string.Equals(pendingChange.StringValue, existingValue.StringValue, AttributeValueComparison.For(pendingChange.Attribute));
         }
 
         // Integer comparison
@@ -1311,7 +1312,7 @@ public partial class SyncEngine
         // Unresolved reference comparison (only if neither side used cross-field DN)
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
-            return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
+            return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, AttributeValueComparison.For(pendingChange.Attribute));
         }
 
         // Both null/empty - consider them matching
