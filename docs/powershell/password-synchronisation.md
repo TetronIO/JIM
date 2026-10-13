@@ -18,7 +18,7 @@ The queue cmdlets exist because a recovery is not a job for a browser. When a di
 
 ## Set-JIMMetaverseObjectPassword
 
-Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-systems.md#set-jimconnectedsystemobjectpassword)) is the same operation with one Connected System Object named; both return the same outcome for each target.
+Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-system-objects.md#set-jimconnectedsystemobjectpassword)) is the same operation with one Connected System Object named; both return the same outcome for each target.
 
 One command, aimed one of two ways. With `-ConnectedSystemId`, the password goes to the Metaverse Object's Connected System Objects in those systems: the reset case, where you chose the password for the person. Without it, the password goes to every Connected System configured for [Password Synchronisation](../concepts/password-synchronisation.md) in which the Metaverse Object has a Connected System Object: the event case, where their password changed somewhere and the rest should hold it. Both go through the same queue and the same [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), which makes the first attempt within about a second, whatever the synchronisation engine is doing; what differs is the defaults, set out under Parameters.
 
@@ -84,8 +84,8 @@ One object describing the change: the Activity that records it, and where delive
 | `ActivityId` | `guid` | The Activity recording the change. It is the durable record, outliving the queue, and is where the per-system outcomes appear once delivery has been attempted. |
 | `Origin` | `string` | Which way the change was aimed: `Explicit` at the accounts the caller named, or `Propagated` to every Connected System configured for Password Synchronisation. One of `Propagated`, `Explicit` or `Provisioned`. |
 | `Targets` | `object[]` | One entry per Connected System the change was queued for. Each has `ConnectedSystemId`, `ConnectedSystemName`, `Enabled`, `ConnectedSystemObjectId`, `State`, `NextAttemptAt`, `Message`, `AttemptCount` and `FailureReason`. |
-| `QueuedForNoSystems` | `bool` | True where a propagated change found no Connected System configured for Password Synchronisation, so nothing was queued. Reported explicitly rather than as an empty list alone: silence here would let a caller believe a password propagated when nothing was even recorded (requirement 14). Always false for named accounts, which are refused rather than queued for nothing. |
-| `Settled` | `bool` | True when no target is still Queued or Delivering: every one has been set, is retrying on its own clock, is parked waiting on a person, is held behind a switched-off system, or has expired. A waited request answers `200` when this is true and `202` when it is not. A change queued for no systems is settled. |
+| `QueuedForNoSystems` | `bool` | True when a propagated change found no Connected System configured for Password Synchronisation, so nothing was queued. Always false for named accounts, which are refused rather than queued for nothing. |
+| `Settled` | `bool` | True when no target is still Queued or Delivering: every one has been set, is retrying on its own clock, is parked waiting on a person, is held behind a switched-off system, or has expired. A change queued for no systems is settled. |
 | `GeneratedPassword` | `securestring` | The password JIM generated, present only with `-Generate`. This is the only chance to read it. |
 <!-- END GENERATED: Set-JIMMetaverseObjectPassword -->
 

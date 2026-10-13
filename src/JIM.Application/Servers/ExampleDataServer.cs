@@ -974,16 +974,12 @@ public class ExampleDataServer
     /// </summary>
     private static ExpressionContext BuildExpressionContext(MetaverseObject metaverseObject)
     {
-        var mv = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var attributeValues in metaverseObject.AttributeValues.Where(av => av.Attribute != null).GroupBy(av => av.Attribute.Name))
-        {
-            var values = attributeValues.ToList();
-            mv[attributeValues.Key] = values.Count == 1
-                ? GetExpressionScalarValue(values[0])
-                : values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
-        }
+        // Every value of each attribute, typed, read exactly as synchronisation reads them (#2053).
+        var mv = new ExpressionAttributeDictionary();
+        foreach (var attributeValue in metaverseObject.AttributeValues.Where(av => av.Attribute != null))
+            mv.Add(attributeValue.Attribute.Name, GetExpressionScalarValue(attributeValue));
 
-        return new ExpressionContext(mv);
+        return new ExpressionContext(mv.Build());
     }
 
     /// <summary>

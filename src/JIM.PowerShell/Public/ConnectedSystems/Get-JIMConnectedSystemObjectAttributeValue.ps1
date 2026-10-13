@@ -4,42 +4,38 @@
 function Get-JIMConnectedSystemObjectAttributeValue {
     <#
     .SYNOPSIS
-        Gets attribute values for a Connected System Object in JIM.
+        Gets a Connected System Object's values of one attribute.
 
     .DESCRIPTION
-        Retrieves paginated attribute values for a specific attribute on a connector space object.
-        This is primarily useful for multi-valued attributes (e.g. memberOf, member) that may
-        have hundreds or thousands of values.
+        Gets the values of one attribute on a Connected System Object a page at a time: for a multi-valued
+        attribute, such as member, that can hold thousands.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER CsoId
-        The unique identifier (GUID) of the connector space object.
+        The ID of the Connected System Object.
 
     .PARAMETER AttributeName
-        The name of the attribute to retrieve values for.
+        The name of the attribute to get the values of.
 
     .PARAMETER Search
-        Optional search text to filter attribute values.
+        Returns only the values that match this text.
 
     .PARAMETER Page
-        Page number for pagination. Defaults to 1.
+        The page to get.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 50. Maximum is 100.
+        How many values a page holds.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages of results. Fetches at most 1000
-        pages (~50,000 values at the default page size of 50) before stopping with a
-        warning; use -Force to fetch beyond the cap.
+        Fetches every page instead of one. Stops after 1000 pages with a warning; -Force fetches the rest.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of how
-        many attribute values there are. Only valid with -All.
+        With -All, fetches every page, past the 1000-page limit.
 
     .OUTPUTS
-        PSCustomObject representing attribute values.
+        The attribute's values.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 1 -CsoId "a1b2c3d4-..." -AttributeName "memberOf"
@@ -66,7 +62,7 @@ function Get-JIMConnectedSystemObjectAttributeValue {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectAttributeValueDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'Page')]
         [Parameter(Mandatory, ParameterSetName = 'All')]

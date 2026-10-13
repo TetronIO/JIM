@@ -106,18 +106,23 @@ public class SetMetaverseObjectPasswordResponse
     public IReadOnlyList<SetMetaverseObjectPasswordTarget> Targets { get; set; } = [];
 
     /// <summary>
-    /// True where a propagated change found no Connected System configured for Password Synchronisation, so nothing
-    /// was queued. Reported explicitly rather than as an empty list alone: silence here would let a caller believe a
-    /// password propagated when nothing was even recorded (requirement 14). Always false for named accounts, which
-    /// are refused rather than queued for nothing.
+    /// True when a propagated change found no Connected System configured for Password Synchronisation, so nothing
+    /// was queued. Always false for named accounts, which are refused rather than queued for nothing.
     /// </summary>
+    /// <remarks>
+    /// Reported explicitly rather than as an empty list alone: silence here would let a caller believe a password
+    /// propagated when nothing was even recorded (requirement 14).
+    /// </remarks>
     public bool QueuedForNoSystems => Targets.Count == 0;
 
     /// <summary>
     /// True when no target is still Queued or Delivering: every one has been set, is retrying on its own clock, is
-    /// parked waiting on a person, is held behind a switched-off system, or has expired. A waited request answers
-    /// <c>200</c> when this is true and <c>202</c> when it is not. A change queued for no systems is settled.
+    /// parked waiting on a person, is held behind a switched-off system, or has expired. A change queued for no
+    /// systems is settled.
     /// </summary>
+    /// <remarks>
+    /// A waited request answers <c>200</c> when this is true and <c>202</c> when it is not.
+    /// </remarks>
     public bool Settled { get; set; }
 
     /// <summary>

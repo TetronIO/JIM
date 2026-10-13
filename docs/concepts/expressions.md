@@ -17,7 +17,7 @@ Expressions live inside **Synchronisation Rules**, in what is known as the **Att
 
 Within a Synchronisation Rule, expressions are used in:
 
-- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System. An export expression produces one value; written to a Multi-Valued attribute, it replaces every value the attribute holds (see [Multi-valued attributes](../configuration/attribute-mappings.md#multi-valued-attributes)).
+- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System. An export expression produces one value or several; one value written to a Multi-Valued attribute replaces every value the attribute holds (see [Multi-valued attributes](../configuration/attribute-mappings.md#multi-valued-attributes)).
 - **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the Metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
@@ -65,7 +65,34 @@ Which accessors mean something depends on where the expression runs. An export A
 
 In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
 
-Attribute names are matched case-insensitively, so `mv["Department"]`, `mv["department"]`, and `mv["DEPARTMENT"]` all refer to the same attribute. This applies to attribute *names* only; attribute *values* are compared case-sensitively by default, which is why text comparisons use `Eq()` and `Lower()` (see [String Comparison](#string-comparison)). Mirroring the casing shown in the JIM admin UI keeps expressions readable, but it is not required for them to work. For the wider picture of where JIM is case-sensitive and where it is forgiving, see [Case Sensitivity](case-sensitivity.md).
+Attribute names are matched case-insensitively, so `mv["Department"]`, `mv["department"]`, and `mv["DEPARTMENT"]` all refer to the same attribute. This applies to attribute *names* only; attribute *values* are compared case-sensitively by default, which is why a case-insensitive comparison wraps the value in `Lower()` (see [String Comparison](#string-comparison)). Mirroring the casing shown in the JIM admin UI keeps expressions readable, but it is not required for them to work. For the wider picture of where JIM is case-sensitive and where it is forgiving, see [Case Sensitivity](case-sensitivity.md).
+
+### Multi-Valued Attributes
+
+A Multi-Valued attribute such as `proxyAddresses` or `memberOf` reads as **every value it holds**, in every expression: none reads as nothing (null), one reads as that value, and several read as every distinct value in a fixed order (text by ordinal, so upper case before lower case; numbers ascending; dates oldest first; Guids and references by their text). The order does not depend on how the Connected System returned the values, so an expression gives the same answer after every import. An attribute declared Multi-Valued but holding one value, as `cn`, `mail` and `givenName` usually do in a directory, behaves exactly like a Single-Valued one.
+
+Functions work with several values in four ways:
+
+- **Transforms apply to each value** and return every result, in the same order: `Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `EscapeDN`, `ToString`, `FormatDate`, `ParseDate` and `FromFileTime`.
+- **Comparisons are true when any value satisfies them**, as a [scoping criterion](../configuration/scoping-criteria.md) on a Multi-Valued attribute is: `Eq`, `StartsWith`, `EndsWith` and `Contains`. `!` in front of one therefore means "no value does".
+- **Whole-set functions work on the set itself**: `Count`, `Min`, `Max`, `Join` and `Where` (see [Multi-Valued Functions](#multi-valued-functions)).
+- **Everything else needs one value**: joining text with `+`, the comparison and arithmetic operators, `.ToString()`, and `Length`, `ToInt`, `ToDecimal`, `ToFileTime`, `HasBit`, `SetBit`, `ClearBit`, `EnableUser`, `DisableUser` and `Split`. One value is used as it is; several are an error on the object, naming the attribute and how many values it has. `== null` and `!= null` still test whether there is a value.
+
+For an object whose `proxyAddresses` holds `SMTP:priya.shah@example.org` and `smtp:p.shah@example.org`:
+
+| Expression | Result |
+|---|---|
+| `cs["proxyAddresses"]` into a Multi-Valued attribute | both addresses |
+| `Lower(cs["proxyAddresses"])` | both addresses, lower-cased |
+| `StartsWith(cs["proxyAddresses"], "SMTP:")` | `true` (one address does) |
+| `!StartsWith(cs["proxyAddresses"], "x500:")` | `true` (no address does) |
+| `Count(cs["proxyAddresses"])` | `2` |
+| `Join(cs["proxyAddresses"], ";")` | `SMTP:priya.shah@example.org;smtp:p.shah@example.org` |
+| `Where(cs["proxyAddresses"], "starts with", "SMTP:")` | `SMTP:priya.shah@example.org` |
+| `Replace(Where(cs["proxyAddresses"], "starts with", "SMTP:"), "SMTP:", "")` into Email | `priya.shah@example.org` |
+| `cs["proxyAddresses"]` into a Single-Valued attribute | an error on the object: `proxyAddresses` has 2 values |
+
+A result with several values written to a Multi-Valued attribute writes every value; written to a Single-Valued attribute, it flows nothing and is reported as a `Multi-Valued to Single-Valued` error, the object's other attributes unaffected. The [tester](#testing-an-expression) shows the same, so try an expression against several sample values before saving it.
 
 ## Operators
 
@@ -104,9 +131,10 @@ Compare values using these operators. The result is either `true` or `false`:
 | `<`      | Less than                | `10 < 3`   | `false` |
 | `>=`     | Greater than or equal to | `10 >= 10` | `true`  |
 | `<=`     | Less than or equal to    | `3 <= 10`  | `true`  |
+| `==`     | Equal to                 | `10 == 10` | `true`  |
 | `!=`     | Not equal to             | `10 != 3`  | `true`  |
 
-> **Important**: For comparing text values (strings), always use the `Eq()` function instead of `==`. See [String Comparison](#string-comparison) below.
+Each side of a comparison operator is one value: comparing a Multi-Valued attribute holding several values is an error, so use `Eq()` or `Where()` for those (see [Multi-Valued Attributes](#multi-valued-attributes)).
 
 ### Logic
 
@@ -126,25 +154,20 @@ Eq(mv["Employee Status"], "Active") && Eq(mv["Department"], "IT")
 
 ## String Comparison
 
-**Always use `Eq()` for comparing text values, NOT `==`.**
-
-The `==` operator can give incorrect results when comparing attribute values to text. This is a technical limitation of how attribute values are stored internally.
+`==` and `Eq()` both compare text by its characters, exactly and case-sensitively:
 
 ```csharp
-// WRONG -- may give incorrect results
 IIF(mv["Employee Status"] == "Active", 512, 514)
-
-// CORRECT -- always use Eq() for text comparisons
 IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 ```
+
+They differ in two ways. `Eq()` is true when any value of a Multi-Valued attribute is equal, where `==` needs one value. And `Eq()` reads text against a typed value as that type, so `Eq(mv["Hire Date"], "2026-03-15")` compares dates.
 
 For case-insensitive comparisons (where "Active", "ACTIVE", and "active" should all match), wrap the value in `Lower()` first:
 
 ```csharp
 Eq(Lower(mv["Status"]), "active")
 ```
-
-> **Rule of thumb**: Use `Eq()` whenever you are comparing attribute values to text. Use `>`, `<`, `>=`, `<=`, `!=` for number comparisons.
 
 ## Built-in Functions
 
@@ -161,8 +184,8 @@ Eq(Lower(mv["Status"]), "active")
 | `Substring(value, start, length)` | Extract a portion of text | `Substring(mv["Name"], 2, 4)` |
 | `Replace(value, old, new)` | Replace one piece of text with another | `Replace(mv["Email"], "@old.com", "@new.com")` |
 | `Length(value)` | Count the number of characters | `Length(mv["Name"])` |
-| `IsNullOrEmpty(value)` | Check if a value is missing or blank | `IsNullOrEmpty(mv["Name"])` |
-| `IsNullOrWhitespace(value)` | Check if a value is missing, blank, or only spaces | `IsNullOrWhitespace(mv["Name"])` |
+| `IsNullOrEmpty(value)` | Check if there is no value: missing, blank, or a Multi-Valued attribute with no values | `IsNullOrEmpty(mv["Name"])` |
+| `IsNullOrWhitespace(value)` | Check if there is no value, or only spaces | `IsNullOrWhitespace(mv["Name"])` |
 | `StartsWith(value, prefix)` | Check if text begins with a specific value | `StartsWith(mv["Email"], "admin")` |
 | `EndsWith(value, suffix)` | Check if text ends with a specific value | `EndsWith(mv["Email"], "@company.com")` |
 | `Contains(value, search)` | Check if text contains a specific value | `Contains(mv["Email"], "@company")` |
@@ -172,8 +195,8 @@ Eq(Lower(mv["Status"]), "active")
 | Function | Description | Example |
 |----------|-------------|---------|
 | `IIF(condition, trueValue, falseValue)` | Return one value if a condition is true, another if false | `IIF(Eq(mv["Status"], "Active"), 512, 514)` |
-| `Coalesce(value1, value2)` | Use the first value if it exists, otherwise use the second | `Coalesce(mv["Preferred Name"], mv["First Name"])` |
-| `Eq(value1, value2)` | Check if two values are equal (required for text comparisons); a date compares by [instant](#dates-and-numbers-as-text) | `Eq(mv["Department"], "IT")` |
+| `Coalesce(value1, value2)` | Use the first value if it has one (not missing, blank or an empty list), otherwise use the second | `Coalesce(mv["Preferred Name"], mv["First Name"])` |
+| `Eq(value1, value2)` | Check if two values are equal, true when any value of a Multi-Valued attribute is; a date compares by [instant](#dates-and-numbers-as-text) | `Eq(cs["memberOf"], "CN=Admins")` |
 
 ### Conversion Functions
 
@@ -227,15 +250,20 @@ A `ParseDate()` mismatch is an error, not "no value", so an unexpected form neve
 | `RandomPassword(length, extendedChars)` | Generate a random password. Set extendedChars to `true` for special characters (!@#$%^&*) | `RandomPassword(16, true)` |
 | `RandomPassphrase(wordCount, separator)` | Generate a passphrase from random words | `RandomPassphrase(4, "-")` |
 
-### Collection Functions
+### Multi-Valued Functions
 
-These functions work with multi-valued attributes (attributes that hold a list of values rather than a single value).
+These functions work on every value of a [Multi-Valued attribute](#multi-valued-attributes) at once.
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `CollectionContains(collection, value)` | Check if a list of values contains a specific value | `CollectionContains(cs["memberOf"], "CN=Admins")` |
-| `Split(value, delimiter)` | Split a delimited text value into a list | `Split(cs["coursesCompleted"], "\|")` |
-| `Join(collection, delimiter)` | Combine a list of values into a single delimited text value | `Join(mv["Groups"], ",")` |
+| `Count(values)` | How many values there are: 0 for none | `Count(cs["proxyAddresses"])` |
+| `Min(values)` | The smallest value: numbers by value, dates by instant, text by ordinal; nothing for no values | `Min(mv["Start Dates"])` |
+| `Max(values)` | The largest value, compared as `Min` compares | `Max(cs["employeeNumbers"])` |
+| `Where(values, operator, value)` | The values that meet a [scoping operator](../configuration/scoping-criteria.md#operators), named as the editor shows it (`"starts with"`) or as the REST API names it (`"StartsWith"`); text compares exactly unless a fourth argument, `true`, ignores case | `Where(cs["proxyAddresses"], "starts with", "SMTP:")` |
+| `Split(value, delimiter)` | Split a delimited text value into several values, in the order they appear | `Split(cs["coursesCompleted"], "\|")` |
+| `Join(values, delimiter)` | Combine values into a single delimited text value, in the order they are read | `Join(mv["Groups"], ",")` |
+
+`Min` and `Max` refuse values they cannot order (true or false, Guids, Binary, or a mix of kinds) with an error, and `Where` refuses **has a value** and **has no value**, which test an attribute rather than each value: use `Count` or `IsNullOrEmpty`.
 
 ### Account Control Functions
 
@@ -499,6 +527,7 @@ This creates three separate values: `SOFT101`, `SOFT201`, and `SEC101`.
 - The delimiter can be any text (e.g., `","`, `"|"`, `";"`)
 - Each value is stored in the target attribute's type (`"1|2"` into a Number attribute stores 1 and 2); if any value cannot be, nothing flows and the object is reported
 - Into a single-valued attribute, a list of more than one value flows nothing and the object is reported
+- `Join()` puts the values back together in the same order, so `Join(Split(x, "|"), "|")` gives back `x`
 
 ### Combining a List into a Single Value
 
@@ -508,7 +537,7 @@ When exporting to a system that does not support multi-valued attributes, use `J
 Join(mv["Group Memberships"], "|")
 ```
 
-If the attribute has the values Admin, Users, and Developers, this produces: `Admin|Users|Developers`
+If the attribute has the values Admin, Users, and Developers, this produces `Admin|Developers|Users`: an attribute's values are joined in their fixed order (see [Multi-Valued Attributes](#multi-valued-attributes)), so the result is the same after every import.
 
 **Notes:**
 
@@ -558,14 +587,14 @@ Common errors:
 When an expression does not produce the result you expect:
 
 1. **Check the attribute name spelling**<br /> Attribute names are matched case-insensitively, so `mv["department"]` and `mv["Department"]` are equivalent; casing is never the cause. Do check the name is spelled correctly and matches an attribute that exists in the JIM admin UI.
-2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
+2. **Check for several values**<br /> A Multi-Valued attribute holding more than one value is an error where one value is needed, naming the attribute; choose one with `Where()`, `Min()` or `Max()`, or combine them with `Join()` (see [Multi-Valued Attributes](#multi-valued-attributes)).
 3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can clear the target or, in a concatenation, produce a malformed value. Use `Coalesce()` or `IsNullOrEmpty()` to handle this; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace) for the full picture.
 4. **Test with sample data**<br /> Use the tester in the Attribute Flow dialog to try your expression with sample values, including leaving an input empty to see what an object without that attribute would produce (see [Testing an expression](#testing-an-expression)).
 5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
 ## Best Practices
 
-1. **Always use `Eq()` for text comparisons**<br /> The `==` operator can give incorrect results when comparing attribute values.
+1. **Say which value of a Multi-Valued attribute you mean**<br /> Use `Where()`, `Min()`, `Max()` or `Join()`, so an object gaining a second value is handled rather than reported as an error.
 
 2. **Handle missing values**<br /> Use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents an expression clearing the target or writing malformed data when an attribute has not been populated yet; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace).
 

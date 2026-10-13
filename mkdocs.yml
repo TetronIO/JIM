@@ -210,6 +210,8 @@ nav:
       - Connected System Schema: powershell/connected-system-schema.md
       - Auxiliary Object Classes: powershell/connected-system-auxiliary-classes.md
       - Partitions and Containers: powershell/partitions-and-containers.md
+      - Connected System Objects: powershell/connected-system-objects.md
+      - Pending Exports: powershell/pending-exports.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
       - Attribute Mappings: powershell/attribute-mappings.md

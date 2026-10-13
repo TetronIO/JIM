@@ -881,6 +881,7 @@ public partial class SyncEngine
                 {
                     Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
                     TargetAttributeName = target.Name,
+                    SourceAttributeName = resolution.SourceAttributeName,
                     Expression = source.Expression,
                     ValueCount = resolution.ValueCount
                 });
@@ -1359,16 +1360,17 @@ public partial class SyncEngine
     /// or its effective values as of this pass for a Metaverse-Derived Attribute Flow
     /// (<see cref="BuildEffectiveAttributeDictionary"/>, #1750). Sharing it is what guarantees an export expression
     /// and a derived flow reading the same attribute see the same value: keys case-insensitive, values typed by the
-    /// attribute's data type, asserted-null markers absent, and the last value winning for a multi-valued attribute.
+    /// attribute's data type, asserted-null markers absent, and every value of a multi-valued attribute read as
+    /// <see cref="ExpressionAttributeDictionary"/> reads them (#2053).
     /// </summary>
     private static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> values)
     {
-        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var attributes = new ExpressionAttributeDictionary();
 
         if (mvo.Type == null)
         {
             Log.Warning("BuildAttributeDictionary: MVO {MvoId} has null Type, cannot build attribute dictionary", mvo.Id);
-            return attributes;
+            return attributes.Build();
         }
 
         // Exclude asserted-null markers (#91): they carry no value, so the expression context must treat the
@@ -1384,30 +1386,30 @@ public partial class SyncEngine
                 continue;
             }
 
-            var attributeName = attributeValue.Attribute.Name;
-
-            // Use the appropriate typed value based on the attribute type
-            object? value = attributeValue.Attribute.Type switch
-            {
-                AttributeDataType.Text => attributeValue.StringValue,
-                AttributeDataType.Number => attributeValue.IntValue,
-                AttributeDataType.LongNumber => attributeValue.LongValue,
-                AttributeDataType.Decimal => attributeValue.DecimalValue,
-                AttributeDataType.DateTime => attributeValue.DateTimeValue,
-                AttributeDataType.Boolean => attributeValue.BoolValue,
-                AttributeDataType.Guid => attributeValue.GuidValue,
-                AttributeDataType.Binary => attributeValue.ByteValue,
-                // Fall back to the FK scalar when the navigation is not loaded: reconciler-flagged MVOs
-                // (#892) arrive via a no-tracking query that deliberately omits the ReferenceValue Include.
-                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString() ?? attributeValue.ReferenceValueId?.ToString(),
-                _ => null
-            };
-
-            attributes[attributeName] = value;
+            attributes.Add(attributeValue.Attribute.Name, ToExpressionValue(attributeValue));
         }
 
-        return attributes;
+        return attributes.Build();
     }
+
+    /// <summary>
+    /// The value an expression sees for one Metaverse Object attribute value, typed by the attribute's data type.
+    /// </summary>
+    internal static object? ToExpressionValue(MetaverseObjectAttributeValue attributeValue) => attributeValue.Attribute.Type switch
+    {
+        AttributeDataType.Text => attributeValue.StringValue,
+        AttributeDataType.Number => attributeValue.IntValue,
+        AttributeDataType.LongNumber => attributeValue.LongValue,
+        AttributeDataType.Decimal => attributeValue.DecimalValue,
+        AttributeDataType.DateTime => attributeValue.DateTimeValue,
+        AttributeDataType.Boolean => attributeValue.BoolValue,
+        AttributeDataType.Guid => attributeValue.GuidValue,
+        AttributeDataType.Binary => attributeValue.ByteValue,
+        // Fall back to the FK scalar when the navigation is not loaded: reconciler-flagged MVOs
+        // (#892) arrive via a no-tracking query that deliberately omits the ReferenceValue Include.
+        AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString() ?? attributeValue.ReferenceValueId?.ToString(),
+        _ => null
+    };
 
     /// <summary>
     /// Builds a <see cref="SyncExpressionEvaluationException"/> carrying the failing export expression and
