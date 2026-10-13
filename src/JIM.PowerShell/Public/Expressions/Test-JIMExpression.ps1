@@ -26,12 +26,12 @@ function Test-JIMExpression {
     .PARAMETER MvAttributes
         A hashtable of sample Metaverse attribute values.
         Keys are attribute names, values are the attribute values.
-        With an Attribute Flow, $null is no value (distinct from empty text) and an array gives a multi-valued attribute several values.
+        $null is no value and an array gives the attribute several values; with an Attribute Flow, empty text is a value distinct from $null.
 
     .PARAMETER CsAttributes
         A hashtable of sample Connected System attribute values.
         Keys are attribute names, values are the attribute values.
-        With an Attribute Flow, $null is no value (distinct from empty text) and an array gives a multi-valued attribute several values.
+        $null is no value and an array gives the attribute several values; with an Attribute Flow, empty text is a value distinct from $null.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule whose Attribute Flow to test the expression as. Give it with MappingId.
