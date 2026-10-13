@@ -1,6 +1,6 @@
 # One Operator Catalogue and Function Library
 
-- **Status:** Doing (PR A complete; PRs B and C outstanding)
+- **Status:** Doing (PRs A and C complete; PR B outstanding)
 - **Issue:** [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2 of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 2: One operator catalogue and function library", Scenarios 8, 9 and 13)
 
@@ -113,7 +113,7 @@ Needs neither in-flight dependency.
 4. Save-time rejection of unknown functions in the portal (Attribute Flow save) as well as the REST API.
 5. Expression editor: suggestions as you type for functions and attributes, a function list, signature help.
 
-### PR C: Multi-valued attributes in expressions
+### PR C: Multi-valued attributes in expressions ✅
 
 **Waits on #2055's shared evaluation pipeline**, also in flight elsewhere, and expects #2179's `ExpressionResultConverter` and `DynamicExpressoEvaluator` changes to have landed.
 
@@ -123,6 +123,8 @@ Needs neither in-flight dependency.
 4. One definition of no value; `CollectionContains`, `HasAttribute` and `AttributeNames` removed.
 5. Late binding, subject to the security review against `EXPRESSION_SECURITY.md`; otherwise the save-time refusal fallback.
 6. Scenario 13 as an end-to-end test; changelog 🔄 multi-valued semantics and 🐛 `System.String[]`.
+
+As delivered: several values are one type, `ExpressionValues` (JIM.Models), which every accessor returns for two or more values and whose operators and `ToString` are the one-value positions; every expression dictionary builds through `ExpressionAttributeDictionary`. Late binding passed its review (recorded in `EXPRESSION_SECURITY.md`, "Late binding") and is on. `System.String[]` had already been fixed by #2179, so its changelog entry was not repeated; `==` comparing text by value is the fix this PR carries instead. Several values into a single-valued attribute name the attribute they came from. `Where` landed here rather than in PR B because Scenario 13 needs it.
 
 ## Success Criteria
 
