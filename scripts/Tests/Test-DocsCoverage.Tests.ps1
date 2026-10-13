@@ -210,6 +210,17 @@ Describe 'Test-DocsCoverage: COV-6 expression functions' {
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match "expressions\.md:\d+\s+COV-6\s+.*'Upper'"
     }
+
+    It "reads a function registered in one of the evaluator's partial files" {
+        $files = @{
+            'src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs'         = "target.SetFunction(`"Trim`", x);`n"
+            'src/JIM.Application/Expressions/DynamicExpressoEvaluator.Library.cs' = "target.SetFunction(`"Upper`", x);`ntarget.SetFunction(`"Upper`", y);`ntarget.SetFunction(`"ToDecimal`", x);`n"
+        }
+        $r = Invoke-Coverage -Root (New-Repository -Files $files)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Not -Match "COV-6\s+.*'Upper'"
+        $r.Output | Should -Match "DynamicExpressoEvaluator\.Library\.cs:3\s+COV-6\s+.*'ToDecimal'"
+    }
 }
 
 Describe 'Test-DocsCoverage: LNK-3 links from the product into the docs' {

@@ -208,3 +208,37 @@ public enum AttributeFlowValueProcessingStep
     /// </summary>
     TreatWhitespaceAsNoValue
 }
+
+/// <summary>
+/// The group an expression function belongs to in the function reference and the expression editor's function list
+/// (#2053). Each is one section of the reference, in this order.
+/// </summary>
+public enum ExpressionFunctionCategory
+{
+    /// <summary>Text functions: transforming and testing text.</summary>
+    Text,
+
+    /// <summary>Regular expression functions, with a time limit.</summary>
+    Pattern,
+
+    /// <summary>Choosing between values, and comparing them.</summary>
+    Conditional,
+
+    /// <summary>Converting a value to another type.</summary>
+    Conversion,
+
+    /// <summary>Dates and times.</summary>
+    Date,
+
+    /// <summary>Distinguished name helpers.</summary>
+    DistinguishedName,
+
+    /// <summary>Generating passwords and passphrases.</summary>
+    Password,
+
+    /// <summary>Working on every value of a Multi-Valued attribute at once.</summary>
+    MultiValued,
+
+    /// <summary>Active Directory userAccountControl flags.</summary>
+    AccountControl
+}

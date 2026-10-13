@@ -73,8 +73,8 @@ A Multi-Valued attribute such as `proxyAddresses` or `memberOf` reads as **every
 
 Functions work with several values in four ways:
 
-- **Transforms apply to each value** and return every result, in the same order: `Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `EscapeDN`, `ToString`, `FormatDate`, `ParseDate` and `FromFileTime`.
-- **Comparisons are true when any value satisfies them**, as a [scoping criterion](../configuration/scoping-criteria.md) on a Multi-Valued attribute is: `Eq`, `StartsWith`, `EndsWith` and `Contains`. `!` in front of one therefore means "no value does".
+- **Transforms apply to each value** and return every result, in the same order: `Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `RegexReplace`, `RegexExtract`, `EscapeDN`, `ToString`, `FormatDate`, `ParseDate` and `FromFileTime`.
+- **Comparisons are true when any value satisfies them**, as a [scoping criterion](../configuration/scoping-criteria.md) on a Multi-Valued attribute is: `Eq`, `StartsWith`, `EndsWith`, `Contains` and `IsMatch`. `!` in front of one therefore means "no value does".
 - **Whole-set functions work on the set itself**: `Count`, `Min`, `Max`, `Join` and `Where` (see [Multi-Valued Functions](#multi-valued-functions)).
 - **Everything else needs one value**: joining text with `+`, the comparison and arithmetic operators, `.ToString()`, and `Length`, `ToInt`, `ToDecimal`, `ToFileTime`, `HasBit`, `SetBit`, `ClearBit`, `EnableUser`, `DisableUser` and `Split`. One value is used as it is; several are an error on the object, naming the attribute and how many values it has. `== null` and `!= null` still test whether there is a value.
 
@@ -186,9 +186,22 @@ Eq(Lower(mv["Status"]), "active")
 | `Length(value)` | Count the number of characters | `Length(mv["Name"])` |
 | `IsNullOrEmpty(value)` | Check if there is no value: missing, blank, or a Multi-Valued attribute with no values | `IsNullOrEmpty(mv["Name"])` |
 | `IsNullOrWhitespace(value)` | Check if there is no value, or only spaces | `IsNullOrWhitespace(mv["Name"])` |
-| `StartsWith(value, prefix)` | Check if text begins with a specific value | `StartsWith(mv["Email"], "admin")` |
-| `EndsWith(value, suffix)` | Check if text ends with a specific value | `EndsWith(mv["Email"], "@company.com")` |
-| `Contains(value, search)` | Check if text contains a specific value | `Contains(mv["Email"], "@company")` |
+| `HasValue(value)` | Check if there is a value: the opposite of `IsNullOrEmpty` | `HasValue(mv["Manager"])` |
+| `StartsWith(value, prefix[, ignoreCase])` | Check if text begins with a specific value, exactly unless `ignoreCase` is `true` | `StartsWith(mv["Email"], "admin")` |
+| `EndsWith(value, suffix[, ignoreCase])` | Check if text ends with a specific value, exactly unless `ignoreCase` is `true` | `EndsWith(mv["Email"], "@company.com")` |
+| `Contains(value, search[, ignoreCase])` | Check if text contains a specific value, exactly unless `ignoreCase` is `true` | `Contains(mv["Email"], "@company")` |
+
+`StartsWith`, `EndsWith` and `Contains` compare character by character, exactly as the scoping operators of the same names do: `StartsWith(mv["Email"], "ADMIN", true)` ignores case.
+
+### Pattern Functions
+
+These use .NET [regular expressions](https://learn.microsoft.com/dotnet/standard/base-types/regular-expression-language-quick-reference), the same as the **matches pattern** [scoping operator](../configuration/scoping-criteria.md#operators). A pattern is matched exactly unless `ignoreCase` is `true`, and each match has a time limit of 100 ms: a pattern that runs past it (nested repetition such as `(a+)+` is the usual cause) fails the object with an error rather than guessing. A pattern that is not a valid regular expression is an error too.
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `IsMatch(value, pattern[, ignoreCase])` | Check if text matches a [regular expression](#pattern-functions), true when any value of a Multi-Valued attribute does | `IsMatch(cs["employeeId"], "^E[0-9]{6}$")` |
+| `RegexReplace(value, pattern, replacement[, ignoreCase])` | Replace every match of a regular expression; the replacement can use `$1` for the first group | `RegexReplace(cs["phone"], "[^0-9+]", "")` |
+| `RegexExtract(value, pattern[, group])` | The first match of a regular expression, or the group named by number; nothing when it does not match | `RegexExtract(cs["mail"], "@(.+)$", 1)` |
 
 ### Conditional Functions
 
@@ -259,7 +272,7 @@ These functions work on every value of a [Multi-Valued attribute](#multi-valued-
 | `Count(values)` | How many values there are: 0 for none | `Count(cs["proxyAddresses"])` |
 | `Min(values)` | The smallest value: numbers by value, dates by instant, text by ordinal; nothing for no values | `Min(mv["Start Dates"])` |
 | `Max(values)` | The largest value, compared as `Min` compares | `Max(cs["employeeNumbers"])` |
-| `Where(values, operator, value)` | The values that meet a [scoping operator](../configuration/scoping-criteria.md#operators), named as the editor shows it (`"starts with"`) or as the REST API names it (`"StartsWith"`); text compares exactly unless a fourth argument, `true`, ignores case | `Where(cs["proxyAddresses"], "starts with", "SMTP:")` |
+| `Where(values, operator, value[, ignoreCase])` | The values that meet a [scoping operator](../configuration/scoping-criteria.md#operators), named as the editor shows it (`"starts with"`) or as the REST API names it (`"StartsWith"`); text compares exactly unless `ignoreCase` is `true` | `Where(cs["proxyAddresses"], "starts with", "SMTP:")` |
 | `Split(value, delimiter)` | Split a delimited text value into several values, in the order they appear | `Split(cs["coursesCompleted"], "\|")` |
 | `Join(values, delimiter)` | Combine values into a single delimited text value, in the order they are read | `Join(mv["Groups"], ",")` |
 
