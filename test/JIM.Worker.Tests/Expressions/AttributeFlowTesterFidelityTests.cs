@@ -114,7 +114,11 @@ public class AttributeFlowTesterFidelityTests
                 .ToList();
             return (added, errors, null);
         }
-        catch (Exception ex) when (ex is SyncExpressionEvaluationException or SyncExpressionMissingInputException)
+        catch (SyncExpressionEvaluationException ex)
+        {
+            return ([], [], ex);
+        }
+        catch (SyncExpressionMissingInputException ex)
         {
             return ([], [], ex);
         }
@@ -139,7 +143,7 @@ public class AttributeFlowTesterFidelityTests
             Assert.That(synchronised.Values, Is.EqualTo(new object[] { "2026-03-02" }));
             Assert.That(tested.InputErrors, Is.Empty);
             Assert.That(tested.Evaluation!.Outcome, Is.EqualTo(AttributeFlowOutcome.Values));
-            Assert.That(tested.Evaluation.Values, Is.EqualTo(synchronised.Values));
+            Assert.That(tested.Evaluation!.Values, Is.EqualTo(synchronised.Values));
         }
     }
 
@@ -235,7 +239,7 @@ public class AttributeFlowTesterFidelityTests
             Assert.That(synchronised.Values, Is.Empty);
             Assert.That(synchronised.Errors, Is.Empty);
             Assert.That(tested.Evaluation!.Outcome, Is.EqualTo(AttributeFlowOutcome.NoValue));
-            Assert.That(tested.Evaluation.Source.MissingInputs, Is.EqualTo(new[] { "cs[\"givenName\"]" }));
+            Assert.That(tested.Evaluation!.Source.MissingInputs, Is.EqualTo(new[] { "cs[\"givenName\"]" }));
         }
     }
 
@@ -266,7 +270,7 @@ public class AttributeFlowTesterFidelityTests
         {
             Assert.That(synchronised.Errors.Single().Kind, Is.EqualTo(AttributeFlowErrorKind.ExpressionMissingInput));
             Assert.That(tested.Evaluation!.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.MissingInputFailedMapping));
-            Assert.That(tested.Evaluation.Source.MissingInputs, Is.EqualTo(synchronised.Errors.Single().MissingInputs));
+            Assert.That(tested.Evaluation!.Source.MissingInputs, Is.EqualTo(synchronised.Errors.Single().MissingInputs));
         }
     }
 
@@ -313,8 +317,8 @@ public class AttributeFlowTesterFidelityTests
         {
             Assert.That(synchronised.Errors.Single().Kind, Is.EqualTo(AttributeFlowErrorKind.ExpressionResultNotConvertible));
             Assert.That(tested.Evaluation!.Outcome, Is.EqualTo(AttributeFlowOutcome.Error));
-            Assert.That(tested.Evaluation.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.ResultNotConvertible));
-            Assert.That(tested.Evaluation.Resolution!.UnconvertibleValue, Is.EqualTo(synchronised.Errors.Single().Value));
+            Assert.That(tested.Evaluation!.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.ResultNotConvertible));
+            Assert.That(tested.Evaluation!.Resolution!.UnconvertibleValue, Is.EqualTo(synchronised.Errors.Single().Value));
         }
     }
 
