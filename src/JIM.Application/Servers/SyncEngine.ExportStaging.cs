@@ -843,6 +843,7 @@ public partial class SyncEngine
                 {
                     Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
                     TargetAttributeName = target.Name,
+                    SourceAttributeName = resolution.SourceAttributeName,
                     Expression = source.Expression,
                     ValueCount = resolution.ValueCount
                 });

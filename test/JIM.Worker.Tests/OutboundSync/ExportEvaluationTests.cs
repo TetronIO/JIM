@@ -2307,6 +2307,9 @@ public class ExportEvaluationTests
 
         // Set up MVO attribute values that will be used in the expression
         var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
+        // Display Name is single-valued: replace the fixture's value rather than give the object a second one, which an
+        // expression now reads as two values (#2053) instead of silently taking the last.
+        mvo.AttributeValues.RemoveAll(av => av.AttributeId == displayNameAttr.Id);
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Id = Guid.NewGuid(),

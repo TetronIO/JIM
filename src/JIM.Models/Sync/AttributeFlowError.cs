@@ -63,7 +63,8 @@ public class AttributeFlowError
 
     /// <summary>
     /// The name of the source attribute (the Connected System attribute on import, the Metaverse attribute on
-    /// export). Null where the source is an Expression rather than an attribute.
+    /// export). For <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/>, the attribute whose values the
+    /// Expression returned, where they all came from one (#2053); otherwise null where the source is an Expression.
     /// </summary>
     public string? SourceAttributeName { get; set; }
 
