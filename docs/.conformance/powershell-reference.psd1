@@ -30,6 +30,7 @@
         'JIM.ScopingCriteriaGroup'         = 'SyncRuleScopingCriteriaGroupDto'
         'JIM.ScopingCriterion'             = 'SyncRuleScopingCriteriaDto'
         'JIM.RetiredGeneratedValue'        = 'RetiredGeneratedValueDto'
+        'JIM.SetConnectedSystemObjectPasswordResult' = 'SetMetaverseObjectPasswordResponse'
         'JIM.SetMetaverseObjectPasswordResult' = 'SetMetaverseObjectPasswordResponse'
         'JIM.ServiceHealth'                = 'ServiceHealthEntryResponse'
         'JIM.ServiceHealthSummary'         = 'ServiceHealthResponse'

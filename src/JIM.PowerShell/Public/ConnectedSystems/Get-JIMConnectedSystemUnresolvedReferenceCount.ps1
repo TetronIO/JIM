@@ -4,28 +4,18 @@
 function Get-JIMConnectedSystemUnresolvedReferenceCount {
     <#
     .SYNOPSIS
-        Gets the count of unresolved reference attribute values in a Connected System.
+        Counts the unresolved reference values in a Connected System's Connector Space.
 
     .DESCRIPTION
-        Returns the total number of reference attribute values across all Connected System Objects
-        in the specified Connected System that could not be resolved during the last import run.
-
-        An unresolved reference occurs when a reference attribute (e.g. a group's 'member' attribute)
-        contains a value that could not be matched to another Connected System Object. This typically
-        happens when:
-        - The referenced object is outside the configured container scope
-        - The referenced object has not been imported yet (cross-run reference resolution failure)
-        - The referenced object does not exist in the source system
-
-        A non-zero count indicates data integrity issues. Use this after an import run to verify
-        that all references were successfully resolved before proceeding with synchronisation.
+        Counts the reference values across a Connected System's Connected System Objects that JIM could not resolve
+        to another Connected System Object: a group's member that is outside Container Scope, has not been imported
+        yet, or does not exist. Run it after an import to check every reference resolved before synchronising.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System to check.
+        The ID of the Connected System.
 
     .OUTPUTS
-        [int] The count of unresolved reference attribute values.
-        Returns 0 if all references are resolved.
+        How many reference values are unresolved; 0 when every one resolved.
 
     .EXAMPLE
         Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId 1
