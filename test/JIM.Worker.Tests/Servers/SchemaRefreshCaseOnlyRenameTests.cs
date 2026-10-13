@@ -188,4 +188,25 @@ public class SchemaRefreshCaseOnlyRenameTests
             Assert.That(result.AddedAttributes["user"], Is.EquivalentTo(new[] { "MAIL" }));
         }
     }
+
+    [Test]
+    public void MergeSchema_AttributeRenamedOnlyInCase_KeepsTheAdministratorsCaseExactDecision()
+    {
+        // The rename keeps the row, so a case-exact override an administrator set travels with it rather than being
+        // restated from what the Connector discovered.
+        var connectedSystem = BuildConnectedSystem();
+        var mail = connectedSystem.ObjectTypes!.Single().Attributes.Single(a => a.Id == MailAttributeId);
+        mail.CaseExact = true;
+        mail.CaseExactSetByAdministrator = true;
+
+        ConnectedSystemServer.MergeSchemaIntoConnectedSystem(connectedSystem, BuildSchema("user", "objectGUID", "Mail"));
+
+        var renamed = connectedSystem.ObjectTypes!.Single().Attributes.Single(a => a.Id == MailAttributeId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(renamed.Name, Is.EqualTo("Mail"));
+            Assert.That(renamed.CaseExact, Is.True);
+            Assert.That(renamed.CaseExactSetByAdministrator, Is.True);
+        }
+    }
 }
