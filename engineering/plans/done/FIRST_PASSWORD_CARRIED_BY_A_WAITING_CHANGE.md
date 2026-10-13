@@ -1,6 +1,7 @@
 # An Account's First Password Carried by a Password Change Already Waiting
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** The `RequiresPostgres` tests (written, not yet run) and runtime verification on Samba AD (the scenarios under Verification) are still to run; the migration's Designer must be regenerated after merging `main`.
 - **Issue:** [#2160](https://github.com/TetronIO/JIM/issues/2160)
 - **Created:** 2026-10-13
 
