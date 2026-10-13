@@ -6548,9 +6548,9 @@ public class SynchronisationController(
             return await TestExpressionAsAttributeFlowAsync(request, syncRuleId, mappingId);
 
         // Build the context from the provided attribute values
-        var mvAttributes = request.MvAttributes ?? new Dictionary<string, object?>();
-        var csAttributes = request.CsAttributes ?? new Dictionary<string, object?>();
-        var context = new ExpressionContext(mvAttributes, csAttributes);
+        var context = new ExpressionContext(
+            TestExpressionSampleValues.ToExpressionAttributes(request.MvAttributes),
+            TestExpressionSampleValues.ToExpressionAttributes(request.CsAttributes));
 
         // Evaluate the expression
         var testResult = _expressionEvaluator.Test(request.Expression, context);

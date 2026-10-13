@@ -151,7 +151,7 @@ public sealed class MatchValueResolver
         IReadOnlyCollection<ConnectedSystemObjectAttributeValue> attributeValues,
         ConnectedSystemObjectType? objectType)
     {
-        var inputs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var inputs = new ExpressionAttributeDictionary();
 
         foreach (var attributeValue in attributeValues)
         {
@@ -164,9 +164,9 @@ public sealed class MatchValueResolver
                 continue;
             }
 
-            inputs.TryAdd(attribute.Name, SyncEngine.ToExpressionValue(attributeValue, attribute.Type));
+            inputs.Add(attribute.Name, SyncEngine.ToExpressionValue(attributeValue, attribute.Type));
         }
 
-        return inputs;
+        return inputs.Build();
     }
 }

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-07-11 |
-| **Last Updated** | 2026-07-11 |
+| **Last Updated** | 2026-10-13 |
 | **Status** | Complete |
 | **Issue** | [#500](https://github.com/TetronIO/JIM/issues/500) (OWASP Top 10:2025 assessment, gap 5: "DynamicExpresso input path review") |
 
@@ -96,13 +96,14 @@ registers, and nothing else:
   untrusted-author scenarios, but this is a non-issue here: `AttributeAccessor`'s `mv`/`cs` indexer
   (`src/JIM.Models/Expressions/AttributeAccessor.cs`) is **get-only**, so there is no settable member for an
   assignment expression to target. Proven by `Evaluate_AssignToMvIndexer_ThrowsParseException`.
-- No `LambdaExpressions`, no `CaseInsensitive` interpreter option, no `LateBindObject`. JIM's own attribute-name
-  case-insensitivity is implemented in `AttributeAccessor`, not via a DynamicExpresso interpreter option.
+- **`LateBindObject` is on** (#2053; see "Late binding" below). No `LambdaExpressions`, no `CaseInsensitive`
+  interpreter option. JIM's own attribute-name case-insensitivity is implemented in `AttributeAccessor`, not via a
+  DynamicExpresso interpreter option.
 
 On top of this, `RegisterBuiltInFunctions` (`DynamicExpressoEvaluator.cs`) registers JIM's own functions, all
 pure, side-effect-free, in-process transforms: string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`,
 `Right`, `Substring`, `Replace`, `StartsWith`, `EndsWith`, `Length`, `IsNullOrEmpty`, `IsNullOrWhitespace`),
-containment (`Contains`, `CollectionContains`), collection (`Split`, `Join`), conditional (`Coalesce`, `IIF`,
+containment (`Contains`), multi-valued (`Count`, `Min`, `Max`, `Where`, `Split`, `Join`), conditional (`Coalesce`, `IIF`,
 `Eq`), date (`Now`, `Today`, `FormatDate`, `ParseDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
 helper (`EscapeDN`), password generation (`RandomPassword`, `RandomPassphrase`, both backed by
 `RandomNumberGenerator`, not `System.Random`), and AD `userAccountControl` bitwise helpers (`EnableUser`,
@@ -113,8 +114,9 @@ exists).
 
 The `mv` and `cs` parameters passed into every evaluation (`Evaluate`, `Test`, and the typed parse in
 `Validate`) are `AttributeAccessor` instances: a case-insensitive, get-only dictionary wrapper. They expose
-exactly one indexer (`this[string attributeName]`) and a `HasAttribute` / `AttributeNames` pair; there is no
-route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any other JIM type. The
+exactly one indexer (`this[string attributeName]`); the undocumented `HasAttribute` / `AttributeNames` pair was removed
+in #2053. There is no route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any
+other JIM type. The
 indexer hands out a copy of a Binary value (a `byte[]`), because an array is mutable through its own members
 (`SetValue`): an expression can change its copy, never the attribute value it came from
 (`FlowInboundAttributes_ExpressionChangesABinaryInput_StoredBytesAreUnchanged`, `SyncEngineExpressionResultTests.cs`).
@@ -178,20 +180,75 @@ DynamicExpresso's source alone:
   no SQL, shell, or DOM surface at all, so these strings are just data) or evaluate as ordinary nested function
   calls with no special handling required.
 
-**Open finding (not hardened, by design):** `Evaluate_BareGetType_ParsesAndReturnsTypeInstance` shows that
-`mv["a"].GetType()` **does** parse and evaluate successfully, returning a `System.Type` instance, because the
-`DisableReflectionVisitor` only rejects a call or member access whose receiver is *already* statically typed as
-`Type`/`MemberInfo` (chained reflection); the initial `.GetType()` call receives on `object`, so it is not
-itself blocked, only the reflection *chained onto its result* is (proven by the tests above). This matches
-DynamicExpresso's own documented behaviour (`Type.Name` is explicitly the one reflection member left available)
-and grants no further capability within the same expression: every attempt to chain a method call or another
-member access onto the returned `Type` in the tests above was blocked. It is recorded here as an explicit,
-non-hardened finding per this review's brief, rather than patched unilaterally: whether returning a bare `Type`
-value is worth restricting further is a design call for the validator, not something to fix on this branch's own
-initiative.
+**Bare `GetType()` and `typeof` (closed 2026-10-13, #2053).** This review first recorded as an open finding that
+`mv["a"].GetType()` parsed and returned a `System.Type`, because `DisableReflectionVisitor` only rejects a member
+chained onto a receiver already typed `Type`. Late binding made that worth closing (see "Late binding" below), and
+JIM's own `ReflectionRefusingVisitor` now refuses every reflection-typed part of an expression at parse time, so
+`GetType()`, `typeof(...)` and `Type.Name` are all refused (`Evaluate_BareGetType_IsRefused`). Nothing in an attribute
+expression has a use for them.
 
-**Summary: every deliberate escape attempt exercised by this review failed to parse or evaluate**, with the one
-narrow, non-exploitable, explicitly-flagged exception above.
+**Summary: every deliberate escape attempt exercised by this review failed to parse or evaluate.**
+
+## Late binding
+
+**Reviewed 2026-10-13 for #2053, against DynamicExpresso 2.19.6; adopted.** A Multi-Valued attribute reads as every
+value it holds, so an accessor returns either one value or several (`ExpressionValues`), and a transform such as
+`Upper()` returns whichever it was given. Its result is therefore typed `object`, and without late binding
+`Upper(a) + Upper(b)` stops parsing and `Lower(x) == "abc"` silently becomes a reference comparison (always false for
+text built at run time). PRD Phase 2 requirement 8.9 made adopting `InterpreterOptions.LateBindObject` conditional on
+this review; the fallback, had it failed, was refusing those shapes at save time.
+
+**What late binding opens.** A value typed `object` is bound with the C# runtime binder while the expression runs, so
+an expression can reach the public instance members of the value's *runtime* type. Those types are a closed set:
+the accessor hands out only `string`, `int`, `long`, `decimal`, `DateTime`, `bool`, `Guid`, `byte[]` (a copy) and
+`ExpressionValues` (references are their identifier as text), and JIM's functions return the same set. None of them
+has a member reaching the filesystem, a process, the network or another object graph; `ExpressionValues` was written
+for this exposure, with a public surface of its values, its count and its operators only.
+
+**The attack, and why late binding needed more than DynamicExpresso's guard.** `DisableReflectionVisitor` refuses a
+member on a receiver *statically* typed `Type` or `MemberInfo`. Under late binding, `GetType()` is still bound
+statically, so a member chained straight onto it is refused at parse time. But any route that re-types the `Type` as
+`object` hands it to the runtime binder, where the parse-time visitor sees a dynamic node rather than a member on a
+`Type`: `IIF(true, cs["a"].GetType(), null).Assembly`, `Coalesce(cs["a"].GetType(), null).Assembly`,
+`((object)cs["a"].GetType()).Assembly`, the same through `Where`, `Min` and `Max`, and one level further
+`....Assembly.GetType("System.IO.File").GetMethod("Exists").Invoke(null, null)` (raised in review by the
+orchestrating session). Tested against the branch before any fix: none of these *ran*, because DynamicExpresso's late
+binder also checks the runtime receiver and throws `ReflectionNotAllowedException`. But `Validate` accepted every one
+of them, so an expression that could only fail was savable, and the safety rested on one check inside a third-party
+binder.
+
+**The closure, in depth.** Each layer below refuses the whole set on its own; together they do not depend on any one
+of them.
+
+1. **Parse time, JIM's visitor.** `ReflectionRefusingVisitor` (added to the interpreter's `Visitors` beside
+   DynamicExpresso's) refuses any part of an expression whose type is `Type`, `MemberInfo`, `Assembly` or `Module`.
+   `GetType()` and `typeof` produce exactly such a part, so a reflection object can never enter an expression, and
+   `Validate` refuses every shape above at save time.
+2. **Parse time, DynamicExpresso's visitor**, unchanged: a member on a `Type`-typed receiver.
+3. **Run time, DynamicExpresso's late binder:** a member on a runtime `Type` receiver.
+4. **Run time, JIM's functions.** Every function that hands a value on (`IIF`, `Coalesce`, every transform, `Eq` and
+   the comparisons, `Count`, `Min`, `Max`, `Join`, `Where`) passes it through `ExpressionValueSets.RefuseReflection`,
+   which refuses a reflection object or a delegate.
+5. **Run time, the result.** `Evaluate` refuses a reflection object or a delegate as the expression's result, so none
+   can reach an Attribute Flow, a match value or a tester.
+
+Proven by `Evaluate_ReflectionThroughAnUntypedPassThrough_IsAnExpressionErrorReturningNoReflectionObject` and
+`Validate_ReflectionThroughAnUntypedPassThrough_IsRejected` over sixteen shapes (each pass-through, the cast, the
+`.GetType("System.IO.File").GetMethod(...).Invoke(...)` chain, and a bare `GetType()`/`typeof` returned as the result),
+by `Evaluate_ReflectionThroughALateBoundValue_ThrowsReflectionNotAllowedException` (chains through a late-bound method
+result, a transform's untyped result, `ExpressionValues` and an element of it, `Split`'s result and a `byte[]` member),
+and by `ExpressionValueSetsTests` for layer 4. Each half was proved to stand alone: with JIM's visitor removed, layers
+3 to 5 still refused every shape at run time (only `Type.Name`, plain text, came back); with layers 4 and 5 disabled,
+the visitor alone refused all of them at parse time. The whole existing escape suite above runs against the
+late-bound interpreter unchanged and still passes.
+
+**What changes for an administrator.** A misspelt member on a value (`cs["a"].Lenght`) now fails while the expression
+runs rather than when it is saved; it is still the one expression error, never a JIM fault
+(`Evaluate_AMemberTheValueDoesNotHave_IsAnExpressionError`). The runtime binder's own `RuntimeBinderException` is
+caught and wrapped as `ExpressionEvaluationException` for that reason. A Binary value inside several values is copied
+on every read, as a single one is (`Evaluate_ChangingTheBytesOfOneOfSeveralBinaryValues_LeavesTheStoredValueAlone`).
+Late binding measured no slower than static binding on a representative mapping (about 0.6 microseconds per
+evaluation against 2.1), so the synchronisation path pays nothing for it.
 
 ## Guardrails added (non-subtractive)
 
@@ -255,9 +312,9 @@ legitimate expression functionality now or in future:
   in future, update the input path inventory table above; no further evaluator-level work is expected to be
   needed, since both guardrails and all "what is blocked" behaviour live in the shared evaluator and apply
   automatically.
-- **Open finding:** `mv["a"].GetType()` (bare, unchained) parses and evaluates, returning a `System.Type`
-  instance; see "What is blocked" above for the detail and why it was left as a documented finding rather than
-  patched.
+- **Late binding:** adopted 2026-10-13 for #2053 after the review above, with reflection refused in depth (five
+  layers, two of them at parse time). This also closed the review's one open finding: a bare `GetType()` or `typeof`
+  is now refused.
 - **Out of scope for this review** (explicitly deferred to other OWASP #500 sub-issues per the delivery plan):
   rate limiting, security response headers/CSP, and `Program.cs` changes generally.
 
