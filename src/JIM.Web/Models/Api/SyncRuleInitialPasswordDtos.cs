@@ -45,7 +45,9 @@ public class SyncRuleInitialPasswordResponse
     public PasswordGenerationPolicyDto CustomPolicy { get; set; } = new();
 
     /// <summary>
-    /// What happens to the password once it is set.
+    /// What happens to the password once it is set. On Active Directory and Samba AD, "Password never expires" follows
+    /// this only where no export has written the account's userAccountControl by the time the password is delivered;
+    /// where one has, the Attribute Flow decides it. Requiring a change at the next sign-in always applies.
     /// </summary>
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; }
 
@@ -189,7 +191,10 @@ public class UpdateSyncRuleInitialPasswordRequest
 
     /// <summary>
     /// What happens to the password once it is set. A Connector that cannot honour the choice reports what it
-    /// applied instead, per account, rather than the request being rejected here.
+    /// applied instead, per account, rather than the request being rejected here. On Active Directory and Samba AD,
+    /// "Password never expires" follows this only where no export has written the account's <c>userAccountControl</c>
+    /// by the time the password is delivered; where one has, the Attribute Flow decides it. Requiring a change at the
+    /// next sign-in always applies.
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
