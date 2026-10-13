@@ -569,10 +569,12 @@
                             ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
                             : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
                         Required="true" SyntaxCheck="@(expression => ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, expression))"
+                        MetaverseAttributeNames="SuggestedMetaverseAttributeNames" ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                         Class="mt-5" />
 
-                    @* ─── Insert attribute (#1750, mockup B): puts mv["..."] or cs["..."] at the caret ─── *@
+                    @* ─── Insert attribute (#1750, mockup B) and Insert function (#2053): put an accessor or a call at the caret ─── *@
                     <div class="mt-1">
+                        <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
                         <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                              ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                              ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -711,10 +713,13 @@
                             MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                             TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
                             StagedSyncRule="SyncRule"
+                            MetaverseAttributeNames="SuggestedMetaverseAttributeNames"
+                            ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                             OnChanged="ScheduleFlowAnalysisAsync">
                             <BaseExpressionTools Context="insertIntoBaseExpression">
                                 @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                                 <div class="mt-1">
+                                    <InsertFunctionMenu OnInsert="insertIntoBaseExpression" />
                                     <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                                          ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                                          ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -1232,6 +1237,20 @@
     /// </summary>
     private IEnumerable<ConnectedSystemObjectTypeAttribute>? InsertableConnectedSystemAttributes =>
         SyncRule.Direction == SyncRuleDirection.Import ? SyncRule.ConnectedSystemObjectType?.Attributes : null;
+
+    /// <summary>
+    /// The names the expression editors suggest inside <c>mv["</c> (#2053): the attributes Insert attribute offers.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedMetaverseAttributeNames =>
+        InsertableMetaverseAttributes?.Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+
+    /// <summary>
+    /// The names the expression editors suggest inside <c>cs["</c> (#2053): as Insert attribute, never a credential
+    /// attribute, since those travel through JIM's password channel rather than Attribute Flow.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedConnectedSystemAttributeNames =>
+        InsertableConnectedSystemAttributes?.Where(candidate => !CredentialAttributes.IsCredentialAttribute(candidate.Name))
+            .Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
 
     private Task InsertIntoExpressionAsync(string accessor) =>
         _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;

@@ -6242,6 +6242,29 @@ html[lang] .jim-password-timeline.mud-timeline {
     cursor: default;
 }
 
+/* Insert function (#2053) reuses the attribute menu's shell and items; each item is the signature over what the
+   function does, so the menu is wider to keep most signatures on one line. */
+.jim-insert-function-menu {
+    min-width: 380px;
+    max-width: min(560px, 90vw);
+}
+
+.jim-insert-function-signature {
+    display: block;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    background: none;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.jim-insert-function-description {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
 /* "Checked for availability in" (generated Attribute Flow form, #242): an excluded Connected System's row steps back,
    but its Include switch keeps full strength, since switching it back on is the one thing to do with that row. */
 .jim-availability-row-excluded td:not(.jim-availability-include) {
