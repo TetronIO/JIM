@@ -89,7 +89,7 @@ internal class FileConnectorImport
                 importObject.ObjectType = _reader.CsvReader.GetField(_objectTypeInfo.ObjectTypeColumnName);
 
             // get the schema object type, so we know what attributes we want to pull from the file.
-            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
             if (objectType == null)
             {
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;

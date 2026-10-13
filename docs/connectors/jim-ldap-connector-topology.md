@@ -27,7 +27,7 @@ Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3
 GET /api/v1/synchronisation/connected-systems/3/directory-servers
 ```
 
-See [`Get-JIMConnectedSystemDirectoryServer`](../powershell/connected-systems.md#get-jimconnectedsystemdirectoryserver) in the PowerShell reference.
+See [`Get-JIMConnectedSystemDirectoryServer`](../powershell/partitions-and-containers.md#get-jimconnectedsystemdirectoryserver) in the PowerShell reference.
 
 ## Domain Controller Discovery and Pinning
 
@@ -78,7 +78,7 @@ Containers are listed by their own name rather than by their full Distinguished 
 !!! warning "Narrowing a Container takes objects out of scope"
     Changing a Container from **Whole subtree** to **This level** stops the objects beneath it being imported. JIM asks you to acknowledge this before saving, because the Connected System Objects already imported from those Containers become obsolete on the next Import Run Profile, and whatever they are joined to is deprovisioned on the next synchronisation. Re-selecting the Containers you still want, before running an import, avoids that.
 
-Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Scope`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer).
+Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Scope`](../powershell/partitions-and-containers.md#set-jimconnectedsystemcontainer).
 
 !!! note "Objects that reference something out of scope"
     A reference attribute pointing at an object outside the imported Containers cannot be resolved, and JIM reports it as an unresolved reference naming Container Scope as the likely cause. Narrowing a Container is a common way to create these; if a group's members live in a Container you have just excluded, either bring that Container back into scope or expect the membership to import incompletely.
@@ -107,7 +107,7 @@ An exclusion survives a rename or a move of the Container, because it is keyed o
 
 A Container can be selected or excluded, never both. An exclusion beneath a **This level** selection is inert, since such a selection reaches no Container beneath it, and the tree therefore never offers one there.
 
-Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer), and previewable before they are made with `excludedContainerIds` on the scope-selection preview endpoint or [`New-JIMConfigurationChangePreview -ExcludedContainerIds`](../powershell/previews.md#new-jimconfigurationchangepreview).
+Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/partitions-and-containers.md#set-jimconnectedsystemcontainer), and previewable before they are made with `excludedContainerIds` on the scope-selection preview endpoint or [`New-JIMConfigurationChangePreview -ExcludedContainerIds`](../powershell/previews.md#new-jimconfigurationchangepreview).
 
 A whole scope of selections and exclusions can also be stated at once as text, which is how a directory with hundreds of Containers is practically managed:
 
@@ -117,7 +117,7 @@ exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
 include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
 ```
 
-See [Stating Container Scope as text](../configuration/partitions-and-containers.md#stating-container-scope-as-text-advanced-mode) for the full syntax, the portal's **Advanced** mode, and the [`Get-`](../powershell/connected-systems.md#get-jimconnectedsystemcontainerscopetext) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md#set-jimconnectedsystemcontainerscopetext) cmdlets.
+See [Stating Container Scope as text](../configuration/partitions-and-containers.md#stating-container-scope-as-text-advanced-mode) for the full syntax, the portal's **Advanced** mode, and the [`Get-`](../powershell/partitions-and-containers.md#get-jimconnectedsystemcontainerscopetext) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/partitions-and-containers.md#set-jimconnectedsystemcontainerscopetext) cmdlets.
 
 ## Directory Tuning for Large Groups (OpenLDAP)
 

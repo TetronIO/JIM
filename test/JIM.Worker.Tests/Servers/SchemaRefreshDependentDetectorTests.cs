@@ -230,6 +230,36 @@ public class SchemaRefreshDependentDetectorTests
         Assert.That(dependents.HasAny, Is.False);
     }
 
+    [Test]
+    public void Detect_ObjectTypeRenamedOnlyInCaseAndAnAttributeRemoved_InvalidatesTheMappingReadingIt()
+    {
+        // The result names the type as the Connector now does ("User"); the snapshot holds it as JIM did ("user").
+        var result = new SchemaRefreshResult { Success = true };
+        result.RenamedObjectTypes.Add(new SchemaNameChange { OldName = "user", NewName = "User" });
+        result.RemovedAttributes["User"] = ["faxNumber"];
+        var rule = ImportRule(11, "HR Users Inbound", _userType);
+        rule.AttributeFlowRules.Add(MappingReading(102, _faxAttr));
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EqualTo(new[] { 102 }));
+    }
+
+    [Test]
+    public void Detect_SchemaHoldsTwoObjectTypesDifferingOnlyInCase_ResolvesEachByItsOwnName()
+    {
+        // A Connected System whose names are case-exact can hold both; detection must not fail on them.
+        var result = new SchemaRefreshResult { Success = true, RemovedObjectTypes = ["computer"] };
+        var rule = ImportRule(10, "Directory Computers Inbound", _computerType);
+        SeedPreRefreshSchema(result);
+        result.PreRefreshSchema.Add(new SchemaRefreshPreRefreshType { Id = 3, Name = "Computer" });
+
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        Assert.That(dependents.InvalidatedSyncRules.Select(r => r.SyncRuleId), Is.EqualTo(new[] { 10 }));
+    }
+
     /// <summary>
     /// The pre-refresh schema snapshot the merge captures in production: the detector resolves removal names
     /// against it, because the merged graph no longer holds removed entries.

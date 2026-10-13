@@ -59,7 +59,7 @@ public class ApiRouteTemplateTests
                 offences.AddRange(
                     from controllerTemplate in controllerTemplates
                     from actionTemplate in actionTemplates
-                    let combined = actionTemplate.StartsWith('/') || actionTemplate.StartsWith("~/")
+                    let combined = actionTemplate.StartsWith('/') || actionTemplate.StartsWith("~/", StringComparison.Ordinal)
                         ? actionTemplate
                         : $"{controllerTemplate}/{actionTemplate}"
                     let duplicates = DuplicateParameterNames(combined)

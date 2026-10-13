@@ -2246,7 +2246,7 @@ internal class SeedingServer
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                 AttributeDependency = new ExampleDataTemplateAttributeDependency { 
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
-                    ComparisonType = ComparisonType.Equals,
+                    ComparisonType = SearchComparisonType.Equals,
                     StringValue = "Distribution"
                 },
                 PopulatedValuesPercentage = 100,

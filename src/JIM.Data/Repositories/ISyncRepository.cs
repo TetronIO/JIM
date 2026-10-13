@@ -1177,6 +1177,12 @@ public interface ISyncRepository
     /// </summary>
     Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
+    /// <summary>
+    /// Persists ConnectedSystemObjectChange records that belong to no execution item: the deletion records of
+    /// Connected System Objects deleted quietly, whose disconnection was recorded when it happened.
+    /// </summary>
+    Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes);
+
     #endregion
 
     #region Synchronisation Rules and Configuration

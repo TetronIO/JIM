@@ -8,31 +8,54 @@ using JIM.Models.Enums;
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
-/// Flat projection of a Connected System Object change record for display and API consumption.
-/// Includes denormalised initiator and Run Profile context so consumers can render a row
-/// without further joins, and a list of attribute-level changes.
+/// One change to a Connected System Object: when it happened, who or what made it, and what it changed.
 /// </summary>
 public class CsoChangeHistoryDto
 {
+    /// <summary>
+    /// The ID of the change.
+    /// </summary>
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// What kind of change it was.
+    /// </summary>
     public ObjectChangeType ChangeType { get; set; }
 
+    /// <summary>
+    /// When the change was made (UTC).
+    /// </summary>
     public DateTime ChangeTime { get; set; }
 
+    /// <summary>
+    /// What made the change.
+    /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
 
+    /// <summary>
+    /// The ID of the user or API key that made the change; null when the System did.
+    /// </summary>
     public Guid? InitiatedById { get; set; }
 
+    /// <summary>
+    /// The name of whoever made the change.
+    /// </summary>
     public string? InitiatedByName { get; set; }
 
+    /// <summary>
+    /// The ID of the Run Profile execution item that recorded the change, when a Run Profile made it; null
+    /// otherwise.
+    /// </summary>
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
-    /// The Run Profile name (taken from <c>Activity.TargetName</c>).
+    /// The name of the Run Profile that made the change; null when none did.
     /// </summary>
     public string? RunProfileName { get; set; }
 
+    /// <summary>
+    /// The attributes the change touched, each with the values it added and removed.
+    /// </summary>
     public List<CsoAttributeChangeDto> AttributeChanges { get; set; } = new();
 }
 

@@ -88,7 +88,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        // Configuration names ignore case (#2051); an exact name wins over one differing only in case.
+        var nameLower = name.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectorDefinitions
+            .Where(cd => cd.Name.ToLower() == nameLower)
+            .Select(cd => cd.Name)
+            .ToListAsync();
+        var resolvedName = ConfigurationName.Resolve(candidateNames, name);
+        if (resolvedName == null)
+            return null;
+
+        return await query.SingleOrDefaultAsync(cd => cd.Name == resolvedName);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -1248,7 +1258,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(cso =>
                 // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
@@ -2253,6 +2263,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the object's own Object Type, where an exact name
+        // wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.Id == connectedSystemObjectId)
+            .SelectMany(cso => cso.Type.Attributes)
+            .Where(a => a.Name.ToLower() == attributeNameLower)
+            .Select(a => a.Name)
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
             .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
                          && av.Attribute.Name == attributeName);
@@ -5373,7 +5394,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(pe =>
                 (pe.LastErrorMessage != null && EF.Functions.ILike(pe.LastErrorMessage, searchPattern)) ||
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
@@ -5627,13 +5648,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the attributes this Pending Export changes, where an
+        // exact name wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId && avc.Attribute.Name.ToLower() == attributeNameLower)
+            .Select(avc => avc.Attribute.Name)
+            .Distinct()
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId
                           && avc.Attribute.Name == attributeName);
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
@@ -5730,7 +5761,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
                 || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
@@ -7119,7 +7150,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // searches.
         if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            var searchPattern = $"%{externalIdSearch}%";
+            var searchPattern = LikePattern.Contains(externalIdSearch);
             query = query.Where(c =>
                 c.DeletedObjectExternalId != null &&
                 EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));

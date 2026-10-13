@@ -22,6 +22,12 @@ public class ExpressionContext
     public AttributeAccessor Cs { get; }
 
     /// <summary>
+    /// The instant <c>Now()</c> and <c>Today()</c> read, in UTC; null for the real time. A test run "as of" a moment
+    /// sets it, so a time-dependent Expression gives the result it would give then. Synchronisation leaves it null.
+    /// </summary>
+    public DateTime? NowUtc { get; init; }
+
+    /// <summary>
     /// Creates a new expression context with the specified attribute values.
     /// </summary>
     /// <param name="metaverseAttributes">Dictionary of Metaverse Object attribute values keyed by attribute name.</param>

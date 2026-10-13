@@ -4,66 +4,54 @@
 function Set-JIMConnectedSystemAttribute {
     <#
     .SYNOPSIS
-        Updates properties of one or more Connected System Attributes in JIM.
+        Changes attributes of a Connected System Object Type.
 
     .DESCRIPTION
-        Updates properties of attributes within a Connected System's schema.
-        Use this to mark attributes as selected for management, or to designate
-        them as external identifiers.
-
-        Supports two modes:
-        - Single: Update a single attribute by ID
-        - Bulk: Update multiple attributes in a single operation with a hashtable
+        Changes one attribute, or in bulk several at once with -AttributeUpdates: whether JIM manages it, whether it
+        identifies objects, and where the Connector allows it, its data type.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type that contains the attribute(s).
+        The ID of the Object Type the attributes belong to.
 
     .PARAMETER AttributeId
-        The unique identifier of the Attribute to update (Single mode).
+        The ID of the attribute to change.
 
     .PARAMETER AttributeUpdates
-        A hashtable of attribute updates for bulk operations.
-        Keys are attribute IDs, values are hashtables with properties to update.
-        Example: @{ 10 = @{ selected = $true }; 11 = @{ selected = $true } }
+        The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings
+        to change (selected, isExternalId, isSecondaryExternalId, caseExact); the examples show one.
 
     .PARAMETER Selected
-        Whether the attribute should be managed by JIM (Single mode).
-        When set to $true, JIM will synchronise this attribute.
+        Whether JIM imports and exports the attribute.
 
     .PARAMETER IsExternalId
-        Whether this attribute is the primary external identifier for objects (Single mode).
-        This is typically a unique identifier like objectGUID or employeeId.
+        Whether the attribute uniquely and permanently identifies an object of this type, such as objectGUID or an
+        employee ID.
 
     .PARAMETER IsSecondaryExternalId
-        Whether this attribute is a secondary external identifier (Single mode).
-        This is typically used for attributes like distinguishedName (DN) in LDAP systems.
+        Whether the Connected System also identifies an object by the attribute, as an LDAP directory does by
+        distinguished name.
 
     .PARAMETER Type
-        Overrides the data type schema discovery inferred for the attribute (Single mode).
+        Replaces the data type inferred from the schema. Accepted only where the Connector says its schema cannot
+        state a type for certain: a delimited file names no types, and Oracle has one numeric type, so a NUMBER
+        column may be a whole number, a counter or a fractional figure. Refused once a Synchronisation Rule uses the
+        attribute or it holds values. Integer is the Number data type, as in New-JIMMetaverseAttribute. Cannot be
+        set with -AttributeUpdates.
 
-        Accepted only where the Connector declares that its schema cannot state a type definitively:
-        a delimited file names no types at all, and Oracle has a single numeric type, so a NUMBER
-        column may be a whole number, a counter or a fractional figure. Refused once the attribute is
-        referenced by a Synchronisation Rule or holds values, because changing the type would
-        reinterpret data already imported under the old one.
-
-        'Integer' is the friendly name for the Number data type, matching New-JIMMetaverseAttribute.
-
-        There is no bulk equivalent: the bulk endpoint refuses a request carrying a data type.
+    .PARAMETER CaseExact
+        Whether the attribute's values are case-exact: $true when values differing only in case identify different
+        things, $false when they are the same value. Only a Text attribute can be declared case-exact. Setting it
+        makes the declaration the administrator's, so a schema refresh keeps it. Offered on every Connector.
 
     .PARAMETER PassThru
-        If specified, returns the updated attribute(s).
+        Returns the attribute as changed, or with -AttributeUpdates, the outcome of the change.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Attribute object(s).
-        In Bulk mode, returns a response object containing:
-        - activityId: The ID of the activity created for this bulk operation
-        - updatedCount: Number of attributes successfully updated
-        - updatedAttributes: List of updated attributes
-        - errors: Any errors that occurred (null if none)
+        With -PassThru, the attribute as changed, or with -AttributeUpdates, what was changed and what failed;
+        otherwise nothing. An attribute -AttributeUpdates could not change is written to the warning stream.
 
     .EXAMPLE
         Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 10 -Selected $true
@@ -108,12 +96,19 @@ function Set-JIMConnectedSystemAttribute {
         Corrects an Oracle NUMBER column that schema discovery read as a Decimal, so it can flow into
         a built-in whole-number Metaverse Attribute such as Employee Number without an expression.
 
+    .EXAMPLE
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 12 -CaseExact $true
+
+        Declares that an attribute's values are case-exact, so JBloggs and jbloggs are different values. A schema
+        refresh keeps this declaration rather than restating what the Connected System's schema says.
+
     .LINK
         Get-JIMConnectedSystem
         Set-JIMConnectedSystemObjectType
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'Single')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemAttributeDto', ParameterSetName = 'Single')]
+    [OutputType('JIM.BulkUpdateConnectedSystemAttributesResponse', ParameterSetName = 'Bulk')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'Single')]
         [Parameter(Mandatory, ParameterSetName = 'Bulk')]
@@ -142,6 +137,9 @@ function Set-JIMConnectedSystemAttribute {
         [Parameter(ParameterSetName = 'Single')]
         [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
+
+        [Parameter(ParameterSetName = 'Single')]
+        [bool]$CaseExact,
 
         [switch]$PassThru
     )
@@ -214,6 +212,10 @@ function Set-JIMConnectedSystemAttribute {
                 # The ValidateSet exposes 'Integer' as a friendly alias for the AttributeDataType member
                 # 'Number'; the API takes the enum member name.
                 $body.type = if ($Type -eq 'Integer') { 'Number' } else { $Type }
+            }
+
+            if ($PSBoundParameters.ContainsKey('CaseExact')) {
+                $body.caseExact = $CaseExact
             }
 
             if ($body.Count -eq 0) {

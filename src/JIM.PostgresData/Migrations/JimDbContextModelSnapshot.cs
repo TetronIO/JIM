@@ -3553,6 +3553,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributePlurality")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("CaseExact")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CaseExactSetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ClassName")
                         .HasColumnType("text");
 

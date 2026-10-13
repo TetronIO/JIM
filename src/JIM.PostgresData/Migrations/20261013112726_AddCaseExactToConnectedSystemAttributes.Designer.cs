@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261013083134_CausalTimelineIndexes")]
-    partial class CausalTimelineIndexes
+    [Migration("20261013112726_AddCaseExactToConnectedSystemAttributes")]
+    partial class AddCaseExactToConnectedSystemAttributes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -468,10 +468,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId");
 
                     b.HasIndex("ExternalIdSnapshot");
-
-                    b.HasIndex("MetaverseObjectId")
-                        .HasDatabaseName("IX_ActivityRunProfileExecutionItems_MetaverseObjectId")
-                        .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
 
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
@@ -986,10 +982,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
-
-                    b.HasIndex("DeletedMetaverseObjectId")
-                        .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
-                        .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
 
                     b.HasIndex("DeletedObjectTypeId");
 
@@ -3413,10 +3405,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId");
 
-                    b.HasIndex("DeletedConnectedSystemObjectId")
-                        .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
-                        .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
-
                     b.HasIndex("DeletedObjectExternalIdAttributeValueId");
 
                     b.HasIndex("DeletedObjectTypeId");
@@ -3555,6 +3543,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("AttributePlurality")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("CaseExact")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CaseExactSetByAdministrator")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ClassName")
                         .HasColumnType("text");

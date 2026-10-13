@@ -97,5 +97,5 @@ A deleted object stays explorable: its timeline is read through the records its 
 
 - [Activities](activities.md): execution items and the causality panel's views.
 - [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort; and `-ConnectedSystemObjectId` or `-MetaverseObjectId`, which return an object's causal timeline.
-- [PowerShell: Connected Systems](../powershell/connected-systems.md): `Get-JIMPendingExport -QueuedBy`, the runs that queued a Pending Export.
+- [PowerShell: Pending Exports](../powershell/pending-exports.md): `Get-JIMPendingExport -QueuedBy`, the runs that queued a Pending Export.
 - [Deprovisioning Action](deprovisioning.md) and [grace period](metaverse.md#grace-period): the settings the deletion cards name.

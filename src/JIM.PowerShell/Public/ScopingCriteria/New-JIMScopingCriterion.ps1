@@ -9,7 +9,7 @@ function New-JIMScopingCriterion {
     .DESCRIPTION
         Adds a criterion to a scoping criteria group: one attribute compared with one value. Name a Metaverse
         attribute for an export Synchronisation Rule and a Connected System attribute for an import one, and give
-        the value in the parameter for the attribute's data type.
+        the value in the parameter for the attribute's data type; HasValue and HasNoValue take no value.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule.
@@ -32,11 +32,14 @@ function New-JIMScopingCriterion {
         The name of the Connected System attribute to test, instead of its ID.
 
     .PARAMETER ComparisonType
-        How the attribute is compared with the value. The Not forms are met when no value of the attribute matches;
-        the others when any value does.
+        How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
+        none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a
+        value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in
+        -StringValue, for Text attributes.
 
     .PARAMETER StringValue
-        The value to compare a Text attribute with.
+        The value to compare a Text attribute with, or the regular expression for MatchesPattern and
+        NotMatchesPattern.
 
     .PARAMETER IntValue
         The value to compare a Number attribute with.
@@ -105,6 +108,16 @@ function New-JIMScopingCriterion {
 
         Creates a criterion that filters for Active = true.
 
+    .EXAMPLE
+        New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -ConnectedSystemAttributeName 'employeeType' -ComparisonType HasValue
+
+        Creates a criterion for an import Synchronisation Rule that keeps only objects holding an employeeType.
+
+    .EXAMPLE
+        New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -ConnectedSystemAttributeName 'mail' -ComparisonType MatchesPattern -StringValue '^[a-z.]+@example\.org$' -CaseSensitive $false
+
+        Creates a criterion that keeps only objects with a mail address in the example.org domain, ignoring case.
+
     .LINK
         Get-JIMScopingCriteria
         Remove-JIMScopingCriterion
@@ -133,7 +146,8 @@ function New-JIMScopingCriterion {
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
-                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals')]
+                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+                     'HasValue', 'HasNoValue', 'MatchesPattern', 'NotMatchesPattern')]
         [string]$ComparisonType,
 
         [Parameter()]

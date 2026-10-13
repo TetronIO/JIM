@@ -4,101 +4,81 @@
 function New-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Creates a new Synchronisation Rule Mapping (attribute flow rule) in JIM.
+        Adds an Attribute Flow to a Synchronisation Rule.
 
     .DESCRIPTION
-        Creates a new attribute flow mapping for a Synchronisation Rule.
-        For Import rules, this maps Connected System attributes to Metaverse attributes.
-        For Export rules, this maps Metaverse attributes to Connected System attributes.
-        Alternatively, an expression can be used as the source for dynamic value generation.
+        Adds an Attribute Flow (mapping) to a Synchronisation Rule. On an import rule it writes a Metaverse
+        attribute from Connected System attributes or an expression; on an export rule it writes a Connected System
+        attribute from Metaverse attributes or an expression. With -Generate, its value is a generated value: a base
+        expression plus a uniqueness token.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule to add the mapping to.
-        Also accepts pipeline input via the Id property.
+        The ID of the Synchronisation Rule to add the mapping to.
 
     .PARAMETER TargetMetaverseAttributeId
-        For Import rules: The ID of the Metaverse attribute that will receive the value.
+        On an import rule, the ID of the Metaverse attribute the mapping writes.
 
     .PARAMETER TargetConnectedSystemAttributeId
-        For Export rules: The ID of the Connected System attribute that will receive the value.
+        On an export rule, the ID of the Connected System attribute the mapping writes.
 
     .PARAMETER SourceConnectedSystemAttributeId
-        For Import rules: The ID of the Connected System attribute to use as the source.
-        Can be a single value or an array for multiple sources.
-        Mutually exclusive with -Expression.
+        On an import rule, the IDs of the Connected System attributes the mapping reads. Cannot be used with
+        -Expression.
 
     .PARAMETER SourceMetaverseAttributeId
-        For Export rules: The ID of the Metaverse attribute to use as the source.
-        Can be a single value or an array for multiple sources.
-        Mutually exclusive with -Expression.
+        On an export rule, the IDs of the Metaverse attributes the mapping reads. Cannot be used with -Expression.
 
     .PARAMETER MissingInputBehaviour
-        For expression mappings: what to do when an attribute the expression reads has no value on the object
-        being synchronised. Omit for EvaluateAnyway, which evaluates the expression regardless and is what JIM
-        has always done.
-        - EvaluateAnyway: evaluate with the input absent and contribute whatever it returns.
-        - ContributeNoValue: do not evaluate; contribute nothing, resolved by Attribute Priority. Not an error.
-        - FailMapping: do not evaluate; record an ExpressionMissingInput error. The object's other attributes
-          still flow.
-        - FailObject: do not evaluate anything for the object; it is errored and left untouched.
+        On an expression mapping, what happens when an attribute the expression reads has no value: EvaluateAnyway
+        runs it regardless and contributes what it returns; ContributeNoValue skips it and contributes nothing, so
+        Attribute Priority decides; FailMapping skips it and records an error, while the object's other attributes
+        still flow; and FailObject leaves the whole object untouched and errored. EvaluateAnyway when omitted.
 
     .PARAMETER Expression
-        An expression to evaluate for the source value.
-        Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
-        Example: '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"'
+        The expression the mapping evaluates, reading attributes as mv["Name"] and cs["Name"]: for example '"CN=" +
+        EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"'. With -Generate, the base value the token is
+        added to.
 
     .PARAMETER PreserveWhitespace
-        For import mappings only. By default JIM treats a whitespace-only or empty imported text value as no
-        value (it does not flow, and clears any existing Metaverse value). Use this switch to preserve
-        whitespace as a literal value instead.
+        On an import mapping, keeps a text value that is empty or only whitespace as a value. Without it, such a
+        value counts as no value: it does not flow, and it clears the Metaverse attribute.
 
     .PARAMETER TrimWhitespace
-        For import mappings only. Removes leading and trailing whitespace from the imported text value.
+        On an import mapping, removes leading and trailing whitespace from a text value.
 
     .PARAMETER CollapseInternalWhitespace
-        For import mappings only. Collapses runs of internal whitespace down to a single space.
+        On an import mapping, collapses each run of whitespace inside a text value to one space.
 
     .PARAMETER CaseNormalisation
-        For import mappings only. Normalises the case of the imported text value: None (default), Upper, Lower
-        or Title.
+        On an import mapping, the case a text value is converted to.
 
     .PARAMETER NullIsValue
-        For import mappings only. When this Synchronisation Rule applies to a Connected System Object that is
-        joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value":
-        clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor.
-        A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope)
-        is skipped regardless. Off by default. Change it on an existing mapping with
-        Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority.
+        On an import mapping, makes no value authoritative: when the rule applies to a joined, in-scope Connected
+        System Object that has no value, the Metaverse attribute is cleared rather than taken from a lower-priority
+        mapping. Change it later with Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority.
 
     .PARAMETER InitialExportOnly
-        For export mappings only. When set, the mapping only flows during the initial provisioning (Create)
-        export; afterwards the target attribute is unmanaged by JIM on that Connected System Object and
-        Drift Correction does not re-assert it.
+        On an export mapping, writes the attribute only when the Connected System Object is created; after that JIM
+        leaves it alone, and Drift Correction does not put it back.
 
     .PARAMETER Enabled
-        Whether the mapping is evaluated by synchronisation from the moment it is created. Omit to create the
-        mapping enabled (the server default). Supply $false to create it disabled, so it can be ordered and
-        reviewed before it starts flowing values; a disabled mapping is skipped in both directions until it
-        is re-enabled with Set-JIMSyncRuleMapping -Enabled $true.
+        Whether the mapping takes part in synchronisation from the start. $false creates it disabled, so it can be
+        put in order and reviewed first; enable it later with Set-JIMSyncRuleMapping.
 
     .PARAMETER KeepUnique
-        For an Expression mapping whose value is built from a generated value (an Email built from a generated
-        Account Name): whether a target's refusal of that value as already in use is corrected by correcting the
-        generated value. Omit to keep the server default ($true). Supply $false so such a refusal is reported as
-        an ordinary export error and the generated value is left alone. Refused for a generated mapping.
+        On an Expression mapping whose value is built from a generated value (an Email built from a generated
+        Account Name), whether a target refusing the value as already in use is fixed by correcting the generated
+        value. $false reports the refusal as an ordinary export error instead. Not accepted on a generated mapping.
 
     .PARAMETER Generate
-        Makes this a "Generated Value" mapping (Unique Value Generation, #242): the mapping's value is its base
-        expression (optional; supply with -Expression) plus a uniqueness token. Requires either
-        -TargetMetaverseAttributeId (an import mapping) or -TargetConnectedSystemAttributeId (an export
-        mapping). Collision Remediation is not configurable from any surface in this release.
+        Makes the mapping a generated value: a base value from -Expression, which a Sequence or Random token can do
+        without, plus a uniqueness token. Give -TargetMetaverseAttributeId for an import mapping, or
+        -TargetConnectedSystemAttributeId for an export one.
 
     .PARAMETER TokenKind
-        Which uniqueness token the mapping appends. Omit for OnlyIfTaken (the server default): the base value
-        is tried first, and only suffixed when it is already taken.
-        - OnlyIfTaken: try the base value; append a collision suffix only when needed. Requires -Expression.
-        - Sequence: always append the next number from the target attribute's counter. Never reused.
-        - Random: always append a cryptographically random token (-RandomFormat, -RandomLength).
+        The uniqueness token: OnlyIfTaken tries the base value first and adds a suffix only when it is taken, and
+        needs -Expression; Sequence adds the next number from the attribute's counter, never reused; Random adds a
+        random token (see -RandomFormat). OnlyIfTaken when omitted.
 
     .PARAMETER SuffixStyle
         OnlyIfTaken only: whether the collision suffix is a Number or a Letter. Omit for Number.
@@ -136,8 +116,8 @@ function New-JIMSyncRuleMapping {
         separator. Never valid for a Number target.
 
     .PARAMETER AttemptLimit
-        The maximum number of candidates tried, per object per synchronisation run, before generation fails
-        hard for that object. Omit for 1000.
+        How many candidates are tried for one object in one synchronisation run before generation fails for it. 1000
+        when omitted.
 
     .PARAMETER NeverReuse
         Whether a value whose assignment is deleted is retired and never issued again by this flow. Omit for
@@ -160,22 +140,17 @@ function New-JIMSyncRuleMapping {
         System the value is exported to. Get-JIMSyncRuleMapping's Generation.Participants lists them.
 
     .OUTPUTS
-        PSCustomObject representing the created Synchronisation Rule Mapping. A generated mapping's Generation
-        property carries its uniqueness token settings, Generation.Exclusions (the excluded Connected System
-        IDs) and Generation.Participants (each Connected System the value is exported to, and how it is checked
-        there; see Get-JIMSyncRuleMapping); Generation.SequenceSkippedAhead is present only when -SequenceStart
-        raised the target attribute's counter on this save. Warnings lists any non-blocking
-        warnings the save raised (empty when there were none); each is also written with Write-Warning.
+        The mapping created. Any warnings the save raised are written to the warning stream as well.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10
 
-        Creates an import mapping that flows data from CS attribute 10 to MV attribute 5.
+        Creates an import mapping that flows Connected System attribute 10 into Metaverse attribute 5.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8
 
-        Creates an export mapping that flows data from MV attribute 8 to CS attribute 15.
+        Creates an export mapping that flows Metaverse attribute 8 out to Connected System attribute 15.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=domain,DC=local"'
@@ -253,7 +228,7 @@ function New-JIMSyncRuleMapping {
         Test-JIMExpression
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleMappingDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ImportAttribute')]
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ImportExpression')]
