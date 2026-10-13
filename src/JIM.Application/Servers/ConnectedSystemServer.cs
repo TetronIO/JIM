@@ -2392,22 +2392,20 @@ public partial class ConnectedSystemServer
     /// </summary>
     private static (List<int> RemovedObjectTypeIds, List<int> RemovedAttributeIds) ResolveRemovedSchemaIds(SchemaRefreshResult previewResult)
     {
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
+        // The result names a type as the Connector now does; FindPreRefreshType follows a case-only rename back to
+        // the snapshot's name (#2051). Removed attribute names are the names JIM held, so they match exactly.
         var removedObjectTypeIds = previewResult.RemovedObjectTypes
-            .Where(preRefreshTypesByName.ContainsKey)
-            .Select(name => preRefreshTypesByName[name].Id)
+            .Select(previewResult.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
             .ToList();
 
         var removedAttributeIds = previewResult.RemovedAttributes
-            .Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key))
-            .SelectMany(kvp =>
-            {
-                var attributeNames = kvp.Value.ToHashSet();
-                return preRefreshTypesByName[kvp.Key].Attributes
-                    .Where(attribute => attributeNames.Contains(attribute.Name))
-                    .Select(attribute => attribute.Id);
-            })
+            .Select(kvp => (Type: previewResult.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value.ToHashSet(StringComparer.Ordinal)))
+            .Where(entry => entry.Type != null)
+            .SelectMany(entry => entry.Type!.Attributes
+                .Where(attribute => entry.AttributeNames.Contains(attribute.Name))
+                .Select(attribute => attribute.Id))
             .ToList();
 
         return (removedObjectTypeIds, removedAttributeIds);
@@ -2427,9 +2425,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(previewResult);
 
         var impact = new SchemaRefreshRemovalImpact();
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
-        foreach (var type in previewResult.RemovedObjectTypes.Where(preRefreshTypesByName.ContainsKey).Select(name => preRefreshTypesByName[name]))
+        foreach (var type in previewResult.RemovedObjectTypes.Select(previewResult.FindPreRefreshType).OfType<SchemaRefreshPreRefreshType>())
         {
             impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact
             {
@@ -2439,17 +2435,21 @@ public partial class ConnectedSystemServer
             });
         }
 
-        foreach (var kvp in previewResult.RemovedAttributes.Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key)))
+        foreach (var kvp in previewResult.RemovedAttributes)
         {
-            var type = preRefreshTypesByName[kvp.Key];
-            var attributeNames = kvp.Value.ToHashSet();
+            // FindPreRefreshType follows a case-only rename of the type back to the snapshot's name (#2051).
+            var type = previewResult.FindPreRefreshType(kvp.Key);
+            if (type == null)
+                continue;
+
+            var attributeNames = kvp.Value.ToHashSet(StringComparer.Ordinal);
             foreach (var attribute in type.Attributes.Where(attribute => attributeNames.Contains(attribute.Name)))
             {
                 impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact
                 {
                     AttributeId = attribute.Id,
                     AttributeName = attribute.Name,
-                    ObjectTypeName = type.Name,
+                    ObjectTypeName = kvp.Key,
                     StoredValueCount = await Application.Repository.ConnectedSystems.GetConnectedSystemAttributeValueCountAsync(connectedSystemId, attribute.Id)
                 });
             }
@@ -2712,8 +2712,10 @@ public partial class ConnectedSystemServer
 
         // Keep track of existing object types for merging and change tracking
         var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        // Configuration names ignore case (#2051): an Object Type the Connector now reports under a name differing
+        // only in case is the one JIM already holds, and keeps its id.
+        var existingObjectTypesBySchemaName = PairBySchemaName(schema.ObjectTypes.Select(ot => ot.Name), existingObjectTypes, ot => ot.Name);
 
         // The Object Types JIM imports entries of: a classification change can only move entries between these (#2049).
         var selectedObjectTypeNames = existingObjectTypes
@@ -2728,9 +2730,9 @@ public partial class ConnectedSystemServer
         var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
 
         // Track removed object types
-        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
+        foreach (var removedObjectType in existingObjectTypes.Except(existingObjectTypesBySchemaName.Values))
         {
-            result.RemovedObjectTypes.Add(removedObjectTypeName);
+            result.RemovedObjectTypes.Add(removedObjectType.Name);
         }
 
         foreach (var schemaObjectType in schema.ObjectTypes)
@@ -2738,17 +2740,23 @@ public partial class ConnectedSystemServer
             schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
 
             // Try to find an existing object type with the same name
-            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+            var existingObjectType = existingObjectTypesBySchemaName.GetValueOrDefault(schemaObjectType.Name);
 
             ConnectedSystemObjectType connectedSystemObjectType;
             if (existingObjectType != null)
             {
                 // Update existing object type, preserving its ID and merging attributes
+                if (existingObjectType.Name != schemaObjectType.Name)
+                {
+                    result.RenamedObjectTypes.Add(new SchemaNameChange { OldName = existingObjectType.Name, NewName = schemaObjectType.Name });
+                    existingObjectType.Name = schemaObjectType.Name;
+                }
+
                 result.UpdatedObjectTypes.Add(schemaObjectType.Name);
                 connectedSystemObjectType = existingObjectType;
                 var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+                var existingAttributesBySchemaName = PairBySchemaName(schemaObjectType.Attributes.Select(a => a.Name), existingAttributes, a => a.Name);
+                var matchedAttributes = existingAttributesBySchemaName.Values.ToHashSet();
 
                 // Attributes an administrator's selected auxiliary classes contribute are not in the discovered
                 // schema for this type, because an RFC 4512 directory attaches an auxiliary class to an entry rather
@@ -2759,9 +2767,9 @@ public partial class ConnectedSystemServer
                 connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
 
                 // Track removed attributes for this object type
-                var removedAttributeNames = existingAttributeNames
-                    .Except(newAttributeNames)
-                    .Except(contributedAttributes.Select(a => a.Name))
+                var removedAttributeNames = existingAttributes
+                    .Where(a => !matchedAttributes.Contains(a) && !contributedAttributes.Contains(a))
+                    .Select(a => a.Name)
                     .ToList();
                 if (removedAttributeNames.Count > 0)
                 {
@@ -2770,14 +2778,23 @@ public partial class ConnectedSystemServer
 
                 // Track added attributes for this object type
                 var addedAttributeNames = new List<string>();
+                var renamedAttributes = new List<SchemaNameChange>();
 
                 foreach (var schemaAttribute in schemaObjectType.Attributes)
                 {
                     // Try to find existing attribute by name
-                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                    var existingAttribute = existingAttributesBySchemaName.GetValueOrDefault(schemaAttribute.Name);
 
                     if (existingAttribute != null)
                     {
+                        // A case-only rename keeps the row, and so every mapping referring to it, and takes the
+                        // Connector's casing (#2051).
+                        if (existingAttribute.Name != schemaAttribute.Name)
+                        {
+                            renamedAttributes.Add(new SchemaNameChange { OldName = existingAttribute.Name, NewName = schemaAttribute.Name });
+                            existingAttribute.Name = schemaAttribute.Name;
+                        }
+
                         // Update existing attribute properties but preserve the ID. Definition changes (plurality
                         // and data type) are recorded on the result before being applied: they were applied
                         // silently for years, and a restated definition can invalidate an Attribute Flow mapping
@@ -2851,12 +2868,17 @@ public partial class ConnectedSystemServer
                 // Put the auxiliary contributions back, as the rows they already were. A directory that has since
                 // declared one of them on the structural class itself wins: that attribute is now native, and the
                 // discovery pass above has already carried its row across.
-                foreach (var contributedAttribute in contributedAttributes.Where(a => !newAttributeNames.Contains(a.Name)))
+                foreach (var contributedAttribute in contributedAttributes.Where(a => !matchedAttributes.Contains(a)))
                     connectedSystemObjectType.Attributes.Add(contributedAttribute);
 
                 if (addedAttributeNames.Count > 0)
                 {
                     result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+
+                if (renamedAttributes.Count > 0)
+                {
+                    result.RenamedAttributes[schemaObjectType.Name] = renamedAttributes;
                 }
             }
             else
@@ -2983,6 +3005,48 @@ public partial class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// Pairs each name a Connector reported with the stored Object Type or attribute it continues. Configuration names
+    /// ignore case (#2051), so a name differing only in case continues the stored one, but exact matches are paired
+    /// first: a Connected System whose own names are case-exact can hold two that differ only in case, and each keeps
+    /// its own row. A case-insensitive match is only taken when it is unambiguous, one unpaired stored name for one
+    /// unpaired reported name; anything else would be a guess, and is left as a removal and an addition.
+    /// </summary>
+    /// <returns>The stored item each paired reported name continues, keyed by the reported name.</returns>
+    internal static Dictionary<string, T> PairBySchemaName<T>(IEnumerable<string> reportedNames, IReadOnlyCollection<T> existing, Func<T, string> nameOf)
+        where T : class
+    {
+        var reported = reportedNames.Distinct(StringComparer.Ordinal).ToList();
+        var pairs = new Dictionary<string, T>(StringComparer.Ordinal);
+        var paired = new HashSet<T>(ReferenceEqualityComparer.Instance);
+
+        foreach (var name in reported)
+        {
+            var exact = existing.FirstOrDefault(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.Ordinal));
+            if (exact == null)
+                continue;
+
+            pairs[name] = exact;
+            paired.Add(exact);
+        }
+
+        var unpairedReported = reported.Where(name => !pairs.ContainsKey(name)).ToList();
+        foreach (var name in unpairedReported)
+        {
+            var candidates = existing
+                .Where(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var rivals = unpairedReported.Count(other => string.Equals(other, name, StringComparison.OrdinalIgnoreCase));
+            if (candidates.Count != 1 || rivals != 1)
+                continue;
+
+            pairs[name] = candidates[0];
+            paired.Add(candidates[0]);
+        }
+
+        return pairs;
     }
 
     /// <summary>
@@ -3206,10 +3270,12 @@ public partial class ConnectedSystemServer
 
             // Persisted attributes stay in the incoming schema so the merge matches and preserves them; everything
             // else is dropped before it can be added.
+            // Names ignore case (#2051), so a persisted attribute the Connector now reports in another case is still
+            // persisted, and is preserved for the merge to pair rather than dropped and reported as removed.
             var persistedAttributeNames = connectedSystem.ObjectTypes?
-                .FirstOrDefault(ot => ot.Name == schemaObjectType.Name)?
+                .FirstOrDefault(ot => string.Equals(ot.Name, schemaObjectType.Name, StringComparison.OrdinalIgnoreCase))?
                 .Attributes.Select(a => a.Name)
-                .ToHashSet() ?? [];
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
             foreach (var deniedAttribute in deniedAttributes.Where(a => !persistedAttributeNames.Contains(a.Name)))
                 schemaObjectType.Attributes.Remove(deniedAttribute);

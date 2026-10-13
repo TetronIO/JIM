@@ -231,7 +231,9 @@ internal class LdapConnectorSchema
 
         foreach (string attributeName in objectClassEntry.Attributes[propertyName].GetValues(typeof(string)))
         {
-            if (objectType.Attributes.All(q => q.Name != attributeName))
+            // Active Directory attribute names ignore case, so one listed again by another class, in another case, is
+            // the attribute already added (#2051).
+            if (objectType.Attributes.All(q => !string.Equals(q.Name, attributeName, StringComparison.OrdinalIgnoreCase)))
             {
                 var attr = GetAdSchemaAttribute(attributeName, objectClassName, required, objectType.Name);
                 if (attr != null)

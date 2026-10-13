@@ -1,9 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Globalization;
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Core;
@@ -78,43 +76,10 @@ internal sealed class ScimConnectorUniquenessProbe
 
     /// <summary>
     /// The filter for one request: an equality assertion per value, joined by <c>or</c>, each value a quoted JSON
-    /// string (see <see cref="QuoteFilterValue"/>).
+    /// string (see <see cref="ScimFilterLiteral.Quote"/>).
     /// </summary>
     internal static string BuildFilter(string attributePath, IEnumerable<string> values) =>
-        string.Join(" or ", values.Select(value => $"{attributePath} eq {QuoteFilterValue(value)}"));
-
-    /// <summary>
-    /// A comparison value as RFC 7644 section 3.4.2.2 has it: a JSON string. The quote and the backslash are escaped,
-    /// and control characters written as <c>\u</c> sequences, so whatever a candidate holds it stays one value and can
-    /// never become filter grammar. Everything else is left as it is, since a provider's filter parser need not decode
-    /// escapes JSON does not require.
-    /// </summary>
-    internal static string QuoteFilterValue(string value)
-    {
-        ArgumentNullException.ThrowIfNull(value);
-
-        var quoted = new StringBuilder(value.Length + 2).Append('"');
-        foreach (var character in value)
-        {
-            switch (character)
-            {
-                case '"':
-                    quoted.Append("\\\"");
-                    break;
-                case '\\':
-                    quoted.Append("\\\\");
-                    break;
-                default:
-                    if (char.IsControl(character))
-                        quoted.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
-                    else
-                        quoted.Append(character);
-                    break;
-            }
-        }
-
-        return quoted.Append('"').ToString();
-    }
+        string.Join(" or ", values.Select(value => $"{attributePath} eq {ScimFilterLiteral.Quote(value)}"));
 
     /// <summary>
     /// Searches the provider for the batch and reports an outcome per candidate. Never throws for a provider fault: a

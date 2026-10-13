@@ -1052,6 +1052,24 @@ public class DriftDetectionTests
         Assert.That(result.HasDrift, Is.False);
     }
 
+    [Test]
+    public void EvaluateDrift_ExportExpressionNamesAttributeInDifferentCase_ContributorIsStillRecognised()
+    {
+        // Attribute names in expressions ignore case (#2051): mv["display name"] names Display Name, whose import flow
+        // reads DisplayName from this system, so the system's own value is legitimate rather than drift to correct.
+        CreateImportRule(); // DisplayName -> Display Name
+        var exportRule = CreateExportRule();
+        var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
+        exportSource.MetaverseAttribute = null;
+        exportSource.MetaverseAttributeId = null;
+        exportSource.Expression = $"mv[\"{Constants.BuiltInAttributes.DisplayName.ToLowerInvariant()}\"]";
+
+        var result = EvaluateDivergedDisplayName(exportRule);
+
+        Assert.That(result.HasDrift, Is.False,
+            "the contributor check must match the expression's attribute name ignoring case, as the expression itself does");
+    }
+
     #endregion
 
     private AttributePriorityContext BuildTwoContributorContext(SyncRule targetRule, int targetPriority, int winningSystemId, int winningPriority)

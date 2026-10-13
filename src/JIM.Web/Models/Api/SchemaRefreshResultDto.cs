@@ -48,9 +48,22 @@ public class SchemaRefreshResultDto
     public List<string> UpdatedObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// Object types the Connected System now reports under a name differing only in case. Each keeps its id and
+    /// configuration and takes the new casing; it is not listed as added or removed.
+    /// </summary>
+    public List<SchemaNameChange> RenamedObjectTypes { get; set; } = new();
+
+    /// <summary>
     /// Attributes that are new, grouped by object type name.
     /// </summary>
     public Dictionary<string, List<string>> AddedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Attributes the Connected System now reports under a name differing only in case, grouped by object type name.
+    /// Each keeps its id, so the Synchronisation Rule mappings and Object Matching Rules using it are unaffected, and
+    /// takes the new casing; it is not listed as added or removed.
+    /// </summary>
+    public Dictionary<string, List<SchemaNameChange>> RenamedAttributes { get; set; } = new();
 
     /// <summary>
     /// Attributes the Connected System no longer reports, grouped by object type name. Retained in JIM, not
@@ -149,8 +162,10 @@ public class SchemaRefreshResultDto
             AddedObjectTypes = result.AddedObjectTypes,
             RemovedObjectTypes = result.RemovedObjectTypes,
             UpdatedObjectTypes = result.UpdatedObjectTypes,
+            RenamedObjectTypes = result.RenamedObjectTypes,
             ObjectTypesWithClassificationUpdates = result.ObjectTypesWithClassificationUpdates,
             AddedAttributes = result.AddedAttributes,
+            RenamedAttributes = result.RenamedAttributes,
             RemovedAttributes = result.RemovedAttributes,
             ChangedAttributes = result.ChangedAttributes.ToDictionary(
                 kvp => kvp.Key,

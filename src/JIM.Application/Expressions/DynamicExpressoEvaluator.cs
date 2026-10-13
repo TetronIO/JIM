@@ -307,12 +307,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) =>
         {
             var prefixText = AsString(prefix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText) ?? false);
+            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText, StringComparison.Ordinal) ?? false);
         }));
         target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) =>
         {
             var suffixText = AsString(suffix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText) ?? false);
+            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText, StringComparison.Ordinal) ?? false);
         }));
         target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) =>
         {
