@@ -14,15 +14,10 @@ function Get-JIMConnectedSystemAuxiliaryClassDiscovery {
         Nothing is returned when no discovery run has been started for the Connected System.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject describing the run. Properties: Id, Scope, SampleSizePerObjectType, Status,
-        Started, Completed, EntriesRead, ActivityId, InitiatedByName, ErrorMessage, and Results,
-        each of which carries StructuralObjectTypeId, AuxiliaryClassName and EntryCount.
-
-        Status is InProgress, Complete, Cancelled or Failed. Completed is $null while the run is
-        still going.
+        The most recent discovery run, or nothing when none has been started.
 
     .EXAMPLE
         Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
@@ -48,7 +43,7 @@ function Get-JIMConnectedSystemAuxiliaryClassDiscovery {
         Get-JIMActivity
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AuxiliaryClassDiscoveryRunDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId

@@ -21,10 +21,10 @@ function Get-JIMConnectedSystemAuxiliaryClass {
         or for an Object Type that is itself an auxiliary class, which cannot carry another.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type to list auxiliary classes for.
+        The ID of the Object Type to list auxiliary classes for.
 
     .PARAMETER MergedOnly
         Return only the classes currently merged into the Object Type.
@@ -34,16 +34,7 @@ function Get-JIMConnectedSystemAuxiliaryClass {
         run observed them in use.
 
     .OUTPUTS
-        PSCustomObject per auxiliary class, ordered merged first, then suggested, then the rest by
-        name. Properties: ObjectTypeId, Name, Merged, ContributedAttributeCount,
-        ContributedAttributes, PermittedByTheConnectedSystem, EntriesObservedOn, IsSuggested.
-
-        ContributedAttributes lists what merging the class would bring, ordered by name, each with
-        Name, Type, AttributePlurality, Required (the class's schema demands it) and IsCredential
-        (JIM will never select it; passwords travel by the password channel).
-
-        EntriesObservedOn is $null when no discovery run has observed the class, which is different
-        from 0: 0 means a run read entries and saw none carrying it.
+        The auxiliary classes, merged first, then suggested, then the rest by name.
 
     .EXAMPLE
         Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5
@@ -75,7 +66,7 @@ function Get-JIMConnectedSystemAuxiliaryClass {
         Get-JIMConnectedSystemObjectType
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AuxiliaryClassOfferDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,
