@@ -1832,7 +1832,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and says so in the target's `Message`; the password is still set.
 - A system that refused the password parks it, with its own reason in `Message`. A system that could not be reached is `Retrying`, because nothing was established about the password itself; JIM tries again on its own clock, and nothing is lost while the system is down.
 - The account must be joined to a Metaverse Object. An unjoined object is reported as not found, with the remedy: join it first.
-- Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
+- Routine initial passwords belong on the Synchronisation Rule that provisions the account; see [`Set-JIMSyncRuleInitialPassword`](initial-password.md#set-jimsyncruleinitialpassword).
 - Pass `-Generate` instead of `-Password` to have JIM produce a password satisfying the policy it discovered on
   the Connected System. Prefer this to inventing one in your own script: JIM knows what the target demands, and
   a hand-rolled generator rediscovers the passphrase trap, where three words offer two character categories
