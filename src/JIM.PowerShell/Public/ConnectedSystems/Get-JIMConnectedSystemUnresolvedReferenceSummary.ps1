@@ -20,14 +20,11 @@ function Get-JIMConnectedSystemUnresolvedReferenceSummary {
         object's references, use Get-JIMConnectedSystemObjectUnresolvedReference.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier (integer) of the Connected System. Accepts a Connected System from the pipeline.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject with ConnectedSystemId, UnresolvedReferenceHandling, TotalCount (the unresolved values),
-        ObjectCount (the objects holding them), Causes (each a Cause, FixLocation and Count), Fixes (every
-        distinct next step with its Cause, FixLocation, ContainerExternalId, PartitionExternalId, Count,
-        ObjectCount, Finding and Remedy, most values first) and LargestFix (the change to JIM's configuration
-        that would address the most values, or null).
+        How many references are unresolved and on how many objects, how they split by likely cause, and every
+        distinct next step with how many it would address.
 
     .EXAMPLE
         Get-JIMConnectedSystemUnresolvedReferenceSummary -ConnectedSystemId 1
@@ -54,7 +51,7 @@ function Get-JIMConnectedSystemUnresolvedReferenceSummary {
         Get-JIMConnectedSystemUnresolvedReferenceCount
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemUnresolvedReferenceSummary')]
     param(
         # Aliased so a Connected System can be piped in; the summary is the Connected System's own, so -Id names it.
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
