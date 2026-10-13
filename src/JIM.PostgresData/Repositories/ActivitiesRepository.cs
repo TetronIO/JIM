@@ -1324,7 +1324,7 @@ public partial class ActivityRepository : IActivityRepository
         // Falls back to snapshot fields when CSO navigation is null.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(item =>
                 // Search the name candidates (live CSO attributes)
                 (item.ConnectedSystemObject != null &&

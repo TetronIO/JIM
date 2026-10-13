@@ -76,9 +76,15 @@ Describe 'New-JIMPredefinedSearchCriterion' {
 
     It 'Has a mandatory ComparisonType restricted to the supported operators' {
         $vs = $command.Parameters['ComparisonType'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
-        foreach ($op in 'Equals','NotEquals','GreaterThan','GreaterThanOrEquals','LessThan','LessThanOrEquals','Contains','StartsWith') {
+        foreach ($op in 'Equals','NotEquals','GreaterThan','GreaterThanOrEquals','LessThan','LessThanOrEquals','Contains','StartsWith','HasValue','HasNoValue') {
             $vs.ValidValues | Should -Contain $op
         }
+    }
+
+    It 'Does not offer the pattern operators, which Predefined Searches cannot run' {
+        $vs = $command.Parameters['ComparisonType'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+        $vs.ValidValues | Should -Not -Contain 'MatchesPattern'
+        $vs.ValidValues | Should -Not -Contain 'NotMatchesPattern'
     }
 
     It 'Has typed value parameters' {

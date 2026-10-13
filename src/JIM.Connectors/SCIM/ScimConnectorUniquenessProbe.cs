@@ -192,7 +192,7 @@ internal sealed class ScimConnectorUniquenessProbe
         var access = attribute.Access == ScimValueAccess.CanonicalSlot ? ScimValueAccess.ComplexSubAttribute : attribute.Access;
         var widened = new ScimFlattenedAttribute(attribute.Name, attribute.ScimPath, AttributeDataType.Text, AttributePlurality.MultiValued,
             required: false, attribute.Writability, attribute.ClassName, access: access, sourceAttributeName: attribute.SourceAttributeName,
-            subAttributeName: attribute.SubAttributeName, extensionUrn: attribute.ExtensionUrn);
+            subAttributeName: attribute.SubAttributeName, extensionUrn: attribute.ExtensionUrn, caseExact: attribute.CaseExact);
         IReadOnlyList<ScimFlattenedAttribute> attributes = [widened];
 
         return resource => ScimResourceReader.Read(resource, attributes).Attributes.SelectMany(a => a.StringValues).ToList();

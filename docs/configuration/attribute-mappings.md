@@ -86,7 +86,7 @@ Mappings support both single-valued and multi-valued attributes. A **Multi-Value
 
 The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
 
-To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`, or `Split()` with an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
+To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`, `Min()`, `Max()`, or `Join()` to combine them (see [Multi-Valued Attributes](../concepts/expressions.md#multi-valued-attributes)). Reference attributes on import are exempt from this rule; they are resolved separately.
 
 ## Standard Mapping hints
 

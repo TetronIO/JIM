@@ -19,9 +19,13 @@ public enum SearchGroupType
 }
 
 /// <summary>
-/// The comparison to be made on the search term in the search query.
-/// The values need to map to operations that the database can natively perform. This is why Functions/Expressions are not used.
+/// A criterion's comparison operator: the one vocabulary shared by Synchronisation Rule scoping, Predefined Searches
+/// and Example Data dependencies. Which operators apply to which data type, and where each may be offered, is decided
+/// by <c>SearchComparisonOperators</c> in JIM.Utilities, never here.
 /// </summary>
+/// <remarks>
+/// The ordinals are stored, so members are only ever appended. The names are the REST API's and PowerShell's.
+/// </remarks>
 public enum SearchComparisonType
 {
     NotSet = 0,
@@ -36,7 +40,29 @@ public enum SearchComparisonType
     LessThan = 9,
     LessThanOrEquals = 10,
     GreaterThan = 11,
-    GreaterThanOrEquals = 12
+    GreaterThanOrEquals = 12,
+    /// <summary>Met when the attribute holds at least one value. Takes no value.</summary>
+    HasValue = 13,
+    /// <summary>Met when the attribute holds no value. Takes no value.</summary>
+    HasNoValue = 14,
+    /// <summary>Met when any value matches a .NET regular expression. Text only, and never offered where criteria run as SQL.</summary>
+    MatchesPattern = 15,
+    /// <summary>Met when the attribute holds at least one value and none matches a .NET regular expression.</summary>
+    NotMatchesPattern = 16
+}
+
+/// <summary>
+/// Where a criterion is evaluated, which decides the operators it may be offered. Pattern operators run only in .NET,
+/// so a context that runs as SQL never offers them.
+/// </summary>
+public enum CriterionContext
+{
+    /// <summary>A Synchronisation Rule's scoping criteria, evaluated in .NET during synchronisation.</summary>
+    Scoping = 0,
+    /// <summary>A Predefined Search's criteria, translated to SQL.</summary>
+    PredefinedSearch = 1,
+    /// <summary>An Example Data template attribute's dependency, evaluated in .NET while generating.</summary>
+    ExampleData = 2
 }
 
 /// <summary>

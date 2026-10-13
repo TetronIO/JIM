@@ -7,6 +7,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
@@ -419,6 +420,201 @@ public class PredefinedSearchQueryDatabaseTests
         var rule = new JIM.Models.Logic.SyncRule { Name = "Parity", Direction = JIM.Models.Logic.SyncRuleDirection.Export };
         var group = new JIM.Models.Logic.SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
         group.Criteria.Add(new JIM.Models.Logic.SyncRuleScopingCriteria { MetaverseAttribute = attribute, ComparisonType = op, StringValue = value, CaseSensitive = true });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var scoping = new JIM.Application.Servers.ScopingEvaluationServer();
+        return mvos.Where(m => scoping.IsMvoInScopeForExportRule(m, rule)).Select(m => m.CachedDisplayName!).OrderBy(n => n).ToList();
+    }
+
+    // ─── #2053: one meaning for every operator, in SQL and in .NET ───
+
+    private static readonly Guid GuidOne = new("7a5e0c1d-0000-4000-8000-000000000001");
+    private static readonly Guid GuidTwo = new("7a5e0c1d-0000-4000-8000-000000000002");
+    private static readonly Guid GuidThree = new("7a5e0c1d-0000-4000-8000-000000000003");
+
+    private record ParitySeed(int TypeId, Dictionary<AttributeDataType, int> AttributeIds);
+
+    /// <summary>
+    /// Seeds a Thing type with one multi-valued attribute per data type and six objects whose values cover the shapes
+    /// operators can disagree on: several values, one value, no value, only asserted-null markers (#91), a marker
+    /// beside a value, and text holding <c>%</c>, <c>_</c> and <c>\</c> in mixed case.
+    /// </summary>
+    private async Task<ParitySeed> SeedParityAsync()
+    {
+        await using var ctx = NewContext();
+        var type = new MetaverseObjectType { Name = "Thing", PluralName = "Things", BuiltIn = true };
+        var attributes = new Dictionary<AttributeDataType, MetaverseAttribute>();
+        foreach (var dataType in new[] { AttributeDataType.Text, AttributeDataType.Number, AttributeDataType.LongNumber, AttributeDataType.Decimal,
+                     AttributeDataType.DateTime, AttributeDataType.Boolean, AttributeDataType.Guid })
+        {
+            var attribute = new MetaverseAttribute { Name = $"{dataType} Values", Type = dataType, AttributePlurality = AttributePlurality.MultiValued, BuiltIn = true };
+            attributes[dataType] = attribute;
+            type.Attributes.Add(attribute);
+        }
+
+        MetaverseObject Thing(string name, string[] text, int[] numbers, long[] longs, decimal[] decimals, DateTime[] dates, bool[] booleans, Guid[] guids, bool markers = false)
+        {
+            var mvo = new MetaverseObject { Type = type, CachedDisplayName = name };
+            mvo.AttributeValues.AddRange(text.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.Text], StringValue = v }));
+            mvo.AttributeValues.AddRange(numbers.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.Number], IntValue = v }));
+            mvo.AttributeValues.AddRange(longs.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.LongNumber], LongValue = v }));
+            mvo.AttributeValues.AddRange(decimals.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.Decimal], DecimalValue = v }));
+            mvo.AttributeValues.AddRange(dates.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.DateTime], DateTimeValue = v }));
+            mvo.AttributeValues.AddRange(booleans.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.Boolean], BoolValue = v }));
+            mvo.AttributeValues.AddRange(guids.Select(v => new MetaverseObjectAttributeValue { Attribute = attributes[AttributeDataType.Guid], GuidValue = v }));
+            if (markers)
+                mvo.AttributeValues.AddRange(attributes.Values.Select(a => new MetaverseObjectAttributeValue { Attribute = a, NullValue = true }));
+            return mvo;
+        }
+
+        static DateTime Utc(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+        ctx.MetaverseObjectTypes.Add(type);
+        ctx.MetaverseObjects.Add(Thing("Several", ["svc_admin", "Finance Readers"], [3, 10], [5_000_000_000L], [1.50m], [Utc(2025, 1, 1)], [true], [GuidOne, GuidTwo]));
+        ctx.MetaverseObjects.Add(Thing("Wildcards", ["svcXadmin", "finance readers", "100%", @"DOMAIN\user"], [20], [1L, 2L], [2.0m, 3.25m], [Utc(2026, 7, 1), Utc(2026, 12, 31)], [false], [GuidThree]));
+        ctx.MetaverseObjects.Add(Thing("Single", ["Sales"], [-1], [3L], [3.25m], [Utc(2026, 10, 1)], [false], [GuidOne]));
+        ctx.MetaverseObjects.Add(Thing("Empty", [], [], [], [], [], [], []));
+        ctx.MetaverseObjects.Add(Thing("MarkerOnly", [], [], [], [], [], [], [], markers: true));
+        ctx.MetaverseObjects.Add(Thing("MarkerAndValue", ["sales"], [10], [1L], [1.5m], [Utc(2025, 1, 1)], [true], [GuidTwo], markers: true));
+        await ctx.SaveChangesAsync();
+
+        return new ParitySeed(type.Id, attributes.ToDictionary(kv => kv.Key, kv => kv.Value.Id));
+    }
+
+    /// <summary>The values each type's operators are tried against: values the objects hold, and values none does.</summary>
+    private static IEnumerable<ICriterionValues> ParityValues(AttributeDataType type)
+    {
+        static DateTime Utc(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+        switch (type)
+        {
+            case AttributeDataType.Text:
+                foreach (var text in new[] { "svc_", "svc", "Finance Readers", "finance", "100%", "%", "_", @"DOMAIN\user", @"\", "admin", "Readers", "Sales" })
+                foreach (var caseSensitive in new[] { true, false })
+                    yield return new CriterionValues { StringValue = text, CaseSensitive = caseSensitive };
+                break;
+            case AttributeDataType.Number:
+                foreach (var n in new[] { 3, 10, 15, -1 }) yield return new CriterionValues { IntValue = n };
+                break;
+            case AttributeDataType.LongNumber:
+                foreach (var n in new[] { 1L, 3L, 5_000_000_000L }) yield return new CriterionValues { LongValue = n };
+                break;
+            case AttributeDataType.Decimal:
+                foreach (var n in new[] { 1.5m, 2m, 3.25m }) yield return new CriterionValues { DecimalValue = n };
+                break;
+            case AttributeDataType.DateTime:
+                foreach (var d in new[] { Utc(2025, 1, 1), Utc(2026, 7, 1), Utc(2026, 10, 1) }) yield return new CriterionValues { DateTimeValue = d };
+                break;
+            case AttributeDataType.Boolean:
+                foreach (var b in new[] { true, false }) yield return new CriterionValues { BoolValue = b };
+                break;
+            case AttributeDataType.Guid:
+                foreach (var g in new[] { GuidOne, GuidThree, Guid.Empty }) yield return new CriterionValues { GuidValue = g };
+                break;
+        }
+    }
+
+    private static void CopyValues(ICriterionValues from, ICriterionValues to)
+    {
+        to.StringValue = from.StringValue;
+        to.IntValue = from.IntValue;
+        to.LongValue = from.LongValue;
+        to.DecimalValue = from.DecimalValue;
+        to.DateTimeValue = from.DateTimeValue;
+        to.BoolValue = from.BoolValue;
+        to.GuidValue = from.GuidValue;
+        to.CaseSensitive = from.CaseSensitive;
+    }
+
+    /// <summary>
+    /// Every operator a Predefined Search offers for the type, against every value shape and both case settings, gives
+    /// the same objects in SQL as the scoping evaluator gives in .NET (#2053). The operators come from the catalogue,
+    /// so an operator added without a SQL translation, or translated differently, fails here.
+    /// </summary>
+    [TestCase(AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Number)]
+    [TestCase(AttributeDataType.LongNumber)]
+    [TestCase(AttributeDataType.Decimal)]
+    [TestCase(AttributeDataType.DateTime)]
+    [TestCase(AttributeDataType.Boolean)]
+    [TestCase(AttributeDataType.Guid)]
+    public async Task EveryOperator_OnEveryType_AgreesWithSynchronisationRuleScopingAsync(AttributeDataType type)
+    {
+        var seed = await SeedParityAsync();
+        var attributeId = seed.AttributeIds[type];
+        var disagreements = new List<string>();
+        var checkedCount = 0;
+
+        foreach (var op in SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.PredefinedSearch))
+        {
+            var values = SearchComparisonOperators.TakesValue(op) ? ParityValues(type) : new ICriterionValues[] { new CriterionValues() };
+            foreach (var value in values)
+            {
+                var searchCriterion = new PredefinedSearchCriteria { MetaverseAttributeId = attributeId, ComparisonType = op };
+                CopyValues(value, searchCriterion);
+                var searchId = await PersistSearchAsync(seed.TypeId, Group(SearchGroupType.All, new[] { searchCriterion }));
+
+                var sql = await RunAndGetNamesAsync(searchId);
+                var scoping = await EvaluateScopingAsync(seed.TypeId, attributeId, op, value);
+                checkedCount++;
+                if (!sql.SequenceEqual(scoping))
+                {
+                    disagreements.Add($"{op} {value.StringValue ?? value.IntValue?.ToString() ?? value.LongValue?.ToString() ?? value.DecimalValue?.ToString() ?? value.DateTimeValue?.ToString("o") ?? value.BoolValue?.ToString() ?? value.GuidValue?.ToString() ?? "(none)"}" +
+                                      $"{(type == AttributeDataType.Text ? $" caseSensitive={value.CaseSensitive}" : "")}: SQL [{string.Join(", ", sql)}] scoping [{string.Join(", ", scoping)}]");
+                }
+
+                await using (var ctx = NewContext())
+                    await ctx.PredefinedSearches.Where(s => s.Id == searchId).ExecuteDeleteAsync();
+            }
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(checkedCount, Is.GreaterThan(0));
+            Assert.That(disagreements, Is.Empty, string.Join(Environment.NewLine, disagreements));
+        }
+    }
+
+    [Test]
+    public async Task StartsWith_ValueContainingAnUnderscore_MatchesTheUnderscoreLiterallyAsync()
+    {
+        // PRD Scenario 9: "svc_" starts "svc_admin", and not "svcXadmin", which an unescaped LIKE matched too.
+        var seed = await SeedParityAsync();
+        var id = await PersistSearchAsync(seed.TypeId, Group(SearchGroupType.All, new[]
+        {
+            Text(seed.AttributeIds[AttributeDataType.Text], SearchComparisonType.StartsWith, "svc_")
+        }));
+
+        Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Several" }));
+    }
+
+    [Test]
+    public async Task HasNoValue_ObjectsHoldingOnlyMarkersOrNothing_AreTheOnesMatchedAsync()
+    {
+        var seed = await SeedParityAsync();
+        var id = await PersistSearchAsync(seed.TypeId, Group(SearchGroupType.All, new[]
+        {
+            new PredefinedSearchCriteria { MetaverseAttributeId = seed.AttributeIds[AttributeDataType.Number], ComparisonType = SearchComparisonType.HasNoValue }
+        }));
+
+        Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Empty", "MarkerOnly" }));
+    }
+
+    /// <summary>Evaluates one scoping criterion carrying <paramref name="value"/> against every persisted object of the type, returning the names in scope, sorted.</summary>
+    private async Task<List<string>> EvaluateScopingAsync(int typeId, int attributeId, SearchComparisonType op, ICriterionValues value)
+    {
+        await using var ctx = NewContext();
+        var attribute = await ctx.MetaverseAttributes.SingleAsync(a => a.Id == attributeId);
+        var mvos = await ctx.MetaverseObjects
+            .Include(m => m.AttributeValues)
+            .Where(m => m.Type.Id == typeId)
+            .ToListAsync();
+
+        var rule = new JIM.Models.Logic.SyncRule { Name = "Parity", Direction = JIM.Models.Logic.SyncRuleDirection.Export };
+        var group = new JIM.Models.Logic.SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        var criterion = new JIM.Models.Logic.SyncRuleScopingCriteria { MetaverseAttribute = attribute, ComparisonType = op };
+        CopyValues(value, criterion);
+        group.Criteria.Add(criterion);
         rule.ObjectScopingCriteriaGroups.Add(group);
 
         var scoping = new JIM.Application.Servers.ScopingEvaluationServer();

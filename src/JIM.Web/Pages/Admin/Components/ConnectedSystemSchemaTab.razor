@@ -127,36 +127,54 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        @if (!_objectTypeAttributeBeingEditedIsEditable)
+        @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
         {
-            <MudAlert Severity="Severity.Error">
-                This Connected System attribute cannot be edited as it is being referenced by either a Synchronisation Rule, or has values already populated.
-            </MudAlert>
-        }
-        else
-        {
-            <MudAlert Severity="Severity.Info">
-                This Connector supports changing the data type of a Connected System attribute. This might be because the data type
-                was detected automatically, and might need adjusting if not right.
-            </MudAlert>
+            @if (!_objectTypeAttributeBeingEditedIsEditable)
+            {
+                <MudAlert Severity="Severity.Error">
+                    The data type of this Connected System attribute cannot be changed as it is being referenced by either a Synchronisation Rule, or has values already populated.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">
+                    This Connector supports changing the data type of a Connected System attribute. This might be because the data type
+                    was detected automatically, and might need adjusting if not right.
+                </MudAlert>
+            }
+
+            <MudSelect
+                T="string"
+                Label="Please choose a data type"
+                Required="true"
+                Variant="Variant.Outlined"
+                Class="mt-5"
+                Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+                @bind-Value="_objectTypeAttributeBeingEditedText">
+                @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
+                {
+                    if (type != AttributeDataType.NotSet)
+                    {
+                        <MudSelectItem Value="@type.ToString()"/>
+                    }
+                }
+            </MudSelect>
         }
 
-        <MudSelect
-            T="string"
-            Label="Please choose a data type"
-            Required="true"
-            Variant="Variant.Outlined"
-            Class="mt-5"
-            Disabled="!_objectTypeAttributeBeingEditedIsEditable"
-            @bind-Value="_objectTypeAttributeBeingEditedText">
-            @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
-            {
-                if (type != AttributeDataType.NotSet)
-                {
-                    <MudSelectItem Value="@type.ToString()"/>
-                }
-            }
-        </MudSelect>
+        @* ─── Case-exact declaration (#2051) ─── *@
+        @if (SchemaAttributeEdit.OffersCaseExact(EditedAttributeType()))
+        {
+            <div class="@(ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes ? "mt-5" : string.Empty)" data-testid="jim-schema-attribute-case-exact">
+                <MudCheckBox T="bool" @bind-Value="_objectTypeAttributeBeingEditedCaseExact" Color="Color.Primary" Label="Values are case-exact" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ml-3">
+                    When ticked, values differing only in case identify different things: <code>JBloggs</code> and <code>jbloggs</code> are two values.
+                    When clear, they are the same value, which is how most identifiers behave.
+                    @(_objectTypeAttributeBeingEdited?.CaseExactSetByAdministrator == true
+                        ? "An administrator set this, so a schema refresh keeps it."
+                        : "Currently as discovered from the Connected System's schema. Changing it makes it yours, and a schema refresh keeps it.")
+                </MudText>
+            </div>
+        }
 
     </DialogContent>
     <DialogActions>
@@ -166,11 +184,11 @@
             OnClick="@(() => _editSchemaAttributeDialogVisible = false)"
             Class="ma-4">Cancel</MudButton>
         <MudButton
-            Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+            Disabled="!CanConfirmAttributeEdit()"
             DropShadow="false"
             Variant="Variant.Filled"
             Color="Color.Primary"
-            OnClick="HandleEditAttributeDataTypeButtonClickAsync"
+            OnClick="HandleEditAttributeButtonClickAsync"
             Class="ma-4">Confirm Change</MudButton>
     </DialogActions>
 </MudDialog>
@@ -598,6 +616,23 @@
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn Title="Case-exact" Sortable="false" Hidden="@(!_selectedObjectTypeHasCaseExactAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Case-exact" Name="caseexact" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.CaseExact)
+                        {
+                            <MudTooltip Text="@(context.Item.CaseExactSetByAdministrator ? "Values differing only in case identify different things. Set by an administrator, so a schema refresh keeps it." : "Values differing only in case identify different things. Discovered from the Connected System's schema.")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text">Case-exact</MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Writability" Name="writability" />
@@ -633,13 +668,14 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
-                {
-                    <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
-                        <HeaderTemplate>
-                            <MudText Typo="Typo.button">Action</MudText>
-                        </HeaderTemplate>
-                        <CellTemplate>
+                @* Every Connector offers an edit now: the case-exact declaration applies to any Text attribute (#2051). *@
+                <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Action</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (SchemaAttributeEdit.CanEdit(context.Item, ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes))
+                        {
                             <MudButton
                                 DropShadow="false"
                                 Color="Color.Primary"
@@ -649,9 +685,9 @@
                                 StartIcon="@Icons.Material.Filled.Edit">
                                 Edit
                             </MudButton>
-                        </CellTemplate>
-                    </TemplateColumn>
-                }
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
             </Columns>
             <EmptyContent Context="grid">
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
@@ -811,6 +847,7 @@
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
     private bool _selectedObjectTypeHasConstrainedAttributes;
+    private bool _selectedObjectTypeHasCaseExactAttributes;
     private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
     private IReadOnlyCollection<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
@@ -829,6 +866,7 @@
     private ConnectedSystemObjectTypeAttribute? _objectTypeAttributeBeingEdited;
     private string? _objectTypeAttributeBeingEditedText;
     private bool _objectTypeAttributeBeingEditedIsEditable;
+    private bool _objectTypeAttributeBeingEditedCaseExact;
 
     private const string ObjectTypeQueryParameterName = "ot";
     private bool _objectTypeDeepLinkApplied;
@@ -864,6 +902,7 @@
             _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
             _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
+            _selectedObjectTypeHasCaseExactAttributes = _selectedObjectType.Attributes.Any(q => q.CaseExact);
         }
     }
 
@@ -948,6 +987,7 @@
             "type" => Order(a => a.Type),
             "plurality" => Order(a => a.AttributePlurality),
             "writability" => Order(a => a.Writability),
+            "caseexact" => Order(a => a.CaseExact),
             "description" => Order(a => a.Description ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             _ => Order(a => a.Name, StringComparer.OrdinalIgnoreCase)
         };
@@ -1325,6 +1365,7 @@
         _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
         _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
         _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
+        _selectedObjectTypeHasCaseExactAttributes = _selectedObjectType.Attributes.Any(q => q.CaseExact);
     }
 
     /// <summary>
@@ -1726,23 +1767,42 @@
         _objectTypeAttributeBeingEditedIsEditable = !await jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
         _objectTypeAttributeBeingEditedText = connectedSystemObjectTypeAttribute.Type.ToString();
+        _objectTypeAttributeBeingEditedCaseExact = connectedSystemObjectTypeAttribute.CaseExact;
         _editSchemaAttributeDialogVisible = true;
     }
 
-    private async Task HandleEditAttributeDataTypeButtonClickAsync()
+    /// <summary>
+    /// The type the attribute being edited will have once the dialog is confirmed: the one chosen in the dialog where
+    /// the Connector allows an override, else the one it has.
+    /// </summary>
+    private AttributeDataType EditedAttributeType() =>
+        ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes &&
+        Enum.TryParse<AttributeDataType>(_objectTypeAttributeBeingEditedText, out var chosenType)
+            ? chosenType
+            : _objectTypeAttributeBeingEdited?.Type ?? AttributeDataType.NotSet;
+
+    /// <summary>
+    /// Mirrors what <see cref="SchemaAttributeEdit.Apply"/> can act on, so the button is never enabled with nothing
+    /// to confirm.
+    /// </summary>
+    private bool CanConfirmAttributeEdit() =>
+        _objectTypeAttributeBeingEdited != null &&
+        ((ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes && _objectTypeAttributeBeingEditedIsEditable) ||
+         SchemaAttributeEdit.OffersCaseExact(EditedAttributeType()));
+
+    private async Task HandleEditAttributeButtonClickAsync()
     {
         if (_objectTypeAttributeBeingEdited == null)
             return;
 
-        if (_objectTypeAttributeBeingEditedText == null)
-            return;
+        SchemaAttributeEdit.Apply(
+            _objectTypeAttributeBeingEdited,
+            ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes,
+            _objectTypeAttributeBeingEditedIsEditable,
+            Enum.TryParse<AttributeDataType>(_objectTypeAttributeBeingEditedText, out var chosenType) ? chosenType : null,
+            _objectTypeAttributeBeingEditedCaseExact);
 
-        _objectTypeAttributeBeingEdited.Type = (AttributeDataType)Enum.Parse(typeof(AttributeDataType), _objectTypeAttributeBeingEditedText);
-
-        // Marks the type as the administrator's rather than the Connector's, so the next schema refresh
-        // leaves it alone instead of silently restoring what discovery inferred (#1354).
-        _objectTypeAttributeBeingEdited.TypeSetByAdministrator = true;
-
+        RecomputeSelectedObjectTypeFlags();
         _editSchemaAttributeDialogVisible = false;
 
         // the Type chip filters are contextual and the row may no longer match the chosen ones, so the window is
@@ -1750,7 +1810,7 @@
         await RefreshAttributeGridAsync();
 
         // all done, let the user know
-        Snackbar.Add("Attribute data type updated. Save your changes to apply it.", Severity.Success);
+        Snackbar.Add("Attribute updated. Save your changes to apply it.", Severity.Success);
     }
 
     private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)

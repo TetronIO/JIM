@@ -26,6 +26,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
+using JIM.Models.Search;
 using JIM.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -2697,7 +2698,8 @@ public partial class ConnectedSystemServer
             Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
             {
                 Id = attribute.Id,
-                Name = attribute.Name
+                Name = attribute.Name,
+                CaseExact = attribute.CaseExact
             }).ToList()
         }).ToList();
 
@@ -2818,6 +2820,11 @@ public partial class ConnectedSystemServer
                             existingAttribute.Type = schemaAttribute.Type;
                         }
 
+                        // The case-exact declaration follows the same rule as the data type: discovered unless an
+                        // administrator decided it, and a refresh never overrules the administrator (#2051).
+                        if (!existingAttribute.CaseExactSetByAdministrator)
+                            existingAttribute.CaseExact = schemaAttribute.CaseExact;
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
@@ -2835,7 +2842,8 @@ public partial class ConnectedSystemServer
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
-                            Required = schemaAttribute.Required
+                            Required = schemaAttribute.Required,
+                            CaseExact = schemaAttribute.CaseExact
                         });
                     }
                 }
@@ -2866,7 +2874,8 @@ public partial class ConnectedSystemServer
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
-                        Required = a.Required
+                        Required = a.Required,
+                        CaseExact = a.CaseExact
                     }).ToList()
                 };
 
@@ -5003,6 +5012,59 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates and applies one attribute's part of a bulk update, returning why it was refused, or null once it is
+    /// applied. Shared by both bulk overloads so the user and API key paths cannot disagree on a rule.
+    /// </summary>
+    private static string? ApplyBulkAttributeUpdate(
+        ConnectedSystemObjectTypeAttribute attribute,
+        (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact) updates)
+    {
+        // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
+        if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+            (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            return $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.";
+
+        // Validate: Cannot unselect an External ID or Secondary External ID attribute
+        if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected.";
+        }
+
+        // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
+        if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
+            return $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact.";
+
+        if (updates.Selected.HasValue)
+            attribute.Selected = updates.Selected.Value;
+
+        if (updates.IsExternalId.HasValue)
+        {
+            attribute.IsExternalId = updates.IsExternalId.Value;
+            // External ID attributes must always be selected for sync operations to work
+            if (updates.IsExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.IsSecondaryExternalId.HasValue)
+        {
+            attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+            // Secondary External ID attributes must always be selected for sync operations to work
+            if (updates.IsSecondaryExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.CaseExact.HasValue)
+        {
+            attribute.CaseExact = updates.CaseExact.Value;
+            // The administrator's declaration, which a schema refresh then leaves alone.
+            attribute.CaseExactSetByAdministrator = true;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Bulk updates multiple Connected System Attributes with a single parent activity.
     /// </summary>
     /// <param name="connectedSystem">The Connected System containing the attributes.</param>
@@ -5014,7 +5076,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
@@ -5049,39 +5111,11 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
@@ -5117,7 +5151,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             ApiKey initiatedByApiKey)
     {
         if (connectedSystem == null)
@@ -5154,39 +5188,11 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
@@ -8467,10 +8473,11 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates that every scoping criterion uses a comparison operator applicable to its attribute's data type,
-    /// using the shared <see cref="SearchComparisonOperators"/> rule. Throws <see cref="ArgumentException"/> on the
-    /// first invalid combination found, so a Synchronisation Rule with, for example, "Starts With" on a DateTime
-    /// attribute can never be persisted (the evaluator could never satisfy it, silently dropping objects from scope).
+    /// Validates every scoping criterion with the shared <see cref="CriterionValidation"/> rule (#2053): an operator
+    /// applicable to its attribute's data type in scoping, the value it compares against, and a pattern JIM can run.
+    /// Throws <see cref="ArgumentException"/> on the first invalid criterion found, so a Synchronisation Rule with, for
+    /// example, "Starts With" on a DateTime attribute can never be persisted (the evaluator could never satisfy it,
+    /// silently dropping objects from scope).
     /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
     /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
     /// </summary>
@@ -8488,11 +8495,14 @@ public partial class ConnectedSystemServer
             if (attributeType == null)
                 continue;
 
-            if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, attributeType.Value))
+            // A criterion whose operator takes no value is stored without one, whatever the caller sent.
+            CriterionValidation.ClearValues(criterion);
+            var attributeName = criterion.GetAttributeName() ?? "an attribute";
+            var error = CriterionValidation.Validate(criterion, attributeType.Value, CriterionContext.Scoping, attributeName);
+            if (error != null)
             {
-                var message = $"Comparison operator '{criterion.ComparisonType}' is not valid for the {attributeType.Value} " +
-                              $"attribute '{criterion.GetAttributeName()}' on scoping criteria.";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", message);
+                var message = $"Scoping criterion on '{attributeName}' cannot be saved: {error}";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
                 throw new ArgumentException(message);
             }
         }

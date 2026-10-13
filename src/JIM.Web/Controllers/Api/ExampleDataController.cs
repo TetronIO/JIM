@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Exceptions;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Utilities;
@@ -775,14 +776,22 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (metaverseAttribute == null)
             return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {request.MetaverseAttributeId} not found.")));
 
-        if (!Enum.TryParse<ComparisonType>(request.ComparisonType, ignoreCase: true, out var comparisonType) || !Enum.IsDefined(comparisonType))
+        // The operator catalogue's names, shared with scoping and Predefined Searches (#2053).
+        if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, ignoreCase: true, out var comparisonType) ||
+            !SearchComparisonOperators.All.Contains(comparisonType))
             return (null, BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'.")));
+
+        var error = CriterionValidation.ValidateText(comparisonType, request.StringValue, metaverseAttribute.Type,
+            CriterionContext.ExampleData, metaverseAttribute.Name, caseSensitive: true, out _);
+        if (error != null)
+            return (null, BadRequest(ApiErrorResponse.BadRequest($"The attribute dependency on '{metaverseAttribute.Name}' is not valid: {error}")));
 
         return (new ExampleDataTemplateAttributeDependency
         {
             MetaverseAttribute = metaverseAttribute,
             ComparisonType = comparisonType,
-            StringValue = request.StringValue
+            // An operator that takes no value stores none.
+            StringValue = SearchComparisonOperators.TakesValue(comparisonType) ? request.StringValue ?? string.Empty : string.Empty
         }, null);
     }
 

@@ -1,0 +1,194 @@
+@using JIM.Application.Expressions
+@using JIM.Application.Interfaces
+@using JIM.Application.Servers.Scoping
+@using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Logic.Scoping
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Tests a Synchronisation Rule's scoping criteria as they stand on the form (#2055): sample values typed from the
+   schema, or loaded from a real object, evaluated by the scoping evaluation synchronisation runs, as of a chosen
+   instant, with when the outcome would next change. *@
+<MudPaper Class="pa-4 mt-6" Outlined="true">
+    <MudText Typo="Typo.h6">Test this scope</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
+        Give each attribute the criteria compare a value, or load them from @(Exporting ? "a Metaverse Object" : "a Connected System Object"),
+        and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates
+        such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.
+    </MudText>
+
+    <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
+                     AriaLabel="Where the values come from" Dense="true" />
+
+    @if (_fromObject)
+    {
+        <TestObjectPicker Kind="ObjectKind" ConnectedSystemId="SyncRule.ConnectedSystemId" ConnectedSystemObjectType="SyncRule.ConnectedSystemObjectType"
+                          MetaverseObjectTypeId="SyncRule.MetaverseObjectType?.Id" Label="@ObjectSearchLabel" OnPicked="LoadObjectAsync" Class="mt-3" />
+    }
+
+    <MudSimpleTable Dense="true" Outlined="true" Class="mt-3" Style="overflow-x: auto">
+        <thead>
+            <tr><th>Attribute</th><th>Type</th><th>Value</th><th>No value</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var input in _inputs)
+            {
+                var descriptor = input;
+                var state = StateOf(descriptor.AttributeName);
+                <tr @key="descriptor.AttributeName">
+                    <td>
+                        <AttributeChip Kind="@(Exporting ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)" Name="@descriptor.AttributeName" />
+                    </td>
+                    <td class="mud-text-secondary">@descriptor.Type · @(descriptor.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")</td>
+                    <td style="min-width: 16rem">
+                        <TestInputValueEditor Label="@descriptor.AttributeName" Type="descriptor.Type" Plurality="descriptor.Plurality"
+                                              State="state" OnChanged="ClearResult" />
+                    </td>
+                    <td>
+                        <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValue(state, v))" Dense="true"
+                                     aria-label="@($"{descriptor.AttributeName} has no value")" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+
+    <RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
+
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
+
+    @if (_result is { Explanation: null } inputProblem)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">
+            @foreach (var inputError in inputProblem.InputErrors)
+            {
+                <MudText Typo="Typo.body2">@inputError</MudText>
+            }
+        </MudAlert>
+    }
+
+    @if (_result is { Explanation: { } explanation } tested)
+    {
+        <div class="mt-3" data-testid="jim-scope-test-result">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">As of @explanation.EvaluatedAt.ToFriendlyDate() UTC</MudText>
+            <ScopingExplanationView Explanation="explanation" />
+            <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-scope-test-next-change">@DescribeNextChange(tested, explanation)</MudText>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// The Synchronisation Rule as it stands on the form: its direction, object types and scoping criteria.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRule SyncRule { get; set; } = null!;
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
+    [
+        new(false, "Sample values"),
+        new(true, "From an object")
+    ];
+
+    private IReadOnlyList<AttributeSampleDescriptor> _inputs = [];
+    private readonly Dictionary<string, TestInputState> _states = new(StringComparer.OrdinalIgnoreCase);
+    private DateTime? _asOf;
+    private bool _fromObject;
+    private ScopeTestResult? _result;
+
+    private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
+
+    private ObjectChipKind ObjectKind => Exporting ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject;
+
+    private string ObjectSearchLabel => Exporting
+        ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
+        : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
+
+    protected override void OnParametersSet()
+    {
+        // The inputs follow the criteria as they are edited; values entered for an attribute still compared are kept.
+        _inputs = ScopeTester.DescribeInputs(SyncRule);
+        ClearResult();
+    }
+
+    private TestInputState StateOf(string attributeName)
+    {
+        if (!_states.TryGetValue(attributeName, out var state))
+            _states[attributeName] = state = new TestInputState();
+        return state;
+    }
+
+    private void ClearResult() => _result = null;
+
+    private void SetNoValue(TestInputState state, bool noValue)
+    {
+        state.NoValue = noValue;
+        ClearResult();
+    }
+
+    private void SetAsOf(DateTime? asOf)
+    {
+        _asOf = asOf;
+        ClearResult();
+    }
+
+    private void SetFromObject(bool fromObject) => _fromObject = fromObject;
+
+    /// <summary>
+    /// Fills the inputs from a real object: every value it holds for each attribute the criteria compare, and "No
+    /// value" for an attribute it holds none for.
+    /// </summary>
+    private async Task LoadObjectAsync(TestObjectPicker.PickedObject found)
+    {
+        using var jim = JimFactory.Create();
+        IReadOnlyList<AttributeSample> loaded = [];
+        if (Exporting)
+        {
+            if (await jim.Metaverse.GetMetaverseObjectAsync(found.Id) is { } mvo)
+                loaded = ScopeTester.InputsFromMetaverseObject(mvo, SyncRule);
+        }
+        else if (await jim.ConnectedSystems.GetConnectedSystemObjectAsync(SyncRule.ConnectedSystemId, found.Id) is { } cso)
+        {
+            loaded = ScopeTester.InputsFromConnectedSystemObject(cso, SyncRule);
+        }
+
+        foreach (var input in loaded)
+            StateOf(input.AttributeName).Load(input.Values.Select(ToEditableText));
+
+        ClearResult();
+    }
+
+    /// <summary>
+    /// A loaded value as text the input converts back to the same value: JIM's text form, and base64 for Binary.
+    /// </summary>
+    private static string ToEditableText(object value) => value switch
+    {
+        byte[] bytes => Convert.ToBase64String(bytes),
+        _ => ExpressionText.TryFormat(value, out var text) ? text ?? string.Empty : value.ToString() ?? string.Empty
+    };
+
+    private void RunTest()
+    {
+        var inputs = _inputs
+            .Select(input => new AttributeSample(input.AttributeName, StateOf(input.AttributeName).TestValues))
+            .ToList();
+        _result = ScopeTester.Test(SyncRule, inputs, _asOf ?? DateTime.UtcNow);
+    }
+
+    private static string DescribeNextChange(ScopeTestResult tested, ScopingExplanation explanation)
+    {
+        if (tested.NextChange is not { } change)
+        {
+            return explanation.Outcome == ScopingRuleOutcome.Undetermined
+                ? "A criterion cannot be evaluated, so a Synchronisation would fail this object until the criterion is corrected."
+                : $"Stays {(explanation.Outcome == ScopingRuleOutcome.InScope ? "in scope" : "out of scope")} as time passes, while these values stay the same.";
+        }
+
+        var verb = change.Outcome == ScopingRuleOutcome.InScope ? "Enters scope" : "Leaves scope";
+        return $"{verb} at {change.AtUtc.ToFriendlyDate()} UTC, while these values stay the same.";
+    }
+}

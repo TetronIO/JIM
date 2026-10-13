@@ -55,9 +55,16 @@ public class StartObjectMatchingPreviewRequest
 
         var stored = ObjectMatchingProposal.FromCurrentConfiguration(connectedSystem, objectTypes, syncRules);
 
+        // A proposed rule's omitted case sensitivity follows its source attributes' declarations, exactly as saving
+        // it would (#2051), so the attributes are looked up by id across every Object Type the rules may read.
+        var attributesById = objectTypes
+            .SelectMany(objectType => objectType.Attributes ?? [])
+            .GroupBy(attribute => attribute.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
         return new ObjectMatchingProposal(
             Mode ?? stored.Mode,
-            Rules == null ? stored.Rules : [.. Rules.Select(rule => rule.ToProposal())]);
+            Rules == null ? stored.Rules : [.. Rules.Select(rule => rule.ToProposal(attributesById))]);
     }
 }
 
@@ -94,21 +101,22 @@ public class ObjectMatchingRuleRequest
     public int? TargetMetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// Whether text comparison respects case. Omitted or null takes the default, which ignores case (see
-    /// <see cref="ObjectMatchingDefaults"/>).
+    /// Whether text comparison respects case. Omitted or null follows the sources, as saving the rule would: case is
+    /// respected when any source attribute is declared case-exact, and ignored otherwise.
     /// </summary>
     public bool? CaseSensitive { get; set; }
 
     /// <summary>What supplies the value to match on, in evaluation order.</summary>
     public List<ObjectMatchingRuleSourceRequest> Sources { get; set; } = [];
 
-    internal ObjectMatchingRuleProposal ToProposal() =>
+    internal ObjectMatchingRuleProposal ToProposal(IReadOnlyDictionary<int, ConnectedSystemObjectTypeAttribute> attributesById) =>
         new(Order,
             ConnectedSystemObjectTypeId,
             SyncRuleId,
             MetaverseObjectTypeId,
             TargetMetaverseAttributeId,
-            CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive,
+            CaseSensitive ?? ObjectMatchingDefaults.CaseSensitiveFor(Sources.Select(source =>
+                source.ConnectedSystemAttributeId is { } id ? attributesById.GetValueOrDefault(id) : null)),
             [.. Sources.Select(source => source.ToProposal())]);
 }
 
