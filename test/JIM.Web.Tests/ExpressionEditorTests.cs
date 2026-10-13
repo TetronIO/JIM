@@ -37,6 +37,46 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
+    public void ExpressionEditor_SyntaxCheckReportsAnError_ShowsItUnderTheField()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "lowr(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, _ => "Unknown identifier 'lowr'."));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("Unknown identifier 'lowr'."));
+            Assert.That(cut.Find("textarea").GetAttribute("aria-invalid"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void ExpressionEditor_SyntaxCheckFindsNothing_ShowsNoError()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "Lower(cs[\"mail\"])")
+            .Add(c => c.SyntaxCheck, _ => null));
+
+        Assert.That(cut.Find("textarea").GetAttribute("aria-invalid"), Is.EqualTo("false"));
+    }
+
+    [Test]
+    public void ExpressionEditor_HostErrorAndSyntaxError_ShowsTheHostsError()
+    {
+        var cut = Render<ExpressionEditor>(p => p
+            .Add(c => c.Value, "x(")
+            .Add(c => c.Error, true)
+            .Add(c => c.ErrorText, "The host's own error.")
+            .Add(c => c.SyntaxCheck, _ => "A syntax error."));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("The host's own error."));
+            Assert.That(cut.Markup, Does.Not.Contain("A syntax error."));
+        }
+    }
+
+    [Test]
     public void ExpressionEditor_OverlayTextContent_EqualsValue()
     {
         const string value = "IIF(mv[\"Active\"] == true,\n\tUpper(cs[\"Name\"]), \"<b>\")";

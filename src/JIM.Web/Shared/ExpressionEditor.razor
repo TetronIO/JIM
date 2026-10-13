@@ -85,6 +85,14 @@
     public string? ErrorText { get; set; }
 
     /// <summary>
+    /// Checks the expression as it is typed, returning why it does not parse, or null when it does; the reason shows
+    /// beneath the field. Pass <c>e => ExpressionSyntaxCheck.ErrorFor(evaluator, e)</c>, and gate the host's save on the
+    /// same check, so the field and the button cannot disagree. A host's own <see cref="Error"/> takes precedence.
+    /// </summary>
+    [Parameter]
+    public Func<string, string?>? SyntaxCheck { get; set; }
+
+    /// <summary>
     /// Classes for the field as a whole, for its surrounding geometry (<c>mt-5</c> and the like).
     /// </summary>
     [Parameter]
@@ -108,11 +116,13 @@
     [Parameter]
     public int MaxLines { get; set; } = 8;
 
-    private bool ShowError => Error || RequiredButEmpty;
+    private bool ShowError => Error || SyntaxError != null || RequiredButEmpty;
 
     private bool RequiredButEmpty => Required && _touched && string.IsNullOrWhiteSpace(_value);
 
-    private string? EffectiveErrorText => Error ? ErrorText : RequiredButEmpty ? "Required" : null;
+    private string? SyntaxError => SyntaxCheck != null && !string.IsNullOrWhiteSpace(_value) ? SyntaxCheck(_value) : null;
+
+    private string? EffectiveErrorText => Error ? ErrorText : SyntaxError ?? (RequiredButEmpty ? "Required" : null);
 
     // mud-input-required is the class MudBlazor's own required inputs carry, which is what draws the asterisk after
     // the label, so a required expression is marked exactly as the fields around it are.
