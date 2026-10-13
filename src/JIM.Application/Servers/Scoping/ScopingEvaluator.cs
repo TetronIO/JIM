@@ -4,6 +4,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Models.Search;
@@ -35,15 +36,18 @@ namespace JIM.Application.Servers.Scoping;
 internal static class ScopingEvaluator
 {
     /// <summary>
-    /// Whether the object is in scope of a rule with these top-level groups, exactly as synchronisation decides it.
-    /// Throws <see cref="InvalidOperationException"/> on reaching an invalid criterion.
+    /// Whether the object is in scope of the rule, exactly as synchronisation decides it. Throws
+    /// <see cref="InvalidOperationException"/> on reaching an invalid criterion, and
+    /// <see cref="ScopingCriterionFailedException"/> when a pattern runs past its time limit on one of the object's
+    /// values (#2053), so the caller can stop that object rather than decide its scope on a guess.
     /// </summary>
-    internal static bool IsInScope<TSource>(List<SyncRuleScopingCriteriaGroup> topLevelGroups, TSource source, DateTime nowUtc)
+    internal static bool IsInScope<TSource>(SyncRule rule, TSource source, DateTime nowUtc)
         where TSource : struct, IScopingValueSource
     {
+        var topLevelGroups = rule.ObjectScopingCriteriaGroups;
         for (var i = 0; i < topLevelGroups.Count; i++)
         {
-            if (EvaluateGroup(topLevelGroups[i], source, nowUtc, node: null) == true)
+            if (EvaluateGroup(topLevelGroups[i], source, nowUtc, node: null, rule.Name) == true)
                 return true;
         }
 
@@ -67,7 +71,7 @@ internal static class ScopingEvaluator
 
             // Synchronisation stops at the first group that is met, or fails at the first that reaches an invalid
             // criterion; whichever comes first decides. Later groups are still evaluated, for the explanation only.
-            var met = EvaluateGroup(topLevelGroups[i], source, nowUtc, node);
+            var met = EvaluateGroup(topLevelGroups[i], source, nowUtc, node, ruleName: null);
             if (decided == null && met != false)
                 decided = met == true ? ScopingRuleOutcome.InScope : ScopingRuleOutcome.Undetermined;
         }
@@ -79,7 +83,8 @@ internal static class ScopingEvaluator
     /// Evaluates a group and its descendants. Null only when tracing and the group holds an invalid criterion at any
     /// depth (synchronisation would have thrown on reaching it).
     /// </summary>
-    private static bool? EvaluateGroup<TSource>(SyncRuleScopingCriteriaGroup group, TSource source, DateTime nowUtc, ScopingGroupExplanation? node)
+    private static bool? EvaluateGroup<TSource>(SyncRuleScopingCriteriaGroup group, TSource source, DateTime nowUtc, ScopingGroupExplanation? node,
+        string? ruleName)
         where TSource : struct, IScopingValueSource
     {
         var childCount = 0;
@@ -91,7 +96,7 @@ internal static class ScopingEvaluator
         {
             childCount++;
             var criterionNode = node == null ? null : ScopingTraceBuilder.AddCriterion(node, criteria[i], childCount);
-            var outcome = EvaluateCriterion(criteria[i], source, nowUtc, criterionNode);
+            var outcome = EvaluateCriterion(criteria[i], source, nowUtc, criterionNode, ruleName);
             if (criterionNode != null)
                 criterionNode.Outcome = outcome;
 
@@ -106,7 +111,7 @@ internal static class ScopingEvaluator
         {
             childCount++;
             var childNode = node == null ? null : ScopingTraceBuilder.AddChildGroup(node, childGroups[i], childCount);
-            var met = EvaluateGroup(childGroups[i], source, nowUtc, childNode);
+            var met = EvaluateGroup(childGroups[i], source, nowUtc, childNode, ruleName);
             if (met == true)
                 metCount++;
             else if (met == null)
@@ -129,7 +134,7 @@ internal static class ScopingEvaluator
     }
 
     private static ScopingCriterionOutcome EvaluateCriterion<TSource>(SyncRuleScopingCriteria criterion, TSource source, DateTime nowUtc,
-        ScopingCriterionExplanation? node)
+        ScopingCriterionExplanation? node, string? ruleName)
         where TSource : struct, IScopingValueSource
     {
         if (!source.TryGetAttribute(criterion, out var attributeId, out var type, out var attributeName))
@@ -155,11 +160,20 @@ internal static class ScopingEvaluator
         {
             verdict = CriterionComparer.Evaluate(ref values, type, criterion.ComparisonType, expected, criterion.CaseSensitive);
         }
+        catch (RegexMatchTimeoutException ex) when (node == null)
+        {
+            // Synchronisation cannot tell whether the object is in scope, so it stops the object rather than guess.
+            Log.Warning(ex, "Scoping evaluation: the pattern on {Attribute} in {SyncRule} ran past its time limit",
+                LogSanitiser.Sanitise(attributeName), LogSanitiser.Sanitise(ruleName));
+            throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", attributeName,
+                $"Its pattern '{criterion.StringValue}' ran past its time limit of {CriterionPatterns.MatchTimeout.TotalMilliseconds:0} ms " +
+                "on one of the object's values; simplify the pattern (nested repetition such as (a+)+ is the usual cause).", ex);
+        }
         catch (RegexMatchTimeoutException ex) when (node != null)
         {
             // Synchronisation fails the object on a pattern that runs past its time limit; an explanation shows the
             // criterion as one that cannot be evaluated, as it would an invalid one, so the rest of the tree still shows.
-            Log.Warning(ex, "Scoping explanation: the pattern on {Attribute} ran past its time limit", attributeName);
+            Log.Warning(ex, "Scoping explanation: the pattern on {Attribute} ran past its time limit", LogSanitiser.Sanitise(attributeName));
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary, value: null, valueCount: 0);
             return ScopingCriterionOutcome.Invalid;
         }
