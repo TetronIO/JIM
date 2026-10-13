@@ -14,7 +14,11 @@ Tests an expression with sample metaverse and Connected System attribute values.
 ### Syntax
 
 ```powershell
+# Expression (default)
 Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
+
+# AttributeFlow
+Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
 ```
 
 ### Parameters
@@ -22,12 +26,14 @@ Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttrib
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Expression` | `string` | Yes |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. Can be given by position, as the first argument. |
-| `MvAttributes` | `hashtable` | No |  | A hashtable of sample Metaverse attribute values. Keys are attribute names, values are the attribute values. |
-| `CsAttributes` | `hashtable` | No |  | A hashtable of sample Connected System attribute values. Keys are attribute names, values are the attribute values. |
+| `MvAttributes` | `hashtable` | No |  | A hashtable of sample Metaverse attribute values. Keys are attribute names, values are the attribute values. With an Attribute Flow, `$null` is no value (distinct from empty text) and an array gives a multi-valued attribute several values. |
+| `CsAttributes` | `hashtable` | No |  | A hashtable of sample Connected System attribute values. Keys are attribute names, values are the attribute values. With an Attribute Flow, `$null` is no value (distinct from empty text) and an array gives a multi-valued attribute several values. |
+| `SyncRuleId` | `int` | Yes (AttributeFlow) |  | The ID of the Synchronisation Rule whose Attribute Flow to test the expression as. Give it with MappingId. |
+| `MappingId` | `int` | Yes (AttributeFlow) |  | The ID of the Attribute Flow to test the expression as. The expression tested is Expression, so an edit can be tried before it is saved. |
 
 ### Output
 
-The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester shows it, one value per line.
+The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what a synchronisation would give the target attribute.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -37,6 +43,14 @@ The result of evaluating the expression against the sample values. ResultLines g
 | `ResultType` | `string` | The type of the result (e.g., "String", "Int32", "Boolean"). |
 | `ErrorMessage` | `string` | Error message if the expression is invalid or evaluation failed. |
 | `ErrorPosition` | `int` | Position in the expression where an error occurred (if applicable). |
+| `Outcome` | `string` | What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an Attribute Flow was given and its sample values could be used. One of `Values`, `NoValue` or `Error`. |
+| `ErrorReason` | `string` | Why the outcome is an error. Set only when `Outcome` is Error. One of `MissingInputFailedMapping`, `MissingInputFailedObject`, `EvaluationFailed`, `ResultNotConvertible` or `ResultMultiValued`. |
+| `OutcomeDescription` | `string` | What synchronisation would do, in one sentence. Set only when an Attribute Flow was given. |
+| `ValueLines` | `string[]` | The values the target attribute would hold after value processing and conversion to its type, one line per value in JIM's text form. Set only when `Outcome` is Values. |
+| `TargetAttributeName` | `string` | The Attribute Flow's target attribute. Set only when an Attribute Flow was given. |
+| `TargetAttributeType` | `string` | The target attribute's type, which the values are converted to. Set only when an Attribute Flow was given. One of `NotSet`, `Text`, `Number`, `DateTime`, `Binary`, `Reference`, `Guid`, `Boolean`, `LongNumber` or `Decimal`. |
+| `MissingInputs` | `string[]` | The inputs the expression reads that have no value, such as `cs["sn"]`, when the Attribute Flow's Missing Input Behaviour stopped it being evaluated. |
+| `InputErrors` | `string[]` | Why the sample values could not be used, one message each, such as text that is not a date for a date and time attribute. When present the expression was not evaluated. |
 <!-- END GENERATED: Test-JIMExpression -->
 
 ### Examples
@@ -67,6 +81,17 @@ Test-JIMExpression -Expression 'cs["Department"] == "IT" ? "Technology" : cs["De
 }
 ```
 
+```powershell title="Test an expression as an Attribute Flow"
+# Samples are read as their attributes' types, and the result goes through the Attribute Flow's
+# Missing Input Behaviour, value processing and conversion, as a synchronisation would.
+$result = Test-JIMExpression -Expression 'FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")' -SyncRuleId 12 -MappingId 40 -CsAttributes @{
+    hireDate = "2026-03-02"
+}
+$result.Outcome             # Values, NoValue or Error
+$result.ValueLines          # 2026-03-02
+$result.OutcomeDescription  # what a synchronisation would do, in one sentence
+```
+
 ```powershell title="Check for expression errors"
 $result = Test-JIMExpression -Expression 'mv["Missing"'
 if (-not $result.IsValid) {
@@ -80,7 +105,7 @@ if (-not $result.IsValid) {
     Expressions use DynamicExpresso syntax. Use `mv["AttributeName"]` for metaverse attributes and `cs["AttributeName"]` for Connected System attributes. Built-in functions include `Lower()`, `Upper()`, `Trim()`, `EscapeDN()`, `Left()`, `Right()`, `Mid()`, and more. See the [Expressions concept guide](../concepts/expressions.md) for the full function reference.
 
 !!! warning "Test the missing-input case"
-    A null result clears the target, and a concatenation with a missing operand produces a malformed value rather than null. Use `Test-JIMExpression` with the relevant attribute **omitted** from `-MvAttributes` / `-CsAttributes` to see what happens when an input is absent, before deploying the mapping. See [Nulls, Missing Inputs, and Whitespace](../concepts/expressions.md#nulls-missing-inputs-and-whitespace).
+    A null result clears the target, and a concatenation with a missing operand produces a malformed value rather than null. Use `Test-JIMExpression` with the relevant attribute **omitted** from `-MvAttributes` / `-CsAttributes` (or, with an Attribute Flow, set to `$null`) to see what happens when an input is absent, before deploying the mapping. See [Nulls, Missing Inputs, and Whitespace](../concepts/expressions.md#nulls-missing-inputs-and-whitespace).
 
 ## See also
 
