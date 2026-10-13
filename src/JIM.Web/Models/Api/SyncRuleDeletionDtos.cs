@@ -7,25 +7,23 @@ using JIM.Models.Logic.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Tracking response returned with 202 Accepted when deleting a Synchronisation Rule queued a recall of its
-/// contributed Metaverse attribute values (#1537). The rule is disabled immediately and deleted by the queued
-/// Worker task once the recall completes; monitor progress via the Activity.
+/// A Synchronisation Rule deletion that recalls the values the rule contributed first. The rule is disabled at once
+/// and deleted when the recall finishes.
 /// </summary>
 public class SyncRuleDeletionQueuedResponse
 {
     /// <summary>
-    /// The queued recall's Activity id. Poll <c>GET activities/{id}</c> (or watch the Operations page) to
-    /// monitor progress; the Synchronisation Rule is deleted as the task's final step.
+    /// The ID of the Activity recalling the values. The Synchronisation Rule is deleted as its last step.
     /// </summary>
     public Guid RecallActivityId { get; set; }
 
     /// <summary>
-    /// How many Metaverse attribute values the Synchronisation Rule contributed at decision time.
+    /// How many Metaverse attribute values the Synchronisation Rule contributed when the deletion was asked for.
     /// </summary>
     public int AffectedValueCount { get; set; }
 
     /// <summary>
-    /// How many distinct Metaverse Objects held at least one of those values at decision time.
+    /// How many Metaverse Objects held at least one of those values.
     /// </summary>
     public int AffectedObjectCount { get; set; }
 
