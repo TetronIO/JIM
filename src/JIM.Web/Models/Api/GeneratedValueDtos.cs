@@ -12,15 +12,57 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class GeneratedValueAssignmentHeaderDto
 {
+    /// <summary>
+    /// The unique identifier of the assignment.
+    /// </summary>
     public Guid AssignmentId { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Metaverse Attribute the value was generated for.
+    /// </summary>
     public int MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// That attribute's name.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The generated value.
+    /// </summary>
     public string Value { get; set; } = null!;
+
+    /// <summary>
+    /// How the value was made unique: a number added only if the value is taken, the next number in a sequence, or
+    /// a random token.
+    /// </summary>
     public GeneratedValueTokenKind TokenKind { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Synchronisation Rule whose Attribute Flow generated the value.
+    /// </summary>
     public int SyncRuleId { get; set; }
+
+    /// <summary>
+    /// That Synchronisation Rule's name.
+    /// </summary>
     public string? SyncRuleName { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Attribute Flow that generated the value.
+    /// </summary>
     public int SyncRuleMappingId { get; set; }
+
+    /// <summary>
+    /// Where the value stands: Committed once saved onto the object, Remediated after JIM revised it when a target
+    /// refused it, or NeedsDecision when it could not be revised automatically and waits for an administrator.
+    /// Proposed values are never saved, so never appear here.
+    /// </summary>
     public GeneratedValueAssignmentState State { get; set; }
+
+    /// <summary>
+    /// When the value was assigned (UTC).
+    /// </summary>
     public DateTime AssignedDate { get; set; }
 
     public static GeneratedValueAssignmentHeaderDto FromModel(GeneratedValueAssignmentHeader model) => new()
