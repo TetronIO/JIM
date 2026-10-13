@@ -856,6 +856,113 @@ Describe 'Get-JIMActivityExecutionItem' {
         }
     }
 
+    Context 'Causal timeline' {
+
+        It 'Keeps the item as its default parameter set, with the timeline sets beside it' {
+            $command = Get-Command Get-JIMActivityExecutionItem
+            $command.DefaultParameterSet | Should -Be 'Item'
+            foreach ($set in 'ConnectedSystemObjectTimeline', 'ConnectedSystemObjectTimelineAll', 'MetaverseObjectTimeline', 'MetaverseObjectTimelineAll') {
+                $command.ParameterSets.Name | Should -Contain $set
+            }
+        }
+
+        It 'Requests a page of a Connected System Object''s timeline and returns its rows' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $csoId = [guid]::NewGuid()
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        object = [PSCustomObject]@{ kind = 'ConnectedSystemObject'; id = $csoId; isDeleted = $false }
+                        items = @([PSCustomObject]@{ id = $itemId; because = 'Tina Adams was deleted' })
+                        totalCount = 1; page = 2; pageSize = 10; hasNextPage = $false
+                        metaverseObjectChangesNotRecorded = $false
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -ConnectedSystemId 3 -ConnectedSystemObjectId $csoId -Page 2 -PageSize 10)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/synchronisation/connected-systems/3/connector-space/$csoId/causal-timeline?page=2&pageSize=10"
+                }
+                $rows.Count | Should -Be 1
+                $rows[0].id | Should -Be $itemId
+                $rows[0].because | Should -Be 'Tina Adams was deleted'
+            }
+        }
+
+        It 'Pages through a whole Metaverse Object timeline with -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    $page = if ($Endpoint -match 'page=(\d+)') { [int]$Matches[1] } else { 0 }
+                    [PSCustomObject]@{
+                        items = @([PSCustomObject]@{ id = [guid]::NewGuid(); page = $page })
+                        totalCount = 2; page = $page; pageSize = 1; totalPages = 2; hasNextPage = ($page -lt 2)
+                        metaverseObjectChangesNotRecorded = $false
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -MetaverseObjectId $mvoId -All -PageSize 1)
+
+                $rows.Count | Should -Be 2
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/causal-timeline?page=1&pageSize=1" }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/causal-timeline?page=2&pageSize=1" }
+            }
+        }
+
+        It 'Warns once that a Metaverse Object timeline is incomplete where its changes are not recorded' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    $page = if ($Endpoint -match 'page=(\d+)') { [int]$Matches[1] } else { 0 }
+                    [PSCustomObject]@{
+                        items = @([PSCustomObject]@{ id = [guid]::NewGuid() })
+                        totalCount = 2; page = $page; pageSize = 1; totalPages = 2; hasNextPage = ($page -lt 2)
+                        metaverseObjectChangesNotRecorded = $true
+                    }
+                }
+
+                $null = Get-JIMActivityExecutionItem -MetaverseObjectId ([guid]::NewGuid()) -All -PageSize 1 -WarningVariable warnings -WarningAction SilentlyContinue
+
+                @($warnings).Count | Should -Be 1
+                "$($warnings[0])" | Should -BeLike '*Metaverse Object changes*'
+            }
+        }
+
+        It 'Pipes each timeline row into -Causes by the row''s own execution item id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ runProfileExecutionItemId = $itemId; cohorts = @() } }
+                # The row shape: the item's id beside the ids of the objects it was about.
+                $row = [PSCustomObject]@{
+                    Id = $itemId; ConnectedSystemId = 3; ConnectedSystemObjectId = [guid]::NewGuid(); MetaverseObjectId = [guid]::NewGuid()
+                }
+
+                $row | Get-JIMActivityExecutionItem -Causes | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId/causes" }
+            }
+        }
+
+        It 'Fetches the item for a piped timeline row given no switch, not a timeline' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = $itemId } }
+                $row = [PSCustomObject]@{
+                    Id = $itemId; ConnectedSystemId = 3; ConnectedSystemObjectId = [guid]::NewGuid(); MetaverseObjectId = [guid]::NewGuid()
+                }
+
+                $row | Get-JIMActivityExecutionItem | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId" }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

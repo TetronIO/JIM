@@ -14,11 +14,20 @@ function Get-JIMPendingExport {
         Can list all pending exports for a connected system, retrieve a specific pending export
         by ID, or get paginated attribute changes for a specific attribute.
 
+        With -QueuedBy, returns the synchronisation runs that queued a Pending Export instead, newest
+        first: one row per execution item that staged it, each with its nearest recorded cause. Each
+        row's Id is an execution item's, so piping rows into Get-JIMActivityExecutionItem -Causes walks
+        back through why the change is waiting to be exported.
+
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System to retrieve pending exports for.
 
     .PARAMETER Id
         The unique identifier (GUID) of a specific Pending Export to retrieve.
+
+    .PARAMETER QueuedBy
+        Return the runs that queued the Pending Export instead. Pending Exports listed by
+        Get-JIMPendingExport can be piped straight in.
 
     .PARAMETER AttributeName
         When specified with -Id, retrieves paginated attribute value changes for the named
@@ -44,7 +53,9 @@ function Get-JIMPendingExport {
         large the result set is. Only valid with -All.
 
     .OUTPUTS
-        PSCustomObject representing Pending Export(s) or attribute value changes.
+        PSCustomObject representing Pending Export(s) or attribute value changes. With -QueuedBy,
+        one row per run that queued the Pending Export, newest first; a warning says when runs are no
+        longer retained, or when earlier ones may be missing.
 
     .EXAMPLE
         Get-JIMPendingExport -ConnectedSystemId 2
@@ -77,6 +88,18 @@ function Get-JIMPendingExport {
         Gets all attribute changes for the "member" attribute (auto-paginates).
 
     .EXAMPLE
+        Get-JIMPendingExport -Id "15aa3e6f-9f82-44a8-a04d-0245d3c76198" -QueuedBy |
+            Format-Table Executed, TargetName, TargetContext, Because
+
+        Lists the synchronisation runs that queued a Pending Export, and why each did.
+
+    .EXAMPLE
+        Get-JIMPendingExport -Id "15aa3e6f-9f82-44a8-a04d-0245d3c76198" -QueuedBy |
+            Get-JIMActivityExecutionItem -Causes
+
+        Walks back from each run that queued a Pending Export through everything that caused it.
+
+    .EXAMPLE
         Get-JIMPendingExport -ConnectedSystemId 2 -Count
 
         Gets the total count of pending exports for Connected System 2.
@@ -105,7 +128,11 @@ function Get-JIMPendingExport {
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [Parameter(Mandatory, ParameterSetName = 'AttributeChanges')]
         [Parameter(Mandatory, ParameterSetName = 'AttributeChangesAll')]
+        [Parameter(Mandatory, ParameterSetName = 'QueuedBy', ValueFromPipelineByPropertyName)]
         [guid]$Id,
+
+        [Parameter(Mandatory, ParameterSetName = 'QueuedBy')]
+        [switch]$QueuedBy,
 
         [Parameter(Mandatory, ParameterSetName = 'AttributeChanges')]
         [Parameter(Mandatory, ParameterSetName = 'AttributeChangesAll')]
@@ -178,6 +205,25 @@ function Get-JIMPendingExport {
 
                 $result = Invoke-JIMApi -Endpoint $endpoint
                 $result
+            }
+
+            'QueuedBy' {
+                Write-Verbose "Getting the runs that queued Pending Export: $Id"
+                $stagingRuns = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/pending-exports/$Id/queued-by"
+                if (-not $stagingRuns) {
+                    return
+                }
+
+                if ($stagingRuns.notRetainedCount -gt 0) {
+                    Write-Warning "$($stagingRuns.notRetainedCount) of the runs that queued Pending Export $Id are no longer retained, so they are not listed."
+                }
+                if ($stagingRuns.earlierRunsMayBeOmitted) {
+                    Write-Warning "Pending Export $Id names as many runs as it keeps, so earlier runs that queued it may not be listed."
+                }
+
+                foreach ($run in $stagingRuns.runs) {
+                    $run
+                }
             }
 
             'ById' {

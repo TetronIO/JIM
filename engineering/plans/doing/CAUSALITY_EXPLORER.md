@@ -1,6 +1,6 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phases 3-0 and 3a to 3d complete; Phase 3e next)
+- **Status:** Doing (Phases 3-0 and 3a to 3e complete; Phase 3f next)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
 - **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
 - **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
@@ -177,9 +177,17 @@ Delivery notes:
 - Verified at runtime on the full stack by driving every entry point and re-centring path: item links, object heads and timeline rows re-centre with the trail; crumbs and browser back return; Copy link offers its dialog over plain HTTP; a deleted Connected System Object focus offers its deletion record; a Pending Export staged by two runs and one purged run lists both and counts the third. Layout fixes from the screenshots: the Metaverse Object page's button and the run cells no longer wrap, and trail steps clip later.
 - **An item that recorded no object type takes its record's.** The walk-through showed one trail step naming "jimGroup" and the next not: an import updating a record it already holds records only the name. The timeline reads now fall back to the Connected System Object's own type, keeping a recorded one, which can name the Metaverse Object. The timeline page now also reads its columns for the page's rows alone rather than for the whole history it counts.
 
-### Phase 3e: REST and PowerShell
+### Phase 3e: REST and PowerShell ✅
 
 The endpoints and DTOs from §8, with controller tests and an OpenAPI generation run. New parameter sets on `Get-JIMPendingExport` and `Get-JIMActivityExecutionItem`, with Pester tests of binding (piped objects included), paging and output shape.
+
+Delivery notes:
+
+- **Each row carries its nearest cause twice:** as cohorts (`NearestCauses`, at most three, with `NearestCauseCount`) and as `Because`, the one line the portal reads. The ", and N more causes" wording moved into `CausalityCauseWording` (`NearestCauseText`, `MoreCausesSuffix`) so the component and the API share it.
+- **The object header decides 404,** for live and deleted objects alike; a Connected System Object read under another Connected System's route is also a 404, as change history's is.
+- **No object piping into the timeline sets (a deviation from §8).** A piped Connected System Object or Metaverse Object carries its own id as `Id`, which the item sets already bind by default, so `-InputObject` could only select a timeline through a switch existing for nothing else. The timeline takes the object's ids explicitly; its rows pipe into `-Causes` and `-Consequences`, and a piped row with no switch still fetches the item (both pinned by Pester).
+- **`-QueuedBy` has no `-All`** (a deviation from §8): the endpoint is not paged, since a Pending Export keeps a bounded list of stagers. Rows from the Pending Export list pipe in by `Id`; warnings say when runs are no longer retained or earlier ones may be missing.
+- Verified at runtime on the full stack: both timelines return worded rows with their header; `-All` pages a six-item timeline at two a page; a timeline row piped into `-Causes` walks its causes; an unknown object, a Connected System Object under the wrong Connected System and an unknown Pending Export each return 404. The sandbox held no Pending Exports at the time, so Queued by's populated response rests on the controller tests and on 3d's runtime check of the panel over the same read.
 
 ### Phase 3f: Documentation, integration and close-out
 
