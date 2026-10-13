@@ -23,18 +23,17 @@ function Start-JIMConnectedSystemAuxiliaryClassDiscovery {
         cancelled like any other long-running operation. One run at a time per Connected System.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System to read.
+        The ID of the Connected System to read.
 
     .PARAMETER Scope
         QuickSample to read a fixed number of entries of each Object Type, or FullScan to read every
         entry in scope.
 
     .PARAMETER SampleSizePerObjectType
-        How many entries of each Object Type a quick sample should read. Defaults to 5000, and is
-        ignored for a full scan, which has no per-type limit.
+        How many entries of each Object Type a QuickSample reads. Ignored for a FullScan, which reads them all.
 
     .OUTPUTS
-        PSCustomObject with WorkerTaskId and ActivityId, for watching or cancelling the run.
+        The IDs of the worker task and Activity the run reports against, for following or cancelling it.
 
     .EXAMPLE
         Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1 -Scope QuickSample
@@ -58,7 +57,7 @@ function Start-JIMConnectedSystemAuxiliaryClassDiscovery {
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AuxiliaryClassDiscoveryStartedDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

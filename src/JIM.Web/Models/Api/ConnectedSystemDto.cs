@@ -14,17 +14,67 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class ConnectedSystemDetailDto
 {
+    /// <summary>
+    /// The ID of the Connected System.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// What the Connected System is for, for administrators; null when none is given.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// When the Connected System was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// When the Connected System was last changed (UTC); null if it never has been.
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System takes part in synchronisation: Active, Disabled, or Deleting while a deletion
+    /// is under way.
+    /// </summary>
     public ConnectedSystemStatus Status { get; set; }
+
+    /// <summary>
+    /// Whether the Connector has validated the Connected System's current settings. False on a new Connected
+    /// System, and again after any setting changes, until they are validated.
+    /// </summary>
     public bool SettingValuesValid { get; set; }
+
+    /// <summary>
+    /// The Connector the Connected System uses.
+    /// </summary>
     public ConnectorReferenceDto Connector { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's Object Types, from its imported schema.
+    /// </summary>
     public List<ConnectedSystemObjectTypeDto> ObjectTypes { get; set; } = new();
+
+    /// <summary>
+    /// How many Connected System Objects the Connected System holds.
+    /// </summary>
     public int ObjectCount { get; set; }
+
+    /// <summary>
+    /// How many Pending Exports are waiting to be exported to the Connected System.
+    /// </summary>
     public int PendingExportCount { get; set; }
+
+    /// <summary>
+    /// How many export batches run at once, where the Connector supports exporting in parallel; null or 1 exports
+    /// one batch at a time.
+    /// </summary>
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
@@ -150,11 +200,35 @@ public class ConnectorReferenceDto
 /// </summary>
 public class ConnectedSystemObjectTypeDto
 {
+    /// <summary>
+    /// The ID of the Object Type.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the Object Type, as the Connected System calls it.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// When JIM first imported the Object Type (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// Whether JIM manages objects of this type; objects of an unselected type are not imported.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// Whether the Metaverse attribute values a Connected System Object of this type contributed are recalled when
+    /// the object is deleted from the Connected System. True by default.
+    /// </summary>
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
+
+    /// <summary>
+    /// How many attributes the Object Type has.
+    /// </summary>
     public int AttributeCount { get; set; }
 
     /// <summary>
@@ -198,6 +272,9 @@ public class ConnectedSystemObjectTypeDto
     /// </summary>
     public int? StructuralCarrierObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The Object Type's attributes; null when the response does not include them.
+    /// </summary>
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
@@ -238,6 +315,9 @@ public class AuxiliaryClassOfferDto
     /// </summary>
     public int ObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The name of the auxiliary class.
+    /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
@@ -339,7 +419,15 @@ public class AuxiliaryClassAttributeDto
 /// </summary>
 public class AuxiliaryClassDiscoveryRunDto
 {
+    /// <summary>
+    /// The ID of the discovery run.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// How much the run reads: QuickSample reads up to SampleSizePerObjectType entries per Object Type, which finds
+    /// the classes a population uses consistently but cannot prove one unused; FullScan reads every entry in scope.
+    /// </summary>
     public AuxiliaryClassDiscoveryScope Scope { get; set; }
 
     /// <summary>
@@ -347,7 +435,15 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public int? SampleSizePerObjectType { get; set; }
 
+    /// <summary>
+    /// Where the run has got to: InProgress, Complete, Cancelled or Failed. The results of a run that is not
+    /// Complete are partial.
+    /// </summary>
     public AuxiliaryClassDiscoveryStatus Status { get; set; }
+
+    /// <summary>
+    /// When the run started (UTC).
+    /// </summary>
     public DateTime Started { get; set; }
 
     /// <summary>
@@ -366,6 +462,9 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public Guid? ActivityId { get; set; }
 
+    /// <summary>
+    /// The name of whoever started the run.
+    /// </summary>
     public string? InitiatedByName { get; set; }
 
     /// <summary>
@@ -373,6 +472,9 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// Each auxiliary class the run found, by Object Type, with how many entries carry it.
+    /// </summary>
     public List<AuxiliaryClassDiscoveryResultDto> Results { get; set; } = [];
 
     public static AuxiliaryClassDiscoveryRunDto FromEntity(AuxiliaryClassDiscoveryRun entity)
@@ -430,11 +532,35 @@ public class ConnectedSystemObjectTypeTagDto
 /// </summary>
 public class ConnectedSystemAttributeDto
 {
+    /// <summary>
+    /// The ID of the attribute.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the attribute, as the Connected System calls it.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's description of the attribute; null when it gives none.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// On a Connected System whose classes inherit, such as an LDAP directory, the class the attribute comes from;
+    /// null elsewhere.
+    /// </summary>
     public string? ClassName { get; set; }
+
+    /// <summary>
+    /// When JIM first imported the attribute (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// The type of value the attribute holds, such as Text, Number or Reference.
+    /// </summary>
     public string Type { get; set; } = null!;
 
     /// <summary>
@@ -443,9 +569,25 @@ public class ConnectedSystemAttributeDto
     /// </summary>
     public bool TypeSetByAdministrator { get; set; }
 
+    /// <summary>
+    /// Whether the attribute holds one value (SingleValued) or several (MultiValued).
+    /// </summary>
     public string AttributePlurality { get; set; } = null!;
+
+    /// <summary>
+    /// Whether JIM imports and exports the attribute.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// Whether the attribute uniquely and permanently identifies an object of this type in the Connected System.
+    /// </summary>
     public bool IsExternalId { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System also identifies an object of this type by the attribute, as an LDAP directory
+    /// does by distinguished name.
+    /// </summary>
     public bool IsSecondaryExternalId { get; set; }
 
     /// <summary>
