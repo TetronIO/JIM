@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using System.Text.RegularExpressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
@@ -21,10 +22,9 @@ namespace JIM.Application.Servers.Scoping;
 /// <list type="bullet">
 /// <item><description>Top-level groups are ORed, and synchronisation stops at the first one met.</description></item>
 /// <item><description>Within a group every child is evaluated (no short-circuit), then <c>All</c> or <c>Any</c> applies; an empty group is met.</description></item>
-/// <item><description>A missing value fails every comparison except Equals against an all-empty absolute criterion.</description></item>
-/// <item><description>Every value an attribute holds is compared (#1923): a positive operator is met by any value, a negated one only when every value meets it (no value matches what it negates).</description></item>
+/// <item><description>Every comparison means what <see cref="CriterionComparer"/> says it means (#2053): a positive operator is met by any value, a negated one only when the attribute holds a value and none matches what it negates (#1923), and a missing value fails every comparison except "has no value".</description></item>
 /// <item><description>Relative dates resolve against one instant per evaluation.</description></item>
-/// <item><description>An operator invalid for the attribute's type makes synchronisation fail loudly when it is reached.</description></item>
+/// <item><description>An operator invalid for the attribute's type, or a pattern that is invalid or runs past its time limit, makes synchronisation fail loudly when it is reached.</description></item>
 /// </list>
 /// The trace is optional and is the only difference between the two modes: when it is null (every synchronisation
 /// call) nothing is allocated, invalid criteria throw, and the top-level loop returns at the first met group. When a
@@ -135,47 +135,45 @@ internal static class ScopingEvaluator
         if (!source.TryGetAttribute(criterion, out var attributeId, out var type, out var attributeName))
             return ScopingCriterionOutcome.AttributeMissing;
 
-        if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, type))
+        var invalidReason = InvalidReason(criterion, type);
+        if (invalidReason != null)
         {
             if (node == null)
-                throw InvalidOperator(criterion.ComparisonType, type, attributeName);
+                throw InvalidCriterion(invalidReason, criterion.ComparisonType, type, attributeName);
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary: null, value: null, valueCount: 0);
             return ScopingCriterionOutcome.Invalid;
         }
 
         var boundary = type == AttributeDataType.DateTime ? ResolveCriterionDate(criterion, nowUtc) : null;
+        var expected = new ScopingValue(criterion.StringValue, criterion.IntValue, criterion.LongValue, criterion.DecimalValue,
+            boundary, criterion.BoolValue, criterion.GuidValue);
 
-        // Walk the values until one decides (#1923). A positive operator is met by the first value that meets it; a
-        // negated operator needs every value to meet it, so the first value that does not decides it is not met.
-        // For one value both reduce to comparing that value, so single-valued attributes scope exactly as before.
-        var negated = SearchComparisonOperators.IsNegated(criterion.ComparisonType);
-        var position = 0;
-        var heldCount = 0;
-        var decided = false;
-        ScopingValue lastHeld = default;
-        while (source.TryGetNextValue(attributeId, ref position, out var value))
+        var values = new SourceValueCursor<TSource>(source, attributeId);
+        CriterionVerdict verdict;
+        try
         {
-            heldCount++;
-            lastHeld = value;
-            if (Compare(type, value, criterion, boundary) != negated)
-            {
-                decided = true;
-                break;
-            }
+            verdict = CriterionComparer.Evaluate(ref values, type, criterion.ComparisonType, expected, criterion.CaseSensitive);
+        }
+        catch (RegexMatchTimeoutException ex) when (node != null)
+        {
+            // Synchronisation fails the object on a pattern that runs past its time limit; an explanation shows the
+            // criterion as one that cannot be evaluated, as it would an invalid one, so the rest of the tree still shows.
+            Log.Warning(ex, "Scoping explanation: the pattern on {Attribute} ran past its time limit", attributeName);
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary, value: null, valueCount: 0);
+            return ScopingCriterionOutcome.Invalid;
         }
 
-        var met = heldCount == 0 ? MatchesMissingValue(criterion) : decided != negated;
-        var outcome = met
+        var outcome = verdict.Met
             ? ScopingCriterionOutcome.Met
-            : heldCount > 0 ? ScopingCriterionOutcome.NotMet : ScopingCriterionOutcome.NoValue;
+            : verdict.HeldCount > 0 ? ScopingCriterionOutcome.NotMet : ScopingCriterionOutcome.NoValue;
 
         if (node != null)
         {
             // The value the outcome turned on: the one that decided it, or a lone value either way. Where several values
             // all went the same way, no single one did, and none is named.
             var valueCount = source.CountValues(attributeId);
-            ScopingValue? shown = decided || valueCount == 1 ? lastHeld : null;
+            ScopingValue? shown = verdict.Decided || valueCount == 1 ? verdict.LastHeld : null;
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary, shown, valueCount);
         }
 
@@ -183,32 +181,29 @@ internal static class ScopingEvaluator
     }
 
     /// <summary>
-    /// The failure for a criterion whose operator cannot apply to its attribute's type, logged as it is created.
-    /// Defence in depth: the write path rejects such criteria, so reaching here means a rule was persisted before that
-    /// guard existed or was changed outside it, and silently mis-scoping objects would be worse.
+    /// Why a criterion cannot be evaluated against an attribute of this type, or null when it can: its operator does
+    /// not apply to the type in scoping, or its pattern is not one JIM would save. Defence in depth: the write path
+    /// refuses both, so reaching one here means a rule was persisted before that guard existed or was changed outside
+    /// it, and silently mis-scoping objects would be worse than failing.
     /// </summary>
-    private static InvalidOperationException InvalidOperator(SearchComparisonType comparisonType, AttributeDataType type, string attributeName)
+    private static string? InvalidReason(SyncRuleScopingCriteria criterion, AttributeDataType type)
     {
-        Log.Error("Scoping evaluation: comparison operator {Operator} is not valid for the {Type} attribute {Attribute}; " +
-                  "the Synchronisation Rule is misconfigured", comparisonType, type, attributeName);
-        return new InvalidOperationException(
-            $"Comparison operator '{comparisonType}' is not valid for the {type} attribute '{attributeName}' on scoping criteria.");
+        if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, type, CriterionContext.Scoping))
+            return $"Comparison operator '{criterion.ComparisonType}' is not valid for the {type} attribute";
+
+        return SearchComparisonOperators.IsPattern(criterion.ComparisonType)
+            ? SearchComparisonOperators.ValidatePattern(criterion.StringValue)
+            : null;
     }
 
-    /// <summary>
-    /// Only Equals against an all-empty absolute criterion matches a missing value. A relative date criterion always
-    /// resolves to a real boundary, so it never does.
-    /// </summary>
-    private static bool MatchesMissingValue(SyncRuleScopingCriteria criterion) =>
-        criterion.ComparisonType == SearchComparisonType.Equals &&
-        criterion.ValueMode == DateCriteriaValueMode.Absolute &&
-        criterion.StringValue == null &&
-        criterion.IntValue == null &&
-        criterion.LongValue == null &&
-        criterion.DecimalValue == null &&
-        criterion.DateTimeValue == null &&
-        criterion.BoolValue == null &&
-        criterion.GuidValue == null;
+    /// <summary>The failure for a criterion that cannot be evaluated, logged as it is created.</summary>
+    private static InvalidOperationException InvalidCriterion(string reason, SearchComparisonType comparisonType, AttributeDataType type, string attributeName)
+    {
+        Log.Error("Scoping evaluation: a {Operator} criterion on the {Type} attribute {Attribute} cannot be evaluated ({Reason}); " +
+                  "the Synchronisation Rule is misconfigured", comparisonType, type, attributeName, reason);
+        return new InvalidOperationException(
+            $"The '{comparisonType}' scoping criterion on the {type} attribute '{attributeName}' cannot be evaluated: {reason}.");
+    }
 
     /// <summary>
     /// The DateTime a date criterion compares against: its relative boundary resolved against
@@ -225,65 +220,21 @@ internal static class ScopingEvaluator
         return criterion.DateTimeValue;
     }
 
-    private static bool Compare(AttributeDataType type, in ScopingValue value, SyncRuleScopingCriteria criterion, DateTime? boundary) => type switch
+    /// <summary>One attribute's values on a scoping source, walked without allocating.</summary>
+    private struct SourceValueCursor<TSource> : IScopingValueCursor
+        where TSource : struct, IScopingValueSource
     {
-        AttributeDataType.Text => CompareStrings(value.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
-        AttributeDataType.Number => CompareOrdered(value.IntValue, criterion.IntValue, criterion.ComparisonType),
-        AttributeDataType.LongNumber => CompareOrdered(value.LongValue, criterion.LongValue, criterion.ComparisonType),
-        // Numeric and scale-insensitive: an actual of 5.00 equals a criterion of 5.0.
-        AttributeDataType.Decimal => CompareOrdered(value.DecimalValue, criterion.DecimalValue, criterion.ComparisonType),
-        AttributeDataType.DateTime => CompareOrdered(value.DateTimeValue, boundary, criterion.ComparisonType),
-        AttributeDataType.Boolean => CompareEquality(value.BoolValue, criterion.BoolValue, criterion.ComparisonType),
-        AttributeDataType.Guid => CompareEquality(value.GuidValue, criterion.GuidValue, criterion.ComparisonType),
-        _ => false
-    };
+        private readonly TSource _source;
+        private readonly int _attributeId;
+        private int _position;
 
-    private static bool CompareStrings(string? actual, string? expected, SearchComparisonType comparisonType, bool caseSensitive)
-    {
-        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-        return comparisonType switch
+        public SourceValueCursor(TSource source, int attributeId)
         {
-            SearchComparisonType.Equals => string.Equals(actual, expected, comparison),
-            SearchComparisonType.NotEquals => !string.Equals(actual, expected, comparison),
-            SearchComparisonType.StartsWith => actual?.StartsWith(expected ?? "", comparison) ?? false,
-            SearchComparisonType.NotStartsWith => !(actual?.StartsWith(expected ?? "", comparison) ?? false),
-            SearchComparisonType.EndsWith => actual?.EndsWith(expected ?? "", comparison) ?? false,
-            SearchComparisonType.NotEndsWith => !(actual?.EndsWith(expected ?? "", comparison) ?? false),
-            SearchComparisonType.Contains => actual?.Contains(expected ?? "", comparison) ?? false,
-            SearchComparisonType.NotContains => !(actual?.Contains(expected ?? "", comparison) ?? false),
-            _ => false
-        };
-    }
+            _source = source;
+            _attributeId = attributeId;
+            _position = 0;
+        }
 
-    private static bool CompareOrdered<T>(T? actual, T? expected, SearchComparisonType comparisonType) where T : struct, IComparable<T>
-    {
-        if (!actual.HasValue || !expected.HasValue)
-            return comparisonType == SearchComparisonType.Equals && actual.HasValue == expected.HasValue;
-
-        var order = actual.GetValueOrDefault().CompareTo(expected.GetValueOrDefault());
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => order == 0,
-            SearchComparisonType.NotEquals => order != 0,
-            SearchComparisonType.LessThan => order < 0,
-            SearchComparisonType.LessThanOrEquals => order <= 0,
-            SearchComparisonType.GreaterThan => order > 0,
-            SearchComparisonType.GreaterThanOrEquals => order >= 0,
-            _ => false
-        };
-    }
-
-    private static bool CompareEquality<T>(T? actual, T? expected, SearchComparisonType comparisonType) where T : struct, IEquatable<T>
-    {
-        var equal = actual.HasValue
-            ? expected.HasValue && actual.GetValueOrDefault().Equals(expected.GetValueOrDefault())
-            : !expected.HasValue;
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => equal,
-            SearchComparisonType.NotEquals => !equal,
-            _ => false
-        };
+        public bool TryGetNext(out ScopingValue value) => _source.TryGetNextValue(_attributeId, ref _position, out value);
     }
 }
