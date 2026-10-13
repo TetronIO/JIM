@@ -40,6 +40,15 @@ public class ExpressionInputResolverTests
     }
 
     [Test]
+    public void Resolve_TheSameAttributeInDifferentCase_ReturnsItOnceAsFirstWritten()
+    {
+        // Attribute names in expressions ignore case (#2051), so mv["mail"] and mv["Mail"] read one attribute.
+        var inputs = ExpressionInputResolver.Resolve("mv[\"mail\"] + mv[\"Mail\"]");
+
+        Assert.That(inputs, Is.EqualTo(new[] { new ExpressionInput(ExpressionInputSource.Metaverse, "mail") }));
+    }
+
+    [Test]
     public void Resolve_SameNameOnBothSides_ReturnsBoth()
     {
         // mv["mail"] and cs["mail"] are different inputs holding different values; collapsing them would

@@ -120,6 +120,35 @@ public class ActivityListFilterTests
     }
 
     [Test]
+    public async Task GetActivitiesAsync_ConnectedSystemFilterInDifferentCase_StillMatchesAsync()
+    {
+        // Configuration names ignore case (#2051): -ConnectedSystemName 'contoso ad' finds Contoso AD's Activities.
+        var contoso = NewActivity(ActivityInitiatorType.User, daysOld: 1, targetContext: "Contoso AD");
+        var fabrikam = NewActivity(ActivityInitiatorType.User, daysOld: 1, targetContext: "Fabrikam HR");
+        _dbContext.Activities.AddRange(contoso, fabrikam);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.Activity.GetActivitiesAsync(
+            page: 1, pageSize: 100, connectedSystemFilter: ["contoso ad"]);
+
+        Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { contoso.Id }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_RunProfileFilterInDifferentCase_StillMatchesAsync()
+    {
+        var fullImport = NewActivity(ActivityInitiatorType.System, daysOld: 1, targetName: "Full Import");
+        var deltaImport = NewActivity(ActivityInitiatorType.System, daysOld: 1, targetName: "Delta Import");
+        _dbContext.Activities.AddRange(fullImport, deltaImport);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.Activity.GetActivitiesAsync(
+            page: 1, pageSize: 100, runProfileFilter: ["FULL IMPORT"]);
+
+        Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { fullImport.Id }));
+    }
+
+    [Test]
     public async Task GetActivitiesAsync_InitiatedByFilter_MatchesPartOfTheNameCaseInsensitivelyAsync()
     {
         var alice = NewActivity(ActivityInitiatorType.User, daysOld: 1, initiatedByName: "Alice Adams");

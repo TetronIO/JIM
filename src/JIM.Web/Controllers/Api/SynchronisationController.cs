@@ -5622,7 +5622,9 @@ public class SynchronisationController(
             return (relativeError, false);
 
         criterion.ComparisonType = comparisonType;
-        criterion.CaseSensitive = request.CaseSensitive;
+        // Omitted keeps the criterion's setting: a new criterion's default (respect case), or what an update finds
+        // stored (#2051), so a PUT that does not mention case sensitivity cannot reset it.
+        criterion.CaseSensitive = request.CaseSensitive ?? criterion.CaseSensitive;
         criterion.ValueMode = valueMode;
 
         if (valueMode == DateCriteriaValueMode.Relative)

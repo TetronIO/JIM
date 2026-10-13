@@ -399,7 +399,9 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (attribute == null)
             return BadRequest(ApiErrorResponse.BadRequest(attributeError!));
 
-        var (criterion, validationError) = BuildCriterion(attribute, request);
+        // Omitted CaseSensitive keeps the stored setting (#2051), so a PUT that does not mention it cannot reset it.
+        var storedCaseSensitive = group.Criteria.First(c => c.Id == criterionId).CaseSensitive;
+        var (criterion, validationError) = BuildCriterion(attribute, request, storedCaseSensitive);
         if (criterion == null)
             return BadRequest(ApiErrorResponse.BadRequest(validationError!));
 
@@ -564,7 +566,11 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// comparison operator applies to the attribute's data type and the matching value carrier is provided.
     /// Returns (null, error) on any validation failure.
     /// </summary>
-    private static (PredefinedSearchCriteria? criterion, string? error) BuildCriterion(MetaverseAttribute attribute, PredefinedSearchCriterionRequest request)
+    /// <param name="attribute">The criterion's Metaverse Attribute.</param>
+    /// <param name="request">The criterion request.</param>
+    /// <param name="caseSensitiveWhenOmitted">The case sensitivity to use when the request leaves it out: a new criterion
+    /// respects case, and an updated one keeps its stored setting.</param>
+    private static (PredefinedSearchCriteria? criterion, string? error) BuildCriterion(MetaverseAttribute attribute, PredefinedSearchCriterionRequest request, bool caseSensitiveWhenOmitted = true)
     {
         if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var op) || op == SearchComparisonType.NotSet)
             return (null, $"Invalid comparison type '{request.ComparisonType}'.");
@@ -573,7 +579,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         {
             MetaverseAttributeId = attribute.Id,
             ComparisonType = op,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? caseSensitiveWhenOmitted
         };
 
         // Relative-date validation (rejects relative-on-non-date, missing/negative offset, both-modes-set).

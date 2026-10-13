@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Application;
@@ -149,5 +150,83 @@ public class SynchronisationControllerScopingCriterionTests
             });
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    /// <summary>
+    /// A PUT that leaves CaseSensitive out keeps the criterion's stored setting (#2051), as UpdateObjectMatchingRuleRequest
+    /// does: Set-JIMScopingCriterion without -CaseSensitive used to reset an ignore-case criterion to case-sensitive.
+    /// </summary>
+    [Test]
+    public async Task UpdateScopingCriterionAsync_CaseSensitiveOmitted_KeepsTheStoredSettingAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.CaseSensitive = false;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest
+        {
+            MetaverseAttributeId = TextAttributeId, ComparisonType = "Equals", StringValue = "Sales"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.StringValue, Is.EqualTo("Sales"), "the update was applied");
+            Assert.That(criterion.CaseSensitive, Is.False, "an omitted setting must not reset the stored one");
+        }
+    }
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_CaseSensitiveSupplied_AppliesItAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest
+        {
+            MetaverseAttributeId = TextAttributeId, ComparisonType = "Equals", StringValue = "Sales", CaseSensitive = false
+        });
+
+        Assert.That(criterion.CaseSensitive, Is.False);
+    }
+
+    [Test]
+    public async Task CreateScopingCriterionAsync_CaseSensitiveOmitted_RespectsCaseAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var group = rule.ObjectScopingCriteriaGroups[0];
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        try
+        {
+            await _controller.CreateScopingCriterionAsync(SyncRuleId, GroupId, new CreateScopingCriterionRequest
+            {
+                MetaverseAttributeId = TextAttributeId, ComparisonType = "Equals", StringValue = "Finance"
+            });
+        }
+        catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException)
+        {
+            // The criterion has been added to the group before the save is attempted.
+        }
+
+        Assert.That(group.Criteria.Single(c => c.StringValue == "Finance").CaseSensitive, Is.True,
+            "a condition is exact unless the request says otherwise");
+    }
+
+    /// <summary>
+    /// Runs the update and inspects the criterion it applied the request to. Persisting the Synchronisation Rule is
+    /// the application layer's concern and is covered elsewhere; this fixture's repository is not wired for it.
+    /// </summary>
+    private async Task UpdateIgnoringPersistenceAsync(CreateScopingCriterionRequest request)
+    {
+        try
+        {
+            await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId, request);
+        }
+        catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException)
+        {
+            // The request has been applied to the criterion before the save is attempted.
+        }
     }
 }

@@ -47,8 +47,8 @@ public static class TestUtilities
         Assert.That(csioAttribute, Is.Not.Null);
 
         // look up the attribute in the ConnectedSystemObjectTypesData list and validate that the Connected System Object that has been built, is compliant with the schema.
-        var schemaObjectType = connectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
-        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(sourceSystemAttributeNames.ToString(), StringComparison.InvariantCultureIgnoreCase));
+        var schemaObjectType = connectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(sourceSystemAttributeNames.ToString(), StringComparison.OrdinalIgnoreCase));
 
         // make sure schema attributes that are single valued, only have a single value
         if (schemaAttribute.AttributePlurality == AttributePlurality.SingleValued)

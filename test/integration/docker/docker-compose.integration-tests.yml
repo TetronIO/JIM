@@ -339,6 +339,8 @@ services:
       - SCIM_BULK_MAX_OPERATIONS=${SCIM_BULK_MAX_OPERATIONS:-0}
       - SCIM_SUPPORTS_PATCH=${SCIM_SUPPORTS_PATCH:-true}
       - SCIM_PUBLISHES_SCHEMAS=${SCIM_PUBLISHES_SCHEMAS:-true}
+      # The User extension with a multi-valued string (badges) that Scenario 015's MultiValuedRemoval step needs.
+      - SCIM_PUBLISHES_CUSTOM_USER_EXTENSION=${SCIM_PUBLISHES_CUSTOM_USER_EXTENSION:-true}
       - SCIM_CERTIFICATE_PATH=/certificates/scim-provider.pem
     # No ports published: internal to the Docker network, like the directory containers.
     volumes:

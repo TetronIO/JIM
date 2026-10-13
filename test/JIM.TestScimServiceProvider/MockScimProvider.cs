@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 using JIM.Scim.Serialisation;
@@ -31,6 +32,18 @@ public sealed class MockScimProvider
     private const string BulkResponseSchema = "urn:ietf:params:scim:api:messages:2.0:BulkResponse";
     private const string UserSchemaUrn = "urn:ietf:params:scim:schemas:core:2.0:User";
     private const string GroupSchemaUrn = "urn:ietf:params:scim:schemas:core:2.0:Group";
+
+    /// <summary>The User schema extension published when <see cref="MockScimProviderOptions.PublishesCustomUserExtension"/> is on.</summary>
+    public const string CustomUserExtensionUrn = "urn:example:params:scim:schemas:extension:custom:2.0:User";
+
+    /// <summary>
+    /// A PATCH path selecting entries of a multi-valued attribute by value (RFC 7644 section 3.5.2), which is the one
+    /// filter shape a client needs in order to take one value away rather than all of them. The literal is a JSON
+    /// string or a bare number.
+    /// </summary>
+    private static readonly Regex ValueFilterPath = new(
+        """^(?<attribute>[^\[\]]+)\[\s*value\s+eq\s+(?<literal>"(?:[^"\\]|\\.)*"|[^\s\]]+)\s*\]$""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>Filters the provider understands, which is what RFC 7644 section 3.4.2.2 defines.</summary>
     private static readonly Regex FilterExpression = new(
@@ -189,7 +202,10 @@ public sealed class MockScimProvider
         {
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["id"] = "User", ["name"] = "User", ["endpoint"] = "/Users", ["schema"] = UserSchemaUrn
+                ["id"] = "User", ["name"] = "User", ["endpoint"] = "/Users", ["schema"] = UserSchemaUrn,
+                ["schemaExtensions"] = Options.PublishesCustomUserExtension
+                    ? new[] { new Dictionary<string, object?>(StringComparer.Ordinal) { ["schema"] = CustomUserExtensionUrn, ["required"] = false } }
+                    : Array.Empty<Dictionary<string, object?>>()
             },
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
@@ -212,14 +228,30 @@ public sealed class MockScimProvider
     /// </summary>
     private HttpResponseMessage Schemas()
     {
-        var schemas = new[] { ScimCoreSchemas.User(), ScimCoreSchemas.Group(), ScimCoreSchemas.EnterpriseUser() };
+        var schemas = new List<ScimSchema> { ScimCoreSchemas.User(), ScimCoreSchemas.Group(), ScimCoreSchemas.EnterpriseUser() };
+        if (Options.PublishesCustomUserExtension)
+            schemas.Add(CustomUserExtension());
 
         return Json(JsonSerializer.Serialize(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["schemas"] = new[] { ListResponseSchema },
-            ["totalResults"] = schemas.Length,
+            ["totalResults"] = schemas.Count,
             ["Resources"] = schemas
         }, ScimJson.Options));
+    }
+
+    private static ScimSchema CustomUserExtension()
+    {
+        return new ScimSchema
+        {
+            Id = CustomUserExtensionUrn,
+            Name = "Custom",
+            Description = "A provider's own User extension.",
+            Attributes =
+            [
+                new ScimSchemaAttribute { Name = "badges", Type = ScimAttributeTypes.String, MultiValued = true, Mutability = ScimMutability.ReadWrite }
+            ]
+        };
     }
     #endregion
 
@@ -489,10 +521,10 @@ public sealed class MockScimProvider
 
     /// <summary>
     /// Answers a request against one resource. PATCH applies operations with simple attribute paths
-    /// (<c>displayName</c>, <c>name.givenName</c>) and acknowledges the rest: the integration scenario's
-    /// confirming import reads the provider back, so an unapplied change would make every export
-    /// unconfirmable, but implementing SCIM's filtered paths (<c>members[value eq "x"]</c>) faithfully
-    /// enough to assert against would make the mock the thing being tested.
+    /// (<c>displayName</c>, <c>name.givenName</c>, an extension's URN-qualified attribute) and removals selecting
+    /// values with <c>[value eq ...]</c>, and acknowledges the rest: the integration scenario's confirming import
+    /// reads the provider back, so an unapplied change would make every export unconfirmable, but implementing
+    /// SCIM's filter grammar in full would make the mock the thing being tested.
     /// </summary>
     private HttpResponseMessage SingleResource(string resourceType, string id, HttpRequestMessage request)
     {
@@ -648,20 +680,119 @@ public sealed class MockScimProvider
         {
             var op = operation["op"]?.GetValue<string>()?.ToLowerInvariant();
             var path = operation["path"]?.GetValue<string>();
-
-            // Filtered and multi-segment paths carry SCIM path grammar this mock does not implement.
-            if (string.IsNullOrWhiteSpace(path) || path.Contains('[', StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(path))
                 continue;
 
-            if (op == "remove")
+            // A value filter is applied on a removal; any other filter, and a filtered add or replace, carries SCIM
+            // path grammar this mock does not implement.
+            JsonNode? selected = null;
+            var filter = ValueFilterPath.Match(path);
+            if (filter.Success)
             {
-                resource.Attributes.Remove(path);
+                if (op != "remove")
+                    continue;
+
+                path = filter.Groups["attribute"].Value;
+                selected = JsonNode.Parse(filter.Groups["literal"].Value);
+            }
+            else if (path.Contains('[', StringComparison.Ordinal))
+            {
                 continue;
             }
 
-            if (op is "add" or "replace" && operation.TryGetPropertyValue("value", out var value))
-                resource.Attributes[path] = value?.DeepClone();
+            var (extension, name) = SplitExtension(path);
+
+            if (op == "remove")
+            {
+                if (selected == null)
+                    RemoveMember(resource, extension, name);
+                else if (GetMember(resource, extension, name) is JsonArray entries)
+                    RemoveMatching(entries, selected);
+
+                continue;
+            }
+
+            if (op is not ("add" or "replace") || !operation.TryGetPropertyValue("value", out var value))
+                continue;
+
+            // RFC 7644 section 3.5.2.1: an add to a multi-valued attribute adds values to it, where a replace
+            // asserts the whole attribute.
+            if (op == "add" && GetMember(resource, extension, name) is JsonArray existing)
+            {
+                foreach (var added in value is JsonArray many ? many.ToList() : [value])
+                    existing.Add(added?.DeepClone());
+
+                continue;
+            }
+
+            SetMember(resource, extension, name, value?.DeepClone());
         }
+    }
+
+    /// <summary>
+    /// Separates an extension attribute's schema URN from its name. The URN contains colons of its own, so the name
+    /// is whatever follows the last one.
+    /// </summary>
+    private static (string? Extension, string Name) SplitExtension(string path)
+    {
+        if (!path.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
+            return (null, path);
+
+        var separator = path.LastIndexOf(':');
+        return (path[..separator], path[(separator + 1)..]);
+    }
+
+    private static object? GetMember(MockScimResource resource, string? extension, string name)
+    {
+        return extension == null
+            ? resource.Attributes.GetValueOrDefault(name)
+            : (resource.Attributes.GetValueOrDefault(extension) as JsonObject)?[name];
+    }
+
+    /// <summary>
+    /// Sets a member, nesting an extension attribute inside the member named by its URN, which is where RFC 7643
+    /// section 3 puts it and where a reader looks for it.
+    /// </summary>
+    private static void SetMember(MockScimResource resource, string? extension, string name, JsonNode? value)
+    {
+        if (extension == null)
+        {
+            resource.Attributes[name] = value;
+            return;
+        }
+
+        if (resource.Attributes.GetValueOrDefault(extension) is not JsonObject container)
+        {
+            container = new JsonObject();
+            resource.Attributes[extension] = container;
+        }
+
+        container[name] = value;
+    }
+
+    private static void RemoveMember(MockScimResource resource, string? extension, string name)
+    {
+        if (extension == null)
+            resource.Attributes.Remove(name);
+        else
+            (resource.Attributes.GetValueOrDefault(extension) as JsonObject)?.Remove(name);
+    }
+
+    /// <summary>
+    /// Takes the entries matching a value filter out of a multi-valued attribute: a simple attribute's values
+    /// themselves, or a complex attribute's <c>value</c> sub-attribute. Strings compare without regard to case, as
+    /// RFC 7643 has it for every attribute this provider holds.
+    /// </summary>
+    private static void RemoveMatching(JsonArray entries, JsonNode selected)
+    {
+        foreach (var entry in entries.Where(entry => Matches(entry is JsonObject complex ? complex["value"] : entry, selected)).ToList())
+            entries.Remove(entry);
+
+        static bool Matches(JsonNode? held, JsonNode selected) =>
+            held is JsonValue heldValue && selected is JsonValue selectedValue
+            && heldValue.TryGetValue<string>(out var heldText) && selectedValue.TryGetValue<string>(out var selectedText)
+                ? string.Equals(heldText, selectedText, StringComparison.OrdinalIgnoreCase)
+                : JsonNode.DeepEquals(held, selected);
     }
 
     private static Dictionary<string, JsonNode?>? ReadBody(HttpRequestMessage request)
