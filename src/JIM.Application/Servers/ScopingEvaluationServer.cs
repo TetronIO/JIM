@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -22,6 +23,18 @@ public class ScopingEvaluationServer
     public ScopingEvaluationServer()
     {
     }
+
+    /// <summary>
+    /// Whether evaluating the rule's scope can fail for some object rather than answer in or out: true when any criterion
+    /// compares with a pattern, which can run past its time limit on a value. A caller that must not act on an
+    /// undecidable scope can check such rules ahead of acting and skip the check for every other rule.
+    /// </summary>
+    public static bool CanFailToEvaluate(SyncRule rule) =>
+        rule.ObjectScopingCriteriaGroups.Any(GroupCanFailToEvaluate);
+
+    private static bool GroupCanFailToEvaluate(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria.Any(criterion => SearchComparisonOperators.IsPattern(criterion.ComparisonType)) ||
+        group.ChildGroups.Any(GroupCanFailToEvaluate);
 
     #region Export (MVO) Scoping
 

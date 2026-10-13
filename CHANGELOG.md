@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 The portal now refuses to save an Attribute Flow whose expression does not parse, naming the problem under the field (and suggesting the right case for a mistyped function name), instead of failing at synchronisation. (#2053)
+- 🐛 A scoping pattern that runs past its time limit on one object now stops only that object, with an error, when JIM evaluates exports, cleans up references to deleted objects or deletes a Connected System, instead of failing the whole run. (#2053)
 - 🐛 On Active Directory, an account your Attribute Flow enables while its Initial Password is queued, retrying or parked, like a pre-hire starting before it lands, waits disabled for it instead of failing the export; once it expires (7 days by default), it fails as before. (#2158)
 - 🐛 Removing one value from a multi-valued SCIM attribute, such as a list of strings in a schema extension, now removes only that value; the service provider used to delete every other value with it, including any added in the same export. (#2181)
 - 🐛 A schema refresh that finds an Object Type or attribute renamed only in case, such as `Mail` for `mail`, now keeps it and every Attribute Flow and Object Matching Rule using it, and takes the new name, instead of reporting it removed and added. (#2051)
