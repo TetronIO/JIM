@@ -22,32 +22,35 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
         Omitted parameters leave the stored value unchanged.
 
     .PARAMETER Id
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER InputObject
-        Connected System object to configure (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER Enabled
-        Whether to deliver queued password changes to this Connected System. Enabling drains whatever
-        accumulated while it was off.
+        Whether queued password changes are delivered to the Connected System. Enabling it delivers whatever queued
+        while it was off.
 
     .PARAMETER TargetObjectType
-        The identifier of the Connected System Object Type holding this system's user accounts. Required when
-        creating a configuration, and it must be an Object Type selected for synchronisation.
+        The ID of the Object Type holding the Connected System's user accounts, which must be selected for
+        synchronisation. Required when creating a configuration.
 
     .PARAMETER MaxRetries
-        How many delivery attempts to make before parking a queued change for an administrator. Use 0 for
-        JIM's default.
+        How many delivery attempts are made before a queued change is parked for an administrator; 0 for JIM's
+        default.
 
     .PARAMETER RetryBackoffBase
-        The first retry interval; each subsequent attempt waits twice as long, capped at the change's time to
-        live. Use 0 for JIM's default.
+        The first retry interval; each later attempt waits twice as long, up to the change's time to live. 0 for
+        JIM's default.
 
     .PARAMETER ChangeReason
-        An optional reason recorded against the Connected System's configuration change history.
+        Why the change was made, recorded in the Connected System's change history.
 
     .PARAMETER PassThru
-        Return the updated configuration.
+        Returns the configuration as changed.
+
+    .OUTPUTS
+        With -PassThru, the configuration as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -TargetObjectType 7 -Enabled $false
@@ -63,15 +66,14 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
     .EXAMPLE
         Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 
-        Requires an encrypted connection for password delivery to this system, and allows ten attempts before
-        a change is parked.
+        Allows ten attempts before a change is parked, and returns the configuration as changed.
 
     .LINK
         Get-JIMConnectedSystemPasswordSynchronisation
         Set-JIMConnectedSystemObjectPassword
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById', SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemPasswordSynchronisationResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

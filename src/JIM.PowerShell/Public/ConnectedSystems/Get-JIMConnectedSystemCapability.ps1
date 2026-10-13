@@ -4,7 +4,7 @@
 function Get-JIMConnectedSystemCapability {
     <#
     .SYNOPSIS
-        Gets the Connector-detected capabilities for a Connected System in JIM.
+        Gets what a Connected System's Connector detected about it.
 
     .DESCRIPTION
         Retrieves the human-readable facts a Connected System's Connector has detected about the target
@@ -16,10 +16,10 @@ function Get-JIMConnectedSystemCapability {
         been detected yet (for example, before the first successful connection or schema import).
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject representing each detected capability, with Name and Value properties.
+        One entry per fact the Connector detected, such as the directory type or paging support.
 
     .EXAMPLE
         Get-JIMConnectedSystemCapability -ConnectedSystemId 1
@@ -36,7 +36,7 @@ function Get-JIMConnectedSystemCapability {
         Import-JIMConnectedSystemHierarchy
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectorCapabilityDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
