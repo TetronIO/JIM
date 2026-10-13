@@ -1662,9 +1662,8 @@ public partial class SyncRepository
 
     /// <summary>
     /// The reference recall existence query (#1003). Matches by resolved reference id or by
-    /// case-insensitive raw reference string (values pre-lowered by the caller, as SQL's lower() lowers them; a
-    /// case-exact anchor's exact match is then decided by the caller, ReferenceValueIndex, #2051; LOWER() here
-    /// mirrors the OrdinalIgnoreCase DN comparison export evaluation uses). Driven by the
+    /// raw reference string ignoring case, the database lowering both sides so it never depends on .NET folding alike
+    /// (#2051); a case-exact value's exact match is decided by the caller (ReferenceValueIndex). Driven by the
     /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
     /// group's member rows - milliseconds - rather than materialising them all through EF Core.
     /// Call per target Connected System so identical values cannot cross-match between systems.
@@ -1673,10 +1672,10 @@ public partial class SyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues)
+        IReadOnlyCollection<string> referenceValues)
     {
         if (connectedSystemObjectIds.Count == 0 || connectedSystemAttributeIds.Count == 0 ||
-            (deletedReferenceCsoIds.Count == 0 && loweredReferenceValues.Count == 0))
+            (deletedReferenceCsoIds.Count == 0 && referenceValues.Count == 0))
             return new List<CsoReferenceValueMatch>();
 
         var matches = new List<CsoReferenceValueMatch>();
@@ -1690,7 +1689,7 @@ public partial class SyncRepository
               WHERE ""ConnectedSystemObjectId"" = ANY(@csoIds)
                 AND ""AttributeId"" = ANY(@attributeIds)
                 AND (""ReferenceValueId"" = ANY(@deletedCsoIds)
-                     OR LOWER(""UnresolvedReferenceValue"") = ANY(@loweredValues))";
+                     OR LOWER(""UnresolvedReferenceValue"") IN (SELECT lower(v) FROM unnest(@referenceValues) AS v))";
         var csoIdsParameter = command.CreateParameter();
         csoIdsParameter.ParameterName = "csoIds";
         csoIdsParameter.Value = connectedSystemObjectIds.ToArray();
@@ -1703,10 +1702,10 @@ public partial class SyncRepository
         deletedCsoIdsParameter.ParameterName = "deletedCsoIds";
         deletedCsoIdsParameter.Value = deletedReferenceCsoIds.ToArray();
         command.Parameters.Add(deletedCsoIdsParameter);
-        var loweredValuesParameter = command.CreateParameter();
-        loweredValuesParameter.ParameterName = "loweredValues";
-        loweredValuesParameter.Value = loweredReferenceValues.ToArray();
-        command.Parameters.Add(loweredValuesParameter);
+        var referenceValuesParameter = command.CreateParameter();
+        referenceValuesParameter.ParameterName = "referenceValues";
+        referenceValuesParameter.Value = referenceValues.ToArray();
+        command.Parameters.Add(referenceValuesParameter);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())

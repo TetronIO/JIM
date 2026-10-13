@@ -487,7 +487,7 @@ public class SyncRepository : ISyncRepository
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
                     av.StringValue != null &&
-                    string.Equals(av.StringValue, secondaryExternalIdValue, IdentifierKey.Comparison(IsCaseExact(av.AttributeId)))));
+                    IdentifierKey.AreSame(av.StringValue, secondaryExternalIdValue, IsCaseExact(av.AttributeId))));
 
         // Cloned for the same reason as GetConnectedSystemObjectsByIdsAsync (#1079 Regression B):
         // this is the confirming import's PendingProvisioning fallback lookup path
@@ -759,8 +759,8 @@ public class SyncRepository : ISyncRepository
                 .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
             if (secIdAv?.StringValue == null) continue;
 
-            var comparison = IdentifierKey.Comparison(IsCaseExact(secIdAv.AttributeId));
-            foreach (var value in requested.Where(value => string.Equals(value, secIdAv.StringValue, comparison)))
+            var comparer = IdentifierKey.Comparer(IsCaseExact(secIdAv.AttributeId));
+            foreach (var value in requested.Where(value => comparer.Equals(value, secIdAv.StringValue)))
                 result.TryAdd(value, cso);
         }
         return Task.FromResult(result);
@@ -1289,7 +1289,7 @@ public class SyncRepository : ISyncRepository
                     .FirstOrDefault(c => c.SecondaryExternalIdAttributeId.HasValue && c.AttributeValues
                         .Any(tav => tav.AttributeId == c.SecondaryExternalIdAttributeId &&
                                     tav.StringValue != null &&
-                                    string.Equals(tav.StringValue, av.UnresolvedReferenceValue, IdentifierKey.Comparison(IsCaseExact(tav.AttributeId)))));
+                                    IdentifierKey.AreSame(tav.StringValue, av.UnresolvedReferenceValue, IsCaseExact(tav.AttributeId))));
 
                 if (target != null)
                 {
@@ -1753,12 +1753,12 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues)
+        IReadOnlyCollection<string> referenceValues)
     {
         var csoIds = connectedSystemObjectIds as HashSet<Guid> ?? [.. connectedSystemObjectIds];
         var attributeIds = connectedSystemAttributeIds as HashSet<int> ?? [.. connectedSystemAttributeIds];
         var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
-        var loweredValues = loweredReferenceValues.ToHashSet(StringComparer.Ordinal);
+        var loweredValues = referenceValues.Select(value => IdentifierKey.For(value, caseExact: false)).ToHashSet(StringComparer.Ordinal);
 
         // Same comparison semantics as the SQL implementation: exact match on the resolved
         // reference id, or the pre-lowered raw reference string against LOWER(value).

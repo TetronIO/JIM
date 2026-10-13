@@ -9,14 +9,15 @@ namespace JIM.Utilities;
 /// unless the anchor is case-exact.
 /// </summary>
 /// <remarks>
-/// A database query can only narrow by <see cref="LoweredValues"/> (the superset ignoring case), so the exact answer
-/// for a case-exact value is given here, by <see cref="TryMatch"/>.
+/// A database query narrows by <see cref="Values"/> ignoring case (the database folding both sides), a superset of
+/// both kinds, so the answer for each held value is given here, by <see cref="TryMatch"/>.
 /// </remarks>
 /// <typeparam name="T">What a value identifies.</typeparam>
 public sealed class ReferenceValueIndex<T>
 {
     private readonly Dictionary<string, T> _ignoringCase = new(StringComparer.Ordinal);
     private readonly Dictionary<string, T> _caseExact = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _values = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Records that <paramref name="value"/> identifies <paramref name="target"/>; a later registration of the same
@@ -25,6 +26,7 @@ public sealed class ReferenceValueIndex<T>
     /// <param name="caseExact">Whether the referenced anchor attribute is declared case-exact.</param>
     public void Register(string value, bool caseExact, T target)
     {
+        _values.Add(value);
         if (caseExact)
             _caseExact[value] = target;
         else
@@ -32,10 +34,9 @@ public sealed class ReferenceValueIndex<T>
     }
 
     /// <summary>
-    /// Every registered value, lower-cased as SQL's <c>lower()</c> lowers them, for narrowing a query.
+    /// Every registered value as registered, for narrowing a query ignoring case.
     /// </summary>
-    public IReadOnlyCollection<string> LoweredValues =>
-        _ignoringCase.Keys.Concat(_caseExact.Keys.Select(value => IdentifierKey.For(value, caseExact: false))).ToHashSet(StringComparer.Ordinal);
+    public IReadOnlyCollection<string> Values => _values;
 
     /// <summary>
     /// What a held reference value identifies, if anything.

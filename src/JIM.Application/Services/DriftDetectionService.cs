@@ -209,7 +209,7 @@ public class DriftDetectionService
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
 
                     // Compare values
-                    if (!ValuesEqual(expectedValue, actualValue, AttributeValueComparison.For(mapping.TargetConnectedSystemAttribute)))
+                    if (!ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(mapping.TargetConnectedSystemAttribute)))
                     {
                         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}. " +
                             "Expected: '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -477,7 +477,7 @@ public class DriftDetectionService
 
         // The same comparison every export flow uses (exact for text, unless the attribute is an identifier that ignores
         // case; AttributeValueComparison), so drift and export staging agree on what counts as a difference.
-        if (ValuesEqual(expectedValue, actualValue, AttributeValueComparison.For(targetAttribute)))
+        if (ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(targetAttribute)))
             return;
 
         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} generated attribute {AttrName}. Expected (assigned): '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -910,9 +910,9 @@ public class DriftDetectionService
     /// </summary>
     /// <param name="expected">The value the Metaverse Object says the target should hold.</param>
     /// <param name="actual">The value the target holds.</param>
-    /// <param name="textComparison">How text compares, from <see cref="AttributeValueComparison"/>: exact, except for an
+    /// <param name="textComparer">How text compares, from <see cref="AttributeValueComparison"/>: exact, except for an
     /// identifier that ignores case, which the directory may report in the case it stored (#2195, #2051).</param>
-    private static bool ValuesEqual(object? expected, object? actual, StringComparison textComparison)
+    private static bool ValuesEqual(object? expected, object? actual, StringComparer textComparer)
     {
         if (expected == null && actual == null)
             return true;
@@ -947,7 +947,7 @@ public class DriftDetectionService
             // first, so only genuinely hash-missing values pay for a linear scan.
             foreach (var expectedValue in expectedSet.Where(v => !actualSet.Contains(v)))
             {
-                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue, textComparison));
+                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue, textComparer));
                 if (!found)
                 {
                     Log.Debug("ValuesEqual: Expected value {ExpectedValue} not found in actual set",
@@ -960,13 +960,13 @@ public class DriftDetectionService
         }
 
         // Handle single value comparison
-        return SingleValueEquals(expected, actual, textComparison);
+        return SingleValueEquals(expected, actual, textComparer);
     }
 
     /// <summary>
     /// Compares two single values for equality.
     /// </summary>
-    private static bool SingleValueEquals(object? expected, object? actual, StringComparison textComparison)
+    private static bool SingleValueEquals(object? expected, object? actual, StringComparer textComparer)
     {
         if (expected == null && actual == null)
             return true;
@@ -980,7 +980,7 @@ public class DriftDetectionService
 
         // Handle string comparison (exact unless the attribute is an identifier that ignores case)
         if (expected is string expectedStr && actual is string actualStr)
-            return string.Equals(expectedStr, actualStr, textComparison);
+            return textComparer.Equals(expectedStr, actualStr);
 
         // Handle Guid comparison (may be stored as string in CSO)
         if (expected is Guid expectedGuid)
@@ -1088,7 +1088,7 @@ public class DriftDetectionService
 
         // Check if this is a multi-valued attribute
         var isMultiValued = drifted.Attribute.AttributePlurality == AttributePlurality.MultiValued;
-        var textComparison = AttributeValueComparison.For(drifted.Attribute);
+        var textComparer = AttributeValueComparison.ComparerFor(drifted.Attribute);
 
         if (isMultiValued)
         {
@@ -1099,7 +1099,7 @@ public class DriftDetectionService
             // Find values to ADD (in expected but not in actual)
             foreach (var expectedValue in expectedSet)
             {
-                var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av, textComparison));
+                var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av, textComparer));
                 if (!existsInActual)
                 {
                     var addChange = new PendingExportAttributeValueChange
@@ -1121,7 +1121,7 @@ public class DriftDetectionService
             // Find values to REMOVE (in actual but not in expected)
             foreach (var actualValue in actualSet)
             {
-                var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue, textComparison));
+                var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue, textComparer));
                 if (!existsInExpected)
                 {
                     var removeChange = new PendingExportAttributeValueChange

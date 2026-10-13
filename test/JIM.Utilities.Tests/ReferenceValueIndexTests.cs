@@ -42,12 +42,12 @@ public class ReferenceValueIndexTests
     }
 
     [Test]
-    public void LoweredValues_CoverBothKinds()
+    public void Values_AreTheRegisteredValuesAsGiven()
     {
         var index = new ReferenceValueIndex<int>();
         index.Register("CN=Joe", caseExact: false, 1);
         index.Register("Abc", caseExact: true, 2);
 
-        Assert.That(index.LoweredValues, Is.EquivalentTo(new[] { "cn=joe", "abc" }));
+        Assert.That(index.Values, Is.EquivalentTo(new[] { "CN=Joe", "Abc" }));
     }
 }

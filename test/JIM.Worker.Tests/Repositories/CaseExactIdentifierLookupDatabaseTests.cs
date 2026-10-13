@@ -16,9 +16,9 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// The repository lookups an import uses to find "the same object" by its External ID follow the anchor attribute's
-/// case-exact declaration (#2051): ignoring case unless the attribute is case-exact. Also pins .NET's folding
-/// (<see cref="IdentifierKey.For"/>) against PostgreSQL's <c>lower()</c>, since some lookups fold one side in .NET and
-/// the other in SQL.
+/// case-exact declaration (#2051): ignoring case unless the attribute is case-exact, with the database folding both
+/// sides. Also compares .NET's folding (<see cref="IdentifierKey.For"/>) with PostgreSQL's <c>lower()</c> on this
+/// database, which the in-memory keys and the database lookups agree through.
 /// </summary>
 /// <remarks>
 /// Runs against real PostgreSQL: the folding under test is the database's own, which the in-memory suite cannot see.
@@ -73,7 +73,8 @@ public class CaseExactIdentifierLookupDatabaseTests
         var lowered = await ctx.Database.SqlQueryRaw<string>("SELECT lower({0}) AS \"Value\"", value).SingleAsync();
 
         Assert.That(IdentifierKey.For(value, caseExact: false), Is.EqualTo(lowered),
-            "A key folded in .NET must equal the database's lower() of the same value, or lookups that fold one side in each miss.");
+            "On a Unicode-aware database, .NET's fold and lower() agree, so in-memory keys and database lookups give one answer. " +
+            "Lookups do not rely on it (the database folds both sides), but a disagreement here would show where they would part.");
     }
 
     [Test]

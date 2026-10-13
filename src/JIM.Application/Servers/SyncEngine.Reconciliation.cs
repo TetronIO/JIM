@@ -424,7 +424,7 @@ public partial class SyncEngine
         {
             AttributeDataType.Text =>
                 !string.IsNullOrEmpty(attrChange.StringValue) &&
-                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, AttributeValueComparison.For(attrChange.Attribute))),
+                csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.StringValue, attrChange.StringValue)),
 
             AttributeDataType.Number =>
                 attrChange.IntValue.HasValue &&
@@ -463,9 +463,9 @@ public partial class SyncEngine
                 (attrChange.ResolvedReferenceCsoId.HasValue &&
                  csoValues.Any(v => v.ReferenceValueId == attrChange.ResolvedReferenceCsoId)) ||
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, AttributeValueComparison.For(attrChange.Attribute)))) ||
+                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue))) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, AttributeValueComparison.For(attrChange.Attribute)))),
+                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.StringValue))),
 
             _ => false
         };
@@ -512,7 +512,7 @@ public partial class SyncEngine
         /// Connected System Object's values. A probe whose own attribute compares differently falls back to the linear
         /// comparison, so the two paths can never disagree.
         /// </summary>
-        public StringComparison StringComparison { get; init; } = StringComparison.Ordinal;
+        public StringComparer StringComparer { get; init; } = StringComparer.Ordinal;
         public HashSet<int>? NumberValues { get; init; }
         public HashSet<long>? LongNumberValues { get; init; }
         public HashSet<decimal>? DecimalValues { get; init; }
@@ -529,7 +529,6 @@ public partial class SyncEngine
     private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
     {
         var attribute = values.Count > 0 ? values[0].Attribute : null;
-        var stringComparison = AttributeValueComparison.For(attribute);
         var stringComparer = AttributeValueComparison.ComparerFor(attribute);
 
         return attrType switch
@@ -538,7 +537,7 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                StringComparison = stringComparison,
+                StringComparer = stringComparer,
                 TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(stringComparer)
             },
 
@@ -549,7 +548,7 @@ public partial class SyncEngine
                 // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
                 // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
                 // so a single index built from that one CSO-side field covers both probes.
-                StringComparison = stringComparison,
+                StringComparer = stringComparer,
                 ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
                 ReferenceIds = values.Where(v => v.ReferenceValueId.HasValue).Select(v => v.ReferenceValueId!.Value).ToHashSet()
             },
@@ -653,7 +652,7 @@ public partial class SyncEngine
         // reverse, so a probe whose attribute compares differently from the values' attribute takes the linear path.
         if (!typedSetAvailableForProbe ||
             (attrType is AttributeDataType.Text or AttributeDataType.Reference &&
-             index.StringComparison != AttributeValueComparison.For(attrChange.Attribute)))
+             !ReferenceEquals(index.StringComparer, AttributeValueComparison.ComparerFor(attrChange.Attribute))))
             return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch

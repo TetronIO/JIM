@@ -24,6 +24,47 @@ public class IdentifierKeyTests
         Assert.That(IdentifierKey.For("\u0130STANBUL", caseExact: false), Is.EqualTo("istanbul"));
     }
 
+    private static readonly string[][] SamePairsIgnoringCase =
+    [
+        ["JBloggs", "jbloggs"],
+        ["\u0130STANBUL", "istanbul"],
+        ["\u00C9MILE", "\u00E9mile"],
+        ["STRA\u1E9EE", "stra\u00DFe"],
+        ["\u01C5URO", "\u01C6uro"]
+    ];
+
+    /// <summary>
+    /// One rule, one answer: a comparer ignoring case calls two values the same exactly when their keys are equal, so a
+    /// key lookup can never join values that a comparison or a set calls different (#2051).
+    /// </summary>
+    [TestCaseSource(nameof(SamePairsIgnoringCase))]
+    public void Comparer_IgnoringCase_AgreesWithFor(string first, string second)
+    {
+        var comparer = IdentifierKey.Comparer(caseExact: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(IdentifierKey.For(first, caseExact: false), Is.EqualTo(IdentifierKey.For(second, caseExact: false)));
+            Assert.That(comparer.Equals(first, second), Is.True);
+            Assert.That(comparer.GetHashCode(first), Is.EqualTo(comparer.GetHashCode(second)));
+            Assert.That(IdentifierKey.AreSame(first, second, caseExact: false), Is.True);
+        }
+    }
+
+    [Test]
+    public void Comparer_IgnoringCase_KeepsDifferentValuesApart()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(IdentifierKey.Comparer(caseExact: false).Equals("JBloggs", "JBlogg"), Is.False);
+            Assert.That(IdentifierKey.AreSame("istanbul", "\u0131stanbul", caseExact: false), Is.False,
+                "the dotless i is a different letter");
+            Assert.That(IdentifierKey.AreSame("JBloggs", "jbloggs", caseExact: true), Is.False);
+            Assert.That(IdentifierKey.AreSame(null, null, caseExact: false), Is.True);
+            Assert.That(IdentifierKey.AreSame("a", null, caseExact: false), Is.False);
+        }
+    }
+
     [Test]
     public void For_CaseExact_KeepsTheValue()
     {
@@ -37,8 +78,8 @@ public class IdentifierKeyTests
         {
             Assert.That(IdentifierKey.Comparer(caseExact: false).Equals("DC=PANOPLY", "dc=panoply"), Is.True);
             Assert.That(IdentifierKey.Comparer(caseExact: true).Equals("DC=PANOPLY", "dc=panoply"), Is.False);
-            Assert.That(string.Equals("DC=PANOPLY", "dc=panoply", IdentifierKey.Comparison(caseExact: false)), Is.True);
-            Assert.That(string.Equals("DC=PANOPLY", "dc=panoply", IdentifierKey.Comparison(caseExact: true)), Is.False);
+            Assert.That(IdentifierKey.AreSame("DC=PANOPLY", "dc=panoply", caseExact: false), Is.True);
+            Assert.That(IdentifierKey.AreSame("DC=PANOPLY", "dc=panoply", caseExact: true), Is.False);
         }
     }
 
@@ -49,7 +90,7 @@ public class IdentifierKeyTests
         // components is the directory's own (#2195). A case-only difference names the same entry.
         var distinguishedName = new ConnectedSystemObjectTypeAttribute { Name = "distinguishedName", Type = AttributeDataType.Text, IsSecondaryExternalId = true };
 
-        Assert.That(AttributeValueComparison.For(distinguishedName), Is.EqualTo(StringComparison.OrdinalIgnoreCase));
+        Assert.That(AttributeValueComparison.AreSame(distinguishedName, "DC=PANOPLY", "dc=panoply"), Is.True);
     }
 
     [Test]
@@ -57,7 +98,7 @@ public class IdentifierKeyTests
     {
         var scimId = new ConnectedSystemObjectTypeAttribute { Name = "id", Type = AttributeDataType.Text, IsExternalId = true, CaseExact = true };
 
-        Assert.That(AttributeValueComparison.For(scimId), Is.EqualTo(StringComparison.Ordinal));
+        Assert.That(AttributeValueComparison.AreSame(scimId, "Abc", "abc"), Is.False);
     }
 
     [Test]
@@ -66,7 +107,7 @@ public class IdentifierKeyTests
         // A reference's value is the object it points to; an unresolved one is compared as that object's identifier.
         var member = new ConnectedSystemObjectTypeAttribute { Name = "member", Type = AttributeDataType.Reference };
 
-        Assert.That(AttributeValueComparison.For(member), Is.EqualTo(StringComparison.OrdinalIgnoreCase));
+        Assert.That(AttributeValueComparison.AreSame(member, "CN=Joe", "cn=joe"), Is.True);
     }
 
     [Test]
@@ -77,8 +118,9 @@ public class IdentifierKeyTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(AttributeValueComparison.For(displayName), Is.EqualTo(StringComparison.Ordinal));
-            Assert.That(AttributeValueComparison.For(null), Is.EqualTo(StringComparison.Ordinal));
+            Assert.That(AttributeValueComparison.AreSame(displayName, "Joe Bloggs", "joe bloggs"), Is.False);
+            Assert.That(AttributeValueComparison.AreSame(null, "Joe Bloggs", "joe bloggs"), Is.False);
+            Assert.That(AttributeValueComparison.ComparerFor(displayName).Equals("Joe Bloggs", "joe bloggs"), Is.False);
         }
     }
 }

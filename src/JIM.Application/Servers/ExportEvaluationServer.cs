@@ -1610,7 +1610,7 @@ public class ExportEvaluationServer
                     csoIds.ToList(),
                     attributeIdsBySystem[systemId].ToList(),
                     deletedCsoToMvoBySystem[systemId].Keys.ToList(),
-                    referenceValueToMvoBySystem[systemId].LoweredValues.ToList());
+                    referenceValueToMvoBySystem[systemId].Values.ToList());
                 existenceSpan.SetTag("matchCount", matches.Count);
                 existenceSpan.SetSuccess();
             }

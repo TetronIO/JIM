@@ -2319,13 +2319,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         // Whether two values name the same object follows the attribute's case-exact declaration (#2051): exact for a
-        // case-exact attribute, else ignoring case (directory names, DNs). The sought value is folded the way SQL's
-        // lower() folds the stored one (IdentifierKey.For).
+        // case-exact attribute, else ignoring case (directory names, DNs), the database folding both sides.
         var caseExact = await Repository.Database.ConnectedSystemAttributes
             .Where(a => a.Id == connectedSystemAttributeId)
             .Select(a => a.CaseExact)
             .FirstOrDefaultAsync();
-        var lowerAttributeValue = IdentifierKey.For(attributeValue, caseExact: false);
         var allMatches = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -2340,7 +2338,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(x => x.ConnectedSystem.Id == connectedSystemId)
             .Where(caseExact
                 ? x => x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue == attributeValue)
-                : x => x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
+                : x => x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == SqlFunctions.Lower(attributeValue)))
             .OrderBy(x => x.Id)
             .ToListAsync();
 
@@ -2724,9 +2722,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
-        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051). The sought value is
-        // folded as SQL's lower() folds the stored one (IdentifierKey.For).
-        var lowerSecondaryExternalIdValue = IdentifierKey.For(secondaryExternalIdValue, caseExact: false);
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051), the database
+        // folding both sides.
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -2743,7 +2740,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue != null &&
                     (av.Attribute.CaseExact
                         ? av.StringValue == secondaryExternalIdValue
-                        : av.StringValue.ToLower() == lowerSecondaryExternalIdValue)));
+                        : av.StringValue.ToLower() == SqlFunctions.Lower(secondaryExternalIdValue))));
     }
 
     /// <summary>
@@ -2835,8 +2832,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <returns>The matching CSO, or null if not found.</returns>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue)
     {
-        // Use case-insensitive comparison for LDAP DNs and similar identifiers
-        var lowerValue = secondaryExternalIdValue.ToLowerInvariant();
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051), the database
+        // folding both sides.
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -2854,7 +2851,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av =>
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
-                    av.StringValue.ToLower() == lowerValue));
+                    (av.Attribute.CaseExact
+                        ? av.StringValue == secondaryExternalIdValue
+                        : av.StringValue.ToLower() == SqlFunctions.Lower(secondaryExternalIdValue))));
     }
 
     /// <summary>
@@ -2890,21 +2889,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             case AttributeDataType.Text:
             {
-                // Same thing? Exact for a case-exact anchor, else ignoring case, the sought values folded as SQL's lower()
-                // folds the stored ones (IdentifierKey.For).
+                // Same thing? Exact for a case-exact anchor, else ignoring case with the database folding both sides. The
+                // objects it returns are then filed under the values asked for by .NET's fold; a match on which the two
+                // folds disagree (a database whose character type folds differently) is left unresolved, not guessed.
                 var caseExact = attribute.CaseExact;
                 var requestedByKey = values
                     .Distinct(StringComparer.Ordinal)
                     .GroupBy(v => IdentifierKey.For(v, caseExact), StringComparer.Ordinal)
                     .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-                var keys = requestedByKey.Keys.ToList();
+                var requestedValues = requestedByKey.Values.SelectMany(group => group).ToList();
                 var query = Repository.Database.ConnectedSystemObjects
                     .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
                     .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
                 var csos = await (caseExact
-                        ? query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && keys.Contains(av.StringValue)))
-                        : query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && keys.Contains(av.StringValue.ToLower()))))
+                        ? query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && requestedValues.Contains(av.StringValue)))
+                        : query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null &&
+                            requestedValues.Any(requested => SqlFunctions.Lower(requested) == av.StringValue.ToLower()))))
                     .ToListAsync();
 
                 foreach (var cso in csos)
@@ -3051,8 +3052,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // Keyed by the value the caller asked for (ordinal, since that is the value it probes with). Whether a stored value
         // answers it follows each object's own secondary external id attribute: ignoring case unless that attribute is
-        // case-exact (#2051). The query finds every value equal ignoring case, a superset of both, and the case-exact
-        // ones are then held to their own case below.
+        // case-exact (#2051). The query finds every value equal ignoring case, the database folding both sides, a superset
+        // of both; the case-exact ones are then held to their own case below, and each match is filed under the values
+        // asked for by .NET's fold (a match on which the two folds disagree is left unresolved, not guessed).
         var values = secondaryExternalIdValues.Distinct(StringComparer.Ordinal).ToList();
         var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         if (values.Count == 0)
@@ -3061,7 +3063,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var requestedByLowerKey = values
             .GroupBy(v => IdentifierKey.For(v, caseExact: false), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-        var lowerValues = requestedByLowerKey.Keys.ToList();
         var caseExactAttributeIds = (await Repository.Database.ConnectedSystemAttributes
                 .Where(a => a.ConnectedSystemObjectType.ConnectedSystemId == connectedSystemId && a.IsSecondaryExternalId && a.CaseExact)
                 .Select(a => a.Id)
@@ -3078,7 +3079,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av =>
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
-                    lowerValues.Contains(av.StringValue.ToLower())))
+                    values.Any(requested => SqlFunctions.Lower(requested) == av.StringValue.ToLower())))
             .ToListAsync();
 
         foreach (var cso in csos)
