@@ -98,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Removing one value from a multi-valued SCIM attribute, such as a list of strings in a schema extension, now removes only that value; the service provider used to delete every other value with it, including any added in the same export. (#2181)
 - 🐛 A schema refresh that finds an Object Type or attribute renamed only in case, such as `Mail` for `mail`, now keeps it and every Attribute Flow and Object Matching Rule using it, and takes the new name, instead of reporting it removed and added. (#2051)
 - 🐛 Drift Detection no longer corrects a value its own Connected System supplied when an export expression names the attribute in a different case. (#2051)
 - 🐛 `Set-JIMScopingCriterion` and `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive`, and their REST updates, now keep a criterion's case setting instead of resetting it to case-sensitive. (#2051)
