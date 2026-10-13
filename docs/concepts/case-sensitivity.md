@@ -15,7 +15,7 @@ Understanding this model helps you predict when a change will flow, when two obj
 
 | Question | Rule | Where JIM asks it |
 |----------|------|-------------------|
-| **Has this value changed?** | Exact | Change detection, export confirmation, Drift Detection |
+| **Has this value changed?** | Exact; for an [identifier](#identifiers-a-target-reports-in-its-own-case), export confirmation and Drift Detection ask "Are these the same thing?" instead | Change detection, export confirmation, Drift Detection |
 | **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, Secondary External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
 | **Does this value meet a condition?** | Exact, unless you say otherwise | Scoping criteria, Predefined Search criteria, comparisons in expressions |
 | **Finding something** | Ignore case | Search boxes and list filters in the portal, log search |
@@ -106,7 +106,7 @@ Why case is ignored here:
 
 ## 🔠 When a target changes the case of a value
 
-Because JIM confirms an export by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it retries the change on later exports, and once the retries are spent it reports the export as failed. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived.
+Because JIM confirms an export of ordinary text by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it retries the change on later exports, and once the retries are spent it reports the export as failed. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived. An identifier is the exception; see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case).
 
 Fold the case before the value reaches that system, so JIM sends what the system keeps:
 
