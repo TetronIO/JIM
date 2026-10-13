@@ -338,7 +338,7 @@ public class DriftDetectionService
         // Each field is boxed on its own: chaining nullable value types with ?? would widen an int to a long.
         object?[] fields =
         [
-            change.StringValue, change.IntValue, change.LongValue, change.DecimalValue, change.DateTimeValue,
+            change.StringValue, change.IntValue, change.LongValue, change.DecimalValue, SyncEngine.CanonicalDate(change.DateTimeValue),
             change.BoolValue, change.GuidValue, change.ByteValue, change.UnresolvedReferenceValue
         ];
         return Array.Find(fields, field => field != null);
@@ -819,7 +819,7 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
@@ -892,7 +892,7 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
@@ -1256,7 +1256,7 @@ public class DriftDetectionService
                 change.DecimalValue = value as decimal?;
                 break;
             case AttributeDataType.DateTime:
-                change.DateTimeValue = value as DateTime?;
+                change.DateTimeValue = SyncEngine.CanonicalDate(value as DateTime?);
                 break;
             case AttributeDataType.Boolean:
                 change.BoolValue = value as bool?;

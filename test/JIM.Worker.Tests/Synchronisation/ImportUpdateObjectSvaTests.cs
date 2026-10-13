@@ -2256,7 +2256,8 @@ public class ImportUpdateObjectSvaTests
         var courseEndDateAttribute = cso1.GetAttributeValue(MockSourceSystemAttributeNames.COURSE_END_DATE.ToString());
         Assert.That(courseEndDateAttribute, Is.Not.Null);
         Assert.That(courseEndDateAttribute.DateTimeValue.HasValue);
-        Assert.That(courseEndDateAttribute.DateTimeValue.Value, Is.EqualTo(courseEndDate));
+        // JIM holds a date to the microsecond (#2153); DateTime.UtcNow carries 100ns ticks.
+        Assert.That(courseEndDateAttribute.DateTimeValue.Value, Is.EqualTo(JIM.Utilities.DateTimeAttributeValue.ToCanonical(courseEndDate)));
         
         Assert.Pass();
     }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Serilog;
@@ -226,7 +227,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (v.DateTimeValue.HasValue)
-                await writer.WriteAsync(v.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(v.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (v.IntValue.HasValue)

@@ -7,6 +7,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Utilities;
 
 namespace JIM.Web.Models.Api;
 
@@ -254,7 +255,7 @@ public class MetaverseObjectAttributeValueDto
             AttributeType = entity.Attribute?.Type ?? AttributeDataType.NotSet,
             AttributePlurality = entity.Attribute?.AttributePlurality ?? AttributePlurality.SingleValued,
             StringValue = entity.StringValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = entity.DateTimeValue.HasValue ? DateTimeAttributeValue.ToCanonical(entity.DateTimeValue.Value) : null,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+
 namespace JIM.Utilities;
 
 /// <summary>
@@ -37,4 +39,21 @@ public static class DateTimeAttributeValue
     /// exactly when their keys are equal.
     /// </summary>
     public static long Key(DateTime value) => ToCanonical(value).Ticks;
+
+    /// <summary>
+    /// Whether two dates are the same date as JIM holds them: both absent, or both present with equal
+    /// <see cref="Key"/>s. Use it wherever a held date is compared with a new one, since one read from the database
+    /// (Kind Local, to the microsecond) and one made in memory (Kind Utc, perhaps to the 100ns) can name the same date.
+    /// </summary>
+    public static bool AreEqual(DateTime? a, DateTime? b) =>
+        a.HasValue ? b.HasValue && Key(a.Value) == Key(b.Value) : !b.HasValue;
+
+    /// <summary>
+    /// The canonical value as invariant text, for merge keys, logs and diagnostic text:
+    /// <c>yyyy-MM-ddTHH:mm:ss</c>, then a fraction of up to six digits with trailing zeros trimmed (none for a whole
+    /// second), then <c>Z</c>. The same date always gives the same text, whatever its Kind, precision or the host's
+    /// culture.
+    /// </summary>
+    public static string ToRoundTripString(DateTime value) =>
+        ToCanonical(value).ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFF'Z'", CultureInfo.InvariantCulture);
 }

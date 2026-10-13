@@ -4,6 +4,7 @@
 using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -317,7 +318,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (av.IntValue.HasValue)
@@ -396,7 +397,7 @@ public partial class SyncRepository
                 parameters.Add(mvoId);
                 parameters.Add(av.AttributeId);
                 parameters.Add(BulkSqlHelpers.NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(BulkSqlHelpers.CanonicalDate(av.DateTimeValue), NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
