@@ -101,6 +101,32 @@ public class MetaverseAttributeHeaderRangeDatabaseTests
     private JimApplication CreateJim() => new(new PostgresDataRepository(NewContext()));
 
     [Test]
+    public async Task GetMetaverseAttributeHeadersAsync_ReturnsTheObjectTypesEachAttributeIsBoundToAsync()
+    {
+        // The REST attribute list reads this projection; the attribute entities themselves load untracked and
+        // without their Object Type navigation, so mapping them instead returned every attribute's bindings empty.
+        await using (var ctx = NewContext())
+        {
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            var badgeCode = new MetaverseAttribute { Name = "badgeCode", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            ctx.MetaverseObjectTypes.Add(new MetaverseObjectType { Name = "Person", PluralName = "People", Attributes = [costCentre, badgeCode] });
+            ctx.MetaverseObjectTypes.Add(new MetaverseObjectType { Name = "Room", PluralName = "Rooms", Attributes = [costCentre] });
+            await ctx.SaveChangesAsync();
+        }
+        var jim = CreateJim();
+
+        var headers = await jim.Metaverse.GetMetaverseAttributeHeadersAsync();
+
+        var costCentreHeader = headers!.Single(h => h.Name == "costCentre");
+        var badgeCodeHeader = headers!.Single(h => h.Name == "badgeCode");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(costCentreHeader.MetaverseObjectTypes!.Select(t => t.Value), Is.EquivalentTo(new[] { "Person", "Room" }));
+            Assert.That(badgeCodeHeader.MetaverseObjectTypes!.Select(t => t.Value), Is.EquivalentTo(new[] { "Person" }));
+        }
+    }
+
+    [Test]
     public async Task Range_FirstWindow_ReturnsLeadingSliceAndFullTotalAsync()
     {
         await SeedAsync(10);
