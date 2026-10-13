@@ -8,12 +8,10 @@ LANG-3	powershell/feature-flags.md	1
 LANG-3	powershell/history.md	2
 LANG-3	powershell/index.md	2
 LANG-3	powershell/security.md	1
-LANG-3	powershell/synchronisation-rules.md	11
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
 LANG-4	powershell/connected-systems.md	3
 LANG-4	powershell/history.md	3
-LANG-4	powershell/synchronisation-rules.md	9
 LANG-7	powershell/connection.md	1
 LANG-7	powershell/index.md	1
 LANG-7	powershell/previews.md	1
@@ -34,6 +32,5 @@ STR-2	powershell/previews.md	3
 STR-2	powershell/run-profiles.md	3
 STR-2	powershell/security.md	3
 STR-2	powershell/service-settings.md	3
-STR-2	powershell/synchronisation-rules.md	3
 STR-2	powershell/system.md	3
 STR-2	powershell/worker-tasks.md	3

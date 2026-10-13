@@ -7,13 +7,13 @@ audience: automation-author
 
 # Generated Values
 
-These cmdlets work with the values a generated Attribute Flow issues: those a Metaverse Object holds now, those retired from an attribute and never issued again, the counter behind a Sequence, and the values a target rejected that wait on a decision. How values are generated and kept unique is covered in [Generated Values](../configuration/generated-values.md). A generated Attribute Flow itself is configured with [`New-JIMSyncRuleMapping`](synchronisation-rules.md#new-jimsyncrulemapping).
+These cmdlets work with the values a generated Attribute Flow issues: those a Metaverse Object holds now, those retired from an attribute and never issued again, the counter behind a Sequence, and the values a target rejected that wait on a decision. How values are generated and kept unique is covered in [Generated Values](../configuration/generated-values.md). A generated Attribute Flow itself is configured with [`New-JIMSyncRuleMapping`](attribute-mappings.md#new-jimsyncrulemapping).
 
 ---
 
 ## Get-JIMGeneratedValue
 
-Lists the generated values a Metaverse Object holds, one per generated attribute, or nothing when it holds none. A generated Attribute Flow is configured with `New-JIMSyncRuleMapping -Generate`; see [Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
+Lists the generated values a Metaverse Object holds, one per generated attribute, or nothing when it holds none. A generated Attribute Flow is configured with `New-JIMSyncRuleMapping -Generate`; see [Attribute Mappings](attribute-mappings.md#new-jimsyncrulemapping).
 
 <!-- BEGIN GENERATED: Get-JIMGeneratedValue -->
 ### Syntax
