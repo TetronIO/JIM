@@ -90,9 +90,9 @@ Smallest first, a few per pull request. Each cmdlet gains its output types and t
 
 The first batches headed each table with the type's class name (`ActivityDetailDto`), and a docs review rightly flagged it (VOI-1): nobody can type one, since the module returns a `PSCustomObject`. Tables are now labelled by when they come back, and nested types are shown as `object` or `string` with their properties or values named. Where two types come from one parameter set (`Test-JIMConnection` returns its status, or with `-Quiet` a `bool`), no set can say which comes back, so the check fails until the `.OUTPUTS` help labels each with a line `<type>: <when it is returned>`. Doing this needed the OpenAPI document to describe enumerations as the names the API sends: it had declared every one an integer.
 
-### Phase 3: ACC-6, the example property check
+### Phase 3: ACC-6, the example property check ✅
 
-As described under Examples above.
+As described under Examples above. **Delivered** in `Lint-DocExamples.ps1`, run with `-OpenApiPath` in `build-and-test`; `changelog-lint` runs the lint without the document and skips the rule. What a cmdlet returns is decided once, in `scripts/PowerShellReference.psm1`, which the generator and the lint both import, so the Output tables and the example check cannot disagree. Beyond the three forms above, it follows the output through stages that leave it unchanged (`Where-Object`, `Sort-Object`), and reads from a variable the output was assigned to, a `foreach` over that variable, and a parenthesised call. Its first run over every page and all 725 `.EXAMPLE` blocks found one example reading `StepDisplay` from `Get-JIMWorkerTask`: the property exists, but the cmdlet's `.OUTPUTS` help described it in prose, so the generated Output table had left it out too; it is now listed.
 
 ### Phase 4: Close
 
