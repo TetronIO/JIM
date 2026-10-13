@@ -97,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
-- 🐛 An account provisioned while the person's own password change was already waiting is now given that password and enabled as its Synchronisation Rule's Initial Password says, rather than left disabled with nothing to say why; the export and the delivery both record what happened. (#2160)
+- 🐛 An account provisioned while the person's own password change was already waiting is now given that password and enabled as its Synchronisation Rule's Initial Password says, rather than left disabled with nothing recorded. (#2160)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
 - 🐛 `==` in an expression now compares an attribute's text by its characters, so `mv["Status"] == "Active"` is true when it should be rather than always false. (#2053)
 - 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box now match themselves, so "starts with svc_" no longer also finds "svcX…" and a search agrees with a scoping criterion holding the same value. (#2053)
