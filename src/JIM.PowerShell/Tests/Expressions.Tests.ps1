@@ -53,4 +53,63 @@ Describe 'Test-JIMExpression' {
             $script:capturedBody.mvAttributes.Name | Should -Be 'x'
         }
     }
+
+    It 'Posts the Attribute Flow to test the expression as' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Values'; valueLines = @('2026-03-02') }
+            }
+
+            Test-JIMExpression -Expression 'FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")' -SyncRuleId 12 -MappingId 40 -CsAttributes @{ hireDate = '2026-03-02' } | Out-Null
+
+            $script:capturedBody.syncRuleId | Should -Be 12
+            $script:capturedBody.mappingId | Should -Be 40
+            $script:capturedBody.csAttributes.hireDate | Should -Be '2026-03-02'
+        }
+    }
+
+    It 'Returns what the Attribute Flow would do, as the API reports it' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    IsValid            = $false
+                    Outcome            = 'Error'
+                    ErrorReason        = 'ResultNotConvertible'
+                    OutcomeDescription = "The Expression returned 'Priya', which a Number attribute cannot hold."
+                    ResultLines        = @('Priya')
+                    TargetAttributeName = 'Employee Number'
+                }
+            }
+
+            $result = Test-JIMExpression -Expression 'cs["givenName"]' -SyncRuleId 12 -MappingId 40 -CsAttributes @{ givenName = 'Priya' }
+
+            $result.Outcome | Should -Be 'Error'
+            $result.ErrorReason | Should -Be 'ResultNotConvertible'
+            $result.TargetAttributeName | Should -Be 'Employee Number'
+        }
+    }
+
+    It 'Does not send a Synchronisation Rule when no Attribute Flow is given' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true }
+            }
+
+            Test-JIMExpression -Expression '1 + 1' | Out-Null
+
+            $script:capturedBody.ContainsKey('syncRuleId') | Should -BeFalse
+            $script:capturedBody.ContainsKey('mappingId') | Should -BeFalse
+        }
+    }
+
+    It 'Requires -MappingId with -SyncRuleId' {
+        { Test-JIMExpression -Expression '1' -SyncRuleId 12 -ErrorAction Stop } | Should -Throw
+    }
 }
