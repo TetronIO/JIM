@@ -387,15 +387,17 @@ public partial class ActivityRepository : IActivityRepository
         }
 
         // Apply the Connected System filter, which matches the Activity's Target Context (the system the
-        // operation was performed against).
-        var connectedSystems = connectedSystemFilter?.ToList();
+        // operation was performed against). Configuration names ignore case (#2051). The names are matched
+        // directly rather than resolved against today's configuration, because an Activity records the name the
+        // system had at the time.
+        var connectedSystems = connectedSystemFilter?.Select(name => name.ToLowerInvariant()).ToList();
         if (connectedSystems is { Count: > 0 })
-            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext.ToLower()));
 
-        // Apply the Run Profile filter, which matches the Activity's Target Name.
-        var runProfiles = runProfileFilter?.ToList();
+        // Apply the Run Profile filter, which matches the Activity's Target Name, ignoring case likewise.
+        var runProfiles = runProfileFilter?.Select(name => name.ToLowerInvariant()).ToList();
         if (runProfiles is { Count: > 0 })
-            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName.ToLower()));
 
         // Apply the initiator-name filter. Distinct from initiatedById above: this is a case-insensitive
         // partial match on the recorded name, for callers who know who they are looking for but not their id.

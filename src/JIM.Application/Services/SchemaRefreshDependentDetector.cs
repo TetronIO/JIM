@@ -53,9 +53,10 @@ public static class SchemaRefreshDependentDetector
         var removedAttributeNamesByTypeId = new Dictionary<int, HashSet<string>>();
         foreach (var (type, attributeNames) in result.RemovedAttributes
                      .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value))
-                     .Where(entry => entry.Type != null))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.AttributeNames)))
         {
-            removedAttributeNamesByTypeId[type!.Id] = new HashSet<string>(attributeNames, StringComparer.OrdinalIgnoreCase);
+            removedAttributeNamesByTypeId[type.Id] = new HashSet<string>(attributeNames, StringComparer.OrdinalIgnoreCase);
             // A removed attribute is reported under the name JIM held, so it is matched exactly: a case-exact
             // Connected System can hold a second attribute whose name differs only in case, and that one stays.
             removedAttributeIdsByTypeId[type.Id] = type.Attributes
@@ -67,14 +68,15 @@ public static class SchemaRefreshDependentDetector
         var changedByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
         foreach (var (type, changes) in result.ChangedAttributes
                      .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), Changes: kvp.Value))
-                     .Where(entry => entry.Type != null))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.Changes)))
         {
             var byAttributeId = new Dictionary<int, SchemaAttributeDefinitionChange>();
             foreach (var change in changes)
             {
                 // A change names the attribute as the Connector now does, which may differ only in case from the
                 // snapshot's name; an exact name wins where both exist.
-                var attribute = type!.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.Ordinal))
+                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.Ordinal))
                     ?? type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
                 if (attribute != null)
                     byAttributeId[attribute.Id] = change;

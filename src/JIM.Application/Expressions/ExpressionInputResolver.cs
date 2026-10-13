@@ -90,6 +90,8 @@ public static partial class ExpressionInputResolver
             return Array.Empty<ExpressionInput>();
 
         var inputs = new List<ExpressionInput>();
+        // Attribute names in expressions ignore case (#2051), so mv["mail"] and mv["Mail"] are one input, named as
+        // the Expression first writes it.
         var seen = new HashSet<(ExpressionInputSource Source, string AttributeName)>();
 
         foreach (var match in AccessorRegex().Matches(expression).Cast<Match>())
@@ -99,7 +101,7 @@ public static partial class ExpressionInputResolver
                 : ExpressionInputSource.ConnectedSystem;
             var attributeName = match.Groups[2].Value;
 
-            if (seen.Add((source, attributeName)))
+            if (seen.Add((source, attributeName.ToLowerInvariant())))
                 inputs.Add(new ExpressionInput(source, attributeName));
         }
 
