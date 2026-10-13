@@ -189,3 +189,51 @@ Describe 'Set-JIMScopingCriterion -ConnectedSystemAttributeName' {
         }
     }
 }
+
+Describe 'New-JIMScopingCriterion presence and pattern operators' {
+
+    It 'Sends HasNoValue with no value when no value parameter is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -MetaverseAttributeId 15 -ComparisonType HasNoValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.comparisonType -eq 'HasNoValue' -and
+                -not $Body.ContainsKey('stringValue') -and
+                -not $Body.ContainsKey('intValue')
+            }
+        }
+    }
+
+    It 'Sends the pattern as the string value for MatchesPattern' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedSystemAttributeId 40 -ComparisonType MatchesPattern -StringValue '^[a-z.]+@example\.org$' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.comparisonType -eq 'MatchesPattern' -and
+                $Body.stringValue -eq '^[a-z.]+@example\.org$'
+            }
+        }
+    }
+
+    It 'Sends HasValue on update' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType HasValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.comparisonType -eq 'HasValue'
+            }
+        }
+    }
+}
+

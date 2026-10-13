@@ -68,7 +68,8 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 30,
 
         // Before provisioning, matching found several existing accounts (#2052).
-        [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31
+        [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31,
+        [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32
     };
 
     [Test]

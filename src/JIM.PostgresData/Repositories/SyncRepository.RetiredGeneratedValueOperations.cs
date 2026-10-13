@@ -91,7 +91,7 @@ public partial class SyncRepository
             // itself; the holder's name is free text, so ILike.
             var term = search.Trim();
             var lowered = term.ToLowerInvariant();
-            var pattern = $"%{EscapeLikePattern(term)}%";
+            var pattern = LikePattern.Contains(term);
             query = query.Where(r => r.NormalisedValue.Contains(lowered) || (r.FromObjectDisplayName != null && EF.Functions.ILike(r.FromObjectDisplayName, pattern)));
         }
 
@@ -170,12 +170,6 @@ public partial class SyncRepository
                    ActivityTargetContext = activity != null ? activity.TargetContext : null
                };
     }
-
-    /// <summary>
-    /// Escapes the LIKE wildcards in an administrator's search text, so "%" or "_" match themselves.
-    /// </summary>
-    private static string EscapeLikePattern(string term) =>
-        term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     #endregion
 }

@@ -1374,6 +1374,32 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
             }
         }
 
+        It 'Sends a catalogue operator name for the attribute dependency' {
+            InModuleScope JIM {
+                Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'GreaterThanOrEquals'; StringValue = '30' } -Confirm:$false
+
+                $script:capturedBody.objectTypes[0].attributes[1].attributeDependency.comparisonType | Should -BeExactly 'GreaterThanOrEquals'
+            }
+        }
+
+        It 'Sends HasNoValue with no string value' {
+            InModuleScope JIM {
+                Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'HasNoValue' } -Confirm:$false
+
+                $dependency = $script:capturedBody.objectTypes[0].attributes[1].attributeDependency
+                $dependency.comparisonType | Should -BeExactly 'HasNoValue'
+                $dependency.Contains('stringValue') | Should -BeFalse
+            }
+        }
+
+        It 'Throws on a retired operator name, naming the one that replaced it' {
+            InModuleScope JIM {
+                {
+                    Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'GreaterThanOrEqual'; StringValue = '30' } -Confirm:$false -ErrorAction Stop
+                } | Should -Throw '*GreaterThanOrEquals*'
+            }
+        }
+
         It 'Throws on an invalid attribute dependency comparison type' {
             InModuleScope JIM {
                 {
