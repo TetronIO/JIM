@@ -8,12 +8,26 @@ namespace JIM.Models.Transactional.DTOs;
 /// </summary>
 public class PendingExportHeader
 {
+    /// <summary>
+    /// The ID of the Pending Export.
+    /// </summary>
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// The ID of the Connected System the change is for.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
 
+    /// <summary>
+    /// Whether the Pending Export creates, updates or deletes the object.
+    /// </summary>
     public PendingExportChangeType ChangeType { get; set; }
 
+    /// <summary>
+    /// Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import),
+    /// ExportNotConfirmed (to be retried), Failed (out of retries), or Parked (waiting on a decision about a
+    /// generated value).
+    /// </summary>
     public PendingExportStatus Status { get; set; }
 
     /// <summary>
@@ -22,45 +36,47 @@ public class PendingExportHeader
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
-    /// When was the last export attempt made?
+    /// When the last export attempt was made (UTC); null before the first.
     /// </summary>
     public DateTime? LastAttemptedAt { get; set; }
 
     /// <summary>
-    /// When should the next retry be attempted?
+    /// When the next export attempt is due (UTC); null when none is.
     /// </summary>
     public DateTime? NextRetryAt { get; set; }
 
     /// <summary>
-    /// How many times have we encountered an error whilst trying to export this change?
+    /// How many export attempts have failed.
     /// </summary>
     public int ErrorCount { get; set; }
 
     /// <summary>
-    /// Maximum number of retry attempts before marking as Failed.
+    /// How many failed attempts are allowed before the Pending Export is marked Failed.
     /// </summary>
     public int MaxRetries { get; set; }
 
     /// <summary>
-    /// The error message from the last failed attempt.
+    /// The error from the last failed attempt; null when none has failed.
     /// </summary>
     public string? LastErrorMessage { get; set; }
 
     /// <summary>
-    /// Indicates whether this export has reference attributes that couldn't be resolved.
+    /// Whether any reference change cannot be written yet, because its target has no object in the Connected
+    /// System.
     /// </summary>
     public bool HasUnresolvedReferences { get; set; }
 
     /// <summary>
-    /// How many of this export's attribute changes are references still owed to the target system
-    /// (issue #1398): their targets have no resolvable object there yet, so they could not be
-    /// written when the rest of the export was. The detail view explains each owed reference
-    /// individually; this count lets a list view surface the wait at a glance.
+    /// How many of the attribute changes are references still owed to the Connected System: their targets have no
+    /// object there yet, so they were not written with the rest of the export.
     /// </summary>
+    /// <remarks>
+    /// Issue #1398. The detail view explains each owed reference; this count surfaces the wait in a list.
+    /// </remarks>
     public int UnresolvedReferenceCount { get; set; }
 
     /// <summary>
-    /// The external identifier of the target CSO, if available.
+    /// The target Connected System Object's external identifier, when it has one.
     /// </summary>
     public string? TargetObjectIdentifier { get; set; }
 
