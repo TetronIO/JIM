@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
 - 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
 - 🔄 Example Data dependencies now use scoping's operators and names, and every one works, comparing values as the attribute's own type. `GreaterThanOrEqual`, `LessThanOrEqual` and `Like` become `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains`. (#2053)
 - 🔄 A criterion compared with an empty value is no longer accepted; use **has no value** or **has a value**, which existing criteria that relied on an empty value have been converted to. (#2053)
@@ -95,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An External ID or reference containing the Turkish capital `İ` is now found by the lookups that compare in the database, instead of being missed and imported again as a new object. (#2051)
 - 🐛 A DN, External ID or member reference a directory stores in its own case (`DC=PANOPLY` for JIM's `DC=panoply`) is now confirmed, no longer re-exported every run, and no longer reported as drift. Identifiers declared case-exact still compare exactly. (#2195)
 - 🐛 `==` in an expression now compares an attribute's text by its characters, so `mv["Status"] == "Active"` is true when it should be rather than always false. (#2053)
 - 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box now match themselves, so "starts with svc_" no longer also finds "svcX…" and a search agrees with a scoping criterion holding the same value. (#2053)

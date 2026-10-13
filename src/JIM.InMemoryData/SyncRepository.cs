@@ -1287,7 +1287,7 @@ public class SyncRepository : ISyncRepository
                 // unless that attribute is case-exact (#2051).
                 var target = GetCsosForSystem(connectedSystemId)
                     .FirstOrDefault(c => c.SecondaryExternalIdAttributeId.HasValue && c.AttributeValues
-                        .Any(tav => tav.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
+                        .Any(tav => tav.AttributeId == c.SecondaryExternalIdAttributeId &&
                                     tav.StringValue != null &&
                                     string.Equals(tav.StringValue, av.UnresolvedReferenceValue, IdentifierKey.Comparison(IsCaseExact(tav.AttributeId)))));
 
