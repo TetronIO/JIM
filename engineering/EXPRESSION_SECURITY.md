@@ -100,17 +100,28 @@ registers, and nothing else:
   interpreter option. JIM's own attribute-name case-insensitivity is implemented in `AttributeAccessor`, not via a
   DynamicExpresso interpreter option.
 
-On top of this, `RegisterBuiltInFunctions` (`DynamicExpressoEvaluator.cs`) registers JIM's own functions, all
+On top of this, `RegisterBuiltInFunctions` (`DynamicExpressoEvaluator.cs`, with the functions mirroring the operator
+catalogue in `DynamicExpressoEvaluator.Library.cs`) registers JIM's own functions, all
 pure, side-effect-free, in-process transforms: string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`,
-`Right`, `Substring`, `Replace`, `StartsWith`, `EndsWith`, `Length`, `IsNullOrEmpty`, `IsNullOrWhitespace`),
-containment (`Contains`), multi-valued (`Count`, `Min`, `Max`, `Where`, `Split`, `Join`), conditional (`Coalesce`, `IIF`,
+`Right`, `Substring`, `Replace`, `StartsWith`, `EndsWith`, `Length`, `IsNullOrEmpty`, `IsNullOrWhitespace`, `HasValue`),
+containment (`Contains`), regular expressions (`IsMatch`, `RegexReplace`, `RegexExtract`), multi-valued (`Count`, `Min`, `Max`, `Where`, `Split`, `Join`), conditional (`Coalesce`, `IIF`,
 `Eq`), date (`Now`, `Today`, `FormatDate`, `ParseDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
 helper (`EscapeDN`), password generation (`RandomPassword`, `RandomPassphrase`, both backed by
 `RandomNumberGenerator`, not `System.Random`), and AD `userAccountControl` bitwise helpers (`EnableUser`,
 `DisableUser`, `SetBit`, `ClearBit`, `HasBit`). Every one of these is exercised end-to-end, with expressions
 taken verbatim from the customer-facing function reference in `docs/concepts/expressions.md`, by
 `DynamicExpressoEvaluatorFunctionalityRegressionTests.cs` (see "Guardrails added" below for why this suite
-exists).
+exists). The set registered is pinned to the function catalogue (`ExpressionFunctionCatalogue`) by
+`ExpressionFunctionCatalogueTests`, so a function cannot be added without being described, documented and classed as
+repeatable or not.
+
+The regular expression functions are the one place an expression's own text decides how much work an evaluation
+does, so they take their patterns from the same place as the scoping pattern operators (`CriterionPatterns`):
+validated (and bounded in length) by `SearchComparisonOperators.ValidatePattern`, compiled once and cached, and run
+with a 100 ms match timeout per value. A pattern that runs past it (catastrophic backtracking, such as `(a+)+`
+against a long run of `a`) is an `ExpressionEvaluationException` on that object, never a stalled worker
+(`APatternThatRunsPastItsTimeLimit_IsAnExpressionError`, `DynamicExpressoEvaluatorFunctionLibraryTests.cs`). A
+replacement string's `$1` group references are .NET's own substitution syntax and reach nothing outside the match.
 
 The `mv` and `cs` parameters passed into every evaluation (`Evaluate`, `Test`, and the typed parse in
 `Validate`) are `AttributeAccessor` instances: a case-insensitive, get-only dictionary wrapper. They expose

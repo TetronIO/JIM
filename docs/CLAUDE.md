@@ -16,7 +16,7 @@ The standard is the authority; this is the short version of what trips people up
 - **A cmdlet's Syntax, Parameters and Output on a `docs/powershell/` page are generated from the module** between `<!-- BEGIN GENERATED -->` markers (ACC-5). Never edit inside them: change the cmdlet's help or `[OutputType]` and run `scripts/Update-PowerShellReference.ps1`, as `src/JIM.PowerShell/CLAUDE.md` describes. The introduction, examples and notes around them are written by hand.
 - **A property an example reads from a JIM cmdlet's output must be one it returns** (ACC-6): `Select-Object Name`, `$_.Name` and `$widget.Name` are checked against the parameter set the example binds, by `Lint-DocExamples.ps1 -OpenApiPath` in `build-and-test`. A property that does not exist prints nothing, so a reader who copies the example gets blank output.
 - **Write REST routes in full** (`/api/v1/synchronisation/connected-systems/{id}`), as the API reference names them, never abbreviated (ACC-3). `build-and-test` checks every route a page gives against the OpenAPI document, and the method given with it.
-- **A page over 5,000 words must not grow** (MNT-3; a warning until the over-budget pages are split, then blocking): split it, or make room by rewriting what your change superseded.
+- **A page over 5,000 words must not grow** (MNT-3, blocking): split it, or make room by rewriting what your change superseded. A page that only now crosses the budget gets a warning (STR-8); treat it as a request to split.
 - **`changelog-lint` checks the mechanical rules on every pull request,** and each failure names its rule ID. If your change removes existing debt (adding front matter to a page, say), the conformance check fails until you lock the improvement in:
 
     ```bash
