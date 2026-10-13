@@ -121,7 +121,7 @@ A step that was already running when the run was cancelled shows as **Cancelled*
 
 An execution that is still in progress refreshes as it goes, and can be cancelled from this view, including while it is still starting (shown as **Queued**). A cancellation always stands: a step that finishes after you cancel the run does not change how it ended, and nothing further is started. Starting a schedule normally takes seconds; if a run is still **Queued** five minutes later (most likely because a JIM service stopped part-way through starting it), JIM marks it **Failed** with the message "The Schedule did not finish starting, most likely because a JIM service stopped part-way through. No steps ran."
 
-The same reasons are available to automation: each step returned by `Get-JIMScheduleExecution -Id` and the Schedule Execution REST endpoint carries a `CancellationReason`. See the [Schedules cmdlets](../powershell/schedules.md#get-jimscheduleexecution) for the field-by-field description.
+The same reasons are available to automation: each step returned by `Get-JIMScheduleExecution -Id` and the Schedule Execution REST endpoint carries a `CancellationReason`. See [`Get-JIMScheduleExecution`](../powershell/schedule-executions.md#get-jimscheduleexecution) for the field-by-field description.
 
 ### Watching one run
 
@@ -192,7 +192,7 @@ When changing a schedule from automation you can record a reason alongside the c
 ## Manage Schedules
 
 - **JIM portal**<br /> Schedules area of the admin UI
-- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Start-JIMSchedule`, etc.)
+- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) to configure a Schedule (`Get-JIMSchedule`, `New-JIMSchedule` and the rest), and [Schedule Execution cmdlets](../powershell/schedule-executions.md) to run one and follow its runs (`Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
 ## Related

@@ -1,68 +1,108 @@
 ---
 title: Schedules
+description: "The cmdlets that create, change and remove Schedules and their steps, and turn Schedules on and off."
+type: reference
+audience: automation-author
 ---
 
 # Schedules
 
-The schedule cmdlets manage automated synchronisation schedules in JIM. Schedules define when and how Connected System Run Profiles execute, supporting cron-based, interval, and manual trigger types.
-
-Cmdlets are grouped into four areas: [CRUD operations](#schedule-crud), [control actions](#schedule-control), [step management](#schedule-steps), and [execution monitoring](#schedule-executions).
+The Schedule cmdlets manage when JIM runs Run Profiles on its own: create a Schedule with a trigger and a pattern, give it steps, and turn it on or off. To run a Schedule now, or to watch and stop its runs, see [Schedule Executions](schedule-executions.md). What Schedules are, and their trigger types, patterns and step types, are covered in [Schedules](../configuration/schedules.md).
 
 ---
 
-## Schedule CRUD
+## Get-JIMSchedule
 
-### Get-JIMSchedule
+Retrieves one or more Schedules. Without parameters, returns every Schedule; with `-Id`, returns one.
 
-Retrieves one or more schedules. When called without parameters, returns a paginated list of all schedules (page size 100). When called with `-Id`, returns a single schedule by its identifier.
-
-#### Syntax
+<!-- BEGIN GENERATED: Get-JIMSchedule -->
+### Syntax
 
 ```powershell
 # List (default)
-Get-JIMSchedule [-Name <String>] [-IncludeSteps]
+Get-JIMSchedule [-Name <string>] [-IncludeSteps]
 
 # ById
-Get-JIMSchedule -Id <Guid> [-IncludeSteps]
+Get-JIMSchedule -Id <guid> [-IncludeSteps]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | No | ByValue, ByPropertyName | The unique identifier of the schedule. Alias: `ScheduleId`. |
-| `Name` | `String` | No | No | Filters schedules by name. Supports wildcard characters. Only available in the List parameter set. |
-| `IncludeSteps` | `Switch` | No | No | Includes step details in the returned schedule objects. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of a specific Schedule to retrieve. Accepts pipeline input by property name, `Id` or `ScheduleId`. |
+| `Name` | `string` | No (List) |  | Returns the Schedules whose name matches. Supports wildcards. |
+| `IncludeSteps` | `switch` | No |  | Returns each Schedule in full, steps included. |
 
-#### Output
+### Output
 
-One or more schedule objects. The list parameter set returns results in pages of 100.
+The list returns each Schedule's configuration and the outcome of its last run. `-Id` returns the Schedule in full, with its steps, but leaves the last-run fields empty; `-IncludeSteps` returns each listed Schedule in full and keeps them.
 
-Every object carries the Schedule's configuration: `Id`, `Name`, `Description`, `TriggerType`, `PatternType`, `CronExpression`, `IsEnabled`, `LastRunTime`, `NextRunTime`, `StepCount`, and `OnStepFailure`, what the Schedule does when a step fails (`Stop` or `Continue`; see [When a step fails](#when-a-step-fails)).
-
-The list parameter set also carries the outcome of the Schedule's most recent run:
+**By default**:
 
 | Property | Type | Description |
-|---|---|---|
-| `LastExecutionId` | `Guid` | The most recent Schedule Execution. Pass it to `Get-JIMScheduleExecution -Id` for the per-step detail. |
-| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed` or `Cancelled`. `CompleteWithError` means the run reached its end, but one or more steps failed and were set to let the Schedule continue. |
-| `LastExecutionCurrentStepIndex` | `Int32` | The step the run reached, 0-based. Read with `LastExecutionTotalSteps` to see how far a failed run got. |
-| `LastExecutionTotalSteps` | `Int32` | How many steps the run set out to execute. |
-| `LastExecutionFailedStepIndices` | `Int32[]` | For a `CompleteWithError` run, the steps (0-based, each listed once) that failed and let the Schedule continue. Empty for any other outcome. |
-| `LastExecutionCompletedAt` | `DateTime` | When the run finished (UTC). Empty while it is still running. |
-| `LastExecutionErrorMessage` | `String` | The error that stopped the run, where one did; for a `CompleteWithError` run, the message naming each failed step. |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier of the Schedule. |
+| `Name` | `string` | The Schedule's name. |
+| `Description` | `string` | What the Schedule does, in its author's words. Empty when it has no description. |
+| `TriggerType` | `string` | How the Schedule starts: `Cron` runs it automatically on its pattern; `Manual` runs it only when it is started. One of `Cron` or `Manual`. |
+| `CronExpression` | `string` | The cron expression the Schedule runs on; empty for a `Manual` Schedule. JIM builds it from the pattern fields, except for a `Custom` pattern, which gives it directly. |
+| `PatternType` | `string` | How a `Cron` Schedule is timed: at set times of day (`SpecificTimes`), every few hours or minutes (`Interval`), or by a cron expression of its own (`Custom`). One of `SpecificTimes`, `Interval` or `Custom`. |
+| `DaysOfWeek` | `string` | The days the Schedule runs, as a comma-separated list of numbers from 0 (Sunday) to 6 (Saturday), for example `1,2,3,4,5` for weekdays. A `Custom` pattern does not use it. |
+| `RunTimes` | `string` | For a `SpecificTimes` pattern, the times of day the Schedule runs, as a comma-separated list of 24-hour times, for example `06:00,18:00`. |
+| `IntervalValue` | `int` | For an `Interval` pattern, how often the Schedule runs, counted in IntervalUnit: 2 with `Hours` runs it every two hours. |
+| `IntervalUnit` | `string` | For an `Interval` pattern, the unit of IntervalValue. One of `Minutes` or `Hours`. |
+| `IntervalWindowStart` | `string` | For an hourly `Interval` pattern, the start of the window the Schedule runs in, as a 24-hour time such as `06:00`. Empty when the interval runs all day. |
+| `IntervalWindowEnd` | `string` | For an hourly `Interval` pattern, the end of the window the Schedule runs in, as a 24-hour time such as `18:00`. Empty when the interval runs all day. |
+| `IsEnabled` | `bool` | Whether the Schedule is enabled. |
+| `OnStepFailure` | `string` | What the Schedule does when a step fails, for every step that follows the Schedule: `Stop` ends the run (Failed); `Continue` runs the remaining steps, and a run that carried on past a failure ends `CompleteWithError`. A step with a failure setting of its own overrides it. One of `Stop` or `Continue`. |
+| `LastRunTime` | `datetime` | When the Schedule last ran (UTC). |
+| `NextRunTime` | `datetime` | When the Schedule is next due to run (UTC). |
+| `StepCount` | `int` | The number of steps in the Schedule. |
+| `Created` | `datetime` | When the Schedule was created (UTC). |
+| `LastUpdated` | `datetime` | When the Schedule was last changed (UTC). |
+| `LastExecutionId` | `guid` | The unique identifier of the most recent Schedule Execution, if the Schedule has ever run. The LastExecution fields are filled in only when Schedules are listed: reading a single Schedule, or creating, changing, enabling or disabling one, leaves them all empty, because that describes the Schedule's configuration rather than its run history. The Schedule Executions hold the full history. |
+| `LastExecutionStatus` | `string` | The outcome of the most recent Schedule Execution. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). One of `Queued`, `InProgress`, `Complete`, `Failed`, `Cancelled`, `Paused` or `CompleteWithError`. |
+| `LastExecutionCurrentStepIndex` | `int` | The step the most recent Schedule Execution reached (0-based). Read with LastExecutionTotalSteps to see how far a failed run got before it stopped. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionTotalSteps` | `int` | How many steps the most recent Schedule Execution set out to run. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionFailedStepIndices` | `int[]` | The steps (0-based, ascending, each listed once) that failed in the most recent Schedule Execution and let it carry on, when that execution is `CompleteWithError`; empty for any other outcome. Empty where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionCompletedAt` | `datetime` | When the most recent Schedule Execution finished (UTC). Empty while it is still running, when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionErrorMessage` | `string` | The error reported by the most recent Schedule Execution, if it failed, or the message naming each failed step when it is `CompleteWithError`. Empty when the run succeeded, when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
 
-These are empty for a Schedule that has never run. `-Id` returns the configuration and steps only, with these fields empty; `-IncludeSteps` returns both.
-
-With `-Id` or `-IncludeSteps`, each object also carries `Steps`, one per step (`Id`, `StepIndex`, `Name`, `StepType`, `ExecutionMode`, `ConnectedSystemId`, `RunProfileId`, `TimeoutSeconds`, and the type-specific fields), including how each step behaves when it fails:
+**With `-Id` or `-IncludeSteps`**:
 
 | Property | Type | Description |
-|---|---|---|
-| `OnFailure` | `String` | The step's own setting: `FollowSchedule` (the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. |
-| `ContinueOnFailure` | `Boolean` | What the step will actually do if it fails: `True` when the Schedule carries on past it. This is the step's own setting, or the Schedule's when the step follows the Schedule. |
-| `FailureBehaviourSource` | `String` | Where `ContinueOnFailure` comes from: `Step` (the step has a setting of its own) or `Schedule` (it follows the Schedule). |
+|----------|------|-------------|
+| `Steps` | `object[]` | The Schedule's steps, in the order they run (by StepIndex). Each has `Id`, `StepIndex`, `Name`, `ExecutionMode`, `StepType`, `OnFailure`, `ContinueOnFailure`, `FailureBehaviourSource`, `TimeoutSeconds`, `ConnectedSystemId`, `RunProfileId`, `ScriptPath`, `ExecutablePath`, `WorkingDirectory`, `Arguments`, `SqlConnectionString` and `SqlScriptPath`. |
+| `Id` | `guid` | The unique identifier of the Schedule. |
+| `Name` | `string` | The Schedule's name. |
+| `Description` | `string` | What the Schedule does, in its author's words. Empty when it has no description. |
+| `TriggerType` | `string` | How the Schedule starts: `Cron` runs it automatically on its pattern; `Manual` runs it only when it is started. One of `Cron` or `Manual`. |
+| `CronExpression` | `string` | The cron expression the Schedule runs on; empty for a `Manual` Schedule. JIM builds it from the pattern fields, except for a `Custom` pattern, which gives it directly. |
+| `PatternType` | `string` | How a `Cron` Schedule is timed: at set times of day (`SpecificTimes`), every few hours or minutes (`Interval`), or by a cron expression of its own (`Custom`). One of `SpecificTimes`, `Interval` or `Custom`. |
+| `DaysOfWeek` | `string` | The days the Schedule runs, as a comma-separated list of numbers from 0 (Sunday) to 6 (Saturday), for example `1,2,3,4,5` for weekdays. A `Custom` pattern does not use it. |
+| `RunTimes` | `string` | For a `SpecificTimes` pattern, the times of day the Schedule runs, as a comma-separated list of 24-hour times, for example `06:00,18:00`. |
+| `IntervalValue` | `int` | For an `Interval` pattern, how often the Schedule runs, counted in IntervalUnit: 2 with `Hours` runs it every two hours. |
+| `IntervalUnit` | `string` | For an `Interval` pattern, the unit of IntervalValue. One of `Minutes` or `Hours`. |
+| `IntervalWindowStart` | `string` | For an hourly `Interval` pattern, the start of the window the Schedule runs in, as a 24-hour time such as `06:00`. Empty when the interval runs all day. |
+| `IntervalWindowEnd` | `string` | For an hourly `Interval` pattern, the end of the window the Schedule runs in, as a 24-hour time such as `18:00`. Empty when the interval runs all day. |
+| `IsEnabled` | `bool` | Whether the Schedule is enabled. |
+| `OnStepFailure` | `string` | What the Schedule does when a step fails, for every step that follows the Schedule: `Stop` ends the run (Failed); `Continue` runs the remaining steps, and a run that carried on past a failure ends `CompleteWithError`. A step with a failure setting of its own overrides it. One of `Stop` or `Continue`. |
+| `LastRunTime` | `datetime` | When the Schedule last ran (UTC). |
+| `NextRunTime` | `datetime` | When the Schedule is next due to run (UTC). |
+| `StepCount` | `int` | The number of steps in the Schedule. |
+| `Created` | `datetime` | When the Schedule was created (UTC). |
+| `LastUpdated` | `datetime` | When the Schedule was last changed (UTC). |
+| `LastExecutionId` | `guid` | The unique identifier of the most recent Schedule Execution, if the Schedule has ever run. The LastExecution fields are filled in only when Schedules are listed: reading a single Schedule, or creating, changing, enabling or disabling one, leaves them all empty, because that describes the Schedule's configuration rather than its run history. The Schedule Executions hold the full history. |
+| `LastExecutionStatus` | `string` | The outcome of the most recent Schedule Execution. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). One of `Queued`, `InProgress`, `Complete`, `Failed`, `Cancelled`, `Paused` or `CompleteWithError`. |
+| `LastExecutionCurrentStepIndex` | `int` | The step the most recent Schedule Execution reached (0-based). Read with LastExecutionTotalSteps to see how far a failed run got before it stopped. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionTotalSteps` | `int` | How many steps the most recent Schedule Execution set out to run. Empty when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionFailedStepIndices` | `int[]` | The steps (0-based, ascending, each listed once) that failed in the most recent Schedule Execution and let it carry on, when that execution is `CompleteWithError`; empty for any other outcome. Empty where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionCompletedAt` | `datetime` | When the most recent Schedule Execution finished (UTC). Empty while it is still running, when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+| `LastExecutionErrorMessage` | `string` | The error reported by the most recent Schedule Execution, if it failed, or the message naming each failed step when it is `CompleteWithError`. Empty when the run succeeded, when the Schedule has never run, or where the LastExecution fields are not filled in (see LastExecutionId). |
+<!-- END GENERATED: Get-JIMSchedule -->
 
-#### Examples
+### Examples
 
 ```powershell title="List all schedules"
 Get-JIMSchedule
@@ -100,58 +140,45 @@ Get-JIMSchedule |
 
 ---
 
-### New-JIMSchedule
+## New-JIMSchedule
 
-Creates a new synchronisation schedule. The parameters required depend on the trigger type and pattern type selected.
+Creates a Schedule. Which parameters it needs depends on the trigger type and the pattern type.
 
-Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm creation.
-
-#### Syntax
+<!-- BEGIN GENERATED: New-JIMSchedule -->
+### Syntax
 
 ```powershell
-New-JIMSchedule [-Name] <String>
-    [-Description <String>]
-    -TriggerType <String>
-    [-PatternType <String>]
-    [-DaysOfWeek <Int32[]>]
-    [-RunTimes <String[]>]
-    [-IntervalValue <Int32>]
-    [-IntervalUnit <String>]
-    [-IntervalWindowStart <String>]
-    [-IntervalWindowEnd <String>]
-    [-CronExpression <String>]
-    [-Enabled]
-    [-OnStepFailure <String>]
-    [-ChangeReason <String>]
-    [-PassThru]
-    [-WhatIf] [-Confirm]
+New-JIMSchedule [-Name] <string> -TriggerType <string> [-Description <string>] [-PatternType <string>] [-DaysOfWeek <int[]>] [-RunTimes <string[]>] [-IntervalValue <int>] [-IntervalUnit <string>] [-IntervalWindowStart <string>] [-IntervalWindowEnd <string>] [-CronExpression <string>] [-Enabled] [-OnStepFailure <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `Name` | `String` | Yes (Position 0) | | The display name for the schedule. |
-| `Description` | `String` | No | | A description of the schedule's purpose. |
-| `TriggerType` | `String` | Yes | | The trigger mechanism: `Cron` or `Manual`. |
-| `PatternType` | `String` | No | `SpecificTimes` | The scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
-| `DaysOfWeek` | `Int32[]` | No | | Days the schedule runs. Values 0 (Sunday) through 6 (Saturday). |
-| `RunTimes` | `String[]` | No | | Specific times to run, in 24-hour format (e.g. `"06:00"`, `"12:00"`). Used with `SpecificTimes` pattern. Every time must be at the same minute past the hour (`"06:30"` and `"18:30"`, not `"06:00"` and `"18:30"`), because a Schedule holds one cron expression; use a `Custom` pattern for times that differ. |
-| `IntervalValue` | `Int32` | No | | The interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. Used with `Interval` pattern. |
-| `IntervalUnit` | `String` | No | `Hours` | The interval unit: `Hours` or `Minutes`. |
-| `IntervalWindowStart` | `String` | No | | Start of the interval window in 24-hour format (e.g. `"08:00"`). Applies to an hourly interval; give `IntervalWindowEnd` with it. |
-| `IntervalWindowEnd` | `String` | No | | End of the interval window in 24-hour format (e.g. `"18:00"`). |
-| `CronExpression` | `String` | No | | The cron expression for a `Custom` pattern (e.g. `"0 6 * * 1-5"`). For `SpecificTimes` and `Interval`, JIM builds the expression from the pattern, exactly as the Schedule editor in the portal does. |
-| `Enabled` | `Switch` | No | | Enables the schedule immediately upon creation. |
-| `OnStepFailure` | `String` | No | `Stop` | What the Schedule does when a step fails: `Stop` or `Continue`. Steps follow it unless they have a setting of their own. See [When a step fails](#when-a-step-fails). |
-| `ChangeReason` | `String` | No | | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | | Returns the created schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Name` | `string` | Yes |  | The name for the Schedule. Can be given by position, as the first argument. |
+| `Description` | `string` | No |  | An optional description of what the Schedule does. |
+| `TriggerType` | `string` | Yes |  | How the Schedule starts. Cron runs it automatically on the pattern you give; Manual runs it only when started, from the portal or with `Start-JIMSchedule`. One of `Cron` or `Manual`. |
+| `PatternType` | `string` | No | `'SpecificTimes'` | How a Cron Schedule is timed. SpecificTimes runs it at set times of day (RunTimes), Interval runs it every few hours or minutes (IntervalValue and IntervalUnit), and Custom takes a cron expression of your own (CronExpression). One of `SpecificTimes`, `Interval` or `Custom`. |
+| `DaysOfWeek` | `int[]` | No |  | The days the Schedule runs, as numbers from 0 (Sunday) to 6 (Saturday). For example, @(1,2,3,4,5) for weekdays. From 0 to 6. |
+| `RunTimes` | `string[]` | No |  | For a SpecificTimes pattern, the times of day to run, in 24-hour format, for example @("06:00", "18:00"). Every time must be at the same minute past the hour ("06:30" and "18:30", not "06:00" and "18:30"), because a Schedule holds one cron expression; use a Custom pattern for times that differ. |
+| `IntervalValue` | `int` | No |  | For an Interval pattern, how often to run, counted in IntervalUnit. For example, 2 with `-IntervalUnit` Hours runs every two hours. For Hours, no more than 23. From 1 to 59. |
+| `IntervalUnit` | `string` | No | `'Hours'` | For an Interval pattern, the unit of IntervalValue: Hours or Minutes. One of `Hours` or `Minutes`. |
+| `IntervalWindowStart` | `string` | No |  | For an hourly Interval pattern, the start of the window the Schedule runs in, in 24-hour format, for example "08:00". Give IntervalWindowEnd with it. An interval in minutes runs all day. |
+| `IntervalWindowEnd` | `string` | No |  | For an hourly Interval pattern, the end of the window the Schedule runs in, in 24-hour format, for example "18:00". |
+| `CronExpression` | `string` | No |  | For a Custom pattern, the cron expression, for example "0 6 * * 1-5". For SpecificTimes and Interval, JIM builds the expression from the pattern, exactly as the portal's Schedule editor does. |
+| `Enabled` | `switch` | No |  | Enables the Schedule as soon as it is created. Without it, the Schedule is created disabled. |
+| `OnStepFailure` | `string` | No |  | What the Schedule does when a step fails. With Stop (the default), the remaining steps do not run and the run ends Failed. With Continue, the remaining steps run, and a run that carried on past a failure ends CompleteWithError. A step with a setting of its own (`Add-JIMScheduleStep -OnFailure`) overrides it. One of `Stop` or `Continue`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the created Schedule. |
 
-#### Output
+### Output
 
-None by default. When `-PassThru` is specified, returns the created schedule object.
+With `-PassThru`, the created Schedule in full; otherwise nothing.
 
-#### Examples
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: New-JIMSchedule -->
+
+### Examples
 
 ```powershell title="Create a schedule that runs at specific times on weekdays"
 New-JIMSchedule "Weekday Sync" `
@@ -199,60 +226,46 @@ New-JIMSchedule "Nightly HR sync" `
 
 ---
 
-### Set-JIMSchedule
+## Set-JIMSchedule
 
-Updates an existing schedule. Only the parameters you specify are changed; all other properties retain their current values.
+Changes a Schedule. Only the parameters you give are changed; everything else keeps its current value.
 
-Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm changes.
-
-#### Syntax
+<!-- BEGIN GENERATED: Set-JIMSchedule -->
+### Syntax
 
 ```powershell
-Set-JIMSchedule -Id <Guid>
-    [-Name <String>]
-    [-Description <String>]
-    [-TriggerType <String>]
-    [-PatternType <String>]
-    [-DaysOfWeek <Int32[]>]
-    [-RunTimes <String[]>]
-    [-IntervalValue <Int32>]
-    [-IntervalUnit <String>]
-    [-IntervalWindowStart <String>]
-    [-IntervalWindowEnd <String>]
-    [-CronExpression <String>]
-    [-OnStepFailure <String>]
-    [-Steps <Object[]>]
-    [-ChangeReason <String>]
-    [-PassThru]
-    [-WhatIf] [-Confirm]
+Set-JIMSchedule -Id <guid> [-Name <string>] [-Description <string>] [-TriggerType <string>] [-PatternType <string>] [-DaysOfWeek <int[]>] [-RunTimes <string[]>] [-IntervalValue <int>] [-IntervalUnit <string>] [-IntervalWindowStart <string>] [-IntervalWindowEnd <string>] [-CronExpression <string>] [-OnStepFailure <string>] [-Steps <Array>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to update. Alias: `ScheduleId`. |
-| `Name` | `String` | No | No | Updated display name. |
-| `Description` | `String` | No | No | Updated description. |
-| `TriggerType` | `String` | No | No | Updated trigger mechanism: `Cron` or `Manual`. |
-| `PatternType` | `String` | No | No | Updated scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
-| `DaysOfWeek` | `Int32[]` | No | No | Updated days of the week (0-6). |
-| `RunTimes` | `String[]` | No | No | Updated run times in 24-hour format. |
-| `IntervalValue` | `Int32` | No | No | Updated interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. |
-| `IntervalUnit` | `String` | No | No | Updated interval unit: `Hours` or `Minutes`. |
-| `IntervalWindowStart` | `String` | No | No | Updated interval window start time. |
-| `IntervalWindowEnd` | `String` | No | No | Updated interval window end time. |
-| `CronExpression` | `String` | No | No | Updated cron expression, for a `Custom` pattern. For `SpecificTimes` and `Interval`, JIM rebuilds the expression from the pattern, so changing `RunTimes` or the interval retimes the Schedule. |
-| `OnStepFailure` | `String` | No | No | What the Schedule does when a step fails: `Stop` or `Continue`. Omit to leave it unchanged. A built-in Schedule, such as Temporal Scope Reconciliation, always stops; JIM refuses a change to it. See [When a step fails](#when-a-step-fails). |
-| `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. Give each step its failure setting as `OnFailure`: a step object that carries `OnFailure` ignores its `ContinueOnFailure`, so to change one step's setting, use [`Set-JIMScheduleStep`](#set-jimschedulestep) or change the step's `OnFailure`. |
-| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to update. Accepts pipeline input by property name, `Id` or `ScheduleId`. |
+| `Name` | `string` | No |  | The new name for the Schedule. |
+| `Description` | `string` | No |  | The new description for the Schedule. |
+| `TriggerType` | `string` | No |  | How the Schedule starts. Cron runs it automatically on its pattern; Manual runs it only when started, from the portal or with `Start-JIMSchedule`. One of `Cron` or `Manual`. |
+| `PatternType` | `string` | No |  | How a Cron Schedule is timed. SpecificTimes runs it at set times of day (RunTimes), Interval runs it every few hours or minutes (IntervalValue and IntervalUnit), and Custom takes a cron expression of your own (CronExpression). One of `SpecificTimes`, `Interval` or `Custom`. |
+| `DaysOfWeek` | `int[]` | No |  | The days the Schedule runs, as numbers from 0 (Sunday) to 6 (Saturday). For example, @(1,2,3,4,5) for weekdays. From 0 to 6. |
+| `RunTimes` | `string[]` | No |  | For a SpecificTimes pattern, the times of day to run, in 24-hour format, for example @("06:00", "18:00"). Every time must be at the same minute past the hour, because a Schedule holds one cron expression; use a Custom pattern for times that differ. |
+| `IntervalValue` | `int` | No |  | For an Interval pattern, how often to run, counted in IntervalUnit. For Hours, no more than 23. From 1 to 59. |
+| `IntervalUnit` | `string` | No |  | For an Interval pattern, the unit of IntervalValue: Hours or Minutes. One of `Hours` or `Minutes`. |
+| `IntervalWindowStart` | `string` | No |  | For an hourly Interval pattern, the start of the window the Schedule runs in, in 24-hour format. Give IntervalWindowEnd with it. |
+| `IntervalWindowEnd` | `string` | No |  | For an hourly Interval pattern, the end of the window the Schedule runs in, in 24-hour format. |
+| `CronExpression` | `string` | No |  | For a Custom pattern, the cron expression. For SpecificTimes and Interval, JIM rebuilds the expression from the pattern, so changing RunTimes or the interval retimes the Schedule. |
+| `OnStepFailure` | `string` | No |  | What the Schedule does when a step fails. With Stop, the remaining steps do not run and the run ends Failed. With Continue, the remaining steps run, and a run that carried on past a failure ends CompleteWithError. A step with a setting of its own (see `Set-JIMScheduleStep`) overrides it. Omit to leave the setting unchanged. A built-in Schedule always stops, and JIM refuses a change to it. One of `Stop` or `Continue`. |
+| `Steps` | `Array` | No |  | Array of step objects to replace the existing steps. Give each step its failure setting as OnFailure (FollowSchedule, Stop or Continue). A step object that carries OnFailure ignores its ContinueOnFailure, so to change one step's setting, use `Set-JIMScheduleStep`, or change the step's OnFailure rather than its ContinueOnFailure. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
 
-#### Output
+### Output
 
-None by default. When `-PassThru` is specified, returns the updated schedule object.
+With `-PassThru`, the updated Schedule in full; otherwise nothing.
 
-#### Examples
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Set-JIMSchedule -->
+
+### Examples
 
 ```powershell title="Rename a schedule"
 Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Name "Updated Schedule Name"
@@ -275,36 +288,35 @@ Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
 Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -OnStepFailure Continue
 ```
 
-!!! note
-    `Set-JIMSchedule` merges your updates with the existing schedule configuration. Only the parameters you explicitly provide are modified.
-
 ---
 
-### Remove-JIMSchedule
+## Remove-JIMSchedule
 
-Deletes a schedule permanently. This action cannot be undone.
+Deletes a Schedule permanently. This cannot be undone.
 
-Supports `ShouldProcess` with high impact; prompts for confirmation by default. Use `-Force` to suppress the confirmation prompt.
-
-#### Syntax
+<!-- BEGIN GENERATED: Remove-JIMSchedule -->
+### Syntax
 
 ```powershell
-Remove-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-Force] [-WhatIf] [-Confirm]
+Remove-JIMSchedule -Id <guid> [-ChangeReason <string>] [-Force] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to delete. Alias: `ScheduleId`. |
-| `ChangeReason` | `String` | No | No | A reason for the deletion, recorded in the Schedule's change history. |
-| `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
+### Parameters
 
-#### Output
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to remove. Accepts pipeline input by property name, `Id` or `ScheduleId`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the deletion, recorded against the change history. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+
+### Output
 
 None.
+<!-- END GENERATED: Remove-JIMSchedule -->
 
-#### Examples
+### Examples
 
 ```powershell title="Remove a schedule with confirmation"
 Remove-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -320,31 +332,33 @@ Get-JIMSchedule -Name "Temp*" | Remove-JIMSchedule -Force
 
 ---
 
-## Schedule Control
+## Enable-JIMSchedule
 
-### Enable-JIMSchedule
+Enables a Schedule, so it runs when its trigger fires.
 
-Enables a schedule so it will execute according to its configured trigger.
-
-#### Syntax
+<!-- BEGIN GENERATED: Enable-JIMSchedule -->
+### Syntax
 
 ```powershell
-Enable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
+Enable-JIMSchedule -Id <guid> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to enable. Alias: `ScheduleId`. |
-| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to enable. Accepts pipeline input by property name, `Id` or `ScheduleId`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
 
-#### Output
+### Output
 
-None by default. When `-PassThru` is specified, returns the updated schedule object.
+With `-PassThru`, the updated Schedule in full; otherwise nothing.
 
-#### Examples
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Enable-JIMSchedule -->
+
+### Examples
 
 ```powershell title="Enable a schedule"
 Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -357,29 +371,33 @@ Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -PassThru |
 
 ---
 
-### Disable-JIMSchedule
+## Disable-JIMSchedule
 
-Disables a schedule, preventing it from executing on its configured trigger. The schedule configuration is preserved and can be re-enabled later.
+Disables a Schedule, so it no longer runs when its trigger fires. Its configuration is kept, and it can be enabled again.
 
-#### Syntax
+<!-- BEGIN GENERATED: Disable-JIMSchedule -->
+### Syntax
 
 ```powershell
-Disable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
+Disable-JIMSchedule -Id <guid> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to disable. Alias: `ScheduleId`. |
-| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to disable. Accepts pipeline input by property name, `Id` or `ScheduleId`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
 
-#### Output
+### Output
 
-None by default. When `-PassThru` is specified, returns the updated schedule object.
+With `-PassThru`, the updated Schedule in full; otherwise nothing.
 
-#### Examples
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Disable-JIMSchedule -->
+
+### Examples
 
 ```powershell title="Disable a schedule"
 Disable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -391,107 +409,45 @@ Get-JIMSchedule -Name "Legacy*" | Disable-JIMSchedule -PassThru
 
 ---
 
-### Start-JIMSchedule
+## Add-JIMScheduleStep
 
-Manually triggers a schedule execution regardless of its trigger type or enabled state. This is useful for testing schedules or running on-demand synchronisations.
+Adds a step to a Schedule. Each step runs a Run Profile against a Connected System. Steps run one after another unless `-Parallel` runs a step at the same time as the one before it.
 
-#### Syntax
-
-```powershell
-Start-JIMSchedule -Id <Guid> [-Wait] [-Timeout <TimeSpan>] [-PassThru]
-```
-
-#### Parameters
-
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to trigger. Alias: `ScheduleId`. |
-| `Wait` | `Switch` | No | No | Waits for the Schedule Execution to finish (`Complete`, `CompleteWithError`, `Failed` or `Cancelled`), polling every 5 seconds with progress output. |
-| `Timeout` | `TimeSpan` | No | No | Maximum time to wait when `-Wait` is specified. Default: 30 minutes. |
-| `PassThru` | `Switch` | No | No | Returns the execution object. |
-
-#### Output
-
-None by default. When `-PassThru` is specified, returns the schedule execution object.
-
-#### Examples
-
-```powershell title="Trigger a schedule and return immediately"
-Start-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-```
-
-```powershell title="Trigger and wait for completion"
-Start-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Wait
-```
-
-```powershell title="Trigger with a custom timeout"
-Start-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
-    -Wait -Timeout ([TimeSpan]::FromMinutes(60)) -PassThru
-```
-
-```powershell title="Trigger a disabled schedule on demand"
-# Start-JIMSchedule works regardless of the schedule's enabled state
-Get-JIMSchedule -Name "On-Demand Full Sync" | Start-JIMSchedule -Wait
-```
-
-!!! note
-    When `-Wait` is used and the timeout is reached, the cmdlet issues a warning but the execution continues server-side. Use `Get-JIMScheduleExecution` or `Stop-JIMScheduleExecution` to monitor or cancel it.
-
----
-
-## Schedule Steps
-
-### Add-JIMScheduleStep
-
-Adds a new step to a schedule. Each step defines a Run Profile to execute against a Connected System. Steps run sequentially by default; use `-Parallel` to run a step concurrently with the preceding step.
-
-#### Syntax
+<!-- BEGIN GENERATED: Add-JIMScheduleStep -->
+### Syntax
 
 ```powershell
 # ById (default)
-Add-JIMScheduleStep -ScheduleId <Guid>
-    -StepType <String>
-    -ConnectedSystemId <Int32>
-    -RunProfileId <Int32>
-    [-Parallel]
-    [-OnFailure <String> | -ContinueOnFailure]
-    [-ChangeReason <String>]
-    [-PassThru]
+Add-JIMScheduleStep -ScheduleId <guid> -StepType <string> -ConnectedSystemId <int> -RunProfileId <int> [-Parallel] [-OnFailure <string>] [-ContinueOnFailure] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Add-JIMScheduleStep -ScheduleId <Guid>
-    -StepType <String>
-    -ConnectedSystemName <String>
-    -RunProfileName <String>
-    [-Parallel]
-    [-OnFailure <String> | -ContinueOnFailure]
-    [-ChangeReason <String>]
-    [-PassThru]
+Add-JIMScheduleStep -ScheduleId <guid> -StepType <string> -ConnectedSystemName <string> -RunProfileName <string> [-Parallel] [-OnFailure <string>] [-ContinueOnFailure] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Parameter Set | Description |
-|---|---|---|---|---|
-| `ScheduleId` | `Guid` | Yes | Both | The schedule to add the step to. Alias: `Id`. |
-| `StepType` | `String` | Yes | Both | The type of step. Currently only `RunProfile` is supported. |
-| `ConnectedSystemId` | `Int32` | Yes | ById | The numeric identifier of the Connected System. |
-| `ConnectedSystemName` | `String` | Yes | ByName | The name of the Connected System. |
-| `RunProfileId` | `Int32` | Yes | ById | The numeric identifier of the Run Profile to execute. |
-| `RunProfileName` | `String` | Yes | ByName | The name of the Run Profile to execute. |
-| `Parallel` | `Switch` | No | Both | Runs this step in parallel with the previous step. |
-| `OnFailure` | `String` | No | Both | What the step does when it fails: `FollowSchedule` (the default; the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. See [When a step fails](#when-a-step-fails). |
-| `ContinueOnFailure` | `Switch` | No | Both | Shorthand for `-OnFailure Continue`. Supplying both `-OnFailure` and `-ContinueOnFailure` is an error, and nothing is changed. |
-| `ChangeReason` | `String` | No | Both | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | Both | Returns the updated schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ScheduleId` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to add the step to. Accepts pipeline input by property name, `ScheduleId` or `Id`. |
+| `StepType` | `string` | Yes |  | The type of step. RunProfile, which runs a Connected System's Run Profile, is the only type. One of `RunProfile`. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | For a RunProfile step, the id of the Connected System. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | For a RunProfile step, the name of the Connected System. |
+| `RunProfileId` | `int` | Yes (ById) |  | For a RunProfile step, the id of the Run Profile to run. |
+| `RunProfileName` | `string` | Yes (ByName) |  | For a RunProfile step, the name of the Run Profile to run. |
+| `Parallel` | `switch` | No |  | Runs this step at the same time as the step before it, in one step group. Without it, the step waits for the step before it to finish. |
+| `OnFailure` | `string` | No |  | What the Schedule does when this step fails. FollowSchedule (the default) does whatever the Schedule is set to do (its OnStepFailure). Stop stops the Schedule, even one set to continue. Continue carries on with the remaining steps, even when the Schedule is set to stop. Cannot be used with `-ContinueOnFailure`. One of `FollowSchedule`, `Stop` or `Continue`. |
+| `ContinueOnFailure` | `switch` | No |  | Shorthand for `-OnFailure` Continue: the Schedule carries on if this step fails, whatever the Schedule is set to do. Cannot be used with `-OnFailure`; giving both is an error, and nothing is changed. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
 
-#### Output
+### Output
 
-None by default. When `-PassThru` is specified, returns the updated schedule object with the new step included.
+With `-PassThru`, the Schedule in full, with the new step; otherwise nothing. Adding a step changes no other step: the existing steps are sent back with their failure settings exactly as they were.
 
-Adding a step changes no other step: the existing steps are sent back with their failure settings exactly as they were.
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Add-JIMScheduleStep -->
 
-#### Examples
+### Examples
 
 ```powershell title="Add a step by Connected System and Run Profile IDs"
 Add-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
@@ -549,40 +505,37 @@ Add-JIMScheduleStep -ScheduleId $scheduleId -StepType RunProfile `
 
 ---
 
-### Set-JIMScheduleStep
+## Set-JIMScheduleStep
 
 Changes what one step does when it fails, leaving every other step, and the Schedule itself, as they are. To change a step's other settings, send the whole step list through `Set-JIMSchedule -Steps`.
 
-Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the change.
-
-#### Syntax
+<!-- BEGIN GENERATED: Set-JIMScheduleStep -->
+### Syntax
 
 ```powershell
-Set-JIMScheduleStep -ScheduleId <Guid> -StepId <Guid> -OnFailure <String>
-    [-ChangeReason <String>]
-    [-PassThru]
-    [-WhatIf] [-Confirm]
+Set-JIMScheduleStep -ScheduleId <guid> -StepId <guid> -OnFailure <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+### Parameters
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `ScheduleId` | `Guid` | Yes | ByPropertyName | The Schedule the step belongs to. Alias: `Id`, so a Schedule piped from `Get-JIMSchedule` binds here. |
-| `StepId` | `Guid` | Yes | No | The step to change: its `Id` in the Schedule's `Steps` (`Get-JIMSchedule -Id`). |
-| `OnFailure` | `String` | Yes | No | What the step does when it fails: `FollowSchedule` (the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. |
-| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
-| `PassThru` | `Switch` | No | No | Returns the updated Schedule object. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ScheduleId` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule the step belongs to. A Schedule piped from `Get-JIMSchedule` binds here through its Id. Accepts pipeline input by property name, `ScheduleId` or `Id`. |
+| `StepId` | `guid` | Yes |  | The unique identifier (GUID) of the step to change, as shown in the Schedule's Steps. |
+| `OnFailure` | `string` | Yes |  | What the Schedule does when this step fails. FollowSchedule does whatever the Schedule is set to do (its OnStepFailure). Stop stops the Schedule, even one set to continue. Continue carries on with the remaining steps, even when the Schedule is set to stop. One of `FollowSchedule`, `Stop` or `Continue`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
+
+### Output
+
+With `-PassThru`, the updated Schedule in full; otherwise nothing. If the Schedule has no step with that StepId, the cmdlet reports an error and changes nothing.
+
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Set-JIMScheduleStep -->
 
 The steps of a built-in Schedule, such as Temporal Scope Reconciliation, always follow their Schedule; JIM refuses a change to them.
 
-#### Output
-
-None by default. When `-PassThru` is specified, returns the updated Schedule object, in the same shape as `Get-JIMSchedule -Id`.
-
-If the Schedule has no step with that `StepId`, the cmdlet reports an error and changes nothing.
-
-#### Examples
+### Examples
 
 ```powershell title="Make one step stop the Schedule, even when the Schedule carries on"
 $schedule = Get-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -598,33 +551,37 @@ Get-JIMSchedule -Name "Nightly HR sync" |
 
 ---
 
-### Remove-JIMScheduleStep
+## Remove-JIMScheduleStep
 
-Removes a step from a schedule by its zero-based index. After removal, remaining steps are automatically renumbered.
+Removes a step from a Schedule by its position. The remaining steps are renumbered: removing step 1 from a Schedule with steps 0, 1 and 2 makes the former step 2 step 1.
 
-Supports `ShouldProcess` with high impact. Use `-Force` to suppress the confirmation prompt.
-
-#### Syntax
+<!-- BEGIN GENERATED: Remove-JIMScheduleStep -->
+### Syntax
 
 ```powershell
-Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-ChangeReason <String>] [-Force] [-PassThru]
+Remove-JIMScheduleStep -ScheduleId <guid> -StepIndex <int> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-#### Parameters
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `ScheduleId` | `Guid` | Yes | ByValue, ByPropertyName | The schedule to remove the step from. Alias: `Id`. |
-| `StepIndex` | `Int32` | Yes | No | The zero-based index of the step to remove. |
-| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
-| `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
-| `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
+### Parameters
 
-#### Output
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ScheduleId` | `guid` | Yes |  | The unique identifier (GUID) of the Schedule to remove the step from. Accepts pipeline input by property name, `ScheduleId` or `Id`. |
+| `StepIndex` | `int` | Yes |  | The position of the step to remove, counting from 0. At least 0. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Schedule's change history. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+| `PassThru` | `switch` | No |  | Returns the updated Schedule. |
 
-None by default. When `-PassThru` is specified, returns the updated schedule object.
+### Output
 
-#### Examples
+With `-PassThru`, the updated Schedule in full; otherwise nothing. The remaining steps are renumbered, and each keeps its Id and its failure setting.
+
+Properties as under [Get-JIMSchedule](#get-jimschedule).
+<!-- END GENERATED: Remove-JIMScheduleStep -->
+
+### Examples
 
 ```powershell title="Remove the first step"
 Remove-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -StepIndex 0
@@ -634,9 +591,6 @@ Remove-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -StepI
 Remove-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
     -StepIndex 2 -Force -PassThru
 ```
-
-!!! note
-    Remaining steps are renumbered after removal. If you remove step 1 from a Schedule with steps 0, 1, 2, the former step 2 becomes step 1. Each remaining step keeps its `Id` and its failure setting.
 
 ---
 
@@ -654,141 +608,21 @@ Each Schedule has an `OnStepFailure` setting, `Stop` (the default) or `Continue`
 | Change an existing step's behaviour | `Set-JIMScheduleStep -OnFailure` |
 | See what each step will do | `(Get-JIMSchedule -Id <Guid>).Steps`: `OnFailure`, `ContinueOnFailure`, `FailureBehaviourSource` |
 
+Each step in a Schedule's `Steps` says how it behaves when it fails:
+
+| Property | Type | Description |
+|---|---|---|
+| `OnFailure` | `string` | The step's own setting: `FollowSchedule` (the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. |
+| `ContinueOnFailure` | `bool` | What the step will actually do if it fails: `$true` when the Schedule carries on past it. This is the step's own setting, or the Schedule's when the step follows the Schedule. |
+| `FailureBehaviourSource` | `string` | Where `ContinueOnFailure` comes from: `Step` (the step has a setting of its own) or `Schedule` (it follows the Schedule). |
+
 What counts as a step failing, and how the settings appear in the portal, are covered in [Schedules](../configuration/schedules.md).
-
----
-
-## Schedule Executions
-
-### Get-JIMScheduleExecution
-
-Retrieves schedule execution records. Use this to monitor running executions, review execution history, or check the status of a specific execution.
-
-#### Syntax
-
-```powershell
-# List (default)
-Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] [-Status <String>]
-
-# ById
-Get-JIMScheduleExecution -Id <Guid>
-
-# Active
-Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] -Active
-```
-
-#### Parameters
-
-| Parameter | Type | Required | Pipeline | Parameter Set | Description |
-|---|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
-| `ScheduleId` | `Guid` | No | ByPropertyName | List, Active | Filters executions to a specific schedule. |
-| `InputObject` | `PSCustomObject` | No | ByValue | List, Active | A Schedule object from the pipeline (e.g. from `Get-JIMSchedule`); its `Id` is used to filter executions, equivalent to specifying `-ScheduleId` directly. |
-| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed`, `Cancelled`. |
-| `Active` | `Switch` | Yes | No | Active | Returns only currently active executions (queued or in progress). |
-
-#### Output
-
-One or more Schedule Execution objects. Every shape carries `Status` (`Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed`, `Cancelled` or `Paused`), `ErrorMessage` (what stopped a `Failed` run, or the failed steps a `CompleteWithError` run carried on past), and `StepDisplay`, the step group the execution has reached as one sentence, matching what the portal shows above the Schedule's tasks in **Admin > Operations > Queue**.
-
-`-Id` returns the detail shape, which adds a `Progress` block:
-
-| Property | Description |
-|----------|-------------|
-| `StepDisplay` | `Step 2 of 5: 2 in parallel` from the detail shape, which knows what the step is called; `Step 2 of 5` from the list and active shapes, which carry only the position. |
-| `Progress.CurrentStepNumber` | The step group being run, 1-based. |
-| `Progress.TotalSteps` | How many step groups the Schedule has. Steps that run concurrently are one group, so a Schedule of six steps where two run together is five steps long. |
-| `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
-| `Steps` | Unchanged: one entry per Schedule Step *row*, naming it and carrying its type, timings, errors (`ErrorMessage`) and Activity id. A step group that runs three Run Profiles concurrently appears here three times and in `Progress.Steps` once. |
-| `Steps.CancellationReason` | Why a `Cancelled` step did not run, such as `Not run: an earlier step stopped the Schedule.`; empty for any other step, including one that was already running when it was cancelled. |
-| `Steps.ContinueOnFailure` | Whether the Schedule Execution carries on past this step if it fails: the step's own setting, or its Schedule's when it follows the Schedule. |
-| `Steps.FailureBehaviourSource` | Where `Steps.ContinueOnFailure` comes from: `Step` or `Schedule`. |
-
-#### Examples
-
-```powershell title="List all executions"
-Get-JIMScheduleExecution
-```
-
-```powershell title="See how far each running Schedule has got"
-Get-JIMScheduleExecution -Active | Select-Object ScheduleName, StepDisplay
-```
-
-```powershell title="Find a parallel step where one task failed and another did not"
-$execution = Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
-$execution.Progress.Steps | Where-Object { $_.IsParallel -and $_.TaskStatuses -contains 'Failed' }
-```
-
-```powershell title="Get a specific execution"
-Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
-```
-
-```powershell title="See why each step of an execution did not run"
-$execution = Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
-$execution.Steps | Where-Object { $_.CancellationReason } | Select-Object StepIndex, Name, CancellationReason
-```
-
-```powershell title="List failed executions for a schedule"
-Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Status Failed
-```
-
-```powershell title="List executions that carried on past a failed step"
-Get-JIMScheduleExecution -Status CompleteWithError | Select-Object ScheduleName, CompletedAt, ErrorMessage
-```
-
-```powershell title="Show all active executions"
-Get-JIMScheduleExecution -Active
-```
-
-```powershell title="Check active executions for a specific schedule"
-Get-JIMSchedule -Name "Weekday Sync" | Get-JIMScheduleExecution -Active
-```
-
----
-
-### Stop-JIMScheduleExecution
-
-Cancels a running or queued schedule execution. This sends a cancellation request to the server.
-
-Supports `ShouldProcess` with high impact. Use `-Force` to suppress the confirmation prompt.
-
-#### Syntax
-
-```powershell
-Stop-JIMScheduleExecution -Id <Guid> [-Force] [-PassThru] [-WhatIf] [-Confirm]
-```
-
-#### Parameters
-
-| Parameter | Type | Required | Pipeline | Description |
-|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the execution to cancel. Alias: `ExecutionId`. |
-| `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
-| `PassThru` | `Switch` | No | No | Returns the updated execution object. |
-
-#### Output
-
-None by default. When `-PassThru` is specified, returns the updated execution object.
-
-#### Examples
-
-```powershell title="Stop a specific execution"
-Stop-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
-```
-
-```powershell title="Stop without confirmation"
-Stop-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890" -Force
-```
-
-```powershell title="Stop all active executions for a schedule"
-Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Active |
-    Stop-JIMScheduleExecution -Force
-```
 
 ---
 
 ## See also
 
+- [Schedule Executions](schedule-executions.md): run a Schedule now, and watch or stop its runs
 - [Schedules](../configuration/schedules.md): what schedules are, trigger types and patterns, step types, and execution behaviour
 - [Run Profiles](run-profiles.md): Managing Connected System Run Profiles
 - [Activities](activities.md): Viewing synchronisation activity results

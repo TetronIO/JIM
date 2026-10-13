@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
+- 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
 
 ### Removed
 
@@ -99,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
 - 🐛 PowerShell's Sync Preview cmdlets now return the generated values a synchronisation would check (`GeneratedValueProbes`), which the REST API already reported. (#1083)
 - 🐛 `Invoke-JIMExampleDataTemplate -Wait -PassThru` reports how the generation finished, rather than `Queued`. (#1083)
+- 🐛 `Start-JIMSchedule -Wait` that times out now returns the Schedule Execution as it stood at the last check, rather than as it was when it started. (#1083)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
 - 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 An import's Activity message counts as updated only the objects that changed: objects compared and found unchanged count as unchanged, deletes as deleted, and objects a Full Import no longer found are reported apart from those it read. (#2129)

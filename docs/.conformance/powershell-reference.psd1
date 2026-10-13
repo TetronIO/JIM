@@ -23,6 +23,8 @@
     # no cmdlet declares fails the check.
     OutputTypeSchemas = @{
         'JIM.ExampleDataTemplateExecution' = 'ExampleDataTemplateExecutionResponse'
+        'JIM.ScheduleExecution'            = 'ScheduleExecutionDetailDto'
+        'JIM.ScheduleExecutionSummary'     = 'ScheduleExecutionDto'
         'JIM.ServiceHealth'                = 'ServiceHealthEntryResponse'
         'JIM.ServiceHealthSummary'         = 'ServiceHealthResponse'
         'JIM.SyncPreview'                  = 'SyncPreviewResponse'

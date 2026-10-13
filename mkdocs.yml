@@ -214,6 +214,7 @@ nav:
       - Password Synchronisation: powershell/password-synchronisation.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
+      - Schedule Executions: powershell/schedule-executions.md
       - Activities: powershell/activities.md
       - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
