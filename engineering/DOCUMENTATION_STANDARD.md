@@ -179,7 +179,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 
 **MNT-2 (Review). Find what is now wrong before writing what is new.** The likelier failure is not writing something false, it is *leaving* something true-when-written. The LDAP Connector reference told readers JIM "will not stop you" sending a password over an unencrypted connection for two releases after the setting that does stop you shipped, because the change added a new page and nobody searched for the old claim. When you change behaviour, search `docs/` for the sentence that is now wrong before you search for where to describe the new thing.
 
-**MNT-3 (Warn; Block from Phase 5). A page over its size budget cannot grow.** A pull request may not increase the word count of a page that was over its size budget (STR-8) on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch, so trimming a large page never needs a baseline update. A page that only now crosses the budget gets a warning (STR-8), not a failure. The rule warns until the pages already over budget are split (plan Phases 3 and 4): eleven of them, including the Synchronisation Rules, Connected Systems and PowerShell pages that most features document into, so blocking sooner would fail most feature pull requests or push authors to cut useful text to make room. The warning is annotated on the page in the pull request; treat it as a request to split, not as noise.
+**MNT-3 (Block). A page over its size budget cannot grow.** A pull request may not increase the word count of a page that was over its size budget (STR-8) on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch, so trimming a large page never needs a baseline update. A page that only now crosses the budget gets a warning (STR-8), not a failure. The rule warned until the eleven pages already over budget were split, since blocking sooner would have failed most feature pull requests; with none over budget, it blocks.
 
 ## Accuracy and links
 
@@ -288,7 +288,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | LANG-9 | No competing products named | Review | |
 | MNT-1 | Integrate, don't append | Review | |
 | MNT-2 | Find what is now wrong first | Review | |
-| MNT-3 | An over-budget page cannot grow | Warn (Block from Phase 5) | `Test-DocsConformance.ps1` |
+| MNT-3 | An over-budget page cannot grow | Block | `Test-DocsConformance.ps1` |
 | ACC-1 | Real parameter names, never aliases | Block | `Lint-DocExamples.ps1` |
 | ACC-2 | Cmdlets and parameters exist | Block | `Lint-DocExamples.ps1` |
 | ACC-3 | REST routes exist | Block | `Test-DocsCoverage.ps1` |
