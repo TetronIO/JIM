@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261013085306_DeclareCaseInsensitiveAttributes")]
+    [Migration("20261013113232_DeclareCaseInsensitiveAttributes")]
     partial class DeclareCaseInsensitiveAttributes
     {
         /// <inheritdoc />

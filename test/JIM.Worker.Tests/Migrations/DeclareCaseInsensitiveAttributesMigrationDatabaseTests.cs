@@ -22,7 +22,7 @@ namespace JIM.Worker.Tests.Migrations;
 public class DeclareCaseInsensitiveAttributesMigrationDatabaseTests
 {
     private const string ScratchDatabaseName = "jim_2195_migration_test";
-    private const string PreviousMigrationId = "20261012162234_AddJoinMatchSourceToSyncOutcomes";
+    private const string PreviousMigrationId = "20261013085847_UnifyCriterionOperators";
 
     private const int LdapObjectTypeId = 1;
     private const int SqlObjectTypeId = 2;
