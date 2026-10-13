@@ -189,6 +189,38 @@ public class CaseExactIdentifierLookupDatabaseTests
             expectFound ? Is.EqualTo(seeded.CsoIds[0]) : Is.Null);
     }
 
+    /// <summary>
+    /// Where the database and .NET fold a value differently, the database's match stands: the object it finds is filed
+    /// under the value asked for, never dropped as no match (which would leave a reference unresolved, or worse, read as
+    /// a different object). U+A7CB is a Unicode 16 capital that PostgreSQL lowers to U+0264 and .NET leaves alone.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsByAttributeValuesAsync_DatabaseFoldsWhereDotNetDoesNot_FilesTheDatabasesMatchAsync()
+    {
+        var seeded = await SeedAsync(caseExact: false, "ref-\uA7CB");
+
+        await using var ctx = NewContext();
+        var result = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectsByAttributeValuesAsync(seeded.SystemId, seeded.AnchorAttributeId, ["ref-\u0264"]);
+
+        Assert.That(result.TryGetValue("ref-\u0264", out var cso) ? cso.Id : (Guid?)null, Is.EqualTo(seeded.CsoIds[0]));
+    }
+
+    /// <summary>
+    /// As above, for the any-type Secondary External ID lookup.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync_DatabaseFoldsWhereDotNetDoesNot_FilesTheDatabasesMatchAsync()
+    {
+        var seeded = await SeedAsync(caseExact: false, secondaryCaseExact: false, secondaryValue: "CN=\uA7CB", anchorValues: "id-1");
+
+        await using var ctx = NewContext();
+        var result = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(seeded.SystemId, ["cn=\u0264"]);
+
+        Assert.That(result.TryGetValue("cn=\u0264", out var cso) ? cso.Id : (Guid?)null, Is.EqualTo(seeded.CsoIds[0]));
+    }
+
     [TestCase(false, true)]
     [TestCase(true, false)]
     public async Task FixupCrossBatchReferenceIdsAsync_ReferenceInAnotherCase_FollowsTheTargetsDeclarationAsync(bool caseExact, bool expectResolved)
