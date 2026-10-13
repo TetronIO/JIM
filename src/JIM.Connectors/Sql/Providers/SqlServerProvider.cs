@@ -287,7 +287,12 @@ internal class SqlServerProvider : SqlProviderBase
         $"NUMERIC_PRECISION AS {SqlCatalogueColumns.NumericPrecision}, " +
         $"NUMERIC_SCALE AS {SqlCatalogueColumns.NumericScale}, " +
         $"IS_NULLABLE AS {SqlCatalogueColumns.IsNullable}, " +
-        $"ORDINAL_POSITION AS {SqlCatalogueColumns.OrdinalPosition} " +
+        $"ORDINAL_POSITION AS {SqlCatalogueColumns.OrdinalPosition}, " +
+        // The collation's comparison style carries an "ignore case" flag in its lowest bit, as the uniqueness probe
+        // reads it; a column with no collation is not text and states nothing (#2051).
+        "CASE WHEN COLLATION_NAME IS NULL THEN NULL " +
+        "WHEN CAST(COLLATIONPROPERTY(COLLATION_NAME, 'ComparisonStyle') AS int) & 1 = 1 THEN 'NO' " +
+        $"ELSE 'YES' END AS {SqlCatalogueColumns.CaseExact} " +
         "FROM INFORMATION_SCHEMA.COLUMNS " +
         $"WHERE TABLE_SCHEMA = @{SqlCatalogueParameters.SchemaName} AND TABLE_NAME = @{SqlCatalogueParameters.ObjectName} " +
         "ORDER BY ORDINAL_POSITION";

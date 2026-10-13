@@ -80,6 +80,9 @@ internal abstract class SqlProviderBase : ISqlProvider
     /// </summary>
     public virtual string? ColumnIgnoresCaseCommandText => null;
 
+    /// <inheritdoc />
+    public virtual bool TextComparesExactlyByDefault => false;
+
     /// <summary>
     /// The dialect's opening identifier quote character.
     /// </summary>
