@@ -505,4 +505,69 @@ public class ScimAttributeFlatteningTests
         }
     }
     #endregion
+
+    #region case-exact declaration (#2051)
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactString_DeclaresItCaseExact()
+    {
+        var attribute = new ScimSchemaAttribute { Name = "employeeCode", Type = ScimAttributeTypes.String, CaseExact = true };
+
+        var connectorAttribute = ScimAttributeMapper.Flatten(attribute, ScimUrns.User)[0].ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.True);
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_StringWithoutCaseExact_IgnoresCase()
+    {
+        // RFC 7643 section 7: caseExact defaults to false.
+        var connectorAttribute = ScimAttributeMapper.Flatten(Simple("userName", ScimAttributeTypes.String), ScimUrns.User)[0]
+            .ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.False);
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactSubAttribute_DeclaresTheFlattenedLeafCaseExact()
+    {
+        // A canonical slot's declaration is its value sub-attribute's, since that is what the slot holds.
+        var emails = Emails();
+        emails.SubAttributes.Single(a => a.Name == "value").CaseExact = true;
+
+        var flattened = ScimAttributeMapper.Flatten(emails, ScimUrns.User);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flattened.Single(a => a.Name == "emails.work").ToConnectorSchemaAttribute().CaseExact, Is.True);
+            Assert.That(flattened.Single(a => a.Name == "emails.primary").ToConnectorSchemaAttribute().CaseExact, Is.True,
+                "The primary slot holds the same value sub-attribute.");
+        }
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactOnANonTextType_IsNotDeclared()
+    {
+        // caseExact describes how text compares; a binary or reference attribute carries no declaration.
+        var attribute = new ScimSchemaAttribute { Name = "photo", Type = ScimAttributeTypes.Binary, CaseExact = true };
+
+        var connectorAttribute = ScimAttributeMapper.Flatten(attribute, ScimUrns.User)[0].ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.False);
+    }
+
+    [Test]
+    public void CommonAttributes_IdAndExternalId_AreCaseExact()
+    {
+        // RFC 7643 section 3.1 defines both with "caseExact" true; they are not in any /Schemas document, so the
+        // declaration has to be stated where they are synthesised.
+        var common = ScimCommonAttributes.For(ScimUrns.User).ToDictionary(a => a.Name, a => a.ToConnectorSchemaAttribute());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(common[ScimCommonAttributes.Id].CaseExact, Is.True);
+            Assert.That(common[ScimCommonAttributes.ExternalId].CaseExact, Is.True);
+            Assert.That(common["meta.resourceType"].CaseExact, Is.False);
+        }
+    }
+    #endregion
 }

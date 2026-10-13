@@ -275,7 +275,7 @@ public static class ScimAttributeMapper
         string? extensionUrn)
     {
         return new ScimFlattenedAttribute(name, path, type, plurality, required, writability, schemaUrn, source.Description,
-            access, sourceAttributeName, subAttributeName, canonicalType, selectsPrimary, extensionUrn);
+            access, sourceAttributeName, subAttributeName, canonicalType, selectsPrimary, extensionUrn, source.CaseExact);
     }
 
     private static bool IsComplex(ScimSchemaAttribute attribute)

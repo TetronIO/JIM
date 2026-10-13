@@ -839,6 +839,91 @@ public class SqlConnectorSchemaTests
 
     #endregion
 
+    #region Case-exact declaration (#2051)
+
+    [Test]
+    public async Task GetSchemaAsync_TextColumns_DeclareCaseExactFromTheirCollationAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false, CaseExact: true),
+            new FakeCatalogueColumn("LOGIN", "nvarchar", MaxLength: 64, CaseExact: true),
+            new FakeCatalogueColumn("GIVEN_NAME", "nvarchar", MaxLength: 64, CaseExact: false),
+            new FakeCatalogueColumn("NOTES", "nvarchar", MaxLength: 64));
+
+        var objectType = (await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"))).ObjectTypes.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CaseExact(objectType, "LOGIN"), Is.True, "A case-sensitive collation makes the column case-exact.");
+            Assert.That(CaseExact(objectType, "GIVEN_NAME"), Is.False, "A case-insensitive collation ignores case.");
+            Assert.That(CaseExact(objectType, "NOTES"), Is.False, "Where the catalogue says nothing, the dialect's default applies.");
+            Assert.That(CaseExact(objectType, "EMPLOYEE_ID"), Is.False, "Only Text attributes carry the declaration.");
+        }
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ADialectThatComparesExactlyByDefault_DeclaresUnstatedTextColumnsCaseExactAsync()
+    {
+        // Oracle compares text binary unless a column's collation says otherwise, and a statement's columns have
+        // no catalogue entry to say otherwise at all.
+        const string statement = "SELECT EMPLOYEE_ID, LOGIN FROM HR.EMPLOYEES";
+        var provider = new FakeSqlProvider { TextComparesExactlyByDefaultOverride = true };
+        provider.Catalogue.AddSelectStatement(statement,
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("LOGIN", "nvarchar", MaxLength: 64));
+
+        var objectType = (await GetSchemaAsync(provider, $$"""
+            {
+              "objectTypes": [
+                { "name": "Person", "select": "{{statement}}", "anchorColumns": [ "EMPLOYEE_ID" ] }
+              ]
+            }
+            """)).ObjectTypes.Single();
+
+        Assert.That(CaseExact(objectType, "LOGIN"), Is.True);
+    }
+
+    [TestCase(true, false, true)]
+    [TestCase(false, false, false)]
+    public async Task GetSchemaAsync_ACompositeAnchor_IsCaseExactWhenAnyPartIsAsync(bool firstPartCaseExact, bool secondPartCaseExact, bool expected)
+    {
+        // Two composed values differing only in the case of one case-exact part identify two rows.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "ENROLMENTS",
+            new FakeCatalogueColumn("STUDENT_CODE", "nvarchar", MaxLength: 16, IsNullable: false, CaseExact: firstPartCaseExact),
+            new FakeCatalogueColumn("COURSE_CODE", "nvarchar", MaxLength: 16, IsNullable: false, CaseExact: secondPartCaseExact));
+
+        var schema = await GetSchemaAsync(provider, """
+            {
+              "objectTypes": [
+                { "name": "Enrolment", "schema": "HR", "table": "ENROLMENTS", "anchorColumns": [ "STUDENT_CODE", "COURSE_CODE" ] }
+              ]
+            }
+            """);
+
+        Assert.That(schema.ObjectTypes.Single().RecommendedExternalIdAttribute.CaseExact, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ARelatedTableValueColumn_CarriesItsCollationAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES", new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false));
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_PHONES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("PHONE_NUMBER", "nvarchar", MaxLength: 32, CaseExact: true));
+
+        var objectType = (await GetSchemaAsync(provider, RelatedTableDocument("PHONE_NUMBER"))).ObjectTypes.Single();
+
+        Assert.That(CaseExact(objectType, "PhoneNumbers"), Is.True);
+    }
+
+    private static bool CaseExact(ConnectorSchemaObjectType objectType, string attributeName) =>
+        objectType.Attributes.Single(a => a.Name == attributeName).CaseExact;
+
+    #endregion
+
     #region Helpers
 
     private async Task<ConnectorSchema> GetSchemaAsync(

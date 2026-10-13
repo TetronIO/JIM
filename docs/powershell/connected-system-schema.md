@@ -174,7 +174,7 @@ The Object Types, each with its attributes. An attribute whose Writability is Re
 | `ManagesClassMembership` | `bool` | Whether the Connected System hands this object type's class membership to JIM to compose, which is what makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own auxiliary classes into each structural class. |
 | `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs. |
 | `StructuralCarrierObjectTypeId` | `int` | For an auxiliary object type, the structural object type JIM writes alongside it when creating an object, or empty when none has been named and JIM therefore cannot create one. |
-| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `CaseExact`, `CaseExactSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectType -->
 
 ### Examples
@@ -259,14 +259,14 @@ Deselecting an Object Type takes it out of management: the next Full Import mark
 
 ## Set-JIMConnectedSystemAttribute
 
-Updates the selection, external ID configuration and data type of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
+Updates the selection, external ID configuration, data type and case-exact declaration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
 <!-- BEGIN GENERATED: Set-JIMConnectedSystemAttribute -->
 ### Syntax
 
 ```powershell
 # Single (default)
-Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeId <int> [-Selected <bool>] [-IsExternalId <bool>] [-IsSecondaryExternalId <bool>] [-Type <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeId <int> [-Selected <bool>] [-IsExternalId <bool>] [-IsSecondaryExternalId <bool>] [-Type <string>] [-CaseExact <bool>] [-PassThru] [-WhatIf] [-Confirm]
 
 # Bulk
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeUpdates <hashtable> [-PassThru] [-WhatIf] [-Confirm]
@@ -279,11 +279,12 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int> -At
 | `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. |
 | `ObjectTypeId` | `int` | Yes |  | The ID of the Object Type the attributes belong to. |
 | `AttributeId` | `int` | Yes (Single) |  | The ID of the attribute to change. Accepts pipeline input by property name, `AttributeId` or `Id`. |
-| `AttributeUpdates` | `hashtable` | Yes (Bulk) |  | The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings to change (selected, isExternalId, isSecondaryExternalId); the examples show one. |
+| `AttributeUpdates` | `hashtable` | Yes (Bulk) |  | The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings to change (selected, isExternalId, isSecondaryExternalId, caseExact); the examples show one. |
 | `Selected` | `bool` | No (Single) |  | Whether JIM imports and exports the attribute. |
 | `IsExternalId` | `bool` | No (Single) |  | Whether the attribute uniquely and permanently identifies an object of this type, such as objectGUID or an employee ID. |
 | `IsSecondaryExternalId` | `bool` | No (Single) |  | Whether the Connected System also identifies an object by the attribute, as an LDAP directory does by distinguished name. |
 | `Type` | `string` | No (Single) |  | Replaces the data type inferred from the schema. Accepted only where the Connector says its schema cannot state a type for certain: a delimited file names no types, and Oracle has one numeric type, so a NUMBER column may be a whole number, a counter or a fractional figure. Refused once a Synchronisation Rule uses the attribute or it holds values. Integer is the Number data type, as in `New-JIMMetaverseAttribute`. Cannot be set with `-AttributeUpdates`. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid` or `Binary`. |
+| `CaseExact` | `bool` | No (Single) |  | Whether the attribute's values are case-exact: `$true` when values differing only in case identify different things, `$false` when they are the same value. Only a Text attribute can be declared case-exact. Setting it makes the declaration the administrator's, so a schema refresh keeps it. Offered on every Connector. |
 | `PassThru` | `switch` | No |  | Returns the attribute as changed, or with `-AttributeUpdates`, the outcome of the change. |
 
 ### Output
@@ -302,6 +303,8 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 | `Type` | `string` | The type of value the attribute holds, such as Text, Number or Reference. |
 | `TypeSetByAdministrator` | `bool` | Whether Type was chosen by an administrator rather than inferred by schema discovery. A chosen type is left alone by a schema refresh; an inferred one is restated from the Connector. |
 | `AttributePlurality` | `string` | Whether the attribute holds one value (SingleValued) or several (MultiValued). |
+| `CaseExact` | `bool` | Whether the attribute's values are case-exact: when JIM asks whether two values identify the same thing, `JBloggs` and `jbloggs` are different values. False means they are the same value. Only Text attributes carry the declaration. |
+| `CaseExactSetByAdministrator` | `bool` | Whether an administrator set the case-exact declaration, rather than it being discovered from the Connected System's schema. A schema refresh keeps an administrator's declaration and restates a discovered one. |
 | `Selected` | `bool` | Whether JIM imports and exports the attribute. |
 | `IsExternalId` | `bool` | Whether the attribute uniquely and permanently identifies an object of this type in the Connected System. |
 | `IsSecondaryExternalId` | `bool` | Whether the Connected System also identifies an object of this type by the attribute, as an LDAP directory does by distinguished name. |
@@ -317,7 +320,7 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 |----------|------|-------------|
 | `ActivityId` | `guid` | The activity ID for the bulk update operation. |
 | `UpdatedCount` | `int` | Number of attributes successfully updated. |
-| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `CaseExact`, `CaseExactSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 | `Errors` | `object[]` | Any errors that occurred during the update. Empty if no errors. Each has `AttributeId` and `ErrorMessage`. |
 <!-- END GENERATED: Set-JIMConnectedSystemAttribute -->
 
@@ -337,6 +340,11 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```
 
+```powershell title="Declare an attribute's values case-exact"
+# The source system treats JBloggs and jbloggs as two different codes.
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 7 -CaseExact $true
+```
+
 ```powershell title="Bulk-update multiple attributes"
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeUpdates @{
     5  = @{ selected = $true }
@@ -349,6 +357,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeU
 
 - Supports `ShouldProcess` (Medium impact).
 - Only one attribute per Object Type can be the primary external ID. Setting `IsExternalId` on an attribute automatically clears it from the previous primary.
+- `-CaseExact` is accepted on every Connector, and makes the declaration yours: a schema refresh keeps it rather than restating what the Connected System's schema says. See [Case-exact values](../configuration/connected-system-attributes.md#case-exact-values).
 
 ---
 

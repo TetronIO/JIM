@@ -312,7 +312,11 @@ internal class LdapConnectorSchema
         var linkId = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "linkid");
         var writability = LdapConnectorUtilities.DetermineAttributeWritability(systemOnly, systemFlags, linkId);
 
-        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability);
+        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability)
+        {
+            // Active Directory states case-sensitivity through the syntax rather than a matching rule (#2051).
+            CaseExact = attributeDataType == AttributeDataType.Text && omSyntax.HasValue && LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax.Value)
+        };
 
         if (!string.IsNullOrEmpty(description))
             attribute.Description = description;
@@ -520,7 +524,13 @@ internal class LdapConnectorSchema
                         externalIdAttrName, _rootDse.ExternalIdDataType, AttributePlurality.SingleValued,
                         required: false, className: objectClassDef.Name!, writability: AttributeWritability.ReadOnly)
                     {
-                        Description = "System-assigned unique identifier for this entry"
+                        Description = "System-assigned unique identifier for this entry",
+
+                        // The directory still publishes the operational attribute's type (entryUUID: uuidMatch), so
+                        // its declaration is read from there like any other attribute's (#2051).
+                        CaseExact = _rootDse.ExternalIdDataType == AttributeDataType.Text &&
+                                    attributeTypeDefs.TryGetValue(externalIdAttrName, out var externalIdDef) &&
+                                    Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(externalIdDef, attributeTypeDefs))
                     });
                 }
 
@@ -626,7 +636,7 @@ internal class LdapConnectorSchema
         }
 
         // Resolve SYNTAX OID — walk the SUP chain if the attribute inherits its syntax
-        var syntaxOid = ResolveSyntaxOid(attrDef, attributeTypeDefs);
+        var syntaxOid = Rfc4512SchemaParser.ResolveSyntaxOid(attrDef, attributeTypeDefs);
         var attributeDataType = Rfc4512SchemaParser.GetRfcAttributeDataType(syntaxOid);
 
         // Override data type for external ID attribute
@@ -636,43 +646,18 @@ internal class LdapConnectorSchema
         var plurality = attrDef.IsSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
         var writability = Rfc4512SchemaParser.DetermineRfcAttributeWritability(attrDef.Usage, attrDef.IsNoUserModification);
 
-        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, plurality, required, objectClassName, writability);
+        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, plurality, required, objectClassName, writability)
+        {
+            // Case-exactness follows the EQUALITY matching rule, inherited through SUP like SYNTAX. It describes
+            // how text compares, so it is only declared on Text attributes (#2051).
+            CaseExact = attributeDataType == AttributeDataType.Text &&
+                        Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(attrDef, attributeTypeDefs))
+        };
 
         if (!string.IsNullOrEmpty(attrDef.Description))
             attribute.Description = attrDef.Description;
 
         return attribute;
-    }
-
-    /// <summary>
-    /// Resolves the SYNTAX OID for an attribute type, walking the SUP (superior) chain
-    /// if the attribute inherits its syntax from a parent attribute type.
-    /// </summary>
-    private static string? ResolveSyntaxOid(
-        Rfc4512AttributeTypeDescription attrDef,
-        Dictionary<string, Rfc4512AttributeTypeDescription> allAttributes)
-    {
-        // Direct SYNTAX specified — use it
-        if (attrDef.SyntaxOid != null)
-            return attrDef.SyntaxOid;
-
-        // Walk the SUP chain to find inherited SYNTAX (max 10 levels to prevent infinite loops)
-        var current = attrDef;
-        for (var depth = 0; depth < 10; depth++)
-        {
-            if (current.SuperiorName == null)
-                break;
-
-            if (!allAttributes.TryGetValue(current.SuperiorName, out var superAttr))
-                break;
-
-            if (superAttr.SyntaxOid != null)
-                return superAttr.SyntaxOid;
-
-            current = superAttr;
-        }
-
-        return null;
     }
 
     /// <summary>
