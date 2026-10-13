@@ -5,8 +5,10 @@ using JIM.Application;
 using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Utilities;
@@ -980,23 +982,20 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public void EvaluateDrift_ExportExpressionFails_StagesNothingRatherThanClearingTheTarget()
+    public void EvaluateDrift_ExportExpressionFails_ThrowsTheExpressionErrorForTheObjectRatherThanClearingTheTarget()
     {
         // A failing expression gives no expected value at all; reading it as "expected empty" cleared the target
-        // (#2179, N5). Correcting drift on expression mappings generally is #2180.
+        // (#2179, N5), and only logging it left the failure unreported (#2180). It is raised exactly as export staging
+        // raises it, for the worker to record against the object, and nothing is staged.
         var exportRule = CreateExportRule();
         var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
         exportSource.MetaverseAttribute = null;
         exportSource.MetaverseAttributeId = null;
         exportSource.Expression = "ToFileTime(42)";
 
-        var result = EvaluateDivergedDisplayName(exportRule);
+        var exception = Assert.Throws<SyncExpressionEvaluationException>(() => EvaluateDivergedDisplayName(exportRule));
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.HasDrift, Is.False, "an expression that fails must never be read as the target having to be empty");
-            Assert.That(result.CorrectiveExports, Is.Empty);
-        }
+        Assert.That(exception!.TargetAttributeName, Is.EqualTo(DisplayNameCsoAttr.Name));
     }
 
     [Test]
@@ -2229,6 +2228,338 @@ public class DriftDetectionTests
         Assert.That(result.HasDrift, Is.False,
             "Guid values and their string representations are equivalent under SingleValueEquals; " +
             "the multi-valued comparison must fall back to the pairwise scan when hash equality fails.");
+    }
+
+    #endregion
+
+    #region Expression Attribute Flows (#2180)
+
+    // Drift Detection works out an expression mapping's expected state through export staging's own code, so it never
+    // asserts a state export staging would not stage: the same evaluation, Missing Input Behaviour, typed conversion and
+    // plurality rules, and the same comparison with what the Connected System Object holds.
+
+    private ConnectedSystemObjectTypeAttribute AddTargetAttribute(int id, string name, AttributeDataType type, AttributePlurality plurality)
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = id,
+            Name = name,
+            Type = type,
+            AttributePlurality = plurality,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(attribute);
+        return attribute;
+    }
+
+    private MetaverseAttribute EmailMvAttr => MvoUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.Email);
+
+    private static string MvRead(string attributeName) => $"mv[\"{attributeName}\"]";
+
+    private SyncRule CreateExpressionExportRule(ConnectedSystemObjectTypeAttribute target, string expression,
+        MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.EvaluateAnyway)
+    {
+        var exportRule = CreateExportRule();
+        var mapping = exportRule.AttributeFlowRules.Single();
+        mapping.TargetConnectedSystemAttribute = target;
+        mapping.TargetConnectedSystemAttributeId = target.Id;
+        mapping.Sources.Clear();
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 10001,
+            Expression = expression,
+            MissingInputBehaviour = missingInputBehaviour
+        });
+        return exportRule;
+    }
+
+    private MetaverseObject CreateMvoWithText(params (MetaverseAttribute Attribute, string Value)[] values)
+    {
+        var mvo = CreateTestMvo();
+        foreach (var (attribute, value) in values)
+        {
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = mvo,
+                Attribute = attribute,
+                AttributeId = attribute.Id,
+                StringValue = value
+            });
+        }
+
+        return mvo;
+    }
+
+    private ConnectedSystemObject CreateCsoHolding(MetaverseObject mvo, ConnectedSystemObjectTypeAttribute target, params string[] values)
+    {
+        var cso = CreateTestCso(mvo);
+        foreach (var value in values)
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = cso,
+                Attribute = target,
+                AttributeId = target.Id,
+                StringValue = value
+            });
+        }
+
+        mvo.ConnectedSystemObjects.Add(cso);
+        return cso;
+    }
+
+    private DriftDetectionResult Evaluate(ConnectedSystemObject cso, MetaverseObject mvo, SyncRule exportRule) =>
+        Jim.DriftDetection.EvaluateDrift(cso, mvo, new List<SyncRule> { exportRule }, null);
+
+    /// <summary>
+    /// The text values the target holds once the staged corrections are applied as a Connector applies them: an Update
+    /// replaces the attribute's whole value set, an Add adds a value and a Remove removes one.
+    /// </summary>
+    private static List<string> TextValuesAfterCorrection(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute target, DriftDetectionResult result)
+    {
+        var held = cso.AttributeValues.Where(v => v.AttributeId == target.Id).Select(v => v.StringValue!).ToList();
+        foreach (var change in result.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges).Where(c => c.AttributeId == target.Id))
+        {
+            switch (change.ChangeType)
+            {
+                case PendingExportAttributeChangeType.Update:
+                    held = change.StringValue == null ? [] : [change.StringValue];
+                    break;
+                case PendingExportAttributeChangeType.Add:
+                    held.Add(change.StringValue!);
+                    break;
+                case PendingExportAttributeChangeType.Remove:
+                    held.Remove(change.StringValue!);
+                    break;
+            }
+        }
+
+        return held.Distinct().ToList();
+    }
+
+    [Test]
+    public void EvaluateDrift_ExpressionIntoMultiValuedTargetAlreadyHoldingTheValue_NoDriftAndNothingStaged()
+    {
+        var proxyAddresses = AddTargetAttribute(9400, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var mvo = CreateMvoWithText((EmailMvAttr, "john@example.com"));
+        var cso = CreateCsoHolding(mvo, proxyAddresses, "SMTP:john@example.com");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(proxyAddresses, "\"SMTP:\" + " + MvRead(Constants.BuiltInAttributes.Email)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False, "the target already holds exactly the value export staging writes");
+            Assert.That(result.CorrectiveExports, Is.Empty, "nothing may be staged, least of all the removal of the value export staging wrote");
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_ExpressionIntoMultiValuedTargetHoldingOtherValues_CorrectsToExactlyTheExpectedValue()
+    {
+        var proxyAddresses = AddTargetAttribute(9400, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var mvo = CreateMvoWithText((EmailMvAttr, "john@example.com"));
+        var cso = CreateCsoHolding(mvo, proxyAddresses, "SMTP:old@example.com", "smtp:alias@example.com");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(proxyAddresses, "\"SMTP:\" + " + MvRead(Constants.BuiltInAttributes.Email)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True);
+            Assert.That(TextValuesAfterCorrection(cso, proxyAddresses, result), Is.EqualTo(new[] { "SMTP:john@example.com" }),
+                "a single value into a multi-valued target is the whole set, as export staging's Update makes it");
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_ArrayExpressionIntoMultiValuedTargetHoldingAStrayValue_CorrectsToExactlyTheElements()
+    {
+        var proxyAddresses = AddTargetAttribute(9400, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "a;b"));
+        var cso = CreateCsoHolding(mvo, proxyAddresses, "a", "stray");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(proxyAddresses, $"Split({MvRead(Constants.BuiltInAttributes.DisplayName)}, \";\")"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True);
+            Assert.That(TextValuesAfterCorrection(cso, proxyAddresses, result), Is.EquivalentTo(new[] { "a", "b" }),
+                "an array result is the set of its elements");
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_ArrayExpressionIntoMultiValuedTargetHoldingTheElements_NoDrift()
+    {
+        var proxyAddresses = AddTargetAttribute(9400, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "a;b"));
+        var cso = CreateCsoHolding(mvo, proxyAddresses, "b", "a");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(proxyAddresses, $"Split({MvRead(Constants.BuiltInAttributes.DisplayName)}, \";\")"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_TextExpressionResultIntoNumberTargetHoldingThatNumber_NoDrift()
+    {
+        // The result is converted to the target's type exactly as export staging converts it, so "512" is the number 512.
+        var employeeNumber = AddTargetAttribute(9401, "employeeNumber", AttributeDataType.Number, AttributePlurality.SingleValued);
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = employeeNumber,
+            AttributeId = employeeNumber.Id,
+            IntValue = 512
+        });
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(employeeNumber, "\"512\""));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_ExpressionReturnsNull_StagesNothing()
+    {
+        // Export staging stages nothing for a null result, so the Connected System keeps its value; drift must agree.
+        var mvo = CreateTestMvo();
+        var cso = CreateCsoHolding(mvo, DisplayNameCsoAttr, "Kept As It Is");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(DisplayNameCsoAttr, MvRead(Constants.BuiltInAttributes.Email)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty, "a null result is no value, never an instruction to clear the target");
+        }
+    }
+
+    private static string DisplayNameDotEmail =>
+        MvRead(Constants.BuiltInAttributes.DisplayName) + " + \".\" + " + MvRead(Constants.BuiltInAttributes.Email);
+
+    [Test]
+    public void EvaluateDrift_MissingInputWithFailMapping_StagesNothingAndReportsTheMappingError()
+    {
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "John"));
+        var cso = CreateCsoHolding(mvo, DisplayNameCsoAttr, "John.Smith");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(DisplayNameCsoAttr, DisplayNameDotEmail, MissingInputBehaviour.FailMapping));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty, "a structurally broken value must not overwrite the one the target holds");
+            Assert.That(result.AttributeFlowErrors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.ExpressionMissingInput }));
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_MissingInputWithContributeNoValue_StagesNothingAndReportsNothing()
+    {
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "John"));
+        var cso = CreateCsoHolding(mvo, DisplayNameCsoAttr, "John.Smith");
+
+        var result = Evaluate(cso, mvo, CreateExpressionExportRule(DisplayNameCsoAttr, DisplayNameDotEmail, MissingInputBehaviour.ContributeNoValue));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+            Assert.That(result.AttributeFlowErrors, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_MissingInputWithFailObject_ThrowsTheMissingInputErrorForTheObject()
+    {
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "John"));
+        var cso = CreateCsoHolding(mvo, DisplayNameCsoAttr, "John.Smith");
+        var exportRule = CreateExpressionExportRule(DisplayNameCsoAttr, DisplayNameDotEmail, MissingInputBehaviour.FailObject);
+
+        var exception = Assert.Throws<SyncExpressionMissingInputException>(() => Evaluate(cso, mvo, exportRule));
+
+        Assert.That(exception!.MissingInputs, Is.EqualTo(new[] { MvRead(Constants.BuiltInAttributes.Email) }));
+    }
+
+    [Test]
+    public void EvaluateDrift_MultiValuedSourceHoldingTwoValuesIntoSingleValuedTarget_StagesNothingAndReportsTheError()
+    {
+        // Export staging refuses to pick one of several values for a single-valued target (#435); drift must not pick one either.
+        var aliasesMvAttr = new MetaverseAttribute
+        {
+            Id = 9500,
+            Name = "Aliases",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(aliasesMvAttr);
+        var mvo = CreateMvoWithText((aliasesMvAttr, "first"), (aliasesMvAttr, "second"));
+        var cso = CreateCsoHolding(mvo, DisplayNameCsoAttr, "something else");
+        var exportRule = CreateExportRule();
+        var source = exportRule.AttributeFlowRules.Single().Sources.Single();
+        source.MetaverseAttribute = aliasesMvAttr;
+        source.MetaverseAttributeId = aliasesMvAttr.Id;
+
+        var result = Evaluate(cso, mvo, exportRule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty, "whichever value happened to load first must not be written");
+            Assert.That(result.AttributeFlowErrors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.MultiValuedToSingleValued }));
+            Assert.That(result.AttributeFlowErrors.Select(e => e.ValueCount), Is.EqualTo(new[] { 2 }));
+        }
+    }
+
+    [Test]
+    public void EvaluateDrift_DifferenceThatStagesNoCorrection_ReportsNoDrift()
+    {
+        // The target holds one Guid in two text forms: the sets differ in size, but every value matches what is expected,
+        // so no correction can be staged. Drift reported with nothing staged raised a Drift Correction item on every sync.
+        var entitlementsMvAttr = new MetaverseAttribute
+        {
+            Id = 9600,
+            Name = "Entitlement Ids",
+            Type = AttributeDataType.Guid,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(entitlementsMvAttr);
+        var entitlements = AddTargetAttribute(9601, "entitlements", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var entitlementId = Guid.NewGuid();
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = entitlementsMvAttr,
+            AttributeId = entitlementsMvAttr.Id,
+            GuidValue = entitlementId
+        });
+        var cso = CreateCsoHolding(mvo, entitlements, entitlementId.ToString().ToLowerInvariant(), entitlementId.ToString().ToUpperInvariant());
+        var exportRule = CreateExportRule();
+        var mapping = exportRule.AttributeFlowRules.Single();
+        mapping.TargetConnectedSystemAttribute = entitlements;
+        mapping.TargetConnectedSystemAttributeId = entitlements.Id;
+        mapping.Sources.Single().MetaverseAttribute = entitlementsMvAttr;
+        mapping.Sources.Single().MetaverseAttributeId = entitlementsMvAttr.Id;
+
+        var result = Evaluate(cso, mvo, exportRule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CorrectiveExports, Is.Empty, "arrange: no correction can be staged");
+            Assert.That(result.HasDrift, Is.False, "drift is reported only where a correction is staged");
+        }
     }
 
     #endregion

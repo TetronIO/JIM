@@ -3,7 +3,6 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
-using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using Moq;
@@ -12,8 +11,8 @@ using SyncRepository = JIM.InMemoryData.SyncRepository;
 namespace JIM.Worker.Tests.OutboundSync;
 
 /// <summary>
-/// Verifies that the expression-context attribute dictionaries used by export evaluation and
-/// Drift Detection expose every attribute data type, including LongNumber. A missing switch arm
+/// Verifies that the expression-context attribute dictionary used by export evaluation (which
+/// Drift Detection shares, #2180) exposes every attribute data type, including LongNumber. A missing switch arm
 /// silently presents the attribute as null inside expressions, so expression-based mappings
 /// evaluate against a phantom missing value rather than failing loudly.
 /// </summary>
@@ -72,23 +71,6 @@ public class AttributeDictionaryLongNumberTests
         var dictionary = server.BuildAttributeDictionary(mvo);
 
         // Assert - a long beyond int range proves no narrowing occurred anywhere
-        Assert.That(dictionary["usnChanged"], Is.EqualTo(9999999999L));
-        Assert.That(dictionary["usnChanged"], Is.TypeOf<long>());
-        Assert.That(dictionary["displayName"], Is.EqualTo("Jo Bloggs"));
-        Assert.That(dictionary["employeeNumber"], Is.EqualTo(42));
-        Assert.That(dictionary["salary"], Is.EqualTo(1.5m));
-    }
-
-    [Test]
-    public void DriftDetectionService_BuildAttributeDictionary_LongNumberAttribute_ExposedAsLong()
-    {
-        // Arrange
-        var mvo = BuildMvoWithTypedValues();
-
-        // Act
-        var dictionary = DriftDetectionService.BuildAttributeDictionary(mvo);
-
-        // Assert
         Assert.That(dictionary["usnChanged"], Is.EqualTo(9999999999L));
         Assert.That(dictionary["usnChanged"], Is.TypeOf<long>());
         Assert.That(dictionary["displayName"], Is.EqualTo("Jo Bloggs"));
