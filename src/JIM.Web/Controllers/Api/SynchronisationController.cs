@@ -347,9 +347,26 @@ public class SynchronisationController(
             }
         }
 
+        // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact.
+        // The type checked is the one the attribute will have, so a Type and a CaseExact sent together agree (#2051).
+        if (request.CaseExact == true && (request.Type ?? attribute.Type) != AttributeDataType.Text)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact. Only text values compare with or without regard to case."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
+
+        if (request.CaseExact.HasValue)
+        {
+            attribute.CaseExact = request.CaseExact.Value;
+
+            // Recorded, not inferred from the value differing, for the same reason as a type override: a schema
+            // refresh must leave the administrator's declaration alone even where it matches what was discovered.
+            attribute.CaseExactSetByAdministrator = true;
+        }
 
         if (request.Type.HasValue)
         {
@@ -478,7 +495,7 @@ public class SynchronisationController(
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
             kvp => kvp.Key,
-            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId)
+            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId, kvp.Value.CaseExact)
         );
 
         // Get the current API key for Activity attribution if authenticated via API key
