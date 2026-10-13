@@ -19,6 +19,12 @@ public class IdentifierKeyTests
     }
 
     [Test]
+    public void For_NotCaseExact_LowersTheTurkishDottedCapitalIAsPostgresDoes()
+    {
+        Assert.That(IdentifierKey.For("\u0130STANBUL", caseExact: false), Is.EqualTo("istanbul"));
+    }
+
+    [Test]
     public void For_CaseExact_KeepsTheValue()
     {
         Assert.That(IdentifierKey.For("JBloggs", caseExact: true), Is.EqualTo("JBloggs"));

@@ -292,8 +292,9 @@ public class SyncImportTaskProcessor
         // Cross-page duplicate detection: Track external IDs seen across ALL pages of an import run.
         // This is defence-in-depth for directory servers that may return duplicate objects across pages
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
-        // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
-        var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking), the value already in its comparable
+        // form (GetDuplicateDetectionKey), so the set compares ordinally.
+        var crossPageSeenExternalIds = new HashSet<string>(StringComparer.Ordinal);
 
         // A Connector is the only thing that can know how many objects a Connected System holds
         // before it has finished handing them over, so the fetching step has a total only where the
@@ -1207,7 +1208,9 @@ public class SyncImportTaskProcessor
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
+                    // Whether a held value is among the imported ones follows the External ID's case-exact declaration (#2051).
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(
+                        connectedSystemStringExternalIdValues, IdentifierKey.Comparer(objectTypeExternalIdAttribute.CaseExact));
 
                     // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
@@ -1822,7 +1825,8 @@ public class SyncImportTaskProcessor
 
             var importedExternalIdsForType = ImportedExternalIdSet.Build(externalIdsImported
                 .Where(pair => pair.ConnectedSystemObjectTypeId == selectedObjectType.Id)
-                .Select(pair => pair.ConnectedSystemImportObjectAttribute));
+                .Select(pair => pair.ConnectedSystemImportObjectAttribute),
+                selectedObjectType.Attributes.FirstOrDefault(a => a.IsExternalId)?.CaseExact ?? false);
 
             // The runType/totalObjectsImported guard above already holds for every candidate; the only
             // thing left to decide per candidate is whether it was seen this run.
@@ -1892,15 +1896,22 @@ public class SyncImportTaskProcessor
     /// </summary>
     private sealed class ImportedExternalIdSet
     {
-        private readonly HashSet<string> _strings = [];
+        private readonly HashSet<string> _strings;
         private readonly HashSet<int> _ints = [];
         private readonly HashSet<long> _longs = [];
         private readonly HashSet<decimal> _decimals = [];
         private readonly HashSet<Guid> _guids = [];
 
-        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes)
+        private ImportedExternalIdSet(bool caseExact)
         {
-            var set = new ImportedExternalIdSet();
+            _strings = new HashSet<string>(IdentifierKey.Comparer(caseExact));
+        }
+
+        /// <param name="caseExact">The External ID attribute's case-exact declaration: a Text value in another case is the
+        /// same object unless it is set (#2051).</param>
+        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes, bool caseExact)
+        {
+            var set = new ImportedExternalIdSet(caseExact);
             foreach (var attribute in importedExternalIdAttributes)
             {
                 set._strings.UnionWith(attribute.StringValues);
@@ -2548,7 +2559,7 @@ public class SyncImportTaskProcessor
                     if (!string.IsNullOrEmpty(externalIdValue))
                     {
                         // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
-                        var duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdValue);
+                        var duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
@@ -3140,7 +3151,7 @@ public class SyncImportTaskProcessor
 
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
         var externalIdValue = GetExternalIdLookupValue(connectedSystemImportObject, externalIdAttribute);
-        var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
+        var cacheKey = CsoLookupKey.For(_connectedSystem.Id, externalIdAttribute.Id, externalIdValue);
         return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
     }
 
@@ -3154,15 +3165,15 @@ public class SyncImportTaskProcessor
     {
         var pageKeys = importObjects.Select(GetDuplicateDetectionKey).OfType<string>().ToList();
         var repeatedOnThisPage = pageKeys
-            .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(key => key, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.Ordinal);
 
         if (earlierPageKeys == null)
-            return (repeatedOnThisPage, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return (repeatedOnThisPage, new HashSet<string>(StringComparer.Ordinal));
 
-        var returnedOnAnEarlierPage = pageKeys.Where(earlierPageKeys.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var returnedOnAnEarlierPage = pageKeys.Where(earlierPageKeys.Contains).ToHashSet(StringComparer.Ordinal);
         earlierPageKeys.UnionWith(pageKeys);
         return (repeatedOnThisPage, returnedOnAnEarlierPage);
     }
@@ -3188,14 +3199,15 @@ public class SyncImportTaskProcessor
         RemoveNullImportObjectAttributes(importObject);
         var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
         var externalIdValue = externalIdImportAttr == null ? null : GetDuplicateDetectionExternalIdValue(externalIdImportAttr, externalIdAttribute.Type);
-        return string.IsNullOrEmpty(externalIdValue) ? null : GetDuplicateDetectionKey(csObjectType, externalIdValue);
+        return string.IsNullOrEmpty(externalIdValue) ? null : GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
     }
 
     /// <summary>
-    /// The composite key duplicate detection uses: the same External ID under two Object Types is two keys.
+    /// The composite key duplicate detection uses: the same External ID under two Object Types is two keys. Text folds
+    /// case unless the External ID attribute is case-exact (#2051), so the sets holding these keys compare ordinally.
     /// </summary>
-    private static string GetDuplicateDetectionKey(ConnectedSystemObjectType objectType, string externalIdValue) =>
-        $"{objectType.Id}:{externalIdValue}";
+    private static string GetDuplicateDetectionKey(ConnectedSystemObjectType objectType, ConnectedSystemObjectTypeAttribute externalIdAttribute, string externalIdValue) =>
+        $"{objectType.Id}:{(externalIdAttribute.Type == AttributeDataType.Text ? IdentifierKey.For(externalIdValue, externalIdAttribute.CaseExact) : externalIdValue)}";
 
     /// <summary>
     /// The External ID value duplicate detection compares and execution items record, as text for every data type.
@@ -3216,7 +3228,9 @@ public class SyncImportTaskProcessor
     /// <c>GetAllCsoExternalIdMappingsAsync</c> builds for stored values). Throws for an import object whose External
     /// ID attribute is missing, multi-valued or empty, which the per-object loop reports against its own item.
     /// </summary>
-    private static string GetExternalIdLookupValue(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectTypeAttribute externalIdAttribute)
+    /// <param name="caseExact">Whose case-exact declaration folds a Text value: the External ID attribute's own unless the
+    /// caller probes under another Object Type's anchor, which may declare otherwise.</param>
+    private static string GetExternalIdLookupValue(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectTypeAttribute externalIdAttribute, bool? caseExact = null)
     {
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
@@ -3232,7 +3246,7 @@ public class SyncImportTaskProcessor
         {
             AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.Text => importObjectAttribute.StringValues[0].ToLowerInvariant(),
+            AttributeDataType.Text => IdentifierKey.For(importObjectAttribute.StringValues[0], caseExact ?? externalIdAttribute.CaseExact),
             AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number => importObjectAttribute.IntValues[0].ToString(),
@@ -3270,10 +3284,11 @@ public class SyncImportTaskProcessor
 
         var lookup = _csoExternalIdLookup;
         var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
-        var externalIdValue = GetExternalIdLookupValue(importObject, externalIdAttribute);
-
+        // Folded by each target's own anchor, which is the declaration the held object's key was built under.
         var matches = GetCrossTypeProbeTargets(objectType, externalIdAttribute)
-            .Select(target => lookup.TryGetValue($"cso:{_connectedSystem.Id}:{target.ExternalIdAttribute.Id}:{externalIdValue}", out var entry)
+            .Select(target => lookup.TryGetValue(
+                CsoLookupKey.For(_connectedSystem.Id, target.ExternalIdAttribute.Id,
+                    GetExternalIdLookupValue(importObject, externalIdAttribute, target.ExternalIdAttribute.CaseExact)), out var entry)
                 ? new HeldObject(entry, target.ObjectType)
                 : null)
             .OfType<HeldObject>()

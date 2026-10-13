@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -2296,8 +2297,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
-        // Use case-insensitive comparison for string attributes (e.g., DNs which are case-insensitive in LDAP)
-        var lowerAttributeValue = attributeValue.ToLowerInvariant();
+        // Whether two values name the same object follows the attribute's case-exact declaration (#2051): exact for a
+        // case-exact attribute, else ignoring case (directory names, DNs). The sought value is folded the way SQL's
+        // lower() folds the stored one (IdentifierKey.For).
+        var caseExact = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.Id == connectedSystemAttributeId)
+            .Select(a => a.CaseExact)
+            .FirstOrDefaultAsync();
+        var lowerAttributeValue = IdentifierKey.For(attributeValue, caseExact: false);
         var allMatches = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -2309,10 +2316,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(refCso => refCso!.Type)
-            // Use case-insensitive comparison for string lookups (DNs, etc.)
-            .Where(x =>
-                x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
+            .Where(x => x.ConnectedSystem.Id == connectedSystemId)
+            .Where(caseExact
+                ? x => x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue == attributeValue)
+                : x => x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
             .OrderBy(x => x.Id)
             .ToListAsync();
 
@@ -2451,7 +2458,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
         var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
-        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, StringComparer.OrdinalIgnoreCase);
+        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, CsoLookupKey.Comparer);
     }
 
     /// <summary>
@@ -2491,24 +2498,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.IntValue,
                         av.LongValue,
                         av.GuidValue,
-                        av.DecimalValue
+                        av.DecimalValue,
+                        av.Attribute.CaseExact
                     })
                     .ToList()
             })
             .ToListAsync();
 
-        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        // Keys carry the value in its comparable form (CsoLookupKey: ignoring case unless the anchor is case-exact).
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(CsoLookupKey.Comparer);
         foreach (var cso in csos)
         {
             var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
 
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue, primaryAv?.DecimalValue);
+            var primaryValue = CsoLookupKey.ValueKey(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue, primaryAv?.DecimalValue, primaryAv?.CaseExact ?? false);
 
             if (primaryValue != null)
             {
-                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
                 result.TryAdd(cacheKey, entry);
                 continue; // Primary found — no need for secondary
             }
@@ -2517,11 +2526,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue, secondaryAv?.DecimalValue);
+                var secondaryValue = CsoLookupKey.ValueKey(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue, secondaryAv?.DecimalValue, secondaryAv?.CaseExact ?? false);
 
                 if (secondaryValue != null)
                 {
-                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
                     result.TryAdd(cacheKey, entry);
                 }
             }
@@ -2571,22 +2580,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
-    }
-
-    /// <summary>
-    /// Converts an external ID attribute value to its lowercase string representation for cache key building.
-    /// Returns null if no value column is populated.
-    /// </summary>
-    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue, decimal? decimalValue)
-    {
-        if (stringValue != null) return stringValue.ToLowerInvariant();
-        if (intValue.HasValue) return intValue.Value.ToString();
-        if (longValue.HasValue) return longValue.Value.ToString();
-        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
-        // otherwise key differently despite being the same anchor (#1283).
-        if (decimalValue.HasValue) return ExternalIdValue.ToCanonicalString(decimalValue.Value);
-        if (guidValue.HasValue) return guidValue.Value.ToString().ToLowerInvariant();
-        return null;
     }
 
     /// <inheritdoc />
