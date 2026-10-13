@@ -7,18 +7,19 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (!string.IsNullOrWhiteSpace(Expression))
+@* Given the Attribute Flow being edited, the test runs it as a Synchronisation would (#2055); otherwise the Expression is
+   evaluated on its own. *@
+@if (TestsAttributeFlow)
+{
+    <AttributeFlowTestPanel Expression="@Expression" SyncRule="SyncRule!" Mapping="Mapping!" Source="Source!" />
+}
+else if (!string.IsNullOrWhiteSpace(Expression))
 {
     <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Expression</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
         Supply a sample value for each attribute the Expression reads and see what it produces, before saving it and
         finding out from a Synchronisation. Leave an input empty to see what the Expression does when the object has
         no value for it.
-        @if (TestsAttributeFlow)
-        {
-            @: Each value is read as its attribute's type, and the result goes through this Attribute Flow's value
-            @: processing and Missing Input Behaviour, exactly as a Synchronisation would.
-        }
     </MudText>
 
     @if (_inputs.Count == 0)
@@ -46,16 +47,6 @@
     <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3"
                OnClick="RunTest">Run test</MudButton>
 
-    @if (_inputErrors.Count > 0)
-    {
-        <MudAlert Severity="Severity.Error" Class="mt-3">
-            @foreach (var inputError in _inputErrors)
-            {
-                <MudText Typo="Typo.body2">@inputError</MudText>
-            }
-        </MudAlert>
-    }
-
     @if (_result != null)
     {
         @if (_result.IsValid)
@@ -65,13 +56,10 @@
                 @if (_outputLines.Count == 0)
                 {
                     <MudText Typo="Typo.body1"><EmptyValue /></MudText>
-                    @if (_flowEvaluation == null)
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            The Expression returned no value. JIM treats that as an authoritative "no value" from this
-                            contribution, resolved by Attribute Priority and "Null is a value".
-                        </MudText>
-                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        The Expression returned no value. JIM treats that as an authoritative "no value" from this
+                        contribution, resolved by Attribute Priority and "Null is a value".
+                    </MudText>
                 }
                 else
                 {
@@ -95,30 +83,6 @@
                 }
             </MudAlert>
         }
-    }
-
-    @* What synchronisation would do with it (#2055): the same pipeline a synchronisation runs, so an Expression that
-       evaluates but whose result the target cannot hold fails here as it fails there. *@
-    @if (_flowEvaluation != null)
-    {
-        var evaluation = _flowEvaluation;
-        <MudPaper Outlined="true" Class="pa-3 mt-3">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">What a Synchronisation would do</MudText>
-            @if (evaluation.Outcome == AttributeFlowOutcome.Values)
-            {
-                @foreach (var line in evaluation.Values.Select(ExpressionText.Describe))
-                {
-                    <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
-                }
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_flowDescription Type: @evaluation.TargetType</MudText>
-            }
-            else
-            {
-                <MudAlert Severity="@(evaluation.Outcome == AttributeFlowOutcome.Error ? Severity.Error : Severity.Info)" Dense="true">
-                    @_flowDescription
-                </MudAlert>
-            }
-        </MudPaper>
     }
 }
 
@@ -158,24 +122,18 @@
     [Parameter]
     public SyncRuleMappingSource? Source { get; set; }
 
+    /// <summary>
+    /// Whether the Attribute Flow can be tested as a whole: it needs a target attribute, by direction, and an Expression.
+    /// </summary>
+    private bool TestsAttributeFlow => SyncRule != null && Mapping != null && Source != null && !string.IsNullOrWhiteSpace(Expression)
+        && (SyncRule.Direction == SyncRuleDirection.Export ? Mapping.TargetConnectedSystemAttribute : (object?)Mapping.TargetMetaverseAttribute) != null;
+
     private IReadOnlyList<ExpressionInput> _inputs = Array.Empty<ExpressionInput>();
     private readonly Dictionary<string, string?> _sampleValues = new();
     private ExpressionTestResult? _result;
     private IReadOnlyList<string> _outputLines = Array.Empty<string>();
     private int? _errorPosition;
     private string? _resolvedFrom;
-    private IReadOnlyList<string> _inputErrors = Array.Empty<string>();
-    private AttributeFlowEvaluation? _flowEvaluation;
-    private string? _flowDescription;
-
-    /// <summary>
-    /// The target attribute's name when the Attribute Flow has one to test against, by direction.
-    /// </summary>
-    private string? FlowTargetName => SyncRule?.Direction == SyncRuleDirection.Export
-        ? Mapping?.TargetConnectedSystemAttribute?.Name
-        : Mapping?.TargetMetaverseAttribute?.Name;
-
-    private bool TestsAttributeFlow => SyncRule != null && Source != null && FlowTargetName != null;
 
     protected override void OnParametersSet()
     {
@@ -186,16 +144,8 @@
 
         _resolvedFrom = Expression;
         _inputs = ExpressionInputResolver.Resolve(Expression);
-        ClearResult();
-    }
-
-    private void ClearResult()
-    {
         _result = null;
         _errorPosition = null;
-        _inputErrors = Array.Empty<string>();
-        _flowEvaluation = null;
-        _flowDescription = null;
     }
 
     private string? GetSampleValue(string accessor) => _sampleValues.GetValueOrDefault(accessor);
@@ -206,7 +156,8 @@
 
         // The displayed output belongs to the values that produced it; keeping it beside changed inputs would
         // read as the answer to a question that was not asked.
-        ClearResult();
+        _result = null;
+        _errorPosition = null;
 
         if (SampleValuesChanged.HasDelegate)
             await SampleValuesChanged.InvokeAsync(_sampleValues);
@@ -217,8 +168,6 @@
         if (string.IsNullOrWhiteSpace(Expression))
             return;
 
-        ClearResult();
-
         var validation = ExpressionEvaluator.Validate(Expression);
         if (!validation.IsValid)
         {
@@ -227,11 +176,7 @@
             return;
         }
 
-        if (TestsAttributeFlow)
-        {
-            RunAttributeFlowTest(Expression);
-            return;
-        }
+        _errorPosition = null;
 
         var metaverseAttributes = new Dictionary<string, object?>();
         var connectedSystemAttributes = new Dictionary<string, object?>();
@@ -254,49 +199,5 @@
         // Several values show one per line rather than as their list's type name (#2179), and every value shows in
         // JIM's one text form, so a date reads as it would be written to a Text attribute (#2153, N1).
         _outputLines = _result.IsValid ? ExpressionText.ToDisplayLines(_result.Result) : Array.Empty<string>();
-    }
-
-    /// <summary>
-    /// Runs the Attribute Flow being edited through the evaluation pipeline a Synchronisation runs (#2055): each sample
-    /// read as its attribute's type, then Missing Input Behaviour, the Expression, value processing and conversion to
-    /// the target attribute's type. An empty box is no value.
-    /// </summary>
-    private void RunAttributeFlowTest(string expression)
-    {
-        var inputs = _inputs
-            .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName,
-                string.IsNullOrEmpty(_sampleValues.GetValueOrDefault(input.Accessor))
-                    ? Array.Empty<object>()
-                    : new object[] { _sampleValues[input.Accessor]! }))
-            .ToList();
-
-        // The source as it stands in the editor, with the Expression as typed.
-        var source = new SyncRuleMappingSource { Expression = expression, MissingInputBehaviour = Source!.MissingInputBehaviour };
-        var tested = AttributeFlowTester.Test(SyncRule!, Mapping!, source, inputs, ExpressionEvaluator);
-
-        if (tested.Evaluation is not { } evaluation)
-        {
-            _inputErrors = tested.InputErrors;
-            return;
-        }
-
-        _flowEvaluation = evaluation;
-        _flowDescription = AttributeFlowTester.Describe(evaluation, FlowTargetName!);
-
-        // The Expression's own result, as before, beside what the Attribute Flow would then do with it. A failed
-        // Expression has no result; the outcome's description, which carries its message, takes its place.
-        if (evaluation.Source.Outcome == ExpressionSourceOutcome.EvaluationFailed)
-        {
-            _result = ExpressionTestResult.Failure(_flowDescription);
-            _flowEvaluation = null;
-            return;
-        }
-
-        if (evaluation.Source.Outcome is ExpressionSourceOutcome.Result or ExpressionSourceOutcome.NoValue && evaluation.Source.MissingInputs.Count == 0)
-        {
-            var output = evaluation.Source.Result;
-            _result = ExpressionTestResult.Success(output);
-            _outputLines = ExpressionText.ToDisplayLines(output);
-        }
     }
 }

@@ -2,7 +2,15 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
+using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Interfaces;
+using JIM.Data;
+using JIM.Data.Repositories;
+using JIM.Models.Expressions;
+using JIM.Models.Staging.DTOs;
+using JIM.Models.Utility;
+using Moq;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -23,10 +31,24 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class ExpressionTesterTests : JimComponentTestContext
 {
+    private Mock<IConnectedSystemRepository> _connectedSystems = null!;
+
     [SetUp]
     public void SetUp()
     {
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
+
+        // Loading values from an object reads through the application, as the portal does.
+        _connectedSystems = new Mock<IConnectedSystemRepository>();
+        var repository = new Mock<IRepository>();
+        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
+        repository.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
+    }
+
+    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    {
+        public JimApplication Create() => new(repository);
     }
 
     /// <summary>
@@ -143,7 +165,8 @@ public class ExpressionTesterTests : JimComponentTestContext
 
     private sealed record Flow(SyncRule Rule, SyncRuleMapping Mapping, SyncRuleMappingSource Source);
 
-    private static Flow ImportFlow(string expression, AttributeDataType targetType)
+    private static Flow ImportFlow(string expression, AttributeDataType targetType,
+        MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.EvaluateAnyway)
     {
         var target = new MetaverseAttribute { Id = 21, Name = "Target", Type = targetType };
         var rule = new SyncRule
@@ -155,14 +178,16 @@ public class ExpressionTesterTests : JimComponentTestContext
                 Attributes =
                 [
                     new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "hireDate", Type = AttributeDataType.DateTime },
-                    new ConnectedSystemObjectTypeAttribute { Id = 12, Name = "givenName", Type = AttributeDataType.Text }
+                    new ConnectedSystemObjectTypeAttribute { Id = 12, Name = "givenName", Type = AttributeDataType.Text },
+                    new ConnectedSystemObjectTypeAttribute { Id = 14, Name = "mail", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued }
                 ]
             },
             MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person", Attributes = [target] }
         };
         var mapping = new SyncRuleMapping { TargetMetaverseAttribute = target };
-        var source = new SyncRuleMappingSource { Expression = expression };
+        var source = new SyncRuleMappingSource { Expression = expression, MissingInputBehaviour = missingInputBehaviour };
         mapping.Sources.Add(source);
+        rule.ConnectedSystemId = 3;
         return new Flow(rule, mapping, source);
     }
 
@@ -227,5 +252,79 @@ public class ExpressionTesterTests : JimComponentTestContext
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Is.EqualTo(new[] { "x" }));
     }
 
-    #endregion
+        [Test]
+    public void ExpressionTester_AttributeFlowInputLeftUntouched_IsTestedAsNoValue()
+    {
+        var cut = RenderFlow(ImportFlow("cs[\"givenName\"]", AttributeDataType.Text, MissingInputBehaviour.FailMapping));
+
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error),
+            "an untouched input has no value, so Fail this mapping reports an error");
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowInputClearedAfterTyping_IsEmptyTextNotNoValueAsync()
+    {
+        // Empty text reaches the Expression as empty text; "No value" (the tick box) reaches it as null.
+        var cut = RenderFlow(ImportFlow("IIF(cs[\"givenName\"] == null, \"null\", \"empty\")", AttributeDataType.Text));
+
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+        await EnterAsync(cut, "cs[\"givenName\"]", "");
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("empty"));
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowNoValueTicked_TestsTheInputAsAbsentAsync()
+    {
+        var cut = RenderFlow(ImportFlow("cs[\"givenName\"]", AttributeDataType.Text, MissingInputBehaviour.FailMapping));
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+
+        var noValue = cut.FindComponents<MudCheckBox<bool>>().Single();
+        await cut.InvokeAsync(() => noValue.Instance.ValueChanged.InvokeAsync(true));
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error));
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowMultiValuedInput_TakesSeveralValuesAsync()
+    {
+        var cut = RenderFlow(ImportFlow("Join(cs[\"mail\"], \";\")", AttributeDataType.Text));
+
+        foreach (var address in new[] { "a@example.org", "b@example.org" })
+        {
+            await EnterAsync(cut, "cs[\"mail\"]", address);
+            cut.FindAll("button").Single(b => b.TextContent.Contains("Add value")).Click();
+        }
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindComponents<MudChip<string>>().Select(c => c.Instance.Text ?? c.Markup), Has.Some.Contains("b@example.org"),
+            "each value added is held as a value of the multi-valued input");
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowLoadedFromAnObject_TestsItsValuesAsync()
+    {
+        var flow = ImportFlow("FormatDate((DateTime)cs[\"hireDate\"], \"yyyy-MM-dd\")", AttributeDataType.Text);
+        var csoId = Guid.NewGuid();
+        var hireDate = flow.Rule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "hireDate");
+        var cso = new ConnectedSystemObject { Id = csoId, ConnectedSystemId = 3, TypeId = 1 };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = hireDate, AttributeId = hireDate.Id, DateTimeValue = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc) });
+        _connectedSystems.Setup(r => r.GetConnectedSystemObjectHeadersAsync(3, 1, 8, "Priya", null, true, null, It.IsAny<IEnumerable<int>?>(), null, null))
+            .ReturnsAsync(new PagedResultSet<ConnectedSystemObjectHeader> { Results = [new ConnectedSystemObjectHeader { Id = csoId, DisplayName = "Priya Shah", ConnectedSystemId = 3, TypeId = 1 }] });
+        _connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(3, csoId)).ReturnsAsync(cso);
+        var cut = RenderFlow(flow);
+
+        await cut.InvokeAsync(() => cut.FindComponent<SegmentedToggle<bool>>().Instance.ValueChanged.InvokeAsync(true));
+        await cut.InvokeAsync(() => cut.FindComponent<SearchField>().Instance.ValueChanged.InvokeAsync("Priya"));
+        cut.FindAll("button").Single(b => b.GetAttribute("aria-label") == "Load values from Priya Shah").Click();
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("2026-03-02"));
+    }
+
+#endregion
 }
