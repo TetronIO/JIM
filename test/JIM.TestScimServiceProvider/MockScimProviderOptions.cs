@@ -31,6 +31,13 @@ public sealed class MockScimProviderOptions
     /// <summary>Plenty of providers serve no <c>/Schemas</c>, leaving the client on the RFC 7643 core schemas.</summary>
     public bool PublishesSchemas { get; set; } = true;
 
+    /// <summary>
+    /// Publishes a User schema extension, <see cref="MockScimProvider.CustomUserExtensionUrn"/>, carrying a multi-valued
+    /// string attribute (<c>badges</c>). The RFC 7643 core schemas have no multi-valued simple attribute, but a
+    /// provider's own extensions commonly do.
+    /// </summary>
+    public bool PublishesCustomUserExtension { get; set; }
+
     /// <summary>What <c>/ServiceProviderConfig</c> claims about PATCH, and whether PATCH is honoured.</summary>
     public bool SupportsPatch { get; set; } = true;
 

@@ -15,6 +15,11 @@
         Objects rather than projecting their own; its Groups project, so imported membership references
         have something to prove reference staging against.
 
+    HR also carries a pipe-separated "badges" column, split into the multi-valued Metaverse attribute
+    "Badges" and exported to the provider's own User extension (custom.badges, a multi-valued string).
+    It is empty for every seeded user; the scenario's MultiValuedRemoval step gives one user values and
+    then takes one away (#2181).
+
     Two systems rather than one is not incidental. JIM deliberately never exports a value back to the
     Connected System it came from (Q3 circular-sync prevention, OUTBOUND_SYNC_DESIGN.md), so a scenario
     where SCIM sourced the Metaverse values it was also the export target for produced no Pending
@@ -110,6 +115,8 @@ $userJoinRuleName = "SCIM Users Join (SCIM -> MV)"
 $groupImportRuleName = "SCIM Groups Import (SCIM -> MV)"
 $userExportRuleName = "SCIM Users Export (MV -> SCIM)"
 $certificateName = "SCIM Test Service Provider"
+$badgesMvAttributeName = "Badges"
+$badgesScimAttributeName = "custom.badges"
 
 Write-TestSection "Scenario 015 Setup: SCIM 2.0 Client Connector"
 Write-Host "SCIM provider: $ScimBaseUrl" -ForegroundColor Gray
@@ -186,10 +193,11 @@ Write-TestStep "Step 5" "Seeding the HR CSV ($UserCount users)"
 # One row per seeded SCIM user, keyed so the join lands: the CSV's accountName equals the provider's
 # userName. Display Name is the value the scenario exports; the provider's seed deliberately has no
 # displayName, so the export has real work to do. Deterministic, no Get-Date (see test/CLAUDE.md).
+# The badges column is empty here; it only needs to exist for the schema import to find it.
 $csvLines = [System.Collections.Generic.List[string]]::new()
-$csvLines.Add("accountName,firstName,lastName,displayName,email,department")
+$csvLines.Add("accountName,firstName,lastName,displayName,email,department,badges")
 for ($i = 1; $i -le $UserCount; $i++) {
-    $csvLines.Add("user$i,User,Number$i,User Number$i,user$i@example.com,Engineering")
+    $csvLines.Add("user$i,User,Number$i,User Number$i,user$i@example.com,Engineering,")
 }
 
 $localCsvPath = Join-Path ([System.IO.Path]::GetTempPath()) "scenario-015-hr-users.csv"
@@ -288,6 +296,12 @@ foreach ($expected in @("userName", "name.givenName", "emails.work", "id")) {
         throw "The imported User schema is missing '$expected'; SCIM attribute flattening did not produce the expected shape."
     }
 }
+
+# The provider's own User extension carries the multi-valued simple attribute the MultiValuedRemoval step
+# exports to. The RFC 7643 core schemas have none, which is why the provider publishes one.
+if (-not ($userType.attributes | Where-Object { $_.name -eq $badgesScimAttributeName })) {
+    throw "The imported User schema is missing '$badgesScimAttributeName'. The provider publishes its custom User extension only when SCIM_PUBLISHES_CUSTOM_USER_EXTENSION is true (the default) and SCIM_PUBLISHES_SCHEMAS is true."
+}
 Write-Host "  OK Schema imported: User ($($userType.attributes.Count) attributes), Group ($($groupType.attributes.Count) attributes)" -ForegroundColor Green
 
 # Step 10: Select SCIM object types and attributes
@@ -296,7 +310,7 @@ Write-TestStep "Step 10" "Selecting SCIM object types and attributes"
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $userType.id -Selected $true | Out-Null
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $groupType.id -Selected $true | Out-Null
 
-$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", "meta.version")
+$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", "meta.version", $badgesScimAttributeName)
 $userAttributeUpdates = @{}
 foreach ($attribute in $userType.attributes | Where-Object { $_.name -in $userAttributeNames }) {
     $userAttributeUpdates[$attribute.id] = @{ selected = $true; isExternalId = ($attribute.name -eq "id") }
@@ -319,6 +333,18 @@ $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } |
 $mvGroupType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "Group" } | Select-Object -First 1
 if (-not $mvUserType -or -not $mvGroupType) { throw "Metaverse 'User' or 'Group' object type not found in seed data" }
 $mvAttributes = @(Get-JIMMetaverseAttribute)
+
+# A multi-valued Metaverse attribute for the badges HR contributes and SCIM receives. None is seeded, so it
+# is created on the first run and reused after.
+if (-not ($mvAttributes | Where-Object { $_.name -eq $badgesMvAttributeName })) {
+    $badgesMvAttribute = New-JIMMetaverseAttribute `
+        -Name $badgesMvAttributeName `
+        -Type Text `
+        -AttributePlurality MultiValued `
+        -ObjectTypeIds @($mvUserType.id)
+    $mvAttributes = @($mvAttributes) + $badgesMvAttribute
+    Write-Host "  Created the multi-valued Metaverse attribute '$badgesMvAttributeName'" -ForegroundColor Gray
+}
 
 function Get-CsAttribute { param($ObjectType, [string]$Name)
     $attribute = $ObjectType.attributes | Where-Object { $_.name -eq $Name }
@@ -388,6 +414,13 @@ foreach ($flow in $hrFlows) {
         -SourceConnectedSystemAttributeId (Get-CsAttribute $hrPersonType $flow.Cs).id | Out-Null
 }
 
+# The CSV holds a user's badges in one pipe-separated field; Split makes each one a value of the
+# multi-valued Metaverse attribute, so a badge leaving the list is a single value removed.
+$null = Get-CsAttribute $hrPersonType "badges"
+New-JIMSyncRuleMapping -SyncRuleId $hrImportRule.id `
+    -TargetMetaverseAttributeId (Get-MvAttribute $badgesMvAttributeName).id `
+    -Expression 'Split(cs["badges"], "|")' | Out-Null
+
 # SCIM Users deliberately do not project and contribute no Display Name. If SCIM sourced the values it
 # was also the export target for, Q3 circular-sync prevention would (correctly) suppress every export.
 # The one flow keeps the rule non-empty and is value-identical to HR's, so it changes nothing.
@@ -438,6 +471,12 @@ New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
     -TargetConnectedSystemAttributeId (Get-CsAttribute $userType "displayName").id `
     -SourceMetaverseAttributeId (Get-MvAttribute "Display Name").id | Out-Null
 
+# Badges flow to the multi-valued extension attribute value by value, so taking one badge away exports a
+# removal of that value alone (#2181). Empty for every seeded user, so it adds nothing to the earlier steps.
+New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttribute $userType $badgesScimAttributeName).id `
+    -SourceMetaverseAttributeId (Get-MvAttribute $badgesMvAttributeName).id | Out-Null
+
 # A provisioned resource must carry a userName, or the provider holds an anonymous shell; for already
 # joined users the value is identical to what the provider holds, so no-net-change detection keeps this
 # flow from generating exports of its own.
@@ -460,7 +499,7 @@ New-JIMScopingCriterion `
 # provider is remediated rather than only shaping newly provisioned objects.
 Set-JIMSyncRule -Id $userExportRule.id -OutboundDeprovisionAction Delete -EnforceState $true | Out-Null
 
-Write-Host "  OK Outbound rule created (provisions; Display Name and Account Name flow; scoped to Department=Engineering; deprovision deletes; state enforced)" -ForegroundColor Green
+Write-Host "  OK Outbound rule created (provisions; Display Name, Badges and Account Name flow; scoped to Department=Engineering; deprovision deletes; state enforced)" -ForegroundColor Green
 
 # Step 15: Run Profiles
 Write-TestStep "Step 15" "Creating Run Profiles"
