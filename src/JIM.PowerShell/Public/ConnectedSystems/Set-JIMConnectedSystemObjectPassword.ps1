@@ -62,6 +62,9 @@ function Set-JIMConnectedSystemObjectPassword {
         Valid values: RequireChangeAtNextSignIn, ExpiresAccordingToTargetPolicy, NeverExpires.
         Defaults to RequireChangeAtNextSignIn, which is the right default for a password somebody else chose.
         A Connected System that cannot honour the choice applies what it can and says so in the target's Message.
+        On Active Directory and Samba AD, NeverExpires sets Password never expires and the other two clear it; a
+        Synchronisation Rule that writes the account's userAccountControl with Enforce State on puts its value back at
+        the next synchronisation, and the target's Message says so.
 
     .PARAMETER EnableAccount
         Enables the account as part of setting the password, whatever its Attribute Flows say. Omit it to leave the

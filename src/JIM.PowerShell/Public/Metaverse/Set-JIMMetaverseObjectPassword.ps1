@@ -73,7 +73,11 @@ function Set-JIMMetaverseObjectPassword {
     .PARAMETER ExpiryBehaviour
         What happens to the password once each target has it. Defaults to RequireChangeAtNextSignIn with
         -ConnectedSystemId (somebody else chose this password) and to ExpiresAccordingToTargetPolicy without it (the
-        person chose it, and should not be made to choose another).
+        person chose it, and should not be made to choose another). On Active Directory and Samba AD, with
+        -ConnectedSystemId, NeverExpires sets Password never expires on each account and the other two clear it; a
+        Synchronisation Rule that writes the account's userAccountControl with Enforce State on puts its value back at
+        the next synchronisation. Without -ConnectedSystemId, Password never expires is left as each account has it,
+        so NeverExpires is refused.
 
     .PARAMETER EnableAccount
         Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
@@ -190,6 +194,13 @@ function Set-JIMMetaverseObjectPassword {
         }
 
         $namedAccounts = $PSBoundParameters.ContainsKey('ConnectedSystemId')
+
+        # The server refuses this too. Refused here first only so that -Generate does not produce, and hand back, a
+        # password for a request that is then turned down.
+        if (-not $namedAccounts -and $ExpiryBehaviour -eq 'NeverExpires') {
+            Write-Error "-ExpiryBehaviour NeverExpires needs -ConnectedSystemId. A password set on every Connected System configured for Password Synchronisation leaves Password never expires as each account has it; name the Connected Systems to choose NeverExpires for those accounts. Nothing was set."
+            return
+        }
 
         # The person's accounts are needed to resolve named systems to the accounts the API takes, and to know
         # which systems a generated password has to satisfy. A propagated change with a supplied password needs

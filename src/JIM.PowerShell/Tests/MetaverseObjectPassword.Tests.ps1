@@ -157,9 +157,26 @@ Describe 'Set-JIMMetaverseObjectPassword' {
                 Mock Invoke-JIMApi -MockWith { [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); Origin = 'Propagated'; Settled = $false; Targets = @() } }
 
                 Set-JIMMetaverseObjectPassword -Id ([guid]'8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f') `
-                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -ExpiryBehaviour NeverExpires -Force | Out-Null
+                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -ExpiryBehaviour ExpiresAccordingToTargetPolicy -Force | Out-Null
 
-                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter { $Method -eq 'POST' -and $Body.expiryBehaviour -eq 'NeverExpires' }
+                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter { $Method -eq 'POST' -and $Body.expiryBehaviour -eq 'ExpiresAccordingToTargetPolicy' }
+            }
+        }
+
+        It 'Should refuse NeverExpires without -ConnectedSystemId before calling the API' {
+            # A propagated password leaves "Password never expires" as each account has it, and the server refuses
+            # NeverExpires there. Refused here first so that -Generate does not produce, and print, a password for a
+            # request that is then turned down.
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi { throw 'the API must not be called' }
+
+                { Set-JIMMetaverseObjectPassword -Id ([guid]::NewGuid()) -Generate -ExpiryBehaviour NeverExpires -Force -ErrorAction Stop } |
+                    Should -Throw -ExpectedMessage '*NeverExpires*-ConnectedSystemId*'
+                { Set-JIMMetaverseObjectPassword -Id ([guid]::NewGuid()) `
+                        -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -ExpiryBehaviour NeverExpires -Force -ErrorAction Stop } |
+                    Should -Throw -ExpectedMessage '*Password never expires*'
+                Should -Invoke Invoke-JIMApi -Times 0
             }
         }
 
@@ -240,6 +257,24 @@ Describe 'Set-JIMMetaverseObjectPassword' {
                     Should -Throw -ExpectedMessage '*no account in Connected System 99*'
 
                 Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'POST' }
+            }
+        }
+
+        It 'Should send NeverExpires for named accounts' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'GET' } -MockWith {
+                    @{ ConnectedSystemObjects = @(
+                        @{ Id = [guid]'11111111-1111-1111-1111-111111111111'; ConnectedSystemId = 1; ConnectedSystemName = 'Contoso AD' }) }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'POST' } -MockWith {
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); Origin = 'Explicit'; Settled = $true; Targets = @() }
+                }
+
+                Set-JIMMetaverseObjectPassword -Id ([guid]'8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f') -ConnectedSystemId 1 `
+                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -ExpiryBehaviour NeverExpires -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter { $Method -eq 'POST' -and $Body.expiryBehaviour -eq 'NeverExpires' }
             }
         }
 

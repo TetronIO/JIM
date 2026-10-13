@@ -28,7 +28,10 @@ public class SetConnectedSystemObjectPasswordRequest
     /// <summary>
     /// What should happen to the password once it is set. Omitted defaults to requiring a change at the next
     /// sign-in, which is the right default for a password somebody else chose. A Connected System that cannot
-    /// honour the request applies what it can and says so in the outcome's message.
+    /// honour the request applies what it can and says so in the outcome's message. On Active Directory and Samba AD,
+    /// <c>NeverExpires</c> sets "Password never expires" and the other two clear it; where a Synchronisation Rule
+    /// writes the account's userAccountControl with Enforce State on, the next synchronisation puts that Attribute
+    /// Flow's value back, and the outcome says so.
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 

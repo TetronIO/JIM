@@ -277,11 +277,11 @@ try {
     # unconfirmed. Scenario 001 proves that configuration on the Active Directory lab (Setup-Scenario-001.ps1
     # -InitialPassword).
     #
-    # This scenario still needs the flow gone, for two reasons. Scenario 020 composes it with NeverExpires,
-    # whose delivery adds DONT_EXPIRE_PASSWORD to userAccountControl (66048), which the flow's 512 disagrees
-    # with: the confirming import would find 66048 where the flow asked for 512, and the next export would write
-    # 512 over the flag. And without the flow, Step 2 of this scenario's chain (ACCOUNTDISABLE clear) is
-    # evidence that the password write landed, because nothing else enables the account.
+    # This scenario still needs the flow gone: without it, Step 2 of this scenario's chain (ACCOUNTDISABLE clear) is
+    # evidence that the password write landed, because nothing else enables the account. It is also what lets the
+    # Initial Password's expiry decide "Password never expires" (#2159): with a userAccountControl flow kept, the
+    # delivery would leave that flag to the flow, and Scenario 020, which composes this with NeverExpires, would
+    # get accounts whose password ages by the domain's policy.
     Write-TestStep "Step 2c" "Removing the userAccountControl Attribute Flow so the Initial Password owns the enabled state"
 
     $exportRuleName = "$($DirectoryConfig.ConnectedSystemName) Export Users"

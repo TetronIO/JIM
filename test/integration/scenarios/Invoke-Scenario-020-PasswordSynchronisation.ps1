@@ -239,6 +239,32 @@ function Get-LDIFAccounts {
 
 <#
 .SYNOPSIS
+    Reads every account under the directory's user container, with its account name and (on Active Directory and
+    Samba AD) its userAccountControl, parsed by Get-LDIFAccounts. Returns nothing when the search returns nothing.
+#>
+function Read-DirectoryAccounts {
+    param([Parameter(Mandatory=$true)][hashtable]$DirectoryConfig)
+
+    $searchOutput = Invoke-LDAPSearch `
+        -ContainerName $DirectoryConfig.ContainerName `
+        -DirectoryConfig $DirectoryConfig `
+        -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort `
+        -Scheme $DirectoryConfig.LdapSearchScheme `
+        -BaseDN $DirectoryConfig.UserContainer `
+        -BindDN $DirectoryConfig.BindDN `
+        -BindPassword $DirectoryConfig.BindPassword `
+        -Filter "(&(objectClass=$($DirectoryConfig.UserObjectClass))($($DirectoryConfig.UserNameAttr)=*))" `
+        -Attributes @($DirectoryConfig.UserNameAttr, "userAccountControl")
+
+    if (-not $searchOutput) { return @() }
+
+    $lines = Expand-LDIFFoldedLine -RawLdif ($searchOutput -join "`n")
+    return @(Get-LDIFAccounts -RawLines $lines -UserNameAttr $DirectoryConfig.UserNameAttr)
+}
+
+<#
+.SYNOPSIS
     Waits until nothing is left on the queue for the given identities, and reports what remains if not.
 #>
 function Wait-ForQueueToDrain {
@@ -342,25 +368,12 @@ try {
     # ─────────────────────────────────────────────────────────────────────────────────────────
     Write-TestSection "Step 2: Selecting provisioned accounts and their identities"
 
-    $searchOutput = Invoke-LDAPSearch `
-        -ContainerName $DirectoryConfig.ContainerName `
-        -DirectoryConfig $DirectoryConfig `
-        -Server "localhost" `
-        -Port $DirectoryConfig.LdapSearchPort `
-        -Scheme $DirectoryConfig.LdapSearchScheme `
-        -BaseDN $DirectoryConfig.UserContainer `
-        -BindDN $DirectoryConfig.BindDN `
-        -BindPassword $DirectoryConfig.BindPassword `
-        -Filter "(&(objectClass=$($DirectoryConfig.UserObjectClass))($($DirectoryConfig.UserNameAttr)=*))" `
-        -Attributes @($DirectoryConfig.UserNameAttr, "userAccountControl")
+    $accounts = @(Read-DirectoryAccounts -DirectoryConfig $DirectoryConfig)
 
-    if (-not $searchOutput) {
+    if ($accounts.Count -eq 0) {
         throw "The directory search returned nothing under $($DirectoryConfig.UserContainer). Either the export " +
               "provisioned nothing, or the container is wrong; check the Directory Export Activity."
     }
-
-    $lines = Expand-LDIFFoldedLine -RawLdif ($searchOutput -join "`n")
-    $accounts = @(Get-LDIFAccounts -RawLines $lines -UserNameAttr $DirectoryConfig.UserNameAttr)
 
     # Enabled accounts only. Bit 0x2 is ACCOUNTDISABLE, and a disabled account cannot be bound as whatever
     # password it holds, so one would fail every assertion below for a reason that is not the one under test.
@@ -402,9 +415,11 @@ try {
         }
 
         $people += [PSCustomObject]@{
-            AccountName = $account.AccountName
-            Dn          = $account.dn
-            MvoId       = [guid]$mvo.id
+            AccountName        = $account.AccountName
+            Dn                 = $account.dn
+            MvoId              = [guid]$mvo.id
+            # As provisioned, before any password below is propagated; absent on OpenLDAP. Test 6b reads it back.
+            UserAccountControl = if ($account.ContainsKey('userAccountControl')) { [int]$account.userAccountControl } else { $null }
         }
     }
 
@@ -563,6 +578,30 @@ try {
     Add-TestResult -Name "The account signs in with the synchronised password" `
         -Passed ($bindLive.Outcome -eq 'Success') `
         -Detail "Expected Success, got '$($bindLive.Outcome)'. Directory said: $($bindLive.Output)"
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 6b: a propagated password leaves "Password never expires" as each account has it (#2159)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Active Directory and Samba AD only: OpenLDAP has no per-account flag. Setup-Scenario-020 provisions with
+    # NeverExpires and no userAccountControl Attribute Flow, so the Initial Password's expiry set DONT_EXPIRE_PASSWORD
+    # (0x10000) on every account. Every password since was propagated (no accounts named), and a propagated password
+    # changes neither of the account's flags, so the flag must still be there. Before #2159 each propagated delivery
+    # cleared it.
+    if (-not $isRfcDirectory) {
+        Write-TestSection "Test 6b: Propagated passwords leave Password never expires as each account has it"
+
+        $accountsAfter = @(Read-DirectoryAccounts -DirectoryConfig $DirectoryConfig)
+        foreach ($person in @($held, $coalesced, $whileEnabled)) {
+            $after = $accountsAfter | Where-Object { $_.AccountName -eq $person.AccountName } | Select-Object -First 1
+            $afterValue = if ($after -and $after.ContainsKey('userAccountControl')) { [int]$after.userAccountControl } else { $null }
+            $provisionedWithFlag = $null -ne $person.UserAccountControl -and (($person.UserAccountControl -band 0x10000) -ne 0)
+            $keptFlag = $null -ne $afterValue -and (($afterValue -band 0x10000) -ne 0)
+
+            Add-TestResult -Name "$($person.AccountName) keeps Password never expires after its propagated password" `
+                -Passed ($provisionedWithFlag -and $keptFlag) `
+                -Detail "userAccountControl was '$($person.UserAccountControl)' as provisioned with NeverExpires and is '$afterValue' after delivery. Provisioning must have set 0x10000 for this to mean anything; a propagated password must then leave it set."
+        }
+    }
 
     # ─────────────────────────────────────────────────────────────────────────────────────────
     # Test 7: delivery does not wait behind the synchronisation engine (#1635)

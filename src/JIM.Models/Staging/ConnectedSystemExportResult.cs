@@ -58,6 +58,11 @@ public class ConnectedSystemExportResult
     /// nothing about the account.
     /// </para>
     /// <para>
+    /// On Active Directory the same attribute carries "Password never expires", so the delivery leaves that flag to the
+    /// export too, rather than applying the Initial Password's expiry over it (#2159). A Connector whose targets keep
+    /// the enabled state and the expiry in separate attributes would need to report each separately.
+    /// </para>
+    /// <para>
     /// A non-empty <see cref="AttributesAwaitingInitialPassword"/> implies this is true: an enable withheld until the
     /// password exists is a flow-set enabled state, which is what lets the delivery complete it. False from every
     /// Connector whose password channel has no notion of enabling an account.

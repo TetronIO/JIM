@@ -707,15 +707,47 @@ public class MetaverseControllerSetPasswordTests
         }
     }
 
-    [Test]
-    public async Task SetPassword_HonoursARequestedExpiryBehaviourInEitherModeAsync()
+    [TestCase(PasswordExpiryBehaviour.RequireChangeAtNextSignIn)]
+    [TestCase(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy)]
+    public async Task SetPassword_NoAccountsNamed_HonoursARequestedExpiryBehaviourAsync(PasswordExpiryBehaviour expiryBehaviour)
     {
         ArrangeConfiguredSystems((CorporateAdId, "Corporate AD"));
 
-        await SetPasswordAsync(expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+        await SetPasswordAsync(expiryBehaviour: expiryBehaviour);
+
+        var queued = _syncRepo.PendingPasswordChanges.Values.Single();
+        Assert.That(queued.ExpiryBehaviour, Is.EqualTo(expiryBehaviour));
+    }
+
+    [Test]
+    public async Task SetPassword_AccountsNamed_HonoursNeverExpiresAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+
+        await SetPasswordAsync(connectedSystemObjectIds: accounts, expiryBehaviour: PasswordExpiryBehaviour.NeverExpires, wait: 0);
 
         var queued = _syncRepo.PendingPasswordChanges.Values.Single();
         Assert.That(queued.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+    }
+
+    /// <summary>
+    /// A password set on every Connected System leaves "Password never expires" as each account has it (#2159), so Never
+    /// expires there would do nothing. The core refuses it, and the API answers 400 with nothing queued.
+    /// </summary>
+    [Test]
+    public async Task SetPassword_NoAccountsNamed_WithNeverExpires_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        ArrangeConfiguredSystems((CorporateAdId, "Corporate AD"));
+
+        var result = await SetPasswordAsync(expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("Password never expires"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
     }
 
     [Test]

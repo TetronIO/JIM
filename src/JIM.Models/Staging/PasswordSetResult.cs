@@ -29,22 +29,35 @@ public class PasswordSetResult
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// The expiry behaviour actually applied to the account, which may differ from the one requested when the
-    /// target cannot honour it. Null when the set failed.
+    /// What the account's password now does about expiry, as the Connector left it: the behaviour asked for where it
+    /// was applied, otherwise what the account has instead (for example <see cref="PasswordExpiryBehaviour.NeverExpires"/>
+    /// where the Connector was told to leave "Password never expires" alone and the account carries it). Null when the
+    /// set failed.
     /// </summary>
     public PasswordExpiryBehaviour? AppliedExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Set when the target could not honour the requested expiry behaviour and something else was applied instead.
-    /// Names what was asked for and what happened, so the difference can be reported rather than silently dropped.
-    /// Null when the requested behaviour was applied as asked.
+    /// Set when what the Connector was asked to apply could not take effect: a behaviour the target has no equivalent
+    /// for, or "must change at next sign-in" on an account whose "Password never expires" the Connector was told to
+    /// leave set, which the target then ignores. Names what was asked for and what happened, so the difference is
+    /// reported rather than silently dropped. Null when everything asked was applied. A difference in a flag the
+    /// Connector was told to leave alone is not a warning; it is reported through <see cref="AppliedExpiryBehaviour"/>.
     /// </summary>
     public string? ExpiryBehaviourWarning { get; set; }
 
     /// <summary>
-    /// Whether the requested expiry behaviour was applied exactly as asked.
+    /// Whether everything the Connector was asked to apply took effect. True where the account's expiry differs from the
+    /// behaviour requested only because the Connector was told to leave "Password never expires" as it is; compare
+    /// <see cref="AppliedExpiryBehaviour"/> with the request to see that.
     /// </summary>
     public bool ExpiryBehaviourHonoured => Success && ExpiryBehaviourWarning == null;
+
+    /// <summary>
+    /// Whether applying the password set or cleared the account's "Password never expires" flag, so that it now differs
+    /// from what the account had (#2159). False when the flag was already as asked, was left alone, or the target has no
+    /// such flag. Lets the caller warn where something else will put the flag back.
+    /// </summary>
+    public bool PasswordNeverExpiresChanged { get; set; }
 
     /// <summary>
     /// Creates a successful result where the requested expiry behaviour was applied as asked.

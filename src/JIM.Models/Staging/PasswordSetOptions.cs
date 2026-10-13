@@ -29,4 +29,19 @@ public class PasswordSetOptions
     /// </para>
     /// </summary>
     public bool? EnableAccount { get; set; }
+
+    /// <summary>
+    /// Whether the Connector should leave the account's "Password never expires" flag exactly as the account has it,
+    /// rather than set it for <see cref="PasswordExpiryBehaviour.NeverExpires"/> and clear it for the other two
+    /// behaviours. False by default, so a caller that names only an expiry behaviour gets that behaviour applied whole.
+    /// <para>
+    /// True where something else owns the flag (#2159): an Attribute Flow that writes the attribute holding it (on Active
+    /// Directory, userAccountControl), or the account itself for a propagated password, which never changes it. The
+    /// engine decides which; the Connector applies the answer. "Must change at next sign-in" belongs to the password
+    /// rather than to the flag, so it is still applied for <see cref="PasswordExpiryBehaviour.RequireChangeAtNextSignIn"/>.
+    /// Where the flag left set means that cannot take effect, the Connector says so on its result
+    /// (<see cref="PasswordSetResult.ExpiryBehaviourWarning"/>). A Connector whose targets have no such flag ignores it.
+    /// </para>
+    /// </summary>
+    public bool LeavePasswordNeverExpiresAsIs { get; set; }
 }
