@@ -292,7 +292,7 @@ function Get-JIMWidgetNote {
 
     .PARAMETER Kind
         Pipe it from Get-JIMWidget -Name "x", or give it with -Kind; $true keeps it. Null when the Widget has none,
-        which `Clear-Thing -Now` sets, as $null does.
+        which `Clear-Thing -Now` sets, as $null does. Its "Null is a value" setting is a label, and stays as written.
 
     .OUTPUTS
         Each note, or null where there is none; see Get-JIMWidget -Id.
@@ -791,6 +791,7 @@ function Disconnect-JIMWidget {
         $block | Should -Match 'Pipe it from `Get-JIMWidget -Name` "x", or give it with `-Kind`; `\$true` keeps it\.'
         $block | Should -Match 'Empty when the Widget has none, which `Clear-Thing -Now` sets, as `\$null` does\.'
         $block | Should -Match 'Each note, or empty where there is none; see `Get-JIMWidget -Id`\.'
+        $block | Should -Match 'Its "Null is a value" setting is a label' -Because 'a quoted label is the product''s own wording'
         $block | Should -Not -Match '(?<!`)``(?!`)' -Because 'text already in code is left as it is'
     }
 

@@ -77,6 +77,6 @@ The typical loop is therefore: read what the target said on the parked Connected
 You do not have to go looking. Parked and expired Connected System Objects are reported in two places:
 
 - **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the Connected System Objects grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many Connected System Objects saving will release; it stays quiet for an edit that would not change what is delivered.
-- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons.
+- **Automation**<br /> [`Get-JIMSyncRuleInitialPassword`](../powershell/initial-password.md#get-jimsyncruleinitialpassword) and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons.
 
 An initial password also shows up wherever JIM shows any other password change: on **Operations > Passwords**, labelled with origin **Initial**, and on the identity's own Password panel, as an **Initial** entry with a child Activity naming the system it was set on.

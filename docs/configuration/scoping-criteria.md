@@ -63,7 +63,7 @@ A relative criterion is a **count**, a **unit** (Hours, Days, Weeks, Months or Y
 
 For example, to scope an export rule to leavers terminated between 30 and 364 days ago, use an **All** group with two criteria on the termination-date attribute: *on or before* `30 days ago` and *after* `364 days ago`.
 
-Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or via the [PowerShell cmdlets](../powershell/synchronisation-rules.md) and the REST API.
+Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) and the REST API.
 
 ## Previewing a scope change
 

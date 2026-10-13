@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -229,6 +228,13 @@ public partial class SyncEngine
     /// whatever its value or change type (#1199). Sets the staged export's unresolved-references flag when an
     /// incoming change carries one. Pure in-memory mutation: nothing is persisted here.
     /// </summary>
+    /// <remarks>
+    /// A single-valued attribute holds one value, so it leaves the merge with exactly one change (#2182): incoming
+    /// changes that name such an attribute more than once are first folded into one Update by
+    /// <see cref="WithOneChangePerSingleValuedAttribute"/>. Keyed by the attribute alone, the merge would otherwise keep
+    /// whichever came last, and an Add of the new value followed by a Remove of the old one left only the Remove, which
+    /// cleared the target.
+    /// </remarks>
     /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
     /// <param name="newChanges">The newly evaluated attribute changes to merge in.</param>
     public PendingExportMergeResult MergeAttributeChangesIntoPendingExport(
@@ -237,6 +243,8 @@ public partial class SyncEngine
     {
         var replacedCount = 0;
         var addedCount = 0;
+
+        newChanges = WithOneChangePerSingleValuedAttribute(newChanges);
 
         // Drop the staged changes this evaluation supersedes wholesale before the value-level merge below
         // (#1199): an incoming Update or RemoveAll sets the attribute's entire value set, so any staged
@@ -362,8 +370,9 @@ public partial class SyncEngine
     /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
     /// <param name="csoAlreadyCurrentCount">Output: count of attributes skipped because CSO already has the value.</param>
     /// <param name="removedAttributes">Optional set of attribute values that were removed from the MVO.
-    /// For multi-valued attributes, values in this set create Remove changes instead of Add changes.
-    /// For single-valued attributes, values in this set create null-clearing Update changes.</param>
+    /// Where both the source and the target attribute are multi-valued, values in this set create Remove changes
+    /// instead of Add changes. Everywhere else the target is sent one Update carrying the value that survives, so a
+    /// removed value is never it, and an attribute left with none gets a null-clearing Update (#2182).</param>
     /// <param name="mvAttributeDictionary">Optional pre-built MVO attribute dictionary for expression evaluation.</param>
     /// <param name="preResolvedReferenceValues">Optional map of referenced Metaverse Object ID to the resolved
     /// target value for this export rule's Connected System (reference recall, #908). When a reference points
@@ -489,67 +498,26 @@ public partial class SyncEngine
                         continue;
                     }
 
-                    var result = evaluation.Result!;
-                    var change = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = mapping.TargetConnectedSystemAttribute,
-                        AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        SyncRuleId = exportRule.Id,
-                        SyncRuleName = exportRule.Name
-                    };
-
-                    // Set the value based on the result type
-                    switch (result)
-                    {
-                        case string strValue:
-                            change.StringValue = strValue;
-                            break;
-                        case int intValue:
-                            change.IntValue = intValue;
-                            break;
-                        case long longValue:
-                            change.LongValue = longValue;
-                            break;
-                        case decimal decimalValue:
-                            change.DecimalValue = decimalValue;
-                            break;
-                        case DateTime dtValue:
-                            change.DateTimeValue = dtValue;
-                            break;
-                        case bool boolValue:
-                            change.BoolValue = boolValue;
-                            break;
-                        case Guid guidValue:
-                            change.GuidValue = guidValue;
-                            break;
-                        case byte[] byteValue:
-                            change.ByteValue = byteValue;
-                            break;
-                        default:
-                            // Fall back to string representation
-                            change.StringValue = result.ToString();
-                            break;
-                    }
+                    // Every change an expression stages is for its one target attribute, so the Connected System
+                    // Object's values for it are read once, for staging and for no-net-change detection alike.
+                    var heldValues = canDetectNoNetChange
+                        ? csoAttributeCache![(existingCso!.Id, mapping.TargetConnectedSystemAttribute.Id)].ToList()
+                        : null;
+                    var expressionChanges = StageExportExpressionResult(mapping, source, exportRule, evaluation.Result!, heldValues, flowErrors);
 
                     // No-net-change detection for expression-based mappings
-                    if (canDetectNoNetChange)
+                    var alreadyCurrent = heldValues == null
+                        ? []
+                        : expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+                    foreach (var change in alreadyCurrent)
                     {
-                        var cacheKey = (existingCso!.Id, change.AttributeId);
-                        var existingCsoValues = csoAttributeCache![cacheKey];
-
-                        if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
-                        {
-                            Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
-                                change.AttributeId, existingCso.Id);
-                            csoAlreadyCurrentCount++;
-                            noNetChangeSkipped?.Add(change);
-                            continue;
-                        }
+                        Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
+                            change.AttributeId, existingCso!.Id);
                     }
 
-                    changes.Add(change);
+                    csoAlreadyCurrentCount += alreadyCurrent.Count;
+                    noNetChangeSkipped?.AddRange(alreadyCurrent);
+                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrent.Contains(change)));
                     continue;
                 }
 
@@ -584,14 +552,21 @@ public partial class SyncEngine
                     }
                 }
 
-                // Get attribute values - handling differs for single-valued vs multi-valued attributes
-                // Multi-valued attributes (like member) have multiple MVO attribute values with the same attribute ID
-                var isMultiValued = source.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued;
+                // The change's shape follows the plurality of the attribute it is written to (#2182), never the
+                // plurality of the Metaverse Attribute it comes from: the merge key, every Connector and export
+                // confirmation all go by the target's. Per-value Add and Remove only where both are multi-valued.
+                // Everywhere else the mapping stages one Update carrying the value the attribute should now hold, or an
+                // all-null Update when it should hold none. A single-valued target holds one value, so it is told that
+                // value: an Add and a Remove for one became two assignments to one SQL column, and a merge keyed by the
+                // attribute kept only the Remove. A multi-valued target fed by a single-valued source is told its whole
+                // set is that one value, which is what an Update means to every Connector.
+                var perValue = source.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued &&
+                               mapping.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.MultiValued;
 
-                IEnumerable<MetaverseObjectAttributeValue> mvoValues;
-                if (isMultiValued)
+                List<(MetaverseObjectAttributeValue? Value, PendingExportAttributeChangeType ChangeType)> stagedValues;
+                if (perValue)
                 {
-                    // For multi-valued attributes, get ALL values
+                    IEnumerable<MetaverseObjectAttributeValue> mvoValues;
                     if (isCreateOperation)
                     {
                         // Exclude asserted-null markers (#91): a NullValue row carries no value and must be
@@ -623,74 +598,30 @@ public partial class SyncEngine
 
                         mvoValues = matchingChangedValues;
                     }
+
+                    // Each value is added, or removed if it was removed from the MVO. An Update (a replace) per value
+                    // would have each value overwrite the one before, exporting only the last.
+                    stagedValues = [.. mvoValues.Select(mvoValue => ((MetaverseObjectAttributeValue?)mvoValue, PerValueChangeType(mvoValue)))];
                 }
                 else
                 {
-                    // For single-valued attributes, only get the first value (excluding asserted-null markers, #91)
-                    var changedValue = changedAttributes
-                        .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
+                    var (stage, wholeValue) = SelectWholeAttributeValue(mvo, source.MetaverseAttribute.Id, changedAttributes,
+                        removedAttributes, isCreateOperation);
+                    stagedValues = stage ? [(wholeValue, PendingExportAttributeChangeType.Update)] : [];
 
-                    // Create operations include all mapped attributes (not just changed ones); Update
-                    // operations only include attributes that actually changed.
-                    var mvoValue = isCreateOperation
-                        ? changedValue ?? mvo.AttributeValues
-                            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
-                        : changedValue;
-
-                    mvoValues = mvoValue != null ? [mvoValue] : [];
-                }
-
-                // Process each attribute value (supports multi-valued attributes)
-                foreach (var mvoValue in mvoValues)
-                {
-                    // Note: We only set AttributeId here (not the Attribute navigation property)
-                    // to avoid EF Core change tracking overhead during batch evaluation.
-                    // The Attribute is loaded via Include when reading Pending Exports.
-                    //
-                    // For multi-valued attributes, use Add to add each value to the attribute,
-                    // or Remove if the value was removed from the MVO.
-                    // Using Update (Replace) would cause each value to overwrite the previous one,
-                    // resulting in only the last value being exported.
-                    // For single-valued attributes, use Update (Replace) for the whole attribute.
-                    PendingExportAttributeChangeType attrChangeType;
-                    if (isMultiValued)
+                    if (stage && wholeValue == null)
                     {
-                        // Check if this value is in the removals list using pre-built O(1) lookup sets.
-                        // Three matching strategies in priority order (same logic as before, now O(1) per check):
-                        var isRemoval = removedReferenceValueIds != null && (
-                            (mvoValue.ReferenceValueId.HasValue && removedReferenceValueIds.Contains(mvoValue.ReferenceValueId.Value)) ||
-                            (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
-                            (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
-                                removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
-                                    mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
-
-                        Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
-                            mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
-
-                        attrChangeType = isRemoval
-                            ? PendingExportAttributeChangeType.Remove
-                            : PendingExportAttributeChangeType.Add;
-                    }
-                    else
-                    {
-                        attrChangeType = PendingExportAttributeChangeType.Update;
-                    }
-
-                    // For single-valued attributes, check if this value was removed from the MVO.
-                    // Removals occur when an attribute value is no longer contributed by any source
-                    // (e.g. attribute recall on CSO obsoletion, source no longer returning the value,
-                    // CSO falling out of Synchronisation Rule scope). The changedAttributes list contains the
-                    // original values (pre-removal) — we must create a null-clearing export so the
-                    // target system clears the attribute, rather than copying the stale old value.
-                    var isSingleValuedRemoval = !isMultiValued && removedAttributes?.Contains(mvoValue) == true;
-
-                    if (isSingleValuedRemoval)
-                    {
-                        Log.Debug("CreateAttributeValueChanges: Single-valued attribute {AttrName} is a removal - " +
-                            "creating null-clearing export change",
+                        Log.Debug("CreateAttributeValueChanges: Attribute {AttrName} holds no value any more - creating a null-clearing export change",
                             source.MetaverseAttribute.Name);
                     }
+                }
 
+                foreach (var (mvoValue, attrChangeType) in stagedValues)
+                {
+                    // The target Attribute navigation is set deliberately, not just AttributeId: the single-valued
+                    // fold in the merge (WithOneChangePerSingleValuedAttribute), the whole-set Update checks
+                    // (IsWholeSetUpdate) and the pre-send SingleValuedAttributeChangeValidator all read its
+                    // plurality (#2182), and would silently stop working without it.
                     var attributeChange = new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -701,10 +632,9 @@ public partial class SyncEngine
                         SyncRuleName = exportRule.Name
                     };
 
-                    // Set the appropriate value based on data type.
-                    // For single-valued removals, skip value assignment — all fields remain
+                    // Set the appropriate value based on data type. A clear carries no value: all fields remain
                     // null, which tells the target system to clear the attribute.
-                    if (!isSingleValuedRemoval)
+                    if (mvoValue != null)
                     {
                         switch (source.MetaverseAttribute.Type)
                         {
@@ -745,8 +675,8 @@ public partial class SyncEngine
                                 {
                                     // A reference row with no referenced object carries nothing exportable, for
                                     // example a ghost row left by a pre-#1019 Metaverse Object deletion; emitting
-                                    // it would stage an all-null change. Single-valued removals never reach here
-                                    // (they skip value assignment entirely), so the clearing change is unaffected.
+                                    // it would stage an all-null change. A clear never reaches here (it carries no
+                                    // value), so the clearing change is unaffected.
                                     Log.Debug("CreateAttributeValueChanges: Skipping valueless reference row {MvoValueId} for attribute {AttrName}",
                                         mvoValue.Id, source.MetaverseAttribute.Name);
                                     continue;
@@ -789,6 +719,211 @@ public partial class SyncEngine
         }
 
         return changes;
+
+        // Whether a value of a multi-valued source, exported per value, is a removal: matched against the removals by
+        // the pre-built O(1) lookup sets, in priority order (referenced object, persisted row, then value content).
+        PendingExportAttributeChangeType PerValueChangeType(MetaverseObjectAttributeValue mvoValue)
+        {
+            var isRemoval = removedReferenceValueIds != null && (
+                (mvoValue.ReferenceValueId.HasValue && removedReferenceValueIds.Contains(mvoValue.ReferenceValueId.Value)) ||
+                (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
+                (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
+                    removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
+                        mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
+
+            Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
+                mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
+
+            return isRemoval ? PendingExportAttributeChangeType.Remove : PendingExportAttributeChangeType.Add;
+        }
+    }
+
+    /// <summary>
+    /// The value a mapping exports as a whole (#2182): the one change it stages where the source and target are not both
+    /// multi-valued, so the target is told what the attribute now holds rather than which values came and went. That is
+    /// the value this pass gave the attribute (additions precede removals in <paramref name="changedAttributes"/>), else
+    /// the one the Metaverse Object holds; a value removed this pass is never it. Removals are matched by identity, not by
+    /// content: a reference removed and given again is a new row naming the same object, and it survives.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object, holding its values as this pass leaves them.</param>
+    /// <param name="sourceAttributeId">The mapping's source Metaverse Attribute.</param>
+    /// <param name="changedAttributes">The values this pass changed: additions, then removals.</param>
+    /// <param name="removedAttributes">The values this pass removed.</param>
+    /// <param name="isCreateOperation">True for a Create, which provisions every mapped attribute whether or not it changed.</param>
+    /// <returns>Whether anything is staged, and the value to carry: null for a clear, which is staged when the attribute
+    /// changed and no value survives. An Update stages nothing for an attribute this pass did not change, and a Create
+    /// nothing for one with no value to provision.</returns>
+    private static (bool Stage, MetaverseObjectAttributeValue? Value) SelectWholeAttributeValue(
+        MetaverseObject mvo,
+        int sourceAttributeId,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes,
+        bool isCreateOperation)
+    {
+        // Asserted-null markers (#91) carry no value, so they are invisible here exactly as an absent row.
+        var changedValues = changedAttributes
+            .Where(av => av.AttributeId == sourceAttributeId && !av.NullValue)
+            .ToList();
+
+        if (!isCreateOperation && changedValues.Count == 0)
+            return (false, null);
+
+        var survivor = changedValues.Find(av => !IsRemoved(av)) ??
+                       mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == sourceAttributeId && !av.NullValue && !IsRemoved(av));
+
+        return survivor != null
+            ? (true, survivor)
+            : (changedValues.Count > 0, null);
+
+        bool IsRemoved(MetaverseObjectAttributeValue value) => removedAttributes?.Contains(value) == true;
+    }
+
+    /// <summary>
+    /// The Pending Export changes an export Expression's result stages (#2179), resolved through the one result
+    /// handler: every value converted to the target attribute's type, so text a Number attribute cannot hold is
+    /// reported rather than sent and "512" stages the number 512, and several values never become their type name.
+    /// <list type="bullet">
+    /// <item>No value (an empty collection, or blank text for a typed attribute): nothing, the same as a null result.</item>
+    /// <item>A value the target's type cannot hold: nothing, and an <see cref="AttributeFlowErrorKind.ExpressionResultNotConvertible"/> error.</item>
+    /// <item>Several values for a single-valued target: nothing, and an <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/> error.</item>
+    /// <item>A single value (not a list), or the one value a single-valued target takes: one Update, as an expression
+    /// has always staged.</item>
+    /// <item>A list for a multi-valued target, whatever its length: an Add for each value and a Remove for each value
+    /// the Connected System Object holds that the result does not, so the target ends up holding exactly the
+    /// result. A list of one value is the whole set as much as a list of two is.</item>
+    /// </list>
+    /// </summary>
+    /// <param name="heldValues">The Connected System Object's current values for the target attribute, or null when
+    /// there is no object yet (a Create) or none was supplied.</param>
+    private static List<PendingExportAttributeValueChange> StageExportExpressionResult(
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        SyncRule exportRule,
+        object result,
+        IEnumerable<ConnectedSystemObjectAttributeValue>? heldValues,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var target = mapping.TargetConnectedSystemAttribute!;
+
+        // An export expression into a Reference attribute supplies the reference's text (for example a DN), staged as
+        // text exactly as it always has been; every other type converts to that type.
+        var valueType = target.Type == AttributeDataType.Reference ? AttributeDataType.Text : target.Type;
+        var resolution = ExpressionResultValues.Resolve(result, valueType, target.AttributePlurality);
+
+        switch (resolution.Kind)
+        {
+            case ExpressionResultResolutionKind.NoValue:
+                return [];
+
+            case ExpressionResultResolutionKind.NotConvertible:
+                // The value itself is source data, so it goes to the Run Profile Execution Item (AttributeFlowError.Value),
+                // never to the log.
+                Log.Warning("CreateAttributeValueChanges: Expression result cannot be stored in {Type} attribute {AttrName}; " +
+                    "no Pending Export generated for this attribute.",
+                    target.Type, target.Name);
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
+                    TargetAttributeName = target.Name,
+                    TargetAttributeType = target.Type,
+                    Expression = source.Expression,
+                    Value = resolution.UnconvertibleValue
+                });
+                return [];
+
+            case ExpressionResultResolutionKind.SeveralValues:
+                Log.Warning("CreateAttributeValueChanges: Expression returned {ValueCount} values for single-valued attribute {AttrName}; " +
+                    "no Pending Export generated for this attribute.",
+                    resolution.ValueCount, target.Name);
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
+                    TargetAttributeName = target.Name,
+                    Expression = source.Expression,
+                    ValueCount = resolution.ValueCount
+                });
+                return [];
+        }
+
+        // A single value keeps the Update an expression has always staged; how a single value meets a multi-valued
+        // target is the target-plurality rule (#2182). A list is never routed here by its length: an Update is compared
+        // only with the first value the Connected System Object holds, so a list reduced to one value would leave a
+        // stale value behind, or not, depending on the order the held values were read in.
+        if (target.AttributePlurality != AttributePlurality.MultiValued || !ExpressionResultValues.IsCollection(result))
+            return [NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Update, resolution.Values[0])];
+
+        // A list for a multi-valued target. Whether this becomes one whole-set change is the target-plurality rule
+        // (#2182); until then each value is an Add, and each held value the result no longer has is a Remove, which
+        // every Connector already applies to a multi-valued attribute.
+        var changes = resolution.Values
+            .Select(value => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Add, value))
+            .ToList();
+
+        if (heldValues != null)
+        {
+            var wantedKeys = resolution.Values.Select(ExpressionResultValues.Key).ToHashSet();
+            changes.AddRange(heldValues
+                .Select(held => (Held: held, Value: HeldTypedValue(held, target.Type)))
+                .Where(held => held.Value != null && !wantedKeys.Contains(ExpressionResultValues.Key(held.Value)))
+                .Select(held => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Remove, held.Value!)));
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// A Connected System Object attribute value's value in the field of <paramref name="type"/>, or null when it holds
+    /// none there. Reference values are not compared with expression results, which supply them as text.
+    /// </summary>
+    private static object? HeldTypedValue(ConnectedSystemObjectAttributeValue held, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => held.StringValue,
+        AttributeDataType.Number => held.IntValue,
+        AttributeDataType.LongNumber => held.LongValue,
+        AttributeDataType.Decimal => held.DecimalValue,
+        AttributeDataType.DateTime => held.DateTimeValue,
+        AttributeDataType.Boolean => held.BoolValue,
+        AttributeDataType.Guid => held.GuidValue,
+        AttributeDataType.Binary => held.ByteValue,
+        _ => null
+    };
+
+    /// <summary>
+    /// A Pending Export change carrying one converted expression value in its typed field.
+    /// </summary>
+    private static PendingExportAttributeValueChange NewExpressionChange(
+        SyncRuleMapping mapping,
+        SyncRule exportRule,
+        PendingExportAttributeChangeType changeType,
+        object value)
+    {
+        var change = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = mapping.TargetConnectedSystemAttribute!,
+            AttributeId = mapping.TargetConnectedSystemAttribute!.Id,
+            ChangeType = changeType,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name
+        };
+
+        switch (value)
+        {
+            case string text: change.StringValue = text; break;
+            case int number: change.IntValue = number; break;
+            case long longNumber: change.LongValue = longNumber; break;
+            case decimal decimalNumber: change.DecimalValue = decimalNumber; break;
+            case DateTime date: change.DateTimeValue = date; break;
+            case bool flag: change.BoolValue = flag; break;
+            case Guid guid: change.GuidValue = guid; break;
+            case byte[] bytes: change.ByteValue = bytes; break;
+            default:
+                // ExpressionResultConverter only produces the types above; anything else is a JIM fault.
+                throw new InvalidOperationException(
+                    $"An expression value of type '{value.GetType().Name}' has no field on a Pending Export change.");
+        }
+
+        return change;
     }
 
     /// <summary>
@@ -886,22 +1021,19 @@ public partial class SyncEngine
         }
 
         // Only the evaluation itself is guarded. A thrown export expression must be surfaced as an errored
-        // object, never swallowed and never conflated with a deliberate null result. Known failure modes are
-        // rethrown as SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError
-        // RPEI; anything else propagates to UnhandledError.
+        // object, never swallowed and never conflated with a deliberate null result. Every failure an expression can
+        // cause arrives as the one ExpressionEvaluationException (#2153, N5) and is rethrown as
+        // SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError RPEI; anything
+        // else is a JIM fault and propagates to UnhandledError.
         object? result;
         try
         {
             result = expressionEvaluator.Evaluate(source.Expression!, new ExpressionContext(mvAttributeDictionary, null));
         }
-        catch (DynamicExpressoException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (ArgumentException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (FormatException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (OverflowException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (InvalidOperationException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (ArithmeticException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (InvalidCastException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (KeyNotFoundException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (ExpressionEvaluationException ex)
+        {
+            throw BuildExportExpressionEvaluationException(mapping, source, ex);
+        }
 
         if (result == null)
         {
@@ -963,11 +1095,11 @@ public partial class SyncEngine
                 baseValue = null;
                 baseUnavailable = true;
             }
-            else if (evaluation.Result is string[])
+            else if (ExpressionResultValues.IsCollection(evaluation.Result))
             {
                 // A generated value's base must be a single text value: a uniqueness token is appended to
-                // exactly one candidate, so an array or other multi-valued result is a misconfiguration, not
-                // data to select from. Nothing is staged for this attribute this pass.
+                // exactly one candidate, so a collection of anything (#2179, not only a list of text) is a
+                // misconfiguration, not data to select from. Nothing is staged for this attribute this pass.
                 flowErrors?.Add(new AttributeFlowError
                 {
                     Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
@@ -976,9 +1108,21 @@ public partial class SyncEngine
                 });
                 return null;
             }
+            else if (!ExpressionText.TryFormat(evaluation.Result, out baseValue))
+            {
+                // A single value in JIM's text form (#2153, N1); a Binary value has none, so it cannot be a base.
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
+                    TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
+                    TargetAttributeType = AttributeDataType.Text,
+                    Expression = source.Expression,
+                    Value = ExpressionText.Describe(evaluation.Result!)
+                });
+                return null;
+            }
             else
             {
-                baseValue = evaluation.Result!.ToString();
                 baseUnavailable = baseValue == null;
             }
         }
@@ -1031,6 +1175,16 @@ public partial class SyncEngine
                 // For RemoveAll: skip if CSO has no values for this attribute (no-net-change)
                 // If CSO has values, we need to remove them (not a no-net-change)
                 return valuesList.Count == 0;
+
+            case PendingExportAttributeChangeType.Update when IsWholeSetUpdate(pendingChange):
+                // An Update against a multi-valued attribute sets its whole value set (#2182), so it is a no-net-change
+                // only when the target holds exactly that value, or nothing for a clear. Comparing with the first value
+                // alone counted [a, stray] as current and [stray, a] as not, so whether a stray value was ever
+                // corrected depended on the order the target returned its values in.
+                if (IsPendingChangeEmpty(pendingChange))
+                    return valuesList.Count == 0;
+
+                return valuesList.Count == 1 && ValuesMatch(pendingChange, valuesList[0]);
 
             case PendingExportAttributeChangeType.Update:
             default:
@@ -1123,6 +1277,18 @@ public partial class SyncEngine
             return pendingChange.DateTimeValue == existingValue.DateTimeValue;
         }
 
+        // Boolean comparison
+        if (pendingChange.BoolValue.HasValue || existingValue.BoolValue.HasValue)
+        {
+            return pendingChange.BoolValue == existingValue.BoolValue;
+        }
+
+        // Guid comparison
+        if (pendingChange.GuidValue.HasValue || existingValue.GuidValue.HasValue)
+        {
+            return pendingChange.GuidValue == existingValue.GuidValue;
+        }
+
         // Binary comparison
         if (pendingChange.ByteValue != null || existingValue.ByteValue != null)
         {
@@ -1137,22 +1303,6 @@ public partial class SyncEngine
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
             return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
-        }
-
-        // Guid comparison (pending stores as StringValue, CSO has GuidValue)
-        if (existingValue.GuidValue.HasValue)
-        {
-            if (Guid.TryParse(pendingChange.StringValue, out var pendingGuid))
-                return pendingGuid == existingValue.GuidValue.Value;
-            return false;
-        }
-
-        // Bool comparison (pending stores as StringValue, CSO has BoolValue)
-        if (existingValue.BoolValue.HasValue)
-        {
-            if (bool.TryParse(pendingChange.StringValue, out var pendingBool))
-                return pendingBool == existingValue.BoolValue.Value;
-            return false;
         }
 
         // Both null/empty - consider them matching
@@ -1300,6 +1450,74 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The changes, with every single-valued attribute named more than once among them folded into one Update (#2182).
+    /// The last change that is not a removal decides it, carrying its value (or, for an all-null Update, the clear) and
+    /// becoming the Update itself; a removal is implied by whatever replaces the value, so it never decides while
+    /// anything else is present. An attribute with only removals among them is cleared: a new all-null Update stands for
+    /// them. Order is kept, the fold taking the place of the attribute's first change.
+    /// </summary>
+    /// <remarks>
+    /// Export staging gives a single-valued attribute exactly one change, so in the ordinary case there is nothing to
+    /// fold and <paramref name="changes"/> itself is returned, allocation-free. The deciding change is converted in place
+    /// rather than copied, so anything resolved against it by identity afterwards (a generated value's marker, Unique
+    /// Value Generation) still finds it.
+    /// </remarks>
+    /// <param name="changes">The changes about to be merged into a Pending Export.</param>
+    internal static List<PendingExportAttributeValueChange> WithOneChangePerSingleValuedAttribute(List<PendingExportAttributeValueChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+
+        var foldedAttributeIds = changes
+            .Where(change => change.Attribute?.AttributePlurality == AttributePlurality.SingleValued)
+            .GroupBy(change => change.AttributeId)
+            .Where(group => group.Skip(1).Any())
+            .Select(group => group.Key)
+            .ToHashSet();
+
+        if (foldedAttributeIds.Count == 0)
+            return changes;
+
+        var folded = new List<PendingExportAttributeValueChange>(changes.Count);
+        var placed = new HashSet<int>();
+        foreach (var change in changes)
+        {
+            if (!foldedAttributeIds.Contains(change.AttributeId))
+                folded.Add(change);
+            else if (placed.Add(change.AttributeId))
+                folded.Add(FoldSingleValuedAttributeChanges([.. changes.Where(c => c.AttributeId == change.AttributeId)]));
+        }
+
+        return folded;
+    }
+
+    /// <summary>
+    /// The one Update a single-valued attribute's several changes come to: see
+    /// <see cref="WithOneChangePerSingleValuedAttribute"/>.
+    /// </summary>
+    private static PendingExportAttributeValueChange FoldSingleValuedAttributeChanges(List<PendingExportAttributeValueChange> attributeChanges)
+    {
+        var deciding = attributeChanges.LastOrDefault(change =>
+            change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update);
+
+        if (deciding != null)
+        {
+            deciding.ChangeType = PendingExportAttributeChangeType.Update;
+            return deciding;
+        }
+
+        var last = attributeChanges[^1];
+        return new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = last.Attribute,
+            AttributeId = last.AttributeId,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            SyncRuleId = last.SyncRuleId,
+            SyncRuleName = last.SyncRuleName
+        };
+    }
+
+    /// <summary>
     /// Selects the changes on an existing (stale, typically drift-staged) Pending Export that survive a merge
     /// with a newly evaluated set of export changes. Export evaluation always wins on a collision, because it
     /// derives from the latest Metaverse Object state.
@@ -1415,12 +1633,11 @@ public partial class SyncEngine
     /// </summary>
     /// <remarks>
     /// The merge key alone is not enough to catch this. It keys multi-valued attributes by value, which is
-    /// right for genuine per-value adds and removals, but a change's type follows the Metaverse attribute's
-    /// plurality while the key follows the Connected System attribute's: a single-valued Metaverse attribute
-    /// flowing to a multi-valued Connected System attribute produces an Update whose key still carries a
-    /// value. A stale per-value Remove for the same attribute then survives the merge, and the connector
-    /// emits the replace followed by a delete of a value the replace has already removed; LDAP rejects that
-    /// modify atomically, so the export never applies.
+    /// right for genuine per-value adds and removals, but a single-valued Metaverse attribute flowing to a
+    /// multi-valued Connected System attribute is staged as an Update (#2182), which replaces the whole set
+    /// while its key still carries a value. A stale per-value Remove for the same attribute would then survive
+    /// the merge, and the connector would emit the replace followed by a delete of a value the replace has
+    /// already removed; LDAP rejects that modify atomically, so the export would never apply.
     /// </remarks>
     internal static HashSet<int> GetWholeAttributeReplacementAttributeIds(IEnumerable<PendingExportAttributeValueChange> changes)
     {

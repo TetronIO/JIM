@@ -12,11 +12,11 @@ function Approve-JIMGeneratedValueRename {
         (Reason AnchoredElsewhere), that account is renamed. The new value is decided at the next export, after JIM
         checks every system again, not now. The held export is released so that export happens.
 
-        Because this renames a live account, it asks for confirmation (ConfirmImpact High) unless -Force is given.
+        Because this renames a live account, it asks for confirmation unless -Force is given.
         Each value is one request and is recorded as an Activity naming who allowed it.
 
     .PARAMETER Id
-        The id of the generated value, as Get-JIMGeneratedValueDecision returns it.
+        The ID of the value, as Get-JIMGeneratedValueDecision returns it.
 
     .PARAMETER InputObject
         A held value from Get-JIMGeneratedValueDecision, through the pipeline. The confirmation then names the
@@ -26,7 +26,8 @@ function Approve-JIMGeneratedValueRename {
         Skips the confirmation prompt.
 
     .OUTPUTS
-        The value as it now stands, in Get-JIMGeneratedValueDecision's shape (Status is RenameAllowed).
+        The value as it now stands, with Status RenameAllowed. A value that is not waiting on a decision, because it
+        has been released or its rename already allowed, is an error, and nothing changes.
 
     .EXAMPLE
         Approve-JIMGeneratedValueRename -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f
@@ -50,7 +51,7 @@ function Approve-JIMGeneratedValueRename {
         Reset-JIMGeneratedValueDecision
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueDecisionDto')]
     param(
         [Parameter(Mandatory, Position = 0, ParameterSetName = 'ById')]
         [guid]$Id,

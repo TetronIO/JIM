@@ -1334,10 +1334,12 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "AccountExpires", 12345 } },  // int, not a date type
             new Dictionary<string, object?>());
 
-        var ex = Assert.Throws<ArgumentException>(() =>
+        // Every failure an expression causes is the one expression error (#2153, N5), keeping the function's message.
+        var ex = Assert.Throws<ExpressionEvaluationException>(() =>
             _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context));
 
-        Assert.That(ex?.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
+        Assert.That(ex!.InnerException, Is.TypeOf<ArgumentException>());
+        Assert.That(ex!.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
     }
 
     [Test]
@@ -1390,10 +1392,11 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "FileTime", DateTime.UtcNow } },  // DateTime, not a numeric type
             new Dictionary<string, object?>());
 
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ExpressionEvaluationException>(() =>
             _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context));
 
-        Assert.That(ex?.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
+        Assert.That(ex!.InnerException, Is.TypeOf<ArgumentException>());
+        Assert.That(ex!.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
     }
 
     [Test]
@@ -1469,12 +1472,14 @@ public class DynamicExpressoEvaluatorTests
     #region Expression Length Ceiling Tests (OWASP #500 guardrail)
 
     [Test]
-    public void Evaluate_ExpressionExceedsMaxLength_ThrowsArgumentException()
+    public void Evaluate_ExpressionExceedsMaxLength_ThrowsExpressionEvaluationException()
     {
         var context = new ExpressionContext();
         var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength + 1);
 
-        var ex = Assert.Throws<ArgumentException>(() => _evaluator.Evaluate(expression, context));
+        // An over-long expression is the administrator's configuration failing, so it is the one expression error
+        // (#2153, N5) every consumer reports, never an unhandled error.
+        var ex = Assert.Throws<ExpressionEvaluationException>(() => _evaluator.Evaluate(expression, context));
 
         Assert.That(ex?.Message, Does.Contain(DynamicExpressoEvaluator.MaxExpressionLength.ToString("N0")));
     }

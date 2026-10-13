@@ -4,21 +4,26 @@
 function Get-JIMScopingCriteria {
     <#
     .SYNOPSIS
-        Gets scoping criteria groups for a Synchronisation Rule.
+        Gets a Synchronisation Rule's scoping criteria.
 
     .DESCRIPTION
-        Retrieves the scoping criteria groups configured on an export Synchronisation Rule.
-        Scoping criteria define which Metaverse objects are included in the export.
-        Only export Synchronisation Rules support scoping criteria.
+        Gets the scoping criteria of a Synchronisation Rule: its top-level groups, each with the criteria and child
+        groups inside it, or one group by ID. Import and export Synchronisation Rules both have them: an import
+        rule's criteria test Connected System attributes, and an export rule's test Metaverse attributes.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER GroupId
-        Optional. The unique identifier of a specific criteria group to retrieve.
+        The ID of one group to get, at any depth. Without it, every top-level group comes back.
 
     .OUTPUTS
-        One or more scoping criteria group objects with their nested criteria.
+        By default, each top-level group, with the criteria and child groups inside it. With -GroupId, that group
+        and what it contains.
+
+        JIM.ScopingCriteriaGroup
+        SyncRuleId (int): The ID of the Synchronisation Rule the group belongs to, so the group can be piped to the
+            other scoping criteria cmdlets.
 
     .EXAMPLE
         Get-JIMScopingCriteria -SyncRuleId 5
@@ -36,7 +41,7 @@ function Get-JIMScopingCriteria {
         New-JIMScopingCriterion
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject[]])]
+    [OutputType('JIM.ScopingCriteriaGroup')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

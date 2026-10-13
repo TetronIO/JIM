@@ -11,7 +11,7 @@ function Get-JIMGeneratedValueDecision {
         When a Connected System rejects a generated value as already in use, Collision Remediation normally chooses
         the next free value and exports it again. It holds the export for a decision instead when correcting the
         value would rename an account another Connected System has already accepted (AnchoredElsewhere), when JIM
-        cannot tell whether one has because its connector space was cleared and not fully imported since
+        cannot tell whether one has because its Connector Space was cleared and not fully imported since
         (CannotTell), when the value has been corrected as often as JIM allows (RemediationLimitReached), or when no
         other value could be generated (NoValueAvailable). The export stays held until someone allows the rename
         (Approve-JIMGeneratedValueRename), tries again (Reset-JIMGeneratedValueDecision), or changes the Attribute
@@ -35,34 +35,28 @@ function Get-JIMGeneratedValueDecision {
         Restrict to one Metaverse Object's values, including those on the accounts joined to it.
 
     .PARAMETER Id
-        Gets one generated value by its id, whatever its state (its Status may also be Released: nothing is
-        waiting on a decision for it).
+        Gets one value by its ID, whatever its state: its Status may also be Released, when nothing is waiting on a
+        decision for it.
 
     .PARAMETER Summary
-        Returns the counts instead of the rows: NeedsDecisionCount, RenameAllowedCount, and CorrectedRecentlyCount
-        (values Collision Remediation corrected since CorrectedSince, seven days ago). Narrowed by -ConnectedSystemId
-        and -SyncRuleId when given.
+        Returns the counts instead of the values. Narrowed by -ConnectedSystemId and -SyncRuleId when given.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of values to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page (1-100). Defaults to 50.
+        How many values each page holds.
 
     .PARAMETER All
-        Retrieves every page of results. Fetches at most 1000 pages before stopping with a warning; use -Force to
-        fetch beyond the cap.
+        Returns every page of values rather than one. It stops after 1,000 pages, about 50,000 values at the default
+        page size, with a warning; -Force reads on. Cannot be used with -Page.
 
     .PARAMETER Force
-        Overrides the -All page ceiling. Only valid with -All.
+        With -All, reads every page, past the 1,000-page limit.
 
     .OUTPUTS
-        PSCustomObject per held value (the list and -Id forms return the same shape): Id, Status, Reason,
-        MetaverseObjectId, MetaverseObjectDisplayName, MetaverseObjectTypeName, ConnectedSystemObjectId,
-        ConnectedSystemObjectConnectedSystemId, AttributeName, Value, RemediationCount, RejectedByConnectedSystemId,
-        RejectedByConnectedSystemName, AnchoredByConnectedSystemId, AnchoredByConnectedSystemName, Since,
-        RenameAllowedAt, RenameAllowedBy, SyncRuleId, SyncRuleName and SyncRuleMappingId. With -Summary, a single
-        object: NeedsDecisionCount, RenameAllowedCount, CorrectedRecentlyCount and CorrectedSince.
+        By default, the values waiting on a decision, newest first. With -Id, that value. With -Summary, how many
+        values are in each state.
 
     .EXAMPLE
         Get-JIMGeneratedValueDecision -Summary
@@ -88,7 +82,10 @@ function Get-JIMGeneratedValueDecision {
         Set-JIMSyncRuleMapping
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueDecisionDto', ParameterSetName = 'List')]
+    [OutputType('JIM.GeneratedValueDecisionDto', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.GeneratedValueDecisionDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.GeneratedValueDecisionSummary', ParameterSetName = 'Summary')]
     param(
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]

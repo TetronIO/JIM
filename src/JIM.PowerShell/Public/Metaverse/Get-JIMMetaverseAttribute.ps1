@@ -11,19 +11,20 @@ function Get-JIMMetaverseAttribute {
         or a specific attribute by ID or name.
 
     .PARAMETER Id
-        The unique identifier of a specific Attribute to retrieve.
+        The ID of the attribute to get.
 
     .PARAMETER Name
-        The name of a specific Attribute to retrieve.
+        The name of the attribute to get, matched exactly but ignoring case.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of attributes to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100.
+        How many attributes each page holds.
 
     .OUTPUTS
-        PSCustomObject representing Attribute(s).
+        By default, one page of attributes, each in summary with the Object Types it is bound to. With -Id or -Name,
+        the attribute in full, with its rendering hint and Standard Mappings.
 
     .EXAMPLE
         Get-JIMMetaverseAttribute
@@ -45,7 +46,9 @@ function Get-JIMMetaverseAttribute {
         Get-JIMMetaverseObjectType
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseAttributeHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.MetaverseAttributeDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.MetaverseAttributeDetailDto', ParameterSetName = 'ByName')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
