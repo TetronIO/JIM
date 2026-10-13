@@ -48,6 +48,9 @@ app.Logger.LogInformation(
     provider.Options.SupportsBulk
         ? $"supported, {(provider.Options.BulkMaxOperations.HasValue ? $"maximum {provider.Options.BulkMaxOperations} per request" : "no stated limit")}"
         : "not supported");
+app.Logger.LogInformation(
+    "Custom User extension ({Urn}): {Published}.",
+    MockScimProvider.CustomUserExtensionUrn, provider.Options.PublishesCustomUserExtension ? "published" : "not published");
 
 // Written where the scenario can read it without scraping logs, so it can trust the certificate before
 // pointing a Connected System at this provider.

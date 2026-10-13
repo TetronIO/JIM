@@ -19,9 +19,14 @@
     7. DeltaImport  - Asks the provider only for what changed since the last completed import
     8. Provision    - A joiner appears in HR and is created in the provider (POST, via /Bulk)
     9. Deprovision  - The joiner leaves the export rule's scope and is deleted from the provider
+    10. MultiValuedRemoval - A user is provisioned with two badges (a multi-valued string in the
+                      provider's own User extension), then one badge is taken away and another added; the
+                      confirming import must find exactly the kept and the added badge (#2181)
 
     With the update flow in steps 4-6, steps 8 and 9 complete CRUD: every operation the connector can
-    perform against a provider is driven end to end and confirmed by reading the provider back.
+    perform against a provider is driven end to end and confirmed by reading the provider back. Step 10
+    covers the value-level update a multi-valued attribute needs, where removing the attribute by its
+    bare path would take every value with it.
 
     The scenario needs two Connected Systems because JIM deliberately never exports a value back to the
     system it came from (Q3 circular-sync prevention). HR is authoritative for Display Name; SCIM is the
@@ -36,7 +41,7 @@
 
 .PARAMETER Step
     Which test step to execute (SourceImport, FullImport, Sync, Flow, Export, Confirm, DeltaImport,
-    Provision, Deprovision, All)
+    Provision, Deprovision, MultiValuedRemoval, All)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -80,7 +85,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SourceImport", "FullImport", "Sync", "Flow", "Export", "Confirm", "DeltaImport", "Provision", "Deprovision", "All")]
+    [ValidateSet("SourceImport", "FullImport", "Sync", "Flow", "Export", "Confirm", "DeltaImport", "Provision", "Deprovision", "MultiValuedRemoval", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -146,20 +151,27 @@ function Add-StepResult {
     $testResults.Steps += @{ Name = $Name; Passed = $Passed; Detail = $Detail }
 }
 
+# The user the MultiValuedRemoval step provisions with badges, and then changes them for.
+$badgeHolderUserName = "badgeholder1"
+
 # Rewrites the HR CSV. HR data drives every transition this scenario tests: the update (a suffix on
-# every Display Name), the joiner (an extra row in the department the export rule is scoped to), and
-# the leaver (the joiner's department changing out of scope).
+# every Display Name), the joiner (an extra row in the department the export rule is scoped to), the
+# leaver (the joiner's department changing out of scope), and the badge holder's badges (pipe-separated,
+# split into a multi-valued Metaverse attribute by the HR import rule).
 function Write-HrCsv {
-    param([bool]$VerifiedSuffix, [string]$JoinerDepartment)
+    param([bool]$VerifiedSuffix, [string]$JoinerDepartment, [string]$BadgeHolderBadges)
 
     $csvLines = [System.Collections.Generic.List[string]]::new()
-    $csvLines.Add("accountName,firstName,lastName,displayName,email,department")
+    $csvLines.Add("accountName,firstName,lastName,displayName,email,department,badges")
     for ($i = 1; $i -le $ExpectedUserCount; $i++) {
         $suffix = if ($VerifiedSuffix) { " (Verified)" } else { "" }
-        $csvLines.Add("user$i,User,Number$i,User Number$i$suffix,user$i@example.com,Engineering")
+        $csvLines.Add("user$i,User,Number$i,User Number$i$suffix,user$i@example.com,Engineering,")
     }
     if ($JoinerDepartment) {
-        $csvLines.Add("joiner1,Joiner,One,Joiner One,joiner1@example.com,$JoinerDepartment")
+        $csvLines.Add("joiner1,Joiner,One,Joiner One,joiner1@example.com,$JoinerDepartment,")
+    }
+    if ($BadgeHolderBadges) {
+        $csvLines.Add("$badgeHolderUserName,Badge,Holder,Badge Holder,$badgeHolderUserName@example.com,Engineering,$BadgeHolderBadges")
     }
 
     $localCsvPath = Join-Path ([System.IO.Path]::GetTempPath()) "scenario-015-hr-users.csv"
@@ -176,6 +188,44 @@ function Invoke-HrImportAndSync {
 
     $result = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Full Synchronisation" -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Synchronisation ($Label)"
+}
+
+# The badges the last SCIM import read back for one user, sorted and joined so a comparison is exact:
+# a value missing, a value left behind and a duplicate all show.
+function Get-ScimUserBadges {
+    param([string]$UserName)
+
+    $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId -All |
+        Where-Object { $_.status -ne "Obsolete" })
+    foreach ($user in $users) {
+        $userNameValues = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName "userName" -All)
+        if (-not ($userNameValues | Where-Object { $_.stringValue -eq $UserName })) { continue }
+
+        $badges = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName "custom.badges" -All |
+            ForEach-Object { $_.stringValue } | Sort-Object)
+        # "(none)" rather than an empty string, which Assert-Equal's mandatory parameters would refuse to bind
+        # instead of reporting the badges as missing.
+        if ($badges.Count -eq 0) { return "(none)" }
+        return ($badges -join ",")
+    }
+
+    throw "No SCIM User with userName '$UserName' was imported from the provider."
+}
+
+# An export of the badge holder's change, then the confirming import that reads the provider back. Every
+# Pending Export must be confirmed by it: one left behind is a value the provider does not hold.
+function Invoke-ScimExportAndConfirm {
+    param([string]$Label)
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Export" -Wait -PassThru
+    Assert-ExportSuccess -ActivityId $result.activityId -Name "SCIM Export ($Label)"
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Full Import" -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $result.activityId -Name "SCIM Confirming Full Import ($Label)"
+
+    $unconfirmed = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All)
+    Assert-Equal -Actual $unconfirmed.Count -Expected 0 `
+        -Message "Pending Exports remaining after the confirming import ($Label)"
 }
 
 try {
@@ -465,6 +515,44 @@ try {
 
         Add-StepResult -Name "Deprovision" -Passed $true -Detail "joiner1 deleted from the provider and confirmed"
         Write-Host "  OK Deprovisioning confirmed" -ForegroundColor Green
+    }
+
+    # --- One value of a multi-valued attribute is removed, and only that value (#2181) ---
+    if ($Step -in @("MultiValuedRemoval", "All")) {
+        Write-TestStep "Step 10" "Multi-valued removal (one badge goes, the others stay)"
+
+        # joiner1 stays in Alumni, where the Deprovision step left it, so this step changes nothing else.
+        Write-HrCsv -VerifiedSuffix $true -JoinerDepartment "Alumni" -BadgeHolderBadges "gold|silver"
+        Write-Host "  OK HR CSV gained $badgeHolderUserName in Engineering with badges gold and silver" -ForegroundColor Gray
+
+        Invoke-HrImportAndSync -Label "badge holder"
+
+        $creates = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All | Where-Object { $_.changeType -eq "Create" })
+        Assert-Equal -Actual $creates.Count -Expected 1 -Message "A Create Pending Export was provisioned for the badge holder"
+
+        Invoke-ScimExportAndConfirm -Label "badge holder provisioned"
+
+        Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName) -Expected "gold,silver" `
+            -Message "The provider holds both badges the badge holder was created with"
+
+        # gold leaves and platinum arrives in one HR change, so one Pending Export carries a removal of one
+        # value and an addition of another. Removing the attribute by its bare path would take silver, and
+        # platinum too where the addition is applied first.
+        Write-HrCsv -VerifiedSuffix $true -JoinerDepartment "Alumni" -BadgeHolderBadges "silver|platinum"
+        Write-Host "  OK HR CSV changed the badge holder's badges to silver and platinum (gold removed)" -ForegroundColor Gray
+
+        Invoke-HrImportAndSync -Label "badge change"
+
+        $updates = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All | Where-Object { $_.changeType -eq "Update" })
+        Assert-Equal -Actual $updates.Count -Expected 1 -Message "An Update Pending Export was staged for the badge change"
+
+        Invoke-ScimExportAndConfirm -Label "badge change"
+
+        Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName) -Expected "platinum,silver" `
+            -Message "The provider holds exactly the kept badge and the added one (gold removed, silver kept, platinum added)"
+
+        Add-StepResult -Name "MultiValuedRemoval" -Passed $true -Detail "gold removed, silver kept and platinum added in the provider, confirmed by import"
+        Write-Host "  OK Multi-valued removal confirmed" -ForegroundColor Green
     }
 
     $testResults.Success = $true

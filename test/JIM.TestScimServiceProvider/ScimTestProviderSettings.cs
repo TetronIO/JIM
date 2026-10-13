@@ -36,6 +36,12 @@ public sealed class ScimTestProviderSettings
 
     public bool PublishesSchemas { get; private init; } = true;
 
+    /// <summary>
+    /// Whether the User resource type carries the provider's own extension with a multi-valued string attribute,
+    /// which Scenario 015 removes one value from (#2181). On by default because the scenario depends on it.
+    /// </summary>
+    public bool PublishesCustomUserExtension { get; private init; } = true;
+
     /// <summary>Where the public certificate is written for the scenario to trust. Empty writes none.</summary>
     public string? CertificateExportPath { get; private init; }
 
@@ -53,6 +59,7 @@ public sealed class ScimTestProviderSettings
             BulkMaxOperations = Integer(configuration, "SCIM_BULK_MAX_OPERATIONS", 0),
             SupportsPatch = Boolean(configuration, "SCIM_SUPPORTS_PATCH", true),
             PublishesSchemas = Boolean(configuration, "SCIM_PUBLISHES_SCHEMAS", true),
+            PublishesCustomUserExtension = Boolean(configuration, "SCIM_PUBLISHES_CUSTOM_USER_EXTENSION", true),
             CertificateExportPath = configuration["SCIM_CERTIFICATE_PATH"]
         };
     }
@@ -68,6 +75,7 @@ public sealed class ScimTestProviderSettings
         provider.Options.BulkMaxOperations = BulkMaxOperations > 0 ? BulkMaxOperations : null;
         provider.Options.SupportsPatch = SupportsPatch;
         provider.Options.PublishesSchemas = PublishesSchemas;
+        provider.Options.PublishesCustomUserExtension = PublishesCustomUserExtension;
 
         // The provider's clock drives meta.lastModified, and a delta import filters against it. Left at
         // its fixed default the seeded resources would predate any watermark JIM records, so a delta
