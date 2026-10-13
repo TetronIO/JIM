@@ -207,8 +207,8 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttribu
 | `MetaverseAttributeName` | `string` | Yes (ByMvName) |  | The name of the Metaverse attribute to test, instead of its ID. |
 | `ConnectedSystemAttributeId` | `int` | Yes (ByCsId) |  | The ID of the Connected System attribute to test. An import Synchronisation Rule's criteria test Connected System attributes. |
 | `ConnectedSystemAttributeName` | `string` | Yes (ByCsName) |  | The name of the Connected System attribute to test, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when no value of the attribute matches; the others when any value does. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
-| `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
+| `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when the attribute holds a value and none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in `-StringValue`, for Text attributes. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue`, `HasNoValue`, `MatchesPattern` or `NotMatchesPattern`. |
+| `StringValue` | `string` | No |  | The value to compare a Text attribute with, or the regular expression for MatchesPattern and NotMatchesPattern. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
 | `DecimalValue` | `decimal` | No |  | The value to compare a Decimal attribute with. For a high-precision value, use the d suffix (123.456789012345678d) or a quoted string: a bare number is read as a double first, and can lose precision. |
@@ -336,8 +336,8 @@ Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Con
 | `MetaverseAttributeName` | `string` | Yes (ByMvName) |  | The name of the Metaverse attribute to test, instead of its ID. |
 | `ConnectedSystemAttributeId` | `int` | Yes (ByCsId) |  | The ID of the Connected System attribute to test. An import Synchronisation Rule's criteria test Connected System attributes. |
 | `ConnectedSystemAttributeName` | `string` | Yes (ByCsName) |  | The name of the Connected System attribute to test, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when no value of the attribute matches; the others when any value does. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
-| `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
+| `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when the attribute holds a value and none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in `-StringValue`, for Text attributes. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue`, `HasNoValue`, `MatchesPattern` or `NotMatchesPattern`. |
+| `StringValue` | `string` | No |  | The value to compare a Text attribute with, or the regular expression for MatchesPattern and NotMatchesPattern. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
 | `DecimalValue` | `decimal` | No |  | The value to compare a Decimal attribute with. For a high-precision value, use the d suffix (123.456789012345678d) or a quoted string: a bare number is read as a double first, and can lose precision. |
@@ -400,6 +400,66 @@ None.
 
 ```powershell title="Delete a scoping criterion"
 Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 -CriterionId 7
+```
+
+---
+
+## Test-JIMScope
+
+Tests whether an object would be in scope of a Synchronisation Rule, criterion by criterion, as of a chosen time, and when that would change. See [Testing a scope](../configuration/scoping-criteria.md#testing-a-scope).
+
+<!-- BEGIN GENERATED: Test-JIMScope -->
+### Syntax
+
+```powershell
+# Samples (default)
+Test-JIMScope [-SyncRuleId] <int> [-Attributes <hashtable>] [-AsOf <datetime>]
+
+# ConnectedSystemObject
+Test-JIMScope [-SyncRuleId] <int> -ConnectedSystemObjectId <guid> [-Attributes <hashtable>] [-AsOf <datetime>]
+
+# MetaverseObject
+Test-JIMScope [-SyncRuleId] <int> -MetaverseObjectId <guid> [-Attributes <hashtable>] [-AsOf <datetime>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `SyncRuleId` | `int` | Yes |  | The ID of the Synchronisation Rule whose scoping criteria to test. Can be given by position, as the first argument. Accepts pipeline input by property name, `SyncRuleId` or `Id`. |
+| `Attributes` | `hashtable` | No |  | A hashtable of sample values for the attributes the scoping criteria compare, keyed by attribute name. Each value is converted to its attribute's type; `$null` is no value, and an array gives a multi-valued attribute several values. With ConnectedSystemObjectId or MetaverseObjectId, a value here replaces the object's value for that attribute. |
+| `ConnectedSystemObjectId` | `guid` | Yes (ConnectedSystemObject) |  | The ID of a Connected System Object whose values to test with, for an import rule. |
+| `MetaverseObjectId` | `guid` | Yes (MetaverseObject) |  | The ID of a Metaverse Object whose values to test with, for an export rule. |
+| `AsOf` | `datetime` | No |  | The instant to test as of, which relative date criteria resolve against. A time without a time zone is read as UTC. |
+
+### Output
+
+Whether the object would be in scope (Outcome), the scoping criteria as they evaluated (Explanation, the same tree the portal's Scope tab shows), the values tested for each compared attribute (Inputs) and when the outcome would next change (NextChange). When the values cannot be used, IsValid is `$false` and InputErrors says why.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsValid` | `bool` | False when the values could not be used; `InputErrors` says why, and nothing was evaluated. |
+| `Outcome` | `string` | Whether the object is in scope, out of scope, or cannot be evaluated because the evaluation reaches an invalid criterion. Empty when `IsValid` is false. One of `InScope`, `OutOfScope` or `Undetermined`. |
+| `EvaluatedAt` | `datetime` | The instant the test was evaluated as of, in UTC. |
+| `Explanation` | `object` | The scoping criteria as they evaluated: each group with whether it was met, each criterion with what the object held. Empty when `IsValid` is false. It has `SyncRuleId`, `SyncRuleName`, `Direction`, `Outcome`, `HasCriteria`, `EvaluatedAt`, `Hint`, `Groups` and `Criteria`. |
+| `NextChange` | `object` | When the outcome next changes as time passes, the values staying as they are. Empty when it never does, which is so whenever no relative date criterion can change it. It has `At` and `Outcome`. |
+| `Inputs` | `object[]` | The attributes the scoping criteria compare, with the values tested for each. Each has `Attribute`, `Type`, `Plurality` and `ValueLines`. |
+| `InputErrors` | `string[]` | Why the values could not be used, one message per problem; empty when they could. |
+<!-- END GENERATED: Test-JIMScope -->
+
+### Examples
+
+```powershell title="Test sample values against an import rule's scope"
+Test-JIMScope -SyncRuleId 12 -Attributes @{ department = 'Finance'; leaveDate = '2026-11-01' }
+```
+
+```powershell title="Test a real object as it would be on a future date"
+Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' -AsOf '2027-01-31'
+```
+
+```powershell title="List each criterion with what a Metaverse Object holds"
+(Test-JIMScope -SyncRuleId 15 -MetaverseObjectId '6f9619ff-8b86-d011-b42d-00c04fc964ff').Explanation.Criteria |
+    Select-Object Description, Met, ActualDescription
 ```
 
 ---

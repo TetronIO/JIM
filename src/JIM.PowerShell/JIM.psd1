@@ -121,6 +121,7 @@
         'New-JIMScopingCriterion',
         'Set-JIMScopingCriterion',
         'Remove-JIMScopingCriterion',
+        'Test-JIMScope',
 
         # Run Profiles
         'Get-JIMRunProfile',

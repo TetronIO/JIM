@@ -751,6 +751,50 @@ public class ConfigurationSnapshotServiceTests
             "the diff shows administrators the display value, so it must read as words rather than an enum name");
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void CreateSnapshot_ConnectedSystem_RecordsACaseExactAttributeOnly(bool caseExact)
+    {
+        // #2051: the declaration decides how identity comparisons treat the attribute, so a change to it is a change
+        // to configuration. Recorded only when true, so a snapshot captured before the declaration existed agrees
+        // with one captured after for every attribute that ignores case, and an upgrade reports no change nobody made.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "HR",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "person", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "login", Type = AttributeDataType.Text, Selected = true, CaseExact = caseExact
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var node = Child(attribute, "caseExact");
+        if (caseExact)
+        {
+            Assert.That(node, Is.Not.Null);
+            Assert.That(node!.Value, Is.EqualTo("true"));
+            Assert.That(node.Label, Is.EqualTo("Case-exact"));
+        }
+        else
+        {
+            Assert.That(node, Is.Null);
+        }
+    }
+
     [Test]
     public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
     {

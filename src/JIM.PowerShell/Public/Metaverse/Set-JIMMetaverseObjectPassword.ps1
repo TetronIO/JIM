@@ -81,7 +81,7 @@ function Set-JIMMetaverseObjectPassword {
 
     .PARAMETER EnableAccount
         Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
-        except for a new Active Directory account JIM created disabled only until it had a password, which the
+        except for an Active Directory account whose enable JIM held back until it had a password, which the
         password enables as its Attribute Flow asks. Only available with -ConnectedSystemId: a password propagated to
         every configured system enables no other account, because it reaches accounts an administrator may have
         disabled on purpose.

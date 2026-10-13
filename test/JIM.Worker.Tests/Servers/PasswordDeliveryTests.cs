@@ -1578,20 +1578,27 @@ public class PasswordDeliveryTests
     }
 
     /// <summary>
-    /// Only JIM's own decision to enable waits. A delivery that leaves the enabled state alone cannot undo what the
-    /// export writes, so it goes ahead.
+    /// A delivery that would leave the enabled state alone waits too (#2158), deliberately reversing #2173's narrower
+    /// rule: an export in flight may be the enabling Update Active Directory refuses for want of a password, which the
+    /// Connector then sends disabled and holds for this very delivery to complete. Delivered before that hold is
+    /// recorded, the password would land without the enable, and the account would wait a schedule cycle for it.
     /// </summary>
     [Test]
-    public async Task Deliver_ProvisionedRow_ExportInFlightAndTheFlowAlreadyDecides_DeliversAsync()
+    public async Task Deliver_ProvisionedRow_ExportInFlightAndTheFlowAlreadyDecides_WaitsWithoutSendingOrCountingAnAttemptAsync()
     {
         var (change, _) = await QueueProvisionedAsync(SyncRuleId);
         _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
         SeedExportInFlight(change.ConnectedSystemObjectId!.Value);
 
-        await _server.DeliverDuePasswordChangesAsync(
+        var result = await _server.DeliverDuePasswordChangesAsync(
             _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
-        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(_syncRepository.PendingPasswordChanges[change.Id].AttemptCount, Is.Zero);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+        }
     }
 
     /// <summary>
@@ -1600,7 +1607,7 @@ public class PasswordDeliveryTests
     /// records so only once it has finished, so JIM's own write of it waits as an enable does.
     /// </summary>
     [Test]
-    public async Task Deliver_ProvisionedRow_ExportInFlightAndTheRuleWritesPasswordNeverExpires_WaitsAsync()
+    public async Task Deliver_ProvisionedRow_ExportInFlightAndTheRuleOff_WaitsWithoutSendingOrCountingAnAttemptAsync()
     {
         var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.EnableAccount = false);
         SeedExportInFlight(change.ConnectedSystemObjectId!.Value);
@@ -1611,7 +1618,50 @@ public class PasswordDeliveryTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(_syncRepository.PendingPasswordChanges[change.Id].AttemptCount, Is.Zero);
             Assert.That(result.PostponedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A propagated password leaves the account's enabled state as it is, and waits all the same (#2158): it is as much
+    /// the password an enable held for want of one is waiting for as a first password is.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRow_ExportInFlight_WaitsAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// An enable held on an Update (#2158), the account's first password already marked as having its enabled state set
+    /// by the flow: the hold decides, so the delivery completes the enable rather than leaving it to the flow, and says so.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_EnableHeldOnAnUpdate_CompletesTheEnableAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value, changeType: PendingExportChangeType.Update);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+            Assert.That(result.WithheldEnablesCompletedCount, Is.EqualTo(1));
         }
     }
 
@@ -1835,13 +1885,13 @@ public class PasswordDeliveryTests
     /// disabled value until the password is delivered (#2039): still awaiting confirmation unless told otherwise.
     /// </summary>
     private void SeedHeldEnable(Guid accountId, PendingExportAttributeChangeStatus status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
-        PendingExportStatus pendingExportStatus = PendingExportStatus.Exported) =>
+        PendingExportStatus pendingExportStatus = PendingExportStatus.Exported, PendingExportChangeType changeType = PendingExportChangeType.Create) =>
         _syncRepository.SeedPendingExport(new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = ConnectedSystemId,
             ConnectedSystemObjectId = accountId,
-            ChangeType = PendingExportChangeType.Create,
+            ChangeType = changeType,
             Status = pendingExportStatus,
             LastAttemptedAt = DateTime.UtcNow,
             AttributeValueChanges =

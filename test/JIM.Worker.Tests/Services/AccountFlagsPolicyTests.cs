@@ -94,20 +94,19 @@ public class AccountFlagsPolicyTests
         Assert.That(AccountFlagsPolicy.DependsOnWithheldEnable(origin, administratorChoice), Is.EqualTo(expected));
     }
 
-    // An export still in flight may be about to disable the account, and records that it wrote the account's flags only
-    // once it has finished (#2173). JIM's own decision to enable waits for it, and so does JIM's own write of "Password
-    // never expires" from the Synchronisation Rule (#2159): the export may be the flow that owns the flag. An
-    // administrator's choice does not wait, and a decision that writes nothing has nothing to wait for.
+    // An export still in flight may be disabling the account (#2173), writing the flags it owns (#2159), or placing a
+    // hold this very delivery would complete (#2158), and records any of these only once its batch has come back. Every
+    // decision but an administrator's choice of the enabled state waits for it, whether it writes a flag or not.
     [TestCase(true, AccountFlagBasis.SyncRuleSetting, true, AccountFlagBasis.SyncRuleSetting, true)]
     [TestCase(true, AccountFlagBasis.CompletesWithheldEnable, null, AccountFlagBasis.LeftAsIs, true)]
     [TestCase(true, AccountFlagBasis.AdministratorChoice, false, AccountFlagBasis.AdministratorChoice, false)]
     [TestCase(false, AccountFlagBasis.AdministratorChoice, true, AccountFlagBasis.AdministratorChoice, false)]
-    [TestCase(null, AccountFlagBasis.LeftAsIs, true, AccountFlagBasis.AdministratorChoice, false)]
+    [TestCase(null, AccountFlagBasis.LeftAsIs, true, AccountFlagBasis.AdministratorChoice, true)]
     [TestCase(null, AccountFlagBasis.SyncRuleSetting, false, AccountFlagBasis.SyncRuleSetting, true)]
     [TestCase(null, AccountFlagBasis.SyncRuleSetting, true, AccountFlagBasis.SyncRuleSetting, true)]
-    [TestCase(null, AccountFlagBasis.LeftToAttributeFlow, null, AccountFlagBasis.LeftToAttributeFlow, false)]
-    [TestCase(null, AccountFlagBasis.LeftAsIs, null, AccountFlagBasis.LeftAsIs, false)]
-    public void WaitsForAnExportInFlight_OnlyWhereJimItselfWouldWriteTheFlags(
+    [TestCase(null, AccountFlagBasis.LeftToAttributeFlow, null, AccountFlagBasis.LeftToAttributeFlow, true)]
+    [TestCase(null, AccountFlagBasis.LeftAsIs, null, AccountFlagBasis.LeftAsIs, true)]
+    public void WaitsForAnExportInFlight_EveryDecisionButAnAdministratorsChoiceOfTheEnabledState(
         bool? enableAccount, AccountFlagBasis enablementBasis, bool? passwordNeverExpires, AccountFlagBasis passwordNeverExpiresBasis, bool expected)
     {
         var decision = new AccountFlagsDecision(enableAccount, enablementBasis, passwordNeverExpires, passwordNeverExpiresBasis);

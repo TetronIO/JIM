@@ -299,8 +299,9 @@ public class PendingPasswordChange
     }
 
     /// <summary>
-    /// Gives a claimed change back unattempted, to be tried again at <paramref name="until"/> (#2173): delivering it
-    /// would enable an account an export is being sent to right now, and that export may be disabling it. Nothing was
+    /// Gives a claimed change back unattempted, to be tried again at <paramref name="until"/> (#2173, #2158): an export
+    /// is being sent to its account right now, and may be disabling it or holding back an enable this delivery would
+    /// complete, neither of which JIM records until the export has finished. Nothing was
     /// sent, so nothing is counted against the change and what earlier attempts recorded stays. Unlike
     /// <see cref="ReleaseClaim"/> the change is not due again at once, so the lane does not claim it straight back
     /// while the export runs; and never later than <see cref="ExpiresAt"/>, so a long export cannot keep a change

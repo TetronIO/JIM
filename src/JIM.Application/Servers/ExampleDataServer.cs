@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Servers.Scoping;
 using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -11,11 +12,13 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Utility;
 // Activity is ambiguous between JIM.Models.Activities.Activity and System.Diagnostics.Activity (used for Stopwatch);
 // the configuration-change capture here means the JIM Activity, so alias it explicitly.
 using Activity = JIM.Models.Activities.Activity;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -525,6 +528,9 @@ public class ExampleDataServer
             // first. Computed once per object type (the dependency graph is static across generated objects), and any
             // circular dependency throws here, before generation begins. See ExampleDataObjectType.
             var orderedTemplateAttributes = objectType.GetTemplateAttributesInDependencyOrder();
+            // Read and validate each dependency once, before any thread starts generating: an operator that does not
+            // apply to the depended-on attribute's type, or a value that is not of that type, fails the template here.
+            var dependencies = BuildDependencyChecks(objectType);
             Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
                 index =>
                 {
@@ -545,30 +551,9 @@ public class ExampleDataServer
                         // generating values for Connector Space values will have to come later, subject to demand
                         if (templateAttribute.MetaverseAttribute != null)
                         {
-                            // is this attribute dependent upon another?
-                            if (templateAttribute.AttributeDependency != null)
-                            {
-                                // get the dependent attribute value
-                                var dependentAttributeValue = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == templateAttribute.AttributeDependency.MetaverseAttribute.Id);
-                                if (dependentAttributeValue == null)
-                                {
-                                    // there's no dependent attribute, so nothing to compare. do not generate a value
-                                    continue;
-                                }
-
-                                if (templateAttribute.AttributeDependency.ComparisonType == ComparisonType.Equals)
-                                {
-                                    if (dependentAttributeValue.StringValue != templateAttribute.AttributeDependency.StringValue)
-                                    {
-                                        Log.Debug($"ExecuteTemplateAsync: Not generating {templateAttribute.MetaverseAttribute.Name} attribute value, as dependent attribute value '{dependentAttributeValue.StringValue}' does not equal '{templateAttribute.AttributeDependency.StringValue}'");
-                                        continue;
-                                    }
-                                }
-                                else
-                                {
-                                    throw new NotSupportedException("Not currently supporting ComparisonTypes other than Equals");
-                                }
-                            }
+                            // is this attribute dependent upon another? It is generated only when the dependency holds.
+                            if (dependencies.TryGetValue(templateAttribute, out var dependency) && !dependency.IsMet(metaverseObject))
+                                continue;
 
                             // handle each attribute type in dedicated functions
                             switch (templateAttribute.MetaverseAttribute.Type)
@@ -989,16 +974,12 @@ public class ExampleDataServer
     /// </summary>
     private static ExpressionContext BuildExpressionContext(MetaverseObject metaverseObject)
     {
-        var mv = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var attributeValues in metaverseObject.AttributeValues.Where(av => av.Attribute != null).GroupBy(av => av.Attribute.Name))
-        {
-            var values = attributeValues.ToList();
-            mv[attributeValues.Key] = values.Count == 1
-                ? GetExpressionScalarValue(values[0])
-                : values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
-        }
+        // Every value of each attribute, typed, read exactly as synchronisation reads them (#2053).
+        var mv = new ExpressionAttributeDictionary();
+        foreach (var attributeValue in metaverseObject.AttributeValues.Where(av => av.Attribute != null))
+            mv.Add(attributeValue.Attribute.Name, GetExpressionScalarValue(attributeValue));
 
-        return new ExpressionContext(mv);
+        return new ExpressionContext(mv.Build());
     }
 
     /// <summary>
@@ -1022,6 +1003,32 @@ public class ExampleDataServer
             return attributeValue.GuidValue.Value;
 
         return null;
+    }
+
+    /// <summary>
+    /// Every template attribute's dependency, read as the depended-on attribute's data type and validated against the
+    /// operator catalogue (#2053). Throws <see cref="InvalidOperationException"/> naming both attributes for a dependency
+    /// that cannot be evaluated: the API refuses one on save, so reaching here means it was stored before that guard.
+    /// </summary>
+    private static Dictionary<ExampleDataTemplateAttribute, ExampleDataDependencyCheck> BuildDependencyChecks(ExampleDataObjectType objectType)
+    {
+        var checks = new Dictionary<ExampleDataTemplateAttribute, ExampleDataDependencyCheck>();
+        foreach (var templateAttribute in objectType.TemplateAttributes.Where(ta => ta.AttributeDependency != null))
+        {
+            var dependency = templateAttribute.AttributeDependency!;
+            var dependsOn = dependency.MetaverseAttribute;
+            var error = CriterionValidation.ValidateText(dependency.ComparisonType, dependency.StringValue, dependsOn.Type,
+                CriterionContext.ExampleData, dependsOn.Name, caseSensitive: true, out var criterion);
+            if (error != null)
+            {
+                throw new InvalidOperationException(
+                    $"The {templateAttribute.MetaverseAttribute?.Name} attribute depends on {dependsOn.Name} with a condition that cannot be evaluated: {error}");
+            }
+
+            checks[templateAttribute] = new ExampleDataDependencyCheck(dependsOn.Id, dependsOn.Type, criterion);
+        }
+
+        return checks;
     }
 
     private static void GenerateMetaverseGuidValue(MetaverseObject metaverseObject, ExampleDataTemplateAttribute dataGenerationTemplateAttribute)

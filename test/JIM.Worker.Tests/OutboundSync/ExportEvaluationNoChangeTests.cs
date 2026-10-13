@@ -151,6 +151,60 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
+    #region Identifiers ignoring case (#2195, #2051)
+
+    private const string WrittenDn = "CN=Joe Bloggs,OU=Users,DC=panoply,DC=local";
+    private const string StoredDn = "CN=Joe Bloggs,OU=Users,DC=PANOPLY,DC=LOCAL";
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_SecondaryExternalIdDifferingOnlyInCase_ReturnsTrue()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "distinguishedName", Type = AttributeDataType.Text, IsSecondaryExternalId = true };
+        var csoAttributeValue = CreateCsoAttributeValue(stringValue: StoredDn);
+        csoAttributeValue.Attribute = attribute;
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: WrittenDn);
+        pendingChange.Attribute = attribute;
+
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        Assert.That(result, Is.True, "A DN differing only in case names the same entry, so there is nothing to export");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_CaseExactExternalIdDifferingOnlyInCase_ReturnsFalse()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Text, IsExternalId = true, CaseExact = true };
+        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "Abc-1");
+        csoAttributeValue.Attribute = attribute;
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "abc-1");
+        pendingChange.Attribute = attribute;
+
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        Assert.That(result, Is.False, "A case-exact identifier differing in case is a different identifier");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UnresolvedReferenceAddDifferingOnlyInCase_ReturnsTrue()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued };
+        var csoAttributeValue = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, UnresolvedReferenceValue = StoredDn };
+        var pendingChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            UnresolvedReferenceValue = WrittenDn
+        };
+
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        Assert.That(result, Is.True, "The member is already present, in the case the directory stored it");
+    }
+
+    #endregion
+
     #region Single-Valued Update Tests (Other Types)
 
     [Test]
