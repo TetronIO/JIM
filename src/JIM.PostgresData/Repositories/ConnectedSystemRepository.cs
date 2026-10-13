@@ -2703,7 +2703,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
-        // External ID matching is case-sensitive to respect Connected System identity
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051). The sought value is
+        // folded as SQL's lower() folds the stored one (IdentifierKey.For).
+        var lowerSecondaryExternalIdValue = IdentifierKey.For(secondaryExternalIdValue, caseExact: false);
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -2718,7 +2720,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av =>
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
-                    av.StringValue == secondaryExternalIdValue));
+                    (av.Attribute.CaseExact
+                        ? av.StringValue == secondaryExternalIdValue
+                        : av.StringValue.ToLower() == lowerSecondaryExternalIdValue)));
     }
 
     /// <summary>
@@ -2734,7 +2738,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (secondaryExternalIdValues.Count == 0)
             return [];
 
-        // External ID matching is case-sensitive, matching the single-object method.
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051), as in the
+        // single-object method. Each variant is its own statement so each uses its index:
+        // IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue for the exact one and
+        // IX_ConnectedSystemObjectAttributeValues_AttributeId_LowerStringValue for the other. Both sides are folded by
+        // SQL's lower(), so .NET's folding does not enter into it.
         //
         // The av."AttributeId" = @secondaryExternalIdAttributeId predicate is there for index use,
         // not correctness on its own: without a known constant to filter on, the planner cannot use
@@ -2756,12 +2764,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //
         // DISTINCT guards against a CSO carrying more than one attribute-value row for that
         // attribute id (should not happen, but would otherwise look like two different CSOs matching).
-        const string sql = """
+        var caseExact = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.Id == secondaryExternalIdAttributeId)
+            .Select(a => a.CaseExact)
+            .FirstOrDefaultAsync();
+        var valuePredicate = caseExact
+            ? "av.\"StringValue\" = v.input"
+            : "lower(av.\"StringValue\") = lower(v.input)";
+        var sql = $"""
             SELECT DISTINCT v.input AS "Value", cso."Id" AS "ConnectedSystemObjectId", cso."Status" AS "Status"
             FROM unnest(@values) AS v(input)
             JOIN "ConnectedSystemObjectAttributeValues" av
                 ON av."AttributeId" = @secondaryExternalIdAttributeId
-               AND av."StringValue" = v.input
+               AND {valuePredicate}
             JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
             WHERE cso."ConnectedSystemId" = @connectedSystemId
               AND cso."TypeId" = @objectTypeId

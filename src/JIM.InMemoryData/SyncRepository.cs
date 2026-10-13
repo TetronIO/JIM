@@ -480,12 +480,14 @@ public class SyncRepository : ISyncRepository
     public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051).
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.TypeId == objectTypeId &&
                 c.SecondaryExternalIdAttributeId.HasValue &&
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
-                    av.StringValue == secondaryExternalIdValue));
+                    av.StringValue != null &&
+                    string.Equals(av.StringValue, secondaryExternalIdValue, IdentifierKey.Comparison(IsCaseExact(av.AttributeId)))));
 
         // Cloned for the same reason as GetConnectedSystemObjectsByIdsAsync (#1079 Regression B):
         // this is the confirming import's PendingProvisioning fallback lookup path
@@ -497,9 +499,10 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Honest in-memory equivalent of the Postgres batch query: same predicate as
-    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
-    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
-    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (<c>StringValue</c> equality
+    /// against that CSO's own configured secondary external id attribute, ignoring case unless the
+    /// attribute is case-exact), evaluated for many values at once, each match reported under the value
+    /// asked for. Virtual so tests can spy on call counts to
     /// prove the import pipeline batches this per page instead of calling it per object.
     /// </summary>
     /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
@@ -515,7 +518,11 @@ public class SyncRepository : ISyncRepository
         if (secondaryExternalIdValues.Count == 0)
             return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
 
-        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        var caseExact = IsCaseExact(secondaryExternalIdAttributeId);
+        var requestedByKey = secondaryExternalIdValues
+            .Distinct(StringComparer.Ordinal)
+            .GroupBy(value => IdentifierKey.For(value, caseExact), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             if (cso.TypeId != objectTypeId ||
@@ -526,9 +533,9 @@ public class SyncRepository : ISyncRepository
                 av.AttributeId == secondaryExternalIdAttributeId &&
                 av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
                 av.StringValue != null &&
-                valueSet.Contains(av.StringValue)))
+                requestedByKey.ContainsKey(IdentifierKey.For(av.StringValue, caseExact))))
             {
-                results.Add((av.StringValue!, cso.Id, cso.Status));
+                results.AddRange(requestedByKey[IdentifierKey.For(av.StringValue!, caseExact)].Select(requested => (requested, cso.Id, cso.Status)));
             }
         }
 
