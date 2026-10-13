@@ -378,7 +378,44 @@ public class PredefinedSearchesControllerTests
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
-        Assert.That(error.Message, Is.EqualTo("DecimalValue is required for a Decimal criterion."));
+        Assert.That(error.Message, Does.StartWith("DecimalValue is required for a Decimal criterion."));
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_HasNoValueWithAStaleValue_StoresTheCriterionWithoutItAsync()
+    {
+        // #2053: "has no value" compares against nothing, so any value sent with it is dropped rather than stored.
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(24, "AnnualSalary", AttributeDataType.Decimal);
+        PredefinedSearchCriteria? stored = null;
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()))
+            .Callback<int, PredefinedSearchCriteria>((_, c) => stored = c)
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => c);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 24, ComparisonType = "HasNoValue", DecimalValue = 1.5m };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.Not.InstanceOf<BadRequestObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.ComparisonType, Is.EqualTo(SearchComparisonType.HasNoValue));
+            Assert.That(stored!.DecimalValue, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithAPatternOperator_IsRefusedBecauseSearchesRunInTheDatabaseAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(25, "Account Name", AttributeDataType.Text);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 25, ComparisonType = "MatchesPattern", StringValue = "^svc_" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
+        Assert.That(error.Message, Does.Contain("not available in Predefined Searches"));
         _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
     }
 

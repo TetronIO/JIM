@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using JIM.Models.Search
+@using JIM.Utilities
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -7,8 +8,18 @@
 @* Shared value editor for a scoping or predefined-search criterion. Renders the value input that matches
    the attribute's data type, including the Absolute/Relative value mode and relative sub-form for DateTime. *@
 
+@* "has a value" and "has no value" compare against nothing, so there is no value to enter. *@
+@if (ShowsValue)
+{
 @switch (AttributeType)
 {
+    case AttributeDataType.Text when SearchComparisonOperators.IsPattern(Criterion.ComparisonType):
+        <MudTextField @bind-Value="Criterion.StringValue" @bind-Value:after="OnChangedAsync" Immediate="true" Required="true"
+                      Label="Pattern" Variant="Variant.Outlined" Class="mt-5"
+                      Error="@(PatternError != null)" ErrorText="@PatternError"
+                      HelperText="A .NET regular expression, matched anywhere in the value unless anchored with ^ and $." />
+        <MudCheckBox @bind-Value="Criterion.CaseSensitive" @bind-Value:after="OnChangedAsync" Label="Case-sensitive" Class="mt-2" />
+        break;
     case AttributeDataType.Text:
         <MudTextField @bind-Value="Criterion.StringValue" @bind-Value:after="OnChangedAsync" Immediate="true" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5" />
         <MudCheckBox @bind-Value="Criterion.CaseSensitive" @bind-Value:after="OnChangedAsync" Label="Case-sensitive" Class="mt-2" />
@@ -63,6 +74,7 @@
         <MudAlert Severity="Severity.Warning" Class="mt-5">This attribute type is not supported in search criteria.</MudAlert>
         break;
 }
+}
 
 @code {
     /// <summary>
@@ -87,6 +99,14 @@
     public EventCallback OnChanged { get; set; }
 
     private async Task OnChangedAsync() => await OnChanged.InvokeAsync();
+
+    // Until an operator is chosen the value input shows, as it always has; it hides only for an operator that takes none.
+    private bool ShowsValue => Criterion.ComparisonType == SearchComparisonType.NotSet || SearchComparisonOperators.TakesValue(Criterion.ComparisonType);
+
+    // Shown once something has been typed; an empty pattern is the Required marker's job.
+    private string? PatternError => string.IsNullOrEmpty(Criterion.StringValue)
+        ? null
+        : SearchComparisonOperators.ValidatePattern(Criterion.StringValue);
 
     private string? RelativePreview =>
         Criterion is { ValueMode: DateCriteriaValueMode.Relative, RelativeCount: { } count, RelativeUnit: { } unit, RelativeDirection: { } direction }

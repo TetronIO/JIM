@@ -1248,7 +1248,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(cso =>
                 // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
@@ -5373,7 +5373,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(pe =>
                 (pe.LastErrorMessage != null && EF.Functions.ILike(pe.LastErrorMessage, searchPattern)) ||
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
@@ -5625,7 +5625,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
@@ -5722,7 +5722,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
                 || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
@@ -7090,7 +7090,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // searches.
         if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            var searchPattern = $"%{externalIdSearch}%";
+            var searchPattern = LikePattern.Contains(externalIdSearch);
             query = query.Where(c =>
                 c.DeletedObjectExternalId != null &&
                 EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));

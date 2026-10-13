@@ -911,6 +911,50 @@ public class ObjectMatchingModeTests
         _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Once);
     }
 
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ScopingCriterionWithNoValueForAValueTakingOperator_ThrowsArgumentException()
+    {
+        // #2053: "Equals with no value" was the workaround for "has no value"; with the operator available it is refused.
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.Equals);
+        syncRule.ObjectScopingCriteriaGroups[0].Criteria[0].DateTimeValue = null;
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain("Account Expires").And.Contain("HasNoValue"));
+        _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ScopingCriterionHasNoValueWithAStaleValue_StoresItWithoutTheValueAsync()
+    {
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.HasNoValue);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(syncRule.ObjectScopingCriteriaGroups[0].Criteria[0].DateTimeValue, Is.Null);
+        }
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ScopingCriterionWithAnInvalidPattern_ThrowsArgumentException()
+    {
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.MatchesPattern);
+        var criterion = syncRule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.MetaverseAttribute = new MetaverseAttribute { Id = 51, Name = "Email", Type = AttributeDataType.Text };
+        criterion.DateTimeValue = null;
+        criterion.StringValue = "[a-z";
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain("Email").And.Contain("not a valid regular expression"));
+    }
+
     private static SyncRule BuildExportSyncRuleWithScopingCriterion(SearchComparisonType comparisonType) => new()
     {
         Id = 0,

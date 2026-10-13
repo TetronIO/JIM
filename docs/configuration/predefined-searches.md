@@ -68,15 +68,17 @@ Each criterion combines:
 
 - **An attribute**<br /> Any attribute of the search's Metaverse Object Type.
 - **A comparison operator**<br /> The operators offered depend on the attribute's data type (see below).
-- **A value**<br /> Typed to match the attribute (a number for a Number attribute, a date for a DateTime attribute, and so on).
+- **A value**<br /> Typed to match the attribute (a number for a Number attribute, a date for a DateTime attribute, and so on). *has a value* and *has no value* take none.
 
 ### Operators by attribute type
 
 | Attribute type | Operators |
 |----------------|-----------|
-| Text | equals, does not equal, starts with, does not start with, ends with, does not end with, contains, does not contain |
-| Number, Long Number, Decimal, Date/Time | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to |
-| Boolean, GUID | equals, does not equal |
+| Text | equals, does not equal, starts with, does not start with, ends with, does not end with, contains, does not contain, has a value, has no value |
+| Number, Long Number, Decimal, Date/Time | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to, has a value, has no value |
+| Boolean, GUID | equals, does not equal, has a value, has no value |
+
+A value means exactly what it says: `%`, `_` and `\` are ordinary characters, so *starts with* `svc_` finds `svc_backup` and not `svcXbackup`. The pattern operators [Synchronisation Rule scoping](scoping-criteria.md#operators) offers are not available here, because a Predefined Search runs in the database, which does not run JIM's regular expressions.
 
 For **Date/Time** attributes the editor shows the operators in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*. Date/Time values are stored and compared in UTC.
 
@@ -89,7 +91,7 @@ A Date/Time criterion can compare against either a fixed date (**Absolute**) or 
 A criterion is tested against **every** value the object holds for the attribute:
 
 - **Positive operators** (*equals*, *starts with*, *contains*, *greater than* and the rest) match when **any** value matches.
-- **The *does not* operators** match when the object holds at least one value and **no** value matches. An object with no value for the attribute matches neither kind.
+- **The *does not* operators** match when the object holds at least one value and **no** value matches. An object with no value for the attribute matches neither kind; use *has no value* to find it.
 
 So with `Groups` holding `All Staff` and `Finance Readers`, *contains* `Finance` matches the object and *does not equal* `Finance Readers` does not. These are the same rules [Synchronisation Rule scoping](scoping-criteria.md#multi-valued-attributes-in-scope) uses, so a search with an export rule's criteria lists exactly the Metaverse Objects that rule covers.
 
