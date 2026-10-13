@@ -45,8 +45,8 @@ Get-JIMActivity -Id <guid>
 | `HasChildActivities` | `bool` | No (List) |  | Return only the Activities that have child Activities (`$true`), or only those that have none (`$false`). Omit it to return both. |
 | `CreatedFrom` | `datetime` | No (List) |  | Return only the Activities created at or after this time, which is converted to UTC. |
 | `CreatedTo` | `datetime` | No (List) |  | Return only the Activities created at or before this time, which is converted to UTC. |
-| `ConnectedSystem` | `string[]` | No (List) |  | Return only the Activities of these Connected Systems, by exact name. |
-| `RunProfile` | `string[]` | No (List) |  | Return only the executions of these Run Profiles, by exact name. |
+| `ConnectedSystem` | `string[]` | No (List) |  | Return only the Activities of these Connected Systems, by name, ignoring case. |
+| `RunProfile` | `string[]` | No (List) |  | Return only the executions of these Run Profiles, by name, ignoring case. |
 | `ScheduledOnly` | `bool` | No (List) |  | Return only the Activities a Schedule produced (`$true`), or only those nobody scheduled (`$false`). Omit it to return both. |
 | `ScheduleId` | `guid[]` | No (List) |  | Return only the Activities these Schedules produced. |
 | `ExecutionItems` | `switch` | Yes (ExecutionItems) |  | Return the Activity's Run Profile Execution Items: what happened to each object. |

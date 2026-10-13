@@ -158,6 +158,37 @@ Describe 'Set-JIMScopingCriterion -DecimalValue' {
     }
 }
 
+Describe 'Set-JIMScopingCriterion -CaseSensitive' {
+
+    # The update keeps a criterion's stored case sensitivity when the request leaves it out (#2051), so the cmdlet
+    # must only send it when -CaseSensitive is bound: an omitted parameter must not become an explicit value.
+    It 'Omits caseSensitive from the update body when -CaseSensitive is not bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'Sales' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and -not $Body.ContainsKey('caseSensitive')
+            }
+        }
+    }
+
+    It 'Sends caseSensitive in the update body when -CaseSensitive is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'Sales' -CaseSensitive $false -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.ContainsKey('caseSensitive') -and $Body.caseSensitive -eq $false
+            }
+        }
+    }
+}
+
 Describe 'Set-JIMScopingCriterion -ConnectedSystemAttributeName' {
 
     It 'Resolves the attribute name to its id via the object-types list endpoint and sends it in the update body' {

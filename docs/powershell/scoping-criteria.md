@@ -306,7 +306,7 @@ New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
 
 ## Set-JIMScopingCriterion
 
-Replaces a criterion in a scoping criteria group: its attribute, comparison and value all come from what you give, as with `New-JIMScopingCriterion`. Because the whole criterion is replaced, give `-CaseSensitive $false` again to keep a criterion that ignores case.
+Replaces a criterion in a scoping criteria group: its attribute, comparison and value all come from what you give, as with `New-JIMScopingCriterion`. Its case sensitivity is the exception: without `-CaseSensitive`, the criterion keeps its current setting.
 
 <!-- BEGIN GENERATED: Set-JIMScopingCriterion -->
 ### Syntax
@@ -344,7 +344,7 @@ Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Con
 | `DateTimeValue` | `datetime` | No |  | The date and time to compare a DateTime attribute with, when `-ValueMode` is Absolute. |
 | `BoolValue` | `bool` | No |  | The value to compare a Boolean attribute with. |
 | `GuidValue` | `guid` | No |  | The value to compare a Guid attribute with. |
-| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case: `$false` ignores it. Case-sensitive when omitted, even if the criterion ignored case before, because the whole criterion is replaced. |
+| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case: `$false` ignores it. When omitted, the criterion keeps its current setting. |
 | `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with `-DateTimeValue`, and Relative with a date worked out from now each time the rule is evaluated, set by `-RelativeCount`, `-RelativeUnit` and `-RelativeDirection`. Relative cannot be used with `-DateTimeValue`. Absolute when omitted. One of `Absolute` or `Relative`. |
 | `RelativeCount` | `int` | No |  | How many units from now the date is, zero or more. Used with `-ValueMode` Relative. |
 | `RelativeUnit` | `string` | No |  | The unit `-RelativeCount` counts. Used with `-ValueMode` Relative. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |

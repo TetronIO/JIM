@@ -1270,7 +1270,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
     /// <param name="attributes">Optional list of Attribute names to include in the response. Use "*" for all Attributes. DisplayName is always included.</param>
-    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by, ignoring case (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paginated list of Metaverse Object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]

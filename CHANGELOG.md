@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 - 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
+- 🔄 Expression `StartsWith` and `EndsWith` now compare character by character, as `Eq` does, so a hidden character such as a soft hyphen, or an accented letter stored a different way, no longer counts as a match. (#2051)
+- 🔄 Names you give JIM ignore case across the REST API and PowerShell: an attribute name in a filter, a Connected System or Run Profile in an Activity filter, a Predefined Search URI and an Example Data `{Attribute}` all find their match whatever the case. (#2051)
 
 ### Removed
 
@@ -85,6 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A schema refresh that finds an Object Type or attribute renamed only in case, such as `Mail` for `mail`, now keeps it and every Attribute Flow and Object Matching Rule using it, and takes the new name, instead of reporting it removed and added. (#2051)
+- 🐛 Drift Detection no longer corrects a value its own Connected System supplied when an export expression names the attribute in a different case. (#2051)
+- 🐛 `Set-JIMScopingCriterion` and `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive`, and their REST updates, now keep a criterion's case setting instead of resetting it to case-sensitive. (#2051)
 - 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
 - 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)
 - 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)

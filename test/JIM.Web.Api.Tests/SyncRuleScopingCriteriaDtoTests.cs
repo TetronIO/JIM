@@ -122,18 +122,18 @@ public class SyncRuleScopingCriteriaDtoTests
     }
 
     [Test]
-    public void CreateScopingCriterionRequest_DefaultsCaseSensitiveTrue()
+    public void CreateScopingCriterionRequest_CaseSensitiveOmitted_IsNull()
     {
-        // The CaseSensitive flag defaults to true when omitted from the request,
-        // matching the entity default. Scenario 011 relies on this so cells that
-        // don't specify the flag get case-sensitive evaluation.
+        // An omitted CaseSensitive is "not stated" (#2051): the controller then uses the criterion's own setting, which
+        // for a new criterion is the entity default (respect case; Scenario 011 relies on this) and for an update is
+        // the stored value. See SynchronisationControllerScopingCriterionTests.
         var request = new CreateScopingCriterionRequest
         {
             ComparisonType = "Equals",
             StringValue = "Finance"
         };
 
-        Assert.That(request.CaseSensitive, Is.True);
+        Assert.That(request.CaseSensitive, Is.Null);
         Assert.That(request.LongValue, Is.Null);
         Assert.That(request.DecimalValue, Is.Null);
     }

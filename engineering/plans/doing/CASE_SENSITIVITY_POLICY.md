@@ -107,7 +107,7 @@ Each PR follows TDD, keeps the build and tests green, and updates the policy pag
   - A preview controller test that a proposed rule without the setting ignores case. The portal tabs are covered by reading the constant directly (the Advanced tab through the entity initialiser); a source-shape test for that was judged not worth its upkeep.
 - **Changelog:** 🔄 "Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged."
 
-### PR 2: Comparison hygiene and configuration names
+### PR 2: Comparison hygiene and configuration names ✅
 
 - **Enforcement:** set `dotnet_diagnostic.CA1309.severity = warning` and `dotnet_diagnostic.CA1310.severity = warning` in `.editorconfig`. `TreatWarningsAsErrors` makes them errors.
   - **CA1307 is deliberately not enabled.** Measured on 2026-10-11 it raises 197 diagnostics, 45 of them in `src/`. Most are `char` overloads, `PathString.StartsWithSegments` or EF predicates, where a `StringComparison` overload would stop the query translating to SQL. It would add noise without catching the defect class.

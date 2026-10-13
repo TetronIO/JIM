@@ -424,7 +424,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 
 ## Set-JIMPredefinedSearchCriterion
 
-Replaces a criterion's attribute, operator and value. It is a full update, taking the same parameters as [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion).
+Replaces a criterion's attribute, operator and value. It is a full update, taking the same parameters as [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion). Its case sensitivity is the exception: without `-CaseSensitive`, the criterion keeps its current setting.
 
 <!-- BEGIN GENERATED: Set-JIMPredefinedSearchCriterion -->
 ### Syntax
@@ -454,7 +454,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 | `DateTimeValue` | `datetime` | No |  | The value to compare a DateTime attribute with, read as UTC. |
 | `BoolValue` | `bool` | No |  | The value to compare a Boolean attribute with. |
 | `GuidValue` | `guid` | No |  | The value to compare a Guid attribute with. |
-| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. `$false` ignores case; it does when omitted. |
+| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case: `$false` ignores it. When omitted, the criterion keeps its current setting. |
 | `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with `-DateTimeValue`, and is the default; Relative compares with a date worked out from now, given by `-RelativeCount`, `-RelativeUnit` and `-RelativeDirection`, and cannot be combined with `-DateTimeValue`. One of `Absolute` or `Relative`. |
 | `RelativeCount` | `int` | No |  | How many units from now, for a Relative comparison; zero or more. |
 | `RelativeUnit` | `string` | No |  | The unit of `-RelativeCount`. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |

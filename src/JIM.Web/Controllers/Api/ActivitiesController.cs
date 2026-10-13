@@ -62,9 +62,9 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// <param name="createdFrom">Optional inclusive lower bound on the Activity's creation time (UTC).</param>
     /// <param name="createdTo">Optional inclusive upper bound on the Activity's creation time (UTC).</param>
     /// <param name="connectedSystem">Optional filter for Connected System names, matched against the Activity's target
-    /// context (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// context (repeat the query parameter for multiple values; additive/OR within the filter). Whole name, ignoring case.</param>
     /// <param name="runProfile">Optional filter for Run Profile names, matched against the Activity's target name
-    /// (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// (repeat the query parameter for multiple values; additive/OR within the filter). Whole name, ignoring case.</param>
     /// <param name="initiatedBy">Optional case-insensitive partial match on the initiator's recorded name. Distinct
     /// from <c>initiatedById</c>, which matches an exact principal.</param>
     /// <param name="scheduledOnly">Optional filter: <c>true</c> returns only Activities a Schedule produced,

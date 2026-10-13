@@ -53,10 +53,10 @@ function Get-JIMActivity {
         Return only the Activities created at or before this time, which is converted to UTC.
 
     .PARAMETER ConnectedSystem
-        Return only the Activities of these Connected Systems, by exact name.
+        Return only the Activities of these Connected Systems, by name, ignoring case.
 
     .PARAMETER RunProfile
-        Return only the executions of these Run Profiles, by exact name.
+        Return only the executions of these Run Profiles, by name, ignoring case.
 
     .PARAMETER ScheduledOnly
         Return only the Activities a Schedule produced ($true), or only those nobody scheduled ($false). Omit it to
