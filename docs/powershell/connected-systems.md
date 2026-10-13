@@ -1776,7 +1776,7 @@ Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Genera
 | `Password` | `securestring` | Yes (unless `-Generate`) | | The password to set. Encrypted before JIM stores it and held only until delivered. |
 | `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate a password satisfying the policy it discovered on the Connected System. |
 | `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password, whatever its Attribute Flows say. Omitting it leaves the account's enabled state as it is, with one exception that [Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) describes. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password, whatever its Attribute Flows say. Omitting it leaves the account's enabled state as it is, with two exceptions that [Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) describes. |
 | `Wait` | `int` | No | `10` | Seconds, 0 to 30, to wait for the account to answer. Pass `0` to return as soon as the change is recorded. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
 

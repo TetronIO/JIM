@@ -298,6 +298,47 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
     }
 
     /// <summary>
+    /// Whether the export in flight is the account's own Create (#2160): a change owing no first password waits for it,
+    /// because the Create stages the account's Initial Password once its batch has come back. Any other export in
+    /// flight, and a Create no longer in flight, is not.
+    /// </summary>
+    [Test]
+    public async Task GetAccountEnablementFactsAsync_ReadsWhetherTheExportInFlightIsTheAccountsCreateAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 3, metaverseObjectCount: 1);
+        var now = DateTime.UtcNow;
+        var createInFlight = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        createInFlight.ChangeType = PendingExportChangeType.Create;
+        createInFlight.Status = PendingExportStatus.Executing;
+        createInFlight.LastAttemptedAt = now.AddMinutes(-1);
+        var updateInFlight = NewPendingExport(s.SystemId, s.CsoIds[1], s.AttributeId);
+        updateInFlight.Status = PendingExportStatus.Executing;
+        updateInFlight.LastAttemptedAt = now.AddMinutes(-1);
+        var createSent = NewPendingExport(s.SystemId, s.CsoIds[2], s.AttributeId);
+        createSent.ChangeType = PendingExportChangeType.Create;
+        createSent.Status = PendingExportStatus.Exported;
+        createSent.LastAttemptedAt = now.AddMinutes(-1);
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([createInFlight, updateInFlight, createSent]);
+
+        await using var read = NewContext();
+        var sync = new PostgresDataRepository(read).Sync;
+        var since = now.AddHours(-1);
+        var creating = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[0], since);
+        var updating = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[1], since);
+        var created = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[2], since);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(creating.ExportInFlight, Is.True);
+            Assert.That(creating.CreateInFlight, Is.True);
+            Assert.That(updating.ExportInFlight, Is.True);
+            Assert.That(updating.CreateInFlight, Is.False);
+            Assert.That(created.CreateInFlight, Is.False);
+        }
+    }
+
+    /// <summary>
     /// The import's sweep of the holds it did not reconcile: every held change on the Connected System, one row each,
     /// with its Pending Export, its object, and the Metaverse Object that object is joined to (null when it is joined
     /// to none). Not an unflagged change, not a flagged one that has left ExportedPendingConfirmation, and nothing on

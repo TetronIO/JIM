@@ -95,4 +95,39 @@ public class PendingPasswordChangeHeaderTests
     {
         Assert.That(Header(PendingPasswordChangeOrigin.Provisioned, takingPasswords: false).IsHeld, Is.False);
     }
+
+    /// <summary>
+    /// A propagated change carrying a Connected System Object's first password (#2160) is delivered like the Initial
+    /// Password it stands in for, so a switched-off system does not hold it.
+    /// </summary>
+    [Test]
+    public void IsHeldAndIsDue_PropagatedChangeCarryingAFirstPassword_OnASwitchedOffSystem_IsDueNotHeld()
+    {
+        var header = Header(PendingPasswordChangeOrigin.Propagated, takingPasswords: false);
+        header.ProvisionedConnectedSystemObjectId = Guid.NewGuid();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.IsHeld, Is.False);
+            Assert.That(header.IsDue(Now), Is.True);
+        }
+    }
+
+    /// <summary>
+    /// The "First password" marker: a set or propagated change carrying a Connected System Object's first password,
+    /// never the Initial Password itself, which is the first password rather than carrying one.
+    /// </summary>
+    [TestCase(PendingPasswordChangeOrigin.Propagated, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, true, false)]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, false, false)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, false, false)]
+    public void CarriesFirstPassword_OnlyForASetOrPropagatedChangeOwingAFirstPassword(
+        PendingPasswordChangeOrigin origin, bool owesAFirstPassword, bool expected)
+    {
+        var header = Header(origin, takingPasswords: true);
+        header.ProvisionedConnectedSystemObjectId = owesAFirstPassword ? Guid.NewGuid() : null;
+
+        Assert.That(header.CarriesFirstPassword, Is.EqualTo(expected));
+    }
 }

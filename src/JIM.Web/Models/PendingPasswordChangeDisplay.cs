@@ -123,4 +123,45 @@ public static class PendingPasswordChangeDisplay
         PendingPasswordChangeOrigin.Provisioned => Color.Secondary,
         _ => Color.Default
     };
+
+    /// <summary>
+    /// The secondary marker beside the kind chip of a set or propagated change that is also a Connected System Object's
+    /// first password (#2160, <see cref="PendingPasswordChangeHeader.CarriesFirstPassword"/>).
+    /// </summary>
+    public const string FirstPasswordLabel = "First password";
+
+    /// <summary>
+    /// What the "First password" marker means, for its tooltip.
+    /// </summary>
+    public const string FirstPasswordTooltip =
+        "This change is also the first password of a Connected System Object JIM provisioned while it was waiting. " +
+        "Delivering it applies the provisioning Synchronisation Rule's Initial Password settings for enabling the Connected " +
+        "System Object and for whether its password never expires. Cancelling it leaves that Connected System Object " +
+        "without a password from JIM.";
+
+    /// <summary>
+    /// The question asked before cancelling one change: whose change, to where, and what cancelling leaves behind,
+    /// including, for an Initial Password or a change carrying a Connected System Object's first password (#2160), that
+    /// the Connected System Object is left with no password from JIM at all.
+    /// </summary>
+    public static string CancelConfirmation(PendingPasswordChangeHeader change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        var who = change.MetaverseObjectDisplayName ?? "this Metaverse Object";
+        var question = $"Stop delivering {who}'s password change to {change.ConnectedSystemName}?";
+
+        return OwesFirstPassword(change)
+            ? $"{question} It is the first password of a Connected System Object JIM provisioned there, so cancelling it leaves " +
+              "that Connected System Object without a password from JIM, and it is not enabled as its Synchronisation Rule's " +
+              "Initial Password asks, until a password is set on it."
+            : $"{question} Their password stays as it was on that system until a new change is synchronised.";
+    }
+
+    /// <summary>
+    /// Whether cancelling the change leaves a Connected System Object without its first password: an Initial Password,
+    /// or a change carrying the first password in its place (#2160).
+    /// </summary>
+    private static bool OwesFirstPassword(PendingPasswordChangeHeader change) =>
+        change.Origin == PendingPasswordChangeOrigin.Provisioned || change.CarriesFirstPassword;
 }

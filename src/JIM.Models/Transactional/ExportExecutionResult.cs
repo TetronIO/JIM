@@ -189,6 +189,23 @@ public class ExportExecutionResult
     public int InitialPasswordMarkingFailedCount { get; set; }
 
     /// <summary>
+    /// Number of newly provisioned accounts whose first password is a password change already waiting for the person
+    /// (#2160): their own password, or an administrator's set naming the account, now carrying the Initial Password's
+    /// promises about the account. No Initial Password was queued for them, and none is counted in
+    /// <see cref="InitialPasswordsStagedCount"/>.
+    /// </summary>
+    public int InitialPasswordsCarriedCount { get; set; }
+
+    /// <summary>
+    /// Number of newly provisioned accounts whose Initial Password was not queued because the queue's one row for the
+    /// person and Connected System is still carrying a password change for another of their Connected System Objects
+    /// there (#2160). Reported as a warning of its own rather than counted in
+    /// <see cref="InitialPasswordStagingFailedCount"/>, whose remedy (set a password now) would replace that other
+    /// change; this one's is to wait until it has been delivered.
+    /// </summary>
+    public int InitialPasswordsConflictedCount { get; set; }
+
+    /// <summary>
     /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was
     /// already in use, whose value Collision Remediation revised. Each is left Pending for the next synchronisation
     /// to re-stage, and is also counted in <see cref="DeferredCount"/>.

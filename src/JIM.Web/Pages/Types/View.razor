@@ -532,6 +532,17 @@
         if (MetaverseObject == null || state.PasswordActionRunning)
             return;
 
+        // Stopping a change that is a Connected System Object's first password (#2160) leaves that object without one,
+        // which is asked about first; an ordinary change stops at once, as it always has.
+        if (state.QueuedPasswordChanges.FirstOrDefault(c => c.ConnectedSystemId == connectedSystemId) is { } queued
+            && (queued.CarriesFirstPassword || queued.Origin == PendingPasswordChangeOrigin.Provisioned))
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync("Cancel password change",
+                PendingPasswordChangeDisplay.CancelConfirmation(queued), yesText: "Cancel delivery", cancelText: "Close");
+            if (confirmed != true)
+                return;
+        }
+
         state.PasswordActionRunning = true;
         try
         {

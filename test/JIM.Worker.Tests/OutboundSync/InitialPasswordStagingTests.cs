@@ -418,35 +418,278 @@ public class InitialPasswordStagingTests
         }
     }
 
+    #region a password change already waiting for the account (#2160)
+
     /// <summary>
-    /// An existing Pending, Propagated row for the same account and Connected System is the person's real
-    /// password, already on its way: the provisioned change must not overwrite it. Instead, the row is made due
-    /// immediately, since it may have been waiting on this very account to come into existence.
+    /// The reported bug: the person's password change was waiting for the account to exist when JIM provisioned it.
+    /// The change is the account's first password; it keeps its own password and Activity, and now carries the Initial
+    /// Password's promises about the account (the account, the rule, the Create's mark), and is due at once. The export
+    /// says so on an Activity of its own, rather than recording nothing.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_ExistingPendingPropagatedRow_IsLeftAndMadeDueNowAsync()
+    public async Task ExecuteExportsAsync_ExistingPendingPropagatedRow_CarriesTheInitialPasswordAndRecordsAnActivityAsync()
     {
         var metaverseObjectId = Guid.NewGuid();
         var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
         var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
             PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending,
             nextRetryAt: DateTime.UtcNow.AddMinutes(30));
-        var activityCountBefore = SyncRepo.Activities.Count;
 
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
-        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
         var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        var note = SyncRepo.Activities.Values.SingleOrDefault(a => a.TargetType == ActivityTargetType.PasswordSynchronisation
+                                                                     && a.TargetContext == nameof(PendingPasswordChangeOrigin.Provisioned));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(row.Id, Is.EqualTo(existing.Id), "the existing row survives untouched, not replaced");
+            Assert.That(row.Id, Is.EqualTo(existing.Id), "the waiting change survives, not replaced");
             Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
-            Assert.That(row.NextRetryAt, Is.Null, "released so it is attempted on the very next delivery pass");
-            Assert.That(SyncRepo.Activities, Has.Count.EqualTo(activityCountBefore), "the row already had its own Activity");
+            Assert.That(row.EncryptedPassword, Is.EqualTo("encrypted-value"), "the person's own password is delivered");
+            Assert.That(row.ActivityId, Is.EqualTo(existing.ActivityId));
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(row.SyncRuleId, Is.EqualTo(ProvisioningRuleId));
+            Assert.That(row.NextRetryAt, Is.Null, "due on the very next delivery pass");
+            Assert.That(result.InitialPasswordsCarriedCount, Is.EqualTo(1));
             Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
+            Assert.That(note, Is.Not.Null, "the export says what became of the Initial Password");
+            Assert.That(note!.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(note.TargetContext, Is.EqualTo(nameof(PendingPasswordChangeOrigin.Provisioned)));
+            Assert.That(note.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(note.MetaverseObjectId, Is.EqualTo(metaverseObjectId));
+            Assert.That(note.Message, Does.Contain("first password"));
         }
-        Assert.That(cso.Id, Is.Not.EqualTo(existing.ConnectedSystemObjectId));
     }
+
+    /// <summary>
+    /// A change JIM had stopped trying because the account did not exist yet is released by the Create that provisions
+    /// it, its attempts reset; the Activity says it was parked and is due again.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExistingRowParkedForAMissingAccount_IsReleasedAndCarriesTheInitialPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Parked,
+            failureReason: PasswordSetFailureReason.TargetObjectNotFound, attemptCount: 6);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges[existing.Id];
+        var note = NewestProvisionedActivity();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(row.AttemptCount, Is.Zero);
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsCarriedCount, Is.EqualTo(1));
+            Assert.That(note.Message, Does.Contain("parked"));
+        }
+    }
+
+    /// <summary>
+    /// Decision (#2160): a change held because Password Synchronisation is switched off on the system has not reached
+    /// it, and would not while the account's first password is delivered whatever the pause. The Initial Password wins:
+    /// it replaces the held change, says so as a warning, and the held change's own record is told it was not set there.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExistingHeldPropagatedRow_IsReplacedByTheInitialPasswordAndSaysSoAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: false);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending);
+        // Read now: the in-memory queue holds the seeded instance itself, which the takeover rewrites.
+        var heldChangeActivityId = existing.ActivityId;
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        var queued = SyncRepo.Activities[row.ActivityId];
+        var toldTheHeldChange = SyncRepo.Activities.Values.SingleOrDefault(a => a.ParentActivityId == heldChangeActivityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(row.EncryptedPassword, Is.Null);
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+            Assert.That(queued.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(queued.Message, Does.Contain("switched off"));
+            Assert.That(toldTheHeldChange, Is.Not.Null, "the person's change must not silently lose this system");
+            Assert.That(toldTheHeldChange!.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
+            Assert.That(toldTheHeldChange.ConnectedSystemId, Is.EqualTo(system.Id));
+        }
+    }
+
+    /// <summary>
+    /// A change parked for a reason no attempt can cure (here, the directory refused the person's password under its
+    /// policy) would leave the new account with no password at all. The Initial Password replaces it, with the
+    /// target's words on the warning.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExistingRowParkedForAPolicyRejection_IsReplacedByTheInitialPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Parked,
+            failureReason: PasswordSetFailureReason.PolicyRejection, targetMessage: "The password does not meet the length requirement.");
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        var queued = SyncRepo.Activities[row.ActivityId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(queued.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(queued.Message, Does.Contain("The password does not meet the length requirement."));
+        }
+    }
+
+    /// <summary>
+    /// An administrator's set for this very account, made before the Create landed, is the account's first password.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExplicitRowNamingTheAccount_CarriesTheInitialPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: false);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Explicit, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges[existing.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit),
+                "an administrator's set is never held by a paused system, so it carries the first password");
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsCarriedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// An administrator's set whose named account has since been deleted (the foreign key nulled it) can deliver
+    /// nothing: the Initial Password replaces it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExplicitRowWhoseAccountWasDeleted_IsReplacedByTheInitialPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Explicit, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: null);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges.Values.Single().Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+    }
+
+    /// <summary>
+    /// The queue holds one change per person per Connected System. A live set for another of this person's accounts
+    /// there keeps it: nothing is written, the export counts the Initial Password as not queued for that reason (not as
+    /// a failure to record it, whose remedy would throw the other account's password away), and the Activity says what
+    /// to do once the other change has landed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExplicitRowForAnotherAccount_IsConflictedAndSaysWhatToDoAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        var otherAccount = SeedOtherAccountOfThePerson(system, cso, metaverseObjectId);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Explicit, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: otherAccount.Id);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        var note = NewestProvisionedActivity();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Id, Is.EqualTo(existing.Id));
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(otherAccount.Id));
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.Null);
+            Assert.That(result.InitialPasswordsConflictedCount, Is.EqualTo(1));
+            Assert.That(result.InitialPasswordStagingFailedCount, Is.Zero);
+            Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
+            Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
+            Assert.That(note.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(note.Message, Does.Contain("set-password"));
+        }
+    }
+
+    /// <summary>
+    /// Two accounts for one person in one Connected System: the first account's Initial Password is still owed, so the
+    /// second must not silently replace it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_LiveInitialPasswordForAnotherAccount_IsConflictedAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        var otherAccount = SeedOtherAccountOfThePerson(system, cso, metaverseObjectId);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: otherAccount.Id);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingPasswordChanges[existing.Id].ConnectedSystemObjectId, Is.EqualTo(otherAccount.Id));
+            Assert.That(result.InitialPasswordsConflictedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// The Create wrote the account's flags (an Attribute Flow sets userAccountControl), so the waiting change carries
+    /// that mark, and its delivery leaves both flags to the flow.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateReportingItWroteTheEnabledState_CarriesTheMarkOntoTheWaitingRowAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending);
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        Assert.That(SyncRepo.PendingPasswordChanges[existing.Id].EnabledStateSetByAttributeFlow, Is.True);
+    }
+
+    /// <summary>
+    /// A leaver disabled before the waiting change landed: the Update that wrote the enabled state marks the change
+    /// carrying the account's first password, so its delivery never re-enables the leaver on the rule's say-so.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportingItWroteTheEnabledState_MarksAWaitingRowCarryingTheInitialPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        var carrying = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+        SyncRepo.PendingPasswordChanges[carrying.Id].CarryInitialPassword(cso.Id, ProvisioningRuleId, false, DateTime.UtcNow.AddDays(7));
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        Assert.That(SyncRepo.PendingPasswordChanges[carrying.Id].EnabledStateSetByAttributeFlow, Is.True);
+    }
+
+    #endregion
 
     /// <summary>
     /// An existing Expired row carries a dead password: it must not block the account's first one, so the
@@ -1042,6 +1285,47 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
+    /// Gives the system a Password Synchronisation configuration targeting the provisioned account's Object Type, on or
+    /// off, and makes the account and the system known to the queue's repository, which is where the staging statement
+    /// reads both (#2160).
+    /// </summary>
+    private void ArrangePasswordSynchronisation(ConnectedSystem system, ConnectedSystemObject cso, bool enabled)
+    {
+        system.PasswordSynchronisation = new ConnectedSystemPasswordSynchronisation
+        {
+            ConnectedSystemId = system.Id,
+            Enabled = enabled,
+            TargetObjectTypeId = cso.TypeId
+        };
+        SyncRepo.SeedConnectedSystem(system);
+        SyncRepo.SeedConnectedSystemObject(cso);
+    }
+
+    /// <summary>Another account of the same person in the same Connected System.</summary>
+    private ConnectedSystemObject SeedOtherAccountOfThePerson(ConnectedSystem system, ConnectedSystemObject cso, Guid metaverseObjectId)
+    {
+        var other = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            Type = cso.Type,
+            TypeId = cso.TypeId,
+            AttributeValues = [],
+            MetaverseObjectId = metaverseObjectId
+        };
+        SyncRepo.SeedConnectedSystemObject(other);
+        return other;
+    }
+
+    /// <summary>The newest Activity export staging recorded about an Initial Password.</summary>
+    private Activity NewestProvisionedActivity() =>
+        SyncRepo.Activities.Values
+            .Where(a => a.TargetType == ActivityTargetType.PasswordSynchronisation
+                        && a.TargetContext == nameof(PendingPasswordChangeOrigin.Provisioned))
+            .OrderBy(a => a.Created)
+            .Last();
+
+    /// <summary>
     /// Seeds a row already on the queue for a (Metaverse Object, Connected System) key a provisioned change is
     /// about to be offered against, so the coalescing tests can arrange what it finds there.
     /// </summary>
@@ -1051,7 +1335,10 @@ public class InitialPasswordStagingTests
         PendingPasswordChangeOrigin origin,
         PendingPasswordChangeStatus status,
         Guid? connectedSystemObjectId = null,
-        DateTime? nextRetryAt = null)
+        DateTime? nextRetryAt = null,
+        PasswordSetFailureReason? failureReason = null,
+        string? targetMessage = null,
+        int attemptCount = 0)
     {
         var existing = new PendingPasswordChange
         {
@@ -1062,7 +1349,11 @@ public class InitialPasswordStagingTests
             Origin = origin,
             Status = status,
             NextRetryAt = nextRetryAt,
+            FailureReason = failureReason,
+            TargetMessage = targetMessage,
+            AttemptCount = attemptCount,
             EncryptedPassword = origin == PendingPasswordChangeOrigin.Provisioned ? null : "encrypted-value",
+            ProvisionedConnectedSystemObjectId = origin == PendingPasswordChangeOrigin.Provisioned ? connectedSystemObjectId : null,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
             ActivityId = Guid.NewGuid()

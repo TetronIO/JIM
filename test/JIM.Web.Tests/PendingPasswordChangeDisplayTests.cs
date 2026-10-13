@@ -237,4 +237,33 @@ public class PendingPasswordChangeDisplayTests
             Assert.That(Change().IsDue(now), Is.True);
         }
     }
+
+    #region a change carrying a Connected System Object's first password (#2160)
+
+    /// <summary>
+    /// Cancelling a change that is also a Connected System Object's first password leaves that object with no password
+    /// from JIM, which is worth saying before the administrator confirms; an ordinary change's cancellation is not.
+    /// </summary>
+    [TestCase(PendingPasswordChangeOrigin.Propagated, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, false, false)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, false, false)]
+    public void CancelConfirmation_WarnsOnlyWhereTheChangeIsAFirstPassword(PendingPasswordChangeOrigin origin, bool owesAFirstPassword, bool warns)
+    {
+        var change = Change(origin: origin);
+        change.MetaverseObjectDisplayName = "Ada Lovelace";
+        change.ConnectedSystemName = "Corporate AD";
+        change.ProvisionedConnectedSystemObjectId = owesAFirstPassword ? Guid.NewGuid() : null;
+
+        var confirmation = PendingPasswordChangeDisplay.CancelConfirmation(change);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(confirmation, Does.Contain("Ada Lovelace").And.Contain("Corporate AD"));
+            Assert.That(confirmation.Contains("first password", StringComparison.Ordinal), Is.EqualTo(warns));
+        }
+    }
+
+    #endregion
 }

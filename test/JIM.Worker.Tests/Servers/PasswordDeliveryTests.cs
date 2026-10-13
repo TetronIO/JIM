@@ -2152,6 +2152,346 @@ public class PasswordDeliveryTests
 
     #endregion
 
+    #region a password change carrying an account's first password (#2160)
+
+    /// <summary>
+    /// The person's own password change, staged as a new account's first password in place of its Initial Password:
+    /// the rule's Initial Password settings, and the account the obligation is for, as staging records them.
+    /// </summary>
+    private async Task<PendingPasswordChange> QueueCarryingAFirstPasswordAsync(
+        Action<SyncRuleInitialPassword>? configure = null,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
+        bool? enableAccount = null,
+        string password = "the-persons-own-password",
+        Guid? owedAccountId = null,
+        DateTime? createdAt = null)
+    {
+        var initialPassword = new SyncRuleInitialPassword
+        {
+            SyncRuleId = SyncRuleId,
+            Enabled = true,
+            Source = InitialPasswordSource.Discovered,
+            ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+            EnableAccount = true
+        };
+        configure?.Invoke(initialPassword);
+        _syncRepository.SeedSyncRule(new SyncRule { Id = SyncRuleId, Name = "Provisioning rule", InitialPassword = initialPassword });
+        _syncRepository.SeedConnectedSystem(_connectedSystem);
+
+        var change = origin == PendingPasswordChangeOrigin.Explicit
+            ? await QueueExplicitAsync(enableAccount, createdAt)
+            : await QueueAsync(password, createdAt: createdAt);
+        ArrangeAccount(change);
+
+        var stored = _syncRepository.PendingPasswordChanges[change.Id];
+        stored.ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+        stored.CarryInitialPassword(owedAccountId ?? change.ConnectedSystemObjectId!.Value, SyncRuleId, accountFlagsWrittenByExport: false,
+            stored.ExpiresAt);
+        return stored;
+    }
+
+    /// <summary>
+    /// The reported bug: the person's password change was waiting when JIM provisioned the account, and was delivered
+    /// as an ordinary propagated password, so nothing enabled the account and it was left disabled with nothing to say
+    /// why. Carrying the first password, it is enabled as the rule's Initial Password asks, and the Activity says so.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_RuleOn_EnablesAndSaysSoAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync();
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(result.FirstPasswordsDeliveredInPlaceCount, Is.EqualTo(1));
+            Assert.That(outcome.Message, Does.Contain("first password"));
+            Assert.That(outcome.Message, Does.Contain("enabled as the Synchronisation Rule's Initial Password asks"));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Passwords replace each other: the person's own password is sent, never the rule's generated one, and with the
+    /// person's own expiry. The rule's "Require a change" belongs to the Initial Password, which is not delivered; only
+    /// its promise about "Password never expires" (here, cleared) carries forward.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_SendsThePersonsPasswordAndExpiryAndClearsNeverExpiresAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(password: "the-persons-own-password");
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var attempt = _connector.PasswordSetAttempts.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attempt.PasswordLength, Is.EqualTo("the-persons-own-password".Length));
+            Assert.That(attempt.Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy),
+                "never the rule's Require a change on a password the person chose");
+            Assert.That(attempt.Options.LeavePasswordNeverExpiresAsIs, Is.False, "the rule's promise decides the flag: cleared");
+        }
+    }
+
+    /// <summary>
+    /// The rule promises "Password never expires": the flag is set with the person's password, which therefore never
+    /// expires, as an Initial Password of Never expires would have.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_RuleNeverExpires_SetsPasswordNeverExpiresAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+            Assert.That(options.LeavePasswordNeverExpiresAsIs, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_RuleOff_LeavesItAsCreatedAndSaysSoAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(ip => ip.EnableAccount = false);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+            Assert.That(outcome.Message, Does.Contain("left as it was created"));
+        }
+    }
+
+    /// <summary>
+    /// The Create wrote the account's flags (an Attribute Flow sets userAccountControl), so the flow decides both, as it
+    /// would for the Initial Password: a pre-hire stays disabled.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_FlagsWrittenByAnExport_LeavesBothToTheFlowAsync()
+    {
+        var change = await QueueCarryingAFirstPasswordAsync();
+        change.EnabledStateSetByAttributeFlow = true;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.EnableAccount, Is.Null);
+            Assert.That(options.LeavePasswordNeverExpiresAsIs, Is.True);
+            Assert.That(result.EnabledStateLeftToAttributeFlowCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A leaver disabled after the lane claimed the change: the mark is read afresh at the attempt, so the delivery
+    /// leaves the enabled state to the flow rather than re-enabling the leaver on the rule's say-so.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_MarkedAfterTheClaim_LeavesItToTheFlowAsync()
+    {
+        var now = DateTime.UtcNow;
+        var first = await QueueCarryingAFirstPasswordAsync(createdAt: now.AddMinutes(-2));
+        var second = await QueueCarryingAFirstPasswordAsync(createdAt: now.AddMinutes(-1));
+        _connector.WithPasswordSetResult(account =>
+        {
+            // The leaver's export lands while the lane is busy with the first account.
+            if (account.Id == first.ConnectedSystemObjectId)
+                _syncRepository.PendingPasswordChanges[second.Id].EnabledStateSetByAttributeFlow = true;
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var attempts = _connector.PasswordSetAttempts.ToDictionary(a => a.ConnectedSystemObjectId, a => a.Options.EnableAccount);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attempts[first.ConnectedSystemObjectId!.Value], Is.True, "nothing set the first account's enabled state");
+            Assert.That(attempts[second.ConnectedSystemObjectId!.Value], Is.Null, "marked after the claim, before its attempt");
+        }
+    }
+
+    /// <summary>
+    /// JIM's own enable, on the rule's say-so, waits for an export to the account in flight (#2173), exactly as the
+    /// Initial Password's would.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_ExportToTheAccountInFlight_WaitsWithoutCountingAnAttemptAsync()
+    {
+        var change = await QueueCarryingAFirstPasswordAsync();
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges[change.Id].AttemptCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// The rule no longer sets an Initial Password: the change is still the person's own password, so it is delivered,
+    /// never withdrawn as an Initial Password would be; the account's flags are left, and the Activity says why.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_RuleNoLongerSetsOne_DeliversWithoutEnablingAndSaysSoAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(ip => ip.Enabled = false);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(result.WithdrawnCount, Is.Zero);
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.LeavePasswordNeverExpiresAsIs, Is.True);
+            Assert.That(outcome.Message, Does.Contain("no longer sets an Initial Password"));
+        }
+    }
+
+    /// <summary>
+    /// The change reached another of the person's accounts than the one it owes its first password (the system now
+    /// targets another Object Type): the promises are never applied to an account they were not made for, and the
+    /// Activity says the other account still has no first password.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_ResolvesToAnotherAccount_DoesNotEnableItAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(owedAccountId: Guid.NewGuid());
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+            Assert.That(outcome.Message, Does.Contain("did not reach"));
+        }
+    }
+
+    /// <summary>
+    /// A change carrying an account's first password is delivered like the Initial Password it stands in for, whatever
+    /// the system's Password Synchronisation says (decision D1): the pause cannot strand a new account without a
+    /// password, or let the obligation expire unseen.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_OnAPausedSystem_IsDeliveredAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync();
+        _configuration.Enabled = false;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(result.DeliveredCount, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Behaviour change (#2160): an administrator's set with no enable choice, on an account still owed its first
+    /// password, follows the rule's Enable Account, as it already completes a withheld enable.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowWithNoChoiceCarryingAFirstPassword_FollowsTheRulesEnableAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync(origin: PendingPasswordChangeOrigin.Explicit);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+    }
+
+    /// <summary>
+    /// The Connector set the password but could not enable the account (a directory with no such operation reports it
+    /// as a warning): the Activity must not claim the account was enabled.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowCarryingAFirstPassword_ConnectorCouldNotEnable_DoesNotClaimItWasEnabledAsync()
+    {
+        await QueueCarryingAFirstPasswordAsync();
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.SucceededWithExpiryDowngrade(
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            "Enabling the account is an Active Directory operation, so the account's enabled state was left unchanged."));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(outcome.Message, Does.Not.Contain("enabled as the Synchronisation Rule's Initial Password asks"));
+            Assert.That(outcome.Message, Does.Contain("left unchanged"));
+        }
+    }
+
+    /// <summary>
+    /// The account is being created right now (#2160): its entry may already exist part-way through the Create's batch,
+    /// and the export stages its Initial Password only once the batch has come back. A change owing no first password
+    /// delivered and removed in between would let that Initial Password be queued over the person's password, so it
+    /// waits, counting nothing; staging then gives it the account's first password.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRow_CreateOfTheAccountInFlight_WaitsWithoutCountingAnAttemptAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value).ChangeType = PendingExportChangeType.Create;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges[change.Id].AttemptCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// The same holds for an administrator's set with a choice, which otherwise never waits for an export.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowChoosingToEnable_CreateOfTheAccountInFlight_WaitsAsync()
+    {
+        var change = await QueueExplicitAsync(enableAccount: true);
+        ArrangeAccount(change);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value).ChangeType = PendingExportChangeType.Create;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+        }
+    }
+
+    #endregion
+
     #region claims (#1635)
 
     /// <summary>

@@ -2479,7 +2479,9 @@ public class SyncRepository : ISyncRepository
         var executing = GetPendingExportsForSystem(connectedSystemId)
             .SingleOrDefault(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
         var stranded = executing?.LastAttemptedAt < exportsInFlightSince;
-        return new AccountEnablementFacts(holds, marked, executing != null && !stranded, stranded ? executing!.Id : null);
+        var inFlight = executing != null && !stranded;
+        return new AccountEnablementFacts(holds, marked, inFlight, stranded ? executing!.Id : null,
+            inFlight && executing!.ChangeType == PendingExportChangeType.Create);
     }
 
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
@@ -3360,8 +3362,9 @@ public class SyncRepository : ISyncRepository
 
     #region Password Synchronisation queue (#1119)
 
-    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    public Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
     {
+        var notQueued = new List<PendingPasswordChange>();
         foreach (var change in changes)
         {
             // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema.
@@ -3372,6 +3375,15 @@ public class SyncRepository : ISyncRepository
 
             if (existing != null)
             {
+                // Mirrors the real repository's WHERE (#2160): a propagated change does not replace a first password
+                // still owed on a system whose Password Synchronisation is switched off.
+                if (existing.KeepsInitialPasswordObligationOver(change) && change.IsPropagated
+                    && !IsTakingPasswords(existing.ConnectedSystemId))
+                {
+                    notQueued.Add(change);
+                    continue;
+                }
+
                 existing.Supersede(change);
                 continue;
             }
@@ -3382,7 +3394,7 @@ public class SyncRepository : ISyncRepository
             _pendingPasswordChanges[change.Id] = change;
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(notQueued);
     }
 
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
@@ -3399,51 +3411,71 @@ public class SyncRepository : ISyncRepository
 
             var requestedId = change.Id;
 
-            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema
-            // and the narrower conflict clause the real repository applies for a provisioned change (#1697): the
-            // existing row wins unless it carries nothing worth keeping.
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema and the
+            // staging statement's three-way decision (#1697, #2160), which this mirrors over the data this repository
+            // holds: the Connected Systems seeded with their Password Synchronisation, and the Connected System Objects.
             var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
                 c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
 
-            if (existing != null && !CanBeSupersededByAProvisionedChange(existing))
+            if (existing == null)
             {
-                // The existing row is the person's real password, already on its way or waiting on a person to
-                // fix it: nothing is written, and a propagated row held waiting on this exact account is
-                // released now that the account exists.
-                if (existing.Status == PendingPasswordChangeStatus.Pending && existing.NextRetryAt != null)
-                    existing.NextRetryAt = null;
-
+                _pendingPasswordChanges[change.Id] = change;
                 outcomes.Add(new ProvisionedPasswordStagingOutcome
                 {
-                    RowId = Guid.Empty,
+                    RowId = change.Id,
                     RequestedId = requestedId,
-                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                    Disposition = ProvisionedPasswordStagingDisposition.Inserted
                 });
                 continue;
             }
 
-            if (existing != null)
+            var before = Copy(existing);
+            var held = before.IsPropagated && !IsTakingPasswords(before.ConnectedSystemId);
+            var accountGone = before.IsExplicit && !IsStillThePersons(before.ConnectedSystemObjectId, before.MetaverseObjectId);
+            var owesAnother = OwesAnotherLiveAccount(before, change.ConnectedSystemObjectId);
+            var takeover = before.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
+                           || (!owesAnother && (IsParkedBeyondCure(before) || held || accountGone || before.IsProvisioned));
+            var reaches = (before.IsExplicit && before.ConnectedSystemObjectId == change.ConnectedSystemObjectId)
+                          || (before.IsPropagated && ReachesPasswordSynchronisationTarget(before.ConnectedSystemId, change.ConnectedSystemObjectId));
+
+            ProvisionedPasswordStagingDisposition disposition;
+            if (takeover)
             {
                 // The row now in the table keeps its own id rather than taking the change's, matching the real
                 // repository, so the caller must adopt it for anything it does with the change afterwards.
                 existing.Supersede(change);
-                change.Id = existing.Id;
-
+                disposition = ProvisionedPasswordStagingDisposition.Superseded;
+            }
+            else if (!owesAnother && reaches)
+            {
+                existing.CarryInitialPassword(change.ConnectedSystemObjectId!.Value, change.SyncRuleId!.Value,
+                    change.EnabledStateSetByAttributeFlow, change.ExpiresAt);
+                disposition = ProvisionedPasswordStagingDisposition.Coalesced;
+            }
+            else
+            {
                 outcomes.Add(new ProvisionedPasswordStagingOutcome
                 {
-                    RowId = existing.Id,
+                    RowId = Guid.Empty,
                     RequestedId = requestedId,
-                    Disposition = ProvisionedPasswordStagingDisposition.Superseded
+                    Disposition = ProvisionedPasswordStagingDisposition.Conflicted
                 });
                 continue;
             }
 
-            _pendingPasswordChanges[change.Id] = change;
+            change.Id = existing.Id;
             outcomes.Add(new ProvisionedPasswordStagingOutcome
             {
-                RowId = change.Id,
+                RowId = existing.Id,
                 RequestedId = requestedId,
-                Disposition = ProvisionedPasswordStagingDisposition.Inserted
+                Disposition = disposition,
+                ExistingOrigin = before.Origin,
+                ExistingStatus = before.Status,
+                ExistingFailureReason = before.FailureReason,
+                ExistingTargetMessage = before.TargetMessage,
+                ExistingActivityId = before.ActivityId,
+                ExistingHeld = held,
+                ExistingAccountGone = accountGone
             });
         }
 
@@ -3455,13 +3487,13 @@ public class SyncRepository : ISyncRepository
         if (FailInitialPasswordMarkingWith != null)
             throw FailInitialPasswordMarkingWith;
 
-        // Mirrors the PostgreSQL status mark (#2064): Provisioned rows for these accounts, whatever their status, not
-        // already marked.
+        // Mirrors the PostgreSQL status mark (#2064, #2160): rows owing one of these accounts its first password,
+        // whatever their status, not already marked.
         var accounts = connectedSystemObjectIds.ToHashSet();
         var marking = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId
-                        && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)
-                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && ((c.ProvisionedConnectedSystemObjectId.HasValue && accounts.Contains(c.ProvisionedConnectedSystemObjectId.Value))
+                            || (c.IsProvisioned && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)))
                         && !c.EnabledStateSetByAttributeFlow)
             .ToList();
 
@@ -3471,16 +3503,40 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(marking.Count);
     }
 
+    /// <summary>Whether a seeded Connected System is taking propagated passwords; one not seeded has no configuration.</summary>
+    private bool IsTakingPasswords(int connectedSystemId) =>
+        _connectedSystems.TryGetValue(connectedSystemId, out var system) && system.PasswordSynchronisation is { Enabled: true };
+
+    /// <summary>Whether the named Connected System Object exists and still belongs to the person.</summary>
+    private bool IsStillThePersons(Guid? connectedSystemObjectId, Guid metaverseObjectId) =>
+        connectedSystemObjectId is { } id && _csos.TryGetValue(id, out var cso) && cso.MetaverseObjectId == metaverseObjectId;
+
+    /// <summary>Whether the account just provisioned is of the Object Type the system's Password Synchronisation targets.</summary>
+    private bool ReachesPasswordSynchronisationTarget(int connectedSystemId, Guid? connectedSystemObjectId) =>
+        _connectedSystems.TryGetValue(connectedSystemId, out var system)
+        && system.PasswordSynchronisation is { } configuration
+        && connectedSystemObjectId is { } id && _csos.TryGetValue(id, out var cso)
+        && cso.TypeId == configuration.TargetObjectTypeId;
+
     /// <summary>
-    /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
-    /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
-    /// and re-provisioned), or <see cref="PendingPasswordChangeStatus.Expired"/> /
-    /// <see cref="PendingPasswordChangeStatus.Cancelled"/> (a dead password). Anything else is the person's real
-    /// password and must win.
+    /// Whether a live row owes another of the person's existing accounts its first password, which nothing staged for
+    /// a different account may take over (#2160).
     /// </summary>
-    private static bool CanBeSupersededByAProvisionedChange(PendingPasswordChange existing) =>
-        existing.Origin == PendingPasswordChangeOrigin.Provisioned
-        || existing.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled;
+    private bool OwesAnotherLiveAccount(PendingPasswordChange row, Guid? provisionedAccountId)
+    {
+        var owed = row.ProvisionedConnectedSystemObjectId ?? (row.IsProvisioned ? row.ConnectedSystemObjectId : null);
+        return owed.HasValue && owed != provisionedAccountId
+               && row.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked
+               && IsStillThePersons(owed, row.MetaverseObjectId);
+    }
+
+    /// <summary>
+    /// Whether a row is parked for a reason no attempt with the new account can cure: anything but a missing account or
+    /// an unreachable target.
+    /// </summary>
+    private static bool IsParkedBeyondCure(PendingPasswordChange row) =>
+        row.Status == PendingPasswordChangeStatus.Parked
+        && row.FailureReason is not (PasswordSetFailureReason.TargetObjectNotFound or PasswordSetFailureReason.Transient);
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
     {
@@ -3529,7 +3585,7 @@ public class SyncRepository : ISyncRepository
         // as it must against PostgreSQL.
         var claimed = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
-            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
+            .Where(c => !excludePropagated || !c.IsHeldWhilePasswordSynchronisationIsOff)
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(maximum)
@@ -3644,7 +3700,8 @@ public class SyncRepository : ISyncRepository
         Origin = source.Origin,
         EnableAccount = source.EnableAccount,
         SyncRuleId = source.SyncRuleId,
-        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow
+        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow,
+        ProvisionedConnectedSystemObjectId = source.ProvisionedConnectedSystemObjectId
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
@@ -3671,7 +3728,7 @@ public class SyncRepository : ISyncRepository
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
-            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
+            .Where(c => !excludePropagated || !c.IsHeldWhilePasswordSynchronisationIsOff)
             .ToList();
 
         foreach (var change in expiring)
@@ -3792,6 +3849,7 @@ public class SyncRepository : ISyncRepository
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
                     Origin = c.Origin,
                     SyncRuleId = c.SyncRuleId,
+                    ProvisionedConnectedSystemObjectId = c.ProvisionedConnectedSystemObjectId,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,

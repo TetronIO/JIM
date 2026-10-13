@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
+- 🔄 Setting a password without choosing to enable the account, on an account still waiting for its first password, now enables it as its Synchronisation Rule's Initial Password says, instead of leaving it as it is. (#2160)
 - 🔄 **Initiated By** reads the same on every page: a run a Schedule started names the Schedule and links its execution, and System has its own icon instead of the Schedule's clock. An execution item's **Operation** shows what was done to the object even when it failed. (#2066)
 - 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
@@ -87,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
+- 🐛 An account provisioned while the person's own password change was already waiting is now given that password and enabled as its Synchronisation Rule's Initial Password says, rather than left disabled with nothing to say why; the export and the delivery both record what happened. (#2160)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
 - 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
 - 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)

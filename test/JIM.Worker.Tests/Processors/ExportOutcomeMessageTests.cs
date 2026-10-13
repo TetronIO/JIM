@@ -155,6 +155,13 @@ public class ExportOutcomeMessageTests
         Assert.That(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(accounts), Does.StartWith(expectedStart));
     }
 
+    [TestCase(1, "1 ")]
+    [TestCase(1_250, "1,250 ")]
+    public void ForInitialPasswordsConflicted_StartsWithTheCount(int accounts, string expectedStart)
+    {
+        Assert.That(ExportOutcomeMessage.ForInitialPasswordsConflicted(accounts), Does.StartWith(expectedStart));
+    }
+
     [Test]
     public void ForUnrecorded_OneExport_UsesTheSingular()
     {

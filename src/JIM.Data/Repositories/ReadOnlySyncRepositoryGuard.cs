@@ -522,7 +522,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         => throw new PreviewWriteAttemptedException(nameof(CreatePendingExportsAsync));
 
 
-    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    public Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
 
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)

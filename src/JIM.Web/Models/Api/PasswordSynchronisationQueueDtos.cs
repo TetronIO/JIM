@@ -68,10 +68,24 @@ public class PendingPasswordChangeResponse
     public PendingPasswordChangeOrigin Origin { get; set; }
 
     /// <summary>
-    /// The Synchronisation Rule a <c>Provisioned</c> change generates its password from at each delivery attempt,
-    /// or null for every other origin.
+    /// The Synchronisation Rule whose Initial Password this change delivers a Connected System Object's first password
+    /// under, or null where it is no Connected System Object's first password. A <c>Provisioned</c> change generates its
+    /// password from the rule at each delivery attempt; a change carrying a first password in place of the Initial
+    /// Password keeps its own password and takes only the rule's settings for enabling the Connected System Object and
+    /// for whether its password never expires.
     /// </summary>
     public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Connected System Object this change also gives its first password, or null. Set when the change was already
+    /// waiting as JIM provisioned that Connected System Object, or replaced its Initial Password before it was
+    /// delivered; delivering it then applies the provisioning Synchronisation Rule's Initial Password settings for
+    /// enabling the Connected System Object and for whether its password never expires. Cancelling such a change
+    /// leaves that Connected System Object without a password from JIM. For a <c>Provisioned</c> change, the Connected
+    /// System Object it is the Initial Password of.
+    /// </summary>
+    /// <remarks>#2160. Read from <c>PendingPasswordChange.ProvisionedConnectedSystemObjectId</c>.</remarks>
+    public Guid? ProvisionedConnectedSystemObjectId { get; set; }
 
     /// <summary>
     /// Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff
@@ -154,6 +168,7 @@ public class PendingPasswordChangeResponse
             Status = header.Status,
             Origin = header.Origin,
             SyncRuleId = header.SyncRuleId,
+            ProvisionedConnectedSystemObjectId = header.ProvisionedConnectedSystemObjectId,
             Due = header.IsDue(asOf),
             Held = header.IsHeld,
             FailureReason = header.FailureReason,

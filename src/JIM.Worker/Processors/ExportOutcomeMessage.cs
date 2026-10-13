@@ -119,6 +119,24 @@ internal static class ExportOutcomeMessage
               "Connected System Object; the service log names the accounts and the cause.";
 
     /// <summary>
+    /// The warning for newly provisioned accounts whose Initial Password was not queued because a password change for
+    /// another of the same person's Connected System Objects in that Connected System is still waiting (#2160): JIM
+    /// holds one per person per Connected System. Not <see cref="ForInitialPasswordsNotStaged"/>, whose remedy (set the
+    /// password now) would replace that other change; this one is to wait for it to be delivered first.
+    /// </summary>
+    /// <param name="accounts">How many accounts were not queued an Initial Password.</param>
+    internal static string ForInitialPasswordsConflicted(int accounts) =>
+        accounts == 1
+            ? "1 newly provisioned account was not queued an Initial Password, because a password change for another of the same person's " +
+              "Connected System Objects in this Connected System is still waiting, and JIM holds one per person per Connected System. Once " +
+              "that change has been delivered, set this account's password with the set-password action, choosing to enable it if it should " +
+              "be; its Activity names it."
+            : $"{accounts:N0} newly provisioned accounts were not queued an Initial Password, because a password change for another of the same " +
+              "person's Connected System Objects in this Connected System is still waiting, and JIM holds one per person per Connected System. " +
+              "Once each such change has been delivered, set the account's password with the set-password action, choosing to enable it if it " +
+              "should be; their Activities name them.";
+
+    /// <summary>
     /// The warning for accounts whose enabled state an export wrote where JIM could not check, and record against, any
     /// Initial Password still owed to them (#2064). Delivering such a password would then follow the Synchronisation
     /// Rule's setting rather than the Attribute Flow, which is why the export run says so; most accounts are owed

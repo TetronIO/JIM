@@ -91,7 +91,9 @@ public enum PendingPasswordChangeOrigin
     /// The password changed somewhere and JIM is carrying it to every Connected System configured to receive
     /// synchronised passwords. The account is resolved on each attempt from the system's configuration; the
     /// delivery enables the account only to complete an enable JIM withheld until a new account had a password
-    /// (#2039, #2064); a paused system holds the change until it is switched back on.
+    /// (#2039, #2064), or where the change is delivered as an account's first password in place of its Initial
+    /// Password, whose promises about the account it then carries (#2160); a paused system holds the change until it
+    /// is switched back on, unless it carries such a first password.
     /// </summary>
     Propagated = 0,
 
@@ -122,10 +124,11 @@ public enum PendingPasswordChangeOrigin
 }
 
 /// <summary>
-/// What staging a <see cref="PendingPasswordChangeOrigin.Provisioned"/> change did, decided by the narrower
+/// What staging a <see cref="PendingPasswordChangeOrigin.Provisioned"/> change did, decided in one statement by the
 /// conflict clause in <c>SyncRepository.PasswordOperations.cs</c>'s <c>StageProvisionedPasswordChangesAsync</c>
-/// (#1697). Unlike the ordinary coalescing UPSERT behind <see cref="PendingPasswordChangeOrigin"/>'s other two
-/// origins, a provisioned row is not allowed to overwrite the person's real password.
+/// (#1697, #2160). Unlike the ordinary coalescing UPSERT behind <see cref="PendingPasswordChangeOrigin"/>'s other two
+/// origins, a provisioned row never overwrites a password change that can still reach the new account: that change
+/// becomes the account's first password instead, carrying the Initial Password's promises about the account.
 /// </summary>
 public enum ProvisionedPasswordStagingDisposition
 {
@@ -135,19 +138,31 @@ public enum ProvisionedPasswordStagingDisposition
     Inserted = 0,
 
     /// <summary>
-    /// A row existed but carried nothing worth keeping (it was Expired, Cancelled, or itself Provisioned): the
-    /// new change's values replaced it in place. The row now in the table keeps its own id rather than taking
-    /// the change's, so a caller must adopt the row's id for anything it does with the change afterwards.
+    /// A row existed that the account's Initial Password replaces in place: an expired or cancelled change; an Initial
+    /// Password for an account since deleted, disjoined or provisioned again; a password change JIM had stopped
+    /// trying because no attempt can deliver it (a policy rejection, an unreadable password, an unsupported operation);
+    /// an administrator's set whose account is gone; or a propagated change held because Password Synchronisation is
+    /// switched off on the system, which has not reached the system and would not, while the account's first password
+    /// is delivered whatever the pause (#2160). The row keeps its own id rather than taking the change's, so a caller
+    /// must adopt the row's id for anything it does with the change afterwards.
     /// </summary>
     Superseded = 1,
 
     /// <summary>
-    /// A row existed carrying the person's real password (Pending, Delivering, or Parked and of Explicit or
-    /// Propagated origin) and won: nothing was written. The provisioned change is discarded, because that
-    /// password is already on its way, or waiting on a person to fix it, and must not be overwritten by the
-    /// account's throwaway first one.
+    /// A row existed carrying a password change that will reach the new account: a propagated change for the Object
+    /// Type the system's Password Synchronisation targets, or an administrator's set naming the account. It keeps its
+    /// own password, expiry and Activity, and now carries the Initial Password's obligation (#2160): the account, the
+    /// rule, and whether the Create wrote the account's flags. Released to be delivered at once, its claim taken back
+    /// where it was being delivered, and a park the account cures released.
     /// </summary>
-    Coalesced = 2
+    Coalesced = 2,
+
+    /// <summary>
+    /// A row existed carrying another of this person's Connected System Objects' first password or a change for one,
+    /// still live, so nothing was written (#2160). The queue holds one password change per person per Connected System,
+    /// and replacing it would lose that account's password; the export reports the Initial Password as not queued.
+    /// </summary>
+    Conflicted = 3
 }
 
 /// <summary>
@@ -197,8 +212,9 @@ public enum AccountFlagBasis
 {
     /// <summary>
     /// The flag was left as the account has it. A propagated password never changes either flag (bar completing a
-    /// withheld enable, <c>CompletesWithheldEnable</c>), and an administrator's set with no enable decision leaves the
-    /// enabled state alone.
+    /// withheld enable, <c>CompletesWithheldEnable</c>, or carrying an account's first password, <c>SyncRuleSetting</c>),
+    /// and an administrator's set with no enable decision leaves the enabled state alone unless the account is still
+    /// owed its first password.
     /// </summary>
     LeftAsIs = 0,
 
@@ -226,7 +242,39 @@ public enum AccountFlagBasis
     /// <summary>
     /// Nothing writes the account's flags, so the provisioning Synchronisation Rule's Initial Password decides: Enable
     /// Account on enables the account (off leaves it as it was created), and its expiry sets "Password never expires"
-    /// for Never expires and clears it otherwise.
+    /// for Never expires and clears it otherwise. Applies to the account's first password whether that is the Initial
+    /// Password or a password change delivered in its place (#2160), which keeps its own "must change at next sign-in".
     /// </summary>
     SyncRuleSetting = 4
+}
+
+/// <summary>
+/// How a password change carrying an account's first password in place of its Initial Password (#2160) relates to the
+/// account its delivery reached: whether the Initial Password's promises about the account apply to this delivery.
+/// Decided at each attempt, and stated on the delivery's Activity.
+/// </summary>
+public enum InitialPasswordStandIn
+{
+    /// <summary>The change carries no account's first password.</summary>
+    None = 0,
+
+    /// <summary>
+    /// The change reached the account it owes its first password, and the provisioning Synchronisation Rule still sets
+    /// an Initial Password, so the rule's promises about the account apply.
+    /// </summary>
+    Applies = 1,
+
+    /// <summary>
+    /// The provisioning Synchronisation Rule no longer sets an Initial Password, or has been deleted. The password is
+    /// still delivered, because it is the person's own; the account's flags are left as the change alone decides.
+    /// </summary>
+    NoLongerSet = 2,
+
+    /// <summary>
+    /// The change reached another of this person's Connected System Objects than the one it owes its first password:
+    /// the system's Password Synchronisation now targets another Object Type, or an administrator's set named another
+    /// account. The promises are not applied to an account they were never made for, and the account they were for is
+    /// left without its first password, which the delivery's Activity says.
+    /// </summary>
+    OtherAccount = 3
 }
