@@ -26,11 +26,7 @@
                 @part.Text
             }
         }
-        @if (NearestCauses.TotalCohortCount > 1)
-        {
-            var more = NearestCauses.TotalCohortCount - 1;
-            @($", and {more} more {(more == 1 ? "cause" : "causes")}")
-        }
+        @CausalityCauseWording.MoreCausesSuffix(NearestCauses)
     }
 </span>
 

@@ -225,6 +225,33 @@ public static class CausalityCauseWording
     }
 
     /// <summary>
+    /// An item's nearest recorded cause as one line of plain text (#2100): the first cohort's sentence and how many more
+    /// causes there are, or how the item's story ends where it has none. The REST API's timeline rows carry it, so a
+    /// script reads the same line the portal shows.
+    /// </summary>
+    public static string NearestCauseText(CausalNearestCauses nearest, string? effectName)
+    {
+        ArgumentNullException.ThrowIfNull(nearest);
+
+        if (nearest.Cohorts.Count == 0)
+            return Ending(nearest.Resolution) ?? Ending(CausalChainResolution.NoFurtherCauses)!;
+
+        return string.Concat(Sentence(nearest.Cohorts[0], effectName).Select(p => p.Text)) + MoreCausesSuffix(nearest);
+    }
+
+    /// <summary>
+    /// What follows the first cause's sentence where an item has more than one: ", and 2 more causes". Empty where it
+    /// has one.
+    /// </summary>
+    public static string MoreCausesSuffix(CausalNearestCauses nearest)
+    {
+        ArgumentNullException.ThrowIfNull(nearest);
+
+        var more = nearest.TotalCohortCount - 1;
+        return more < 1 ? string.Empty : $", and {more} more {(more == 1 ? "cause" : "causes")}";
+    }
+
+    /// <summary>
     /// The label on the disclosure that lists a cohort's individual causes.
     /// </summary>
     public static string MembersLabel(CausalChainCohort cohort)
