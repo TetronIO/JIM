@@ -119,7 +119,7 @@ One pull request per folder, each ending with every page declaring its type, an 
 ### Phase 5: Contributor content, promotion, close
 
 - Customer-relevant behaviour in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) rewritten into `concepts/`; the 16 contributor pages moved to `engineering/`, connector authoring with them (the departure recorded under 5a).
-- Warnings whose baseline has reached zero and that ran a release without a false positive promoted to blocking, and MNT-3 promoted to Block now that no page is over budget.
+- Warnings whose baseline has reached zero and that ran a release without a false positive promoted to blocking, and MNT-3 promoted to Block now that no page is over budget. **MNT-3 done:** splitting `concepts/expressions.md`, whose null-handling rules became `concepts/expression-nulls.md`, left no page over budget, and MNT-3 blocks.
 - PRD and this plan moved to `done/` in the pull request that closes #1454.
 
 ## Success Criteria
