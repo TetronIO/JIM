@@ -146,6 +146,7 @@ internal sealed class SqlConnectorSchema
                 writability: isAnchor ? anchorWritability : writability)
             {
                 Description = DescribeSourceColumn(column),
+                CaseExact = IsCaseExact(column, isReference ? AttributeDataType.Reference : attributeType.Value),
                 // The document names the Object Type every reference points at; carry it through so the
                 // schema merge can persist it and import resolution can use it (#1285).
                 ReferencesObjectTypeName = isReference ? referenceColumns[column.Name].ReferencesObjectType : null
@@ -193,7 +194,11 @@ internal sealed class SqlConnectorSchema
             className: null,
             writability: AttributeWritability.ReadOnly)
         {
-            Description = $"Composed by JIM from the anchor columns {string.Join(", ", configuration.AnchorColumns)}, because a Connected System Object is identified by one value."
+            Description = $"Composed by JIM from the anchor columns {string.Join(", ", configuration.AnchorColumns)}, because a Connected System Object is identified by one value.",
+
+            // Two composed values differing only in the case of a case-exact part identify two rows (#2051).
+            CaseExact = anchorColumns.Any(column => objectType.Attributes.Any(attribute =>
+                attribute.CaseExact && string.Equals(attribute.Name, column.Name, StringComparison.OrdinalIgnoreCase)))
         };
 
         objectType.Attributes.Add(composedAnchor);
@@ -243,7 +248,8 @@ internal sealed class SqlConnectorSchema
                 writability: writability)
             {
                 // As for reference columns above: the declared target travels with the attribute (#1285).
-                ReferencesObjectTypeName = relatedTable.ReferencesObjectType
+                ReferencesObjectTypeName = relatedTable.ReferencesObjectType,
+                CaseExact = IsCaseExact(valueColumn, relatedTable.ReferencesObjectType != null ? AttributeDataType.Reference : attributeType!.Value)
             });
         }
     }
@@ -468,6 +474,13 @@ internal sealed class SqlConnectorSchema
     /// The columns of one table or view. Shared with export, which asks the same catalogue the same
     /// question so that the two can never disagree about what a column is.
     /// </summary>
+    /// <summary>
+    /// Whether a column's values are case-exact (#2051): what its collation says, or the dialect's default where the
+    /// catalogue does not say. Only a Text attribute carries the declaration.
+    /// </summary>
+    private bool IsCaseExact(SqlDiscoveredColumn column, AttributeDataType attributeType) =>
+        attributeType == AttributeDataType.Text && (column.CaseExact ?? _provider.TextComparesExactlyByDefault);
+
     private Task<List<SqlDiscoveredColumn>> ReadColumnsAsync(string? schemaName, string objectName) =>
         SqlCatalogueReader.ReadColumnsAsync(_provider, _connection, schemaName, objectName);
 
@@ -536,7 +549,11 @@ internal sealed record SqlCatalogueObject(string? SchemaName, string ObjectName)
 /// <summary>
 /// A column as discovery found it, whether from a catalogue or from a statement's result metadata.
 /// </summary>
-internal sealed record SqlDiscoveredColumn(string Name, SqlColumnType ColumnType, bool IsNullable);
+/// <param name="CaseExact">
+/// Whether the column's collation compares text exactly; null where the catalogue does not say (the column is not
+/// text, or it is a statement's column, which no catalogue describes).
+/// </param>
+internal sealed record SqlDiscoveredColumn(string Name, SqlColumnType ColumnType, bool IsNullable, bool? CaseExact = null);
 
 /// <summary>
 /// One column of a declared foreign key, with both sides of the constraint.
