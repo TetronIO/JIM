@@ -5,7 +5,10 @@ using System;
 using System.Text.Json;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
@@ -78,6 +81,65 @@ public class DateTimeValueDtoTests
             Attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "startDate", Type = AttributeDataType.DateTime },
             AttributeId = 1,
             ChangeType = PendingExportAttributeChangeType.Update,
+            DateTimeValue = StoredDate
+        });
+
+        Assert.That(JsonSerializer.Serialize(dto.DateTimeValue), Is.EqualTo(ExpectedJson));
+    }
+
+    [Test]
+    public void CanonicaliseDates_MvoChangeHistory_EmitsTheValueAndChangeTimeInUtcWithZ()
+    {
+        var changeTime = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc).AddTicks(10);
+        var item = new MvoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = changeTime.ToLocalTime() };
+        item.AttributeChanges.Add(new MvoAttributeChangeDto { ValueChanges = { new MvoValueChangeDto { DateTimeValue = StoredDate } } });
+
+        ApiDateValues.CanonicaliseDates([item]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(JsonSerializer.Serialize(item.AttributeChanges[0].ValueChanges[0].DateTimeValue), Is.EqualTo(ExpectedJson));
+            Assert.That(JsonSerializer.Serialize(item.ChangeTime), Is.EqualTo("\"2026-03-02T08:00:00.000001Z\""));
+        }
+    }
+
+    [Test]
+    public void CanonicaliseDates_CsoChangeHistory_EmitsTheValueAndChangeTimeInUtcWithZ()
+    {
+        var changeTime = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc).AddTicks(10);
+        var item = new CsoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = changeTime.ToLocalTime() };
+        item.AttributeChanges.Add(new CsoAttributeChangeDto { ValueChanges = { new CsoValueChangeDto { DateTimeValue = StoredDate } } });
+
+        ApiDateValues.CanonicaliseDates([item]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(JsonSerializer.Serialize(item.AttributeChanges[0].ValueChanges[0].DateTimeValue), Is.EqualTo(ExpectedJson));
+            Assert.That(JsonSerializer.Serialize(item.ChangeTime), Is.EqualTo("\"2026-03-02T08:00:00.000001Z\""));
+        }
+    }
+
+    [Test]
+    public void PredefinedSearchCriteriaDto_FromEntity_EmitsTheDateInUtcWithZ()
+    {
+        var dto = PredefinedSearchCriteriaDto.FromEntity(new PredefinedSearchCriteria
+        {
+            Id = 1,
+            MetaverseAttributeId = 1,
+            MetaverseAttribute = new MetaverseAttribute { Id = 1, Name = "Start Date", Type = AttributeDataType.DateTime },
+            DateTimeValue = StoredDate
+        });
+
+        Assert.That(JsonSerializer.Serialize(dto.DateTimeValue), Is.EqualTo(ExpectedJson));
+    }
+
+    [Test]
+    public void SyncRuleScopingCriteriaDto_FromEntity_EmitsTheDateInUtcWithZ()
+    {
+        var dto = SyncRuleScopingCriteriaDto.FromEntity(new SyncRuleScopingCriteria
+        {
+            Id = 1,
+            MetaverseAttribute = new MetaverseAttribute { Id = 1, Name = "Start Date", Type = AttributeDataType.DateTime },
             DateTimeValue = StoredDate
         });
 

@@ -113,7 +113,7 @@ public class PredefinedSearchCriteriaDto
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = ApiDateValues.Canonical(entity.DateTimeValue),
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
             CaseSensitive = entity.CaseSensitive,
