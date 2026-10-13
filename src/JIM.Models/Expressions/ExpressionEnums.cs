@@ -171,3 +171,40 @@ public enum AttributeFlowErrorReason
     /// </summary>
     ResultMultiValued
 }
+
+/// <summary>
+/// One transform of an import Attribute Flow's value processing (#843), as the tester's trace names it (#2055). Listed
+/// in the order synchronisation applies them.
+/// </summary>
+public enum AttributeFlowValueProcessingStep
+{
+    /// <summary>
+    /// Leading and trailing whitespace is removed.
+    /// </summary>
+    TrimWhitespace,
+
+    /// <summary>
+    /// Runs of internal whitespace become a single space.
+    /// </summary>
+    CollapseInternalWhitespace,
+
+    /// <summary>
+    /// The value is changed to upper case.
+    /// </summary>
+    UpperCase,
+
+    /// <summary>
+    /// The value is changed to lower case.
+    /// </summary>
+    LowerCase,
+
+    /// <summary>
+    /// The value is changed to title case.
+    /// </summary>
+    TitleCase,
+
+    /// <summary>
+    /// A value that is empty or only whitespace becomes no value.
+    /// </summary>
+    TreatWhitespaceAsNoValue
+}

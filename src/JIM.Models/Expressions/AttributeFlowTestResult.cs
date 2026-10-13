@@ -19,4 +19,16 @@ public sealed class AttributeFlowTestResult
     /// The evaluation pipeline's outcome. Null when <see cref="InputErrors"/> stopped the test.
     /// </summary>
     public AttributeFlowEvaluation? Evaluation { get; init; }
+
+    /// <summary>
+    /// The value processing step: which transforms apply and whether they changed the result. Null when none can apply
+    /// (an export Attribute Flow, a target that is not Text, or an Expression that produced no result).
+    /// </summary>
+    public AttributeFlowValueProcessing? ValueProcessing { get; init; }
+
+    /// <summary>
+    /// For each input given a value, what the Attribute Flow would do with that input absent. Empty when the inputs
+    /// could not be used.
+    /// </summary>
+    public IReadOnlyList<AttributeFlowAbsentInputOutcome> IfInputHasNoValue { get; init; } = [];
 }
