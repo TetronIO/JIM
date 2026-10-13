@@ -70,9 +70,10 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 |----------|---------|-------------|
 | [System](system.md) | 6 | Health checks, Service Health of the Worker and Scheduler, version, auth config, user info, and system reset |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 26 | Manage Connected Systems, partitions and containers, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
+| [Connected Systems](connected-systems.md) | 19 | Manage Connected Systems, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
 | [Connected System Schema](connected-system-schema.md) | 4 | Import a Connected System's schema, and choose which Object Types and attributes JIM manages |
 | [Auxiliary Object Classes](connected-system-auxiliary-classes.md) | 5 | Choose the auxiliary classes an LDAP Connected System's Object Types carry, and discover which are in use |
+| [Partitions and Containers](partitions-and-containers.md) | 7 | Import a Connected System's hierarchy, and choose which partitions and containers JIM imports from |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
 | [Synchronisation Rules](synchronisation-rules.md) | 4 | List, create, change and delete Synchronisation Rules |
 | [Attribute Mappings](attribute-mappings.md) | 4 | List, create, change and delete a Synchronisation Rule's Attribute Flows, including generated values |

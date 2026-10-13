@@ -4,44 +4,36 @@
 function Set-JIMConnectedSystemContainer {
     <#
     .SYNOPSIS
-        Updates properties of a Connected System Container in JIM.
+        Chooses whether, and how deep, JIM imports from a container.
 
     .DESCRIPTION
-        Updates properties of a container within a Connected System.
-        Use this to select containers for import operations.
-        When a container is selected, objects within it will be imported during sync.
-        Note: The parent partition must also be selected for the container selection to take effect.
+        Chooses whether JIM imports objects from a container of a Connected System, and how far beneath it. The
+        partition holding the container must be selected too.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ContainerId
-        The unique identifier of the Container to update.
+        The ID of the container to change.
 
     .PARAMETER Selected
-        Whether the container should be selected for import operations.
-        When set to $true, JIM will import objects from this container.
+        Whether JIM imports objects from the container.
 
     .PARAMETER Excluded
-        Whether the container should be carved out of a selection an ancestor made, leaving the objects
-        within it deliberately unimported.
-        Mutually exclusive with Selected: a request that would leave the container both selected and
-        excluded is rejected. To replace a selection with an exclusion, set both in the same call
-        (-Selected $false -Excluded $true).
-        Omit this parameter to leave the stored exclusion unchanged.
+        Whether the container is carved out of a selection a container above it made, so its objects are
+        deliberately not imported. A container cannot be both selected and excluded: to replace a selection with an
+        exclusion, give -Selected $false -Excluded $true together. Omit it to leave the exclusion as it is.
 
     .PARAMETER Scope
-        How far beneath the container objects are imported from, when it is selected.
-        Subtree (the default) imports from the container and every container beneath it.
-        OneLevel imports only the objects held directly in the container, leaving containers
-        beneath it to be selected in their own right.
-        Omit this parameter to leave the stored scope unchanged.
+        How far beneath the container objects are imported from, when it is selected: Subtree imports from the
+        container and every container beneath it; OneLevel only from the container itself, leaving the containers
+        beneath it to be selected in their own right. Omit it to leave the scope as it is.
 
     .PARAMETER PassThru
-        If specified, returns the updated container.
+        Returns the container as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Container object.
+        With -PassThru, the container as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Selected $true
@@ -85,7 +77,7 @@ function Set-JIMConnectedSystemContainer {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemContainerDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,
