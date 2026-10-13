@@ -173,6 +173,33 @@ Describe 'Set-JIMPredefinedSearchCriterion' {
         }
     }
 
+    # The update keeps a criterion's stored case sensitivity when the request leaves it out (#2051).
+    It 'Omits caseSensitive from the request body when -CaseSensitive is not bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 15 } }
+
+            Set-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 15 -MetaverseAttributeId 7 -ComparisonType Equals -StringValue 'Sales' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and -not $Body.ContainsKey('caseSensitive')
+            }
+        }
+    }
+
+    It 'Sends caseSensitive in the request body when -CaseSensitive is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 15 } }
+
+            Set-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 15 -MetaverseAttributeId 7 -ComparisonType Equals -StringValue 'Sales' -CaseSensitive $false -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.ContainsKey('caseSensitive') -and $Body.caseSensitive -eq $false
+            }
+        }
+    }
+
     It 'Omits decimalValue from the request body when -DecimalValue is not bound' {
         InModuleScope JIM {
             $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
