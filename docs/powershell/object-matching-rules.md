@@ -484,6 +484,64 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ---
 
+## Test-JIMMatchingRule
+
+Tests what a saved Object Matching Rule would match on for sample values or a real Connected System Object and, with `-LookUp`, which Metaverse Object a synchronisation would join. See [Testing a rule](../configuration/object-matching-rules.md#testing-a-rule).
+
+<!-- BEGIN GENERATED: Test-JIMMatchingRule -->
+### Syntax
+
+```powershell
+# ConnectedSystem (default)
+Test-JIMMatchingRule -ConnectedSystemId <int> -Id <int> [-Attributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-LookUp]
+
+# SyncRule
+Test-JIMMatchingRule -SyncRuleId <int> -Id <int> [-Attributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-LookUp]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes (ConnectedSystem) |  | The ID of the Connected System the rule belongs to, for a rule on a Connected System Object Type. Accepts pipeline input by property name. |
+| `SyncRuleId` | `int` | Yes (SyncRule) |  | The ID of the Synchronisation Rule the rule belongs to, for a rule on a Synchronisation Rule. Accepts pipeline input by property name. |
+| `Id` | `int` | Yes |  | The ID of the Object Matching Rule to test. Accepts pipeline input by property name. |
+| `Attributes` | `hashtable` | No |  | A hashtable of sample values for the attributes the rule reads, keyed by attribute name. Each value is converted to its attribute's type; `$null` is no value, and an array gives a multi-valued attribute several values. With ConnectedSystemObjectId, a value here replaces the object's value for that attribute. |
+| `ConnectedSystemObjectId` | `guid` | No |  | The ID of a Connected System Object of the rule's Object Type whose values to test with. |
+| `LookUp` | `switch` | No |  | Also looks the values up in the Metaverse and reports what a synchronisation would do. Nothing is written. |
+
+### Output
+
+What the rule would match on (Outcome, ValueLines and ValueType, or FailureMessage when it fails), the values tested for each attribute it reads (Inputs) and, with `-LookUp`, what the values find in the Metaverse (Lookup). When the values cannot be used, IsValid is `$false` and InputErrors says why.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsValid` | `bool` | False when the values could not be used; `InputErrors` says why, and nothing was evaluated. |
+| `Outcome` | `string` | What the rule produced: values to match on, no value (a synchronisation would try the next rule), or a failure (a synchronisation would stop the object). Empty when `IsValid` is false. One of `Values`, `NoValue` or `Failed`. |
+| `ValueLines` | `string[]` | The values the rule would compare, one line each, in the Metaverse attribute's type. |
+| `ValueType` | `string` | The type the values are compared as: the target Metaverse attribute's. One of `NotSet`, `Text`, `Number`, `DateTime`, `Binary`, `Reference`, `Guid`, `Boolean`, `LongNumber` or `Decimal`. |
+| `FailureMessage` | `string` | Why the rule failed, when `Outcome` is `Failed`. |
+| `Inputs` | `object[]` | The attributes the rule reads, with the values tested for each. Each has `Attribute`, `Type`, `Plurality` and `ValueLines`. |
+| `Lookup` | `object` | What the values find in the Metaverse. Empty when the lookup was not asked for, or the rule produced no values to look up. It has `Outcome`, `Description`, `MetaverseObjectId`, `MetaverseObjectName`, `Candidates` and `CandidateTotal`. |
+| `InputErrors` | `string[]` | Why the values could not be used, one message per problem; empty when they could. |
+<!-- END GENERATED: Test-JIMMatchingRule -->
+
+### Examples
+
+```powershell title="See what a rule would match on"
+Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -Attributes @{ employeeNumber = 'EMP-48213' }
+```
+
+```powershell title="Find the Metaverse Object a real object would join"
+Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' -LookUp
+```
+
+```powershell title="Check two email addresses identify one Metaverse Object"
+(Test-JIMMatchingRule -SyncRuleId 12 -Id 7 -Attributes @{ mail = 'jo@corp.example', 'j.bloggs@corp.example' } -LookUp).Lookup
+```
+
+---
+
 ## See also
 
 - [Object Matching Rules](../configuration/object-matching-rules.md): how matching works, its outcomes, matching on an expression, and the two modes

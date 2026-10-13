@@ -1,0 +1,128 @@
+@using JIM.Application.Interfaces
+@using JIM.Models.Staging
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Finds a real object for a configuration tester to load values from (#2055): a Connected System Object of one
+   Object Type in one Connected System, or a Metaverse Object of one type. Searches as the administrator types, offers
+   the matches as object chips, and says which object the values were loaded from. The Attribute Flow, Scope and
+   Object Matching testers share it, so finding an object works the same in each. *@
+<div class="@Class">
+    <SearchField Value="@_search" ValueChanged="SearchAsync" Label="@Label" Placeholder="Search by name" />
+    @if (_results.Count > 0)
+    {
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+            @foreach (var found in _results)
+            {
+                var choice = found;
+                <MudButton Variant="Variant.Text" Size="Size.Small" Class="pa-0" OnClick="@(() => PickAsync(choice))"
+                           aria-label="@($"Load values from {choice.Name}")">
+                    <ObjectChip Kind="Kind" TypeName="@choice.TypeName" Name="@choice.Name" Class="ma-0" />
+                </MudButton>
+            }
+        </MudStack>
+    }
+    else if (!string.IsNullOrWhiteSpace(_search) && _searched)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No objects match.</MudText>
+    }
+    @if (_loadedName != null)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">
+            Values loaded from <strong>@_loadedName</strong>. Change any of them to try a variation.
+        </MudText>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The object found and chosen: its id and the name it is known by.
+    /// </summary>
+    public sealed record PickedObject(Guid Id, string Name);
+
+    /// <summary>
+    /// Whether to find a Connected System Object or a Metaverse Object.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ObjectChipKind Kind { get; set; }
+
+    /// <summary>
+    /// The Connected System to search, for a Connected System Object.
+    /// </summary>
+    [Parameter]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The Object Type to search, for a Connected System Object.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemObjectType? ConnectedSystemObjectType { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object Type to search, for a Metaverse Object; null searches every type.
+    /// </summary>
+    [Parameter]
+    public int? MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The search box's label, naming what is found where.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Raised when an object is chosen; the host loads its values and returns once they are in place.
+    /// </summary>
+    [Parameter]
+    public EventCallback<PickedObject> OnPicked { get; set; }
+
+    /// <summary>
+    /// The surrounding geometry, such as a top margin.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private sealed record FoundObject(Guid Id, string? Name, string? TypeName);
+
+    private string? _search;
+    private bool _searched;
+    private List<FoundObject> _results = [];
+    private string? _loadedName;
+
+    private async Task SearchAsync(string? search)
+    {
+        _search = search;
+        _searched = false;
+        _results = [];
+        if (string.IsNullOrWhiteSpace(search))
+            return;
+
+        using var jim = JimFactory.Create();
+        if (Kind == ObjectChipKind.MetaverseObject)
+        {
+            var found = await jim.Metaverse.GetMetaverseObjectsAsync(1, 8, MetaverseObjectTypeId, search);
+            _results = found.Results.Select(mvo => new FoundObject(mvo.Id, mvo.NameOrId, mvo.TypeName)).ToList();
+        }
+        else if (ConnectedSystemObjectType is { } objectType)
+        {
+            var found = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(ConnectedSystemId, 1, 8, search,
+                objectTypeFilter: [objectType.Id]);
+            _results = found.Results
+                .Select(cso => new FoundObject(cso.Id, ObjectDescription.ChipName(cso.DisplayName, cso.ExternalIdValue), objectType.Name))
+                .ToList();
+        }
+
+        _searched = true;
+    }
+
+    private async Task PickAsync(FoundObject found)
+    {
+        var name = found.Name ?? found.Id.ToString();
+        await OnPicked.InvokeAsync(new PickedObject(found.Id, name));
+        _loadedName = name;
+        _results = [];
+        _searched = false;
+    }
+}

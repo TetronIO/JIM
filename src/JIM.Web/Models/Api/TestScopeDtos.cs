@@ -76,38 +76,12 @@ public class TestScopeResponse
     /// <summary>
     /// The attributes the scoping criteria compare, with the values tested for each.
     /// </summary>
-    public List<TestScopeInputDto> Inputs { get; set; } = [];
+    public List<AttributeSampleDto> Inputs { get; set; } = [];
 
     /// <summary>
     /// Why the values could not be used, one message per problem; null when they could.
     /// </summary>
     public IReadOnlyList<string>? InputErrors { get; set; }
-}
-
-/// <summary>
-/// An attribute a Synchronisation Rule's scoping criteria compare, with the values a test used for it.
-/// </summary>
-public class TestScopeInputDto
-{
-    /// <summary>
-    /// The attribute's name.
-    /// </summary>
-    public string Attribute { get; set; } = null!;
-
-    /// <summary>
-    /// The attribute's type.
-    /// </summary>
-    public AttributeDataType Type { get; set; }
-
-    /// <summary>
-    /// Whether the attribute holds one value or several.
-    /// </summary>
-    public AttributePlurality Plurality { get; set; }
-
-    /// <summary>
-    /// The values tested, one line each; empty for no value.
-    /// </summary>
-    public List<string> ValueLines { get; set; } = [];
 }
 
 /// <summary>
