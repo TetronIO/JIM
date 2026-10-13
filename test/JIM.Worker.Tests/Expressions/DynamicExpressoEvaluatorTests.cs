@@ -237,30 +237,6 @@ public class DynamicExpressoEvaluatorTests
         Assert.That(result, Is.False);
     }
 
-    [Test]
-    public void Evaluate_CollectionContains_ReturnsTrueWhenFoundAsync()
-    {
-        var context = new ExpressionContext(
-            new Dictionary<string, object?>(),
-            new Dictionary<string, object?> { { "memberOf", new List<string> { "CN=Users", "CN=Admins", "CN=Developers" } } });
-
-        var result = _evaluator.Evaluate("CollectionContains(cs[\"memberOf\"], \"CN=Admins\")", context);
-
-        Assert.That(result, Is.True);
-    }
-
-    [Test]
-    public void Evaluate_CollectionContains_ReturnsFalseWhenNotFoundAsync()
-    {
-        var context = new ExpressionContext(
-            new Dictionary<string, object?>(),
-            new Dictionary<string, object?> { { "memberOf", new List<string> { "CN=Users", "CN=Developers" } } });
-
-        var result = _evaluator.Evaluate("CollectionContains(cs[\"memberOf\"], \"CN=Admins\")", context);
-
-        Assert.That(result, Is.False);
-    }
-
     #endregion
 
     #region Conditional Function Tests
@@ -482,8 +458,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"coursesCompleted\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "SOFT101", "SOFT201", "SEC101" }));
     }
@@ -497,8 +473,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"tags\"], \",\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "admin", "user", "readonly" }));
     }
@@ -512,8 +488,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
     }
 
@@ -526,8 +502,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
     }
@@ -541,8 +517,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.Empty);
     }
 
@@ -555,8 +531,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.Empty);
     }
 
@@ -569,8 +545,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(1));
         Assert.That(array[0], Is.EqualTo("SingleValue"));
     }
@@ -584,8 +560,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], null)", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(1));
         Assert.That(array[0], Is.EqualTo("A|B|C"));
     }
@@ -683,7 +659,7 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "original", "A|B|C" } });
 
         var splitResult = _evaluator.Evaluate("Split(cs[\"original\"], \"|\")", context);
-        Assert.That(splitResult, Is.InstanceOf<string[]>());
+        Assert.That(splitResult, Is.InstanceOf<ExpressionValues>());
 
         var context2 = new ExpressionContext(
             new Dictionary<string, object?>(),

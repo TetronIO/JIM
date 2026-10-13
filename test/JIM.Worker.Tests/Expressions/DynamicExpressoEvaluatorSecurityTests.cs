@@ -277,4 +277,64 @@ public class DynamicExpressoEvaluatorSecurityTests
     }
 
     #endregion
+
+    #region Late Binding (#2053)
+
+    // Expressions are late-bound so a transform's untyped result still joins and compares as text. A late-bound value
+    // can reach its runtime type's public members, so these prove the reflection guard still holds when the chain to
+    // System.Type runs through a late-bound result first, and through the several-values type every multi-valued
+    // attribute now reads as. See engineering/EXPRESSION_SECURITY.md, "Late binding".
+
+    [TestCase("cs[\"a\"].Substring(0).GetType().Assembly")]
+    [TestCase("cs[\"a\"].Substring(0).GetType().GetMethods()")]
+    [TestCase("cs[\"a\"].Substring(0).GetType().GetMethod(\"Clone\").Invoke(cs[\"a\"], null)")]
+    [TestCase("Lower(cs[\"a\"]).GetType().Assembly")]
+    [TestCase("cs[\"many\"].GetType().Assembly")]
+    [TestCase("cs[\"many\"][0].GetType().GetMethods()")]
+    [TestCase("Split(cs[\"a\"], \",\").GetType().Assembly")]
+    [TestCase("cs[\"bytes\"].GetValue(0).GetType().Assembly")]
+    public void Evaluate_ReflectionThroughALateBoundValue_ThrowsReflectionNotAllowedException(string expression)
+    {
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?>
+        {
+            { "a", "some value" },
+            { "many", new List<object?> { "x", "y" } },
+            { "bytes", new byte[] { 1 } }
+        });
+
+        AssertExpressionError<ReflectionNotAllowedException>(() => _evaluator.Evaluate(expression, context));
+    }
+
+    [TestCase("cs[\"a\"].Substring(0).GetType().Assembly")]
+    [TestCase("Lower(cs[\"a\"]).GetType().GetMethods()")]
+    public void Validate_ReflectionThroughALateBoundValue_IsRejected(string expression)
+    {
+        Assert.That(_evaluator.Validate(expression).IsValid, Is.False);
+    }
+
+    [Test]
+    public void Evaluate_AMemberTheValueDoesNotHave_IsAnExpressionError()
+    {
+        // Late binding resolves members while the expression runs, so a misspelt one fails then rather than at parse
+        // time; it is still the one expression error, never a JIM fault.
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?> { { "a", "abc" } });
+
+        Assert.Throws<ExpressionEvaluationException>(() => _evaluator.Evaluate("cs[\"a\"].Lenght", context));
+    }
+
+    [Test]
+    public void Evaluate_ChangingTheBytesOfOneOfSeveralBinaryValues_LeavesTheStoredValueAlone()
+    {
+        var stored = new byte[] { 1 };
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?>
+        {
+            { "certs", new List<object?> { stored, new byte[] { 2 } } }
+        });
+
+        try { _evaluator.Evaluate("cs[\"certs\"][0][0] = (byte)9", context); } catch (ExpressionEvaluationException) { /* refused is as good as copied */ }
+
+        Assert.That(stored[0], Is.EqualTo(1));
+    }
+
+    #endregion
 }
