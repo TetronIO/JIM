@@ -812,7 +812,7 @@ For every other token kind (`OnlyIfTaken`, `Random`) this is a documented no-op 
 
 **It changes nothing else.** No existing generated value on any object is changed, nothing is exported,
 and no synchronisation runs as a result of this command. To see what it would forget first, run
-`Get-JIMRetiredGeneratedValue` for the attribute (see [Metaverse cmdlets](generated-values.md#get-jimretiredgeneratedvalue)).
+`Get-JIMRetiredGeneratedValue` for the attribute (see [Generated Values](generated-values.md#get-jimretiredgeneratedvalue)).
 
 ### Syntax
 
