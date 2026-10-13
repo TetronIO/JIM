@@ -48,7 +48,7 @@ function Remove-JIMConnectedSystem {
 
     .PARAMETER DeleteImmediately
         Deletes the Connected System immediately instead of deprovisioning through synchronisation.
-        WARNING: contributed attribute values are KEPT with no provenance, so nothing can ever recall
+        The values the Connected System contributed are kept with no provenance, so nothing can ever recall
         them; surviving contributors are not re-elected and downstream systems are not corrected. On a
         system whose deprovisioning run failed partway, this finishes the deletion immediately,
         abandoning the remaining deprovisioning work.
@@ -64,8 +64,8 @@ function Remove-JIMConnectedSystem {
         Why the Connected System was deleted, recorded on the deletion's Activity and in its change history.
 
     .PARAMETER PreviewActivityId
-        The deletion preview this deletion was made after reading, as returned by
-        New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion. Recorded on the deletion's
+        The ID of the deletion preview this deletion was made after reading: the Activity that
+        New-JIMConfigurationChangePreview -Deletion returns for this Connected System. Recorded on the deletion's
         Activity so "previewed, then deleted" is auditable rather than a claim. JIM refuses the deletion,
         deleting nothing, when the id is not a deletion preview of this same Connected System. A preview
         that a later run or configuration change has overtaken is still recorded, and the deletion's

@@ -40,7 +40,7 @@ function Set-JIMConnectedSystem {
 
     .PARAMETER InitialPasswordTimeToLive
         How long an account provisioned into the Connected System stays owed an initial password before JIM records
-        an expiry and stops trying, as a TimeSpan such as (New-TimeSpan -Days 30). Seven days until one is set.
+        an expiry and stops trying, as a TimeSpan. Seven days until one is set.
         Raise it ahead of an outage longer than the current window, or every account provisioned while the Connected
         System is unreachable expires without a password.
 
