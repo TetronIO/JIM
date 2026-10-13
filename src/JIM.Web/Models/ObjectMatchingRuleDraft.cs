@@ -19,9 +19,30 @@ namespace JIM.Web.Models;
 /// </remarks>
 public sealed class ObjectMatchingRuleDraft
 {
-    public ObjectMatchingRuleSourceKind SourceKind { get; set; } = ObjectMatchingRuleSourceKind.Attribute;
+    private ObjectMatchingRuleSourceKind _sourceKind = ObjectMatchingRuleSourceKind.Attribute;
+    private ConnectedSystemObjectTypeAttribute? _sourceAttribute;
+    private bool _caseSensitive = ObjectMatchingDefaults.CaseSensitive;
+    private bool _caseSensitiveChosen;
 
-    public ConnectedSystemObjectTypeAttribute? SourceAttribute { get; set; }
+    public ObjectMatchingRuleSourceKind SourceKind
+    {
+        get => _sourceKind;
+        set
+        {
+            _sourceKind = value;
+            FollowSourceCaseSensitivity();
+        }
+    }
+
+    public ConnectedSystemObjectTypeAttribute? SourceAttribute
+    {
+        get => _sourceAttribute;
+        set
+        {
+            _sourceAttribute = value;
+            FollowSourceCaseSensitivity();
+        }
+    }
 
     public string? Expression { get; set; }
 
@@ -30,7 +51,20 @@ public sealed class ObjectMatchingRuleDraft
     /// <summary>The Metaverse Object Type searched; asked for in simple mode only, where no Synchronisation Rule supplies it.</summary>
     public MetaverseObjectType? MetaverseObjectType { get; set; }
 
-    public bool CaseSensitive { get; set; } = ObjectMatchingDefaults.CaseSensitive;
+    /// <summary>
+    /// Whether the rule respects case. Until the administrator sets it, it follows the chosen source: on for an
+    /// attribute declared case-exact, off for any other attribute and for an expression (#2051), exactly as a rule
+    /// created through the REST API without the setting.
+    /// </summary>
+    public bool CaseSensitive
+    {
+        get => _caseSensitive;
+        set
+        {
+            _caseSensitive = value;
+            _caseSensitiveChosen = true;
+        }
+    }
 
     /// <summary>
     /// Why the rule as composed could never compare anything, as saving it would say (#2052); null when it can, and
@@ -86,7 +120,14 @@ public sealed class ObjectMatchingRuleDraft
         Expression = null;
         TargetAttribute = null;
         MetaverseObjectType = null;
-        CaseSensitive = ObjectMatchingDefaults.CaseSensitive;
+        _caseSensitive = ObjectMatchingDefaults.CaseSensitive;
+        _caseSensitiveChosen = false;
         Problem = null;
+    }
+
+    private void FollowSourceCaseSensitivity()
+    {
+        if (!_caseSensitiveChosen)
+            _caseSensitive = ObjectMatchingDefaults.CaseSensitiveFor([SourceKind == ObjectMatchingRuleSourceKind.Attribute ? SourceAttribute : null]);
     }
 }

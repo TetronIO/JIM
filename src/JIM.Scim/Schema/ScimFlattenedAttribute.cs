@@ -77,6 +77,12 @@ public class ScimFlattenedAttribute
     /// </summary>
     public string? ExtensionUrn { get; }
 
+    /// <summary>
+    /// Whether the provider's schema declares the attribute's values case-exact (RFC 7643 section 7,
+    /// <c>caseExact</c>). For a flattened leaf this is the leaf sub-attribute's declaration.
+    /// </summary>
+    public bool CaseExact { get; }
+
     public ScimFlattenedAttribute(
         string name,
         string scimPath,
@@ -91,7 +97,8 @@ public class ScimFlattenedAttribute
         string? subAttributeName = null,
         string? canonicalType = null,
         bool selectsPrimary = false,
-        string? extensionUrn = null)
+        string? extensionUrn = null,
+        bool caseExact = false)
     {
         Name = name;
         ScimPath = scimPath;
@@ -107,13 +114,17 @@ public class ScimFlattenedAttribute
         CanonicalType = canonicalType;
         SelectsPrimary = selectsPrimary;
         ExtensionUrn = extensionUrn;
+        CaseExact = caseExact;
     }
 
     public ConnectorSchemaAttribute ToConnectorSchemaAttribute()
     {
         return new ConnectorSchemaAttribute(Name, Type, AttributePlurality, Required, ClassName, Writability)
         {
-            Description = Description
+            Description = Description,
+
+            // caseExact describes how text compares, so only Text attributes carry the declaration (#2051).
+            CaseExact = CaseExact && Type == AttributeDataType.Text
         };
     }
 }

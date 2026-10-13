@@ -16,12 +16,12 @@ Understanding this model helps you predict when a change will flow, when two obj
 | Question | Rule | Where JIM asks it |
 |----------|------|-------------------|
 | **Has this value changed?** | Exact | Change detection, export confirmation, Drift Detection |
-| **Are these the same thing?** | Ignore case | External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
+| **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
 | **Does this value meet a condition?** | Exact, unless you say otherwise | Scoping criteria, Predefined Search criteria, comparisons in expressions |
 | **Finding something** | Ignore case | Search boxes and list filters in the portal, log search |
 
 - **A change of case is a change.**<br /> If a source system changes `jsmith` to `JSmith`, JIM detects the change and synchronises it rather than dropping it.
-- **A difference of case is not a different identity.**<br /> The systems that hold identifiers ignore case: directory account names, user principal names, email addresses, LDAP distinguished names, SCIM `userName` and Microsoft SQL Server's default collation all treat `JBloggs` and `jbloggs` as one value. Comparing them exactly would make JIM disagree with itself: it would refuse to issue `jbloggs` because `JBloggs` is taken, yet decline to join HR's `JBloggs` to the directory's `jbloggs` and create a duplicate identity instead.
+- **A difference of case is not a different identity.**<br /> The systems that hold identifiers ignore case: directory account names, user principal names, email addresses, LDAP distinguished names, SCIM `userName` and Microsoft SQL Server's default collation all treat `JBloggs` and `jbloggs` as one value. Comparing them exactly would make JIM disagree with itself: it would refuse to issue `jbloggs` because `JBloggs` is taken, yet decline to join HR's `JBloggs` to the directory's `jbloggs` and create a duplicate identity instead. The exceptions are identifiers a Connected System declares [case-exact](#case-exact-attributes).
 - **A condition means what it says.**<br /> A scoping criterion for `Sales` matches `Sales` and not `SALES`. Where a source is inconsistent about casing, you switch that one criterion to ignore case.
 - **Finding things is forgiving.**<br /> A capital letter in the wrong place should not hide what you are looking for.
 
@@ -35,7 +35,7 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Importing | Detecting two incoming objects with the same External ID | Same thing? | Ignore case | ❌ No |
 | Importing | Resolving references, such as group members and managers, to the objects they point to | Same thing? | Ignore case | ❌ No |
 | Importing | Whether an attribute value changed | Changed? | Exact | ❌ No |
-| Synchronising | [Object Matching Rules](#object-matching-rules): joining on import, and finding an existing account before provisioning on export | Same thing? | Ignore case | ✅ Per rule |
+| Synchronising | [Object Matching Rules](#object-matching-rules): joining on import, and finding an existing account before provisioning on export | Same thing? | Ignore case, unless a source attribute is case-exact | ✅ Per rule |
 | Synchronising | [Scoping criteria](../configuration/scoping-criteria.md) | Condition? | Exact | ✅ Per criterion |
 | Synchronising | Attribute Flow: whether a Metaverse value changed | Changed? | Exact | ❌ No |
 | Synchronising | [Generated values](#identifier-uniqueness-ignores-case): whether a candidate is already taken | Same thing? | Ignore case | ❌ No |
@@ -43,6 +43,7 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Exporting | Export confirmation (did the value JIM sent arrive?) | Changed? | Exact | ❌ No |
 | Exporting | Drift Detection | Changed? | Exact | ❌ No |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
+| Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
 | Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains`, `Where` | Condition? | Exact | ✅ Wrap both sides in `Lower()` |
 | Expressions | `Replace`, `Split` | Changes text rather than comparing it | Exact | ❌ No |
 | Searching | Predefined Search criteria | Condition? | Exact | ✅ Per criterion |
@@ -50,11 +51,32 @@ Every feature that compares text, the question it asks, and the rule that answer
 
 ## 🔗 Object Matching Rules
 
-An Object Matching Rule asks whether an account and an identity are the same thing, so it ignores case: HR's `JBloggs` joins the directory's `jbloggs`. This holds however the rule is created, in the portal, through the REST API or with PowerShell.
+An Object Matching Rule asks whether an account and an identity are the same thing, so it ignores case: HR's `JBloggs` joins the directory's `jbloggs`. The exception is a rule reading an attribute declared [case-exact](#case-exact-attributes): a new rule on such an attribute respects case, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers. A rule matching on an expression ignores case. The default is the same however the rule is created, in the portal, through the REST API or with PowerShell.
 
-Turn on **Case sensitive** for a rule only when its Connected System really does treat values that differ only in case as different objects. Do it sparingly: with case sensitivity on, an account whose value differs from the identity's only in case does not join it, and JIM creates a duplicate identity instead.
+Turn on **Case sensitive** for any other rule only when its Connected System really does treat values that differ only in case as different objects. Do it sparingly: with case sensitivity on, an account whose value differs from the identity's only in case does not join it, and JIM creates a duplicate identity instead. A rule takes its default when it is created; declaring an attribute case-exact later does not change rules that already read it.
 
 Rules created through the REST API or PowerShell before JIM ignored case by default, without stating a setting, respect case. Nothing about them changed: each rule keeps the setting it was saved with. In simple matching mode the Connected System's Object Matching tab shows each rule's setting as a switch you can turn off. In either mode, `Get-JIMMatchingRule` and `Get-JIMSyncRuleMatchingRule` show it as `CaseSensitive`, and `Set-JIMMatchingRule` or `Set-JIMSyncRuleMatchingRule` with `-CaseSensitive $false` turns it off.
+
+## 🔤 Case-exact attributes
+
+Some identifiers really are different when their case differs: SCIM's `id`, an Oracle column, a SQL Server column with a case-sensitive collation, an Active Directory attribute with a case-sensitive string syntax. JIM records this on each Connected System attribute as its **case-exact** declaration, which says how the attribute's values answer "are these the same thing?".
+
+Where the Connected System's schema says so, JIM discovers it when it retrieves the schema:
+
+| Connected System | Case-exact when |
+|------------------|-----------------|
+| LDAP directories | The attribute's equality matching rule is exact (`caseExactMatch`, `caseExactIA5Match`, `octetStringMatch` or `uuidMatch`), declared on the attribute or inherited from the attribute it derives from |
+| Active Directory and Samba AD | The attribute's syntax is a case-sensitive string: String(Case Sensitive), String(IA5) or String(Printable) |
+| SCIM service providers | The schema declares the attribute `caseExact`; `id` and `externalId` always are |
+| Microsoft SQL Server | The column's collation is case-sensitive; a SELECT statement's columns have no collation to read and ignore case |
+| Oracle Database | The column's collation does not ignore case, which is Oracle's own default; a SELECT statement's columns are case-exact |
+| Delimited files | Never discovered: a file says nothing about case |
+
+Only Text attributes carry the declaration. The Schema tab shows a **Case-exact** column wherever an Object Type has a case-exact attribute.
+
+To change it, open the attribute's **Edit** dialog on the Schema tab and set **Values are case-exact**, or use `Set-JIMConnectedSystemAttribute -CaseExact` (see [Case-exact values](../configuration/connected-system-attributes.md#case-exact-values)). Your answer is kept when the schema is next refreshed; one you have not changed is restated from the Connected System's schema each time.
+
+The declaration sets the default case sensitivity of a new [Object Matching Rule](#object-matching-rules). Finding an existing Connected System Object by its External ID, and resolving references, ignore case for every attribute, whatever its declaration.
 
 ## 🎯 Scoping and search criteria
 

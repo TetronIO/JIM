@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
-using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Staging;
@@ -12,7 +11,8 @@ namespace JIM.Worker.Tests.SyncEngineTests;
 
 /// <summary>
 /// Every expression dictionary reads every value of a multi-valued attribute (#2053, PRD Phase 2 requirement 8).
-/// Import used to read the first stored value and export, derived flows and drift detection the last; directories
+/// Import used to read the first stored value and export, derived flows and drift detection the last (drift detection
+/// now reads through export's own dictionary, #2221); directories
 /// hold such attributes as unordered sets, so either was arbitrary and could change after another import.
 /// </summary>
 [TestFixture]
@@ -66,16 +66,6 @@ public class ExpressionDictionaryMultiValuedTests
         var mvo = MetaverseObjectWithProxyAddresses(out _);
 
         var read = SyncEngine.BuildEffectiveAttributeDictionary(mvo)["Proxy Addresses"];
-
-        Assert.That((ExpressionValues)read!, Is.EqualTo(new object[] { Primary, Secondary }));
-    }
-
-    [Test]
-    public void DriftDetection_BuildAttributeDictionary_ReadsEveryValueAsExportDoes()
-    {
-        var mvo = MetaverseObjectWithProxyAddresses(out _);
-
-        var read = DriftDetectionService.BuildAttributeDictionary(mvo)["Proxy Addresses"];
 
         Assert.That((ExpressionValues)read!, Is.EqualTo(new object[] { Primary, Secondary }));
     }

@@ -571,6 +571,12 @@ public class ConfigurationSnapshotService
             Add(children, "isExternalId", Render(attribute.IsExternalId), "External ID");
             Add(children, "isSecondaryExternalId", Render(attribute.IsSecondaryExternalId), "Secondary external ID");
             AddEnum(children, "writability", attribute.Writability, "Writability");
+
+            // Recorded only when true (#2051), so a snapshot captured before the declaration existed agrees with one
+            // captured after for every attribute that ignores case, and an upgrade reports no change nobody made.
+            if (attribute.CaseExact)
+                Add(children, "caseExact", Render(attribute.CaseExact), "Case-exact");
+
             items.Add(ConfigurationSnapshotNode.ObjectNode("attribute", children, attribute.Name, attribute.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");

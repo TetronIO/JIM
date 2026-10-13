@@ -484,28 +484,16 @@ public partial class SyncEngine
                     // Build expression context with MVO attributes (lazy initialization - only build once)
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
 
-                    // Missing Input Behaviour (#1361) and the expression's own evaluation and exception mapping
-                    // are shared with a generated mapping's base expression (Unique Value Generation, #242,
-                    // Phase 2 work package H) via EvaluateExportExpressionSource, so both apply identically.
-                    // The whole evaluation pipeline (#2055), the same code the Attribute Flow tester runs.
-                    var evaluation = AttributeFlowPipeline.EvaluateExport(mvAttributeDictionary, mapping, source, expressionEvaluator);
-
-                    if (!ContinueAfterExportSource(evaluation.Source, mapping, source, mvAttributeDictionary, flowErrors) ||
-                        evaluation.Outcome == AttributeFlowOutcome.NoValue)
-                    {
-                        // Stopped (FailMapping already recorded its AttributeFlowError) and NoValue
-                        // (ContributeNoValue, or a null expression result - expected when the referenced
-                        // attribute doesn't exist on this MVO) alike stage nothing for this attribute, so the
-                        // Connected System keeps whatever it holds; the difference is whether it is reported.
-                        continue;
-                    }
-
                     // Every change an expression stages is for its one target attribute, so the Connected System
                     // Object's values for it are read once, for staging and for no-net-change detection alike.
                     var heldValues = canDetectNoNetChange
                         ? csoAttributeCache![(existingCso!.Id, mapping.TargetConnectedSystemAttribute.Id)].ToList()
                         : null;
-                    var expressionChanges = StageExportExpressionResult(mapping, source, exportRule, evaluation, heldValues, flowErrors);
+
+                    // The whole evaluation pipeline (#2055), the same code the Attribute Flow tester runs, then what
+                    // export staging stages from it; Drift Detection stages through the same method (#2180).
+                    var expressionChanges = StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
+                        expressionEvaluator, heldValues, flowErrors);
 
                     // No-net-change detection for expression-based mappings
                     var alreadyCurrent = heldValues == null
@@ -527,31 +515,13 @@ public partial class SyncEngine
                 if (source.MetaverseAttribute == null)
                     continue;
 
-                // MVA -> SVA guard (#435): a multi-valued Metaverse source flowing to a single-valued Connected
-                // System attribute can only carry one value. If the Metaverse Object holds more than one value for
-                // the source attribute, JIM will not pick one arbitrarily; an arbitrary export could never be
-                // reconciled on the next import (JIM would not know which value is authoritative). No Pending Export
-                // is generated for this attribute and an error is recorded; the object's other attributes still export.
-                if (mapping.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued &&
-                    source.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued)
+                // MVA -> SVA guard (#435), shared with Drift Detection (#2180): no Pending Export is generated for this
+                // attribute and an error is recorded; the object's other attributes still export.
+                var multiValuedToSingleValuedError = FindMultiValuedToSingleValuedError(mvo, mapping, source);
+                if (multiValuedToSingleValuedError != null)
                 {
-                    var mvoValueCount = mvo.AttributeValues.Count(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
-                    if (mvoValueCount > 1)
-                    {
-                        Log.Error("CreateAttributeValueChanges: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but " +
-                            "target attribute '{TargetAttr}' is single-valued. No Pending Export generated for this attribute. MVO {MvoId}",
-                            source.MetaverseAttribute.Name, mvoValueCount, mapping.TargetConnectedSystemAttribute.Name, mvo.Id);
-
-                        flowErrors?.Add(new AttributeFlowError
-                        {
-                            Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
-                            SourceAttributeName = source.MetaverseAttribute.Name,
-                            TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
-                            ValueCount = mvoValueCount
-                        });
-
-                        continue;
-                    }
+                    flowErrors?.Add(multiValuedToSingleValuedError);
+                    continue;
                 }
 
                 // The change's shape follows the plurality of the attribute it is written to (#2182), never the
@@ -741,6 +711,40 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The MVA -> SVA guard (#435): a multi-valued Metaverse source flowing to a single-valued Connected System attribute
+    /// can only carry one value. When the Metaverse Object holds more than one value for the source attribute, JIM will
+    /// not pick one arbitrarily, since an arbitrary export could never be reconciled on the next import (JIM would not
+    /// know which value is authoritative). Export staging and Drift Detection (#2180) both refuse the mapping through
+    /// this one predicate, so neither writes a value the other would not.
+    /// </summary>
+    /// <returns>The error to record when the mapping must stage nothing; null when it may flow.</returns>
+    internal static AttributeFlowError? FindMultiValuedToSingleValuedError(MetaverseObject mvo, SyncRuleMapping mapping, SyncRuleMappingSource source)
+    {
+        var target = mapping.TargetConnectedSystemAttribute;
+        if (target == null || source.MetaverseAttribute == null ||
+            target.AttributePlurality != AttributePlurality.SingleValued ||
+            source.MetaverseAttribute.AttributePlurality != AttributePlurality.MultiValued)
+            return null;
+
+        var sourceAttributeId = source.MetaverseAttribute.Id;
+        var mvoValueCount = mvo.AttributeValues.Count(av => av.AttributeId == sourceAttributeId && !av.NullValue);
+        if (mvoValueCount <= 1)
+            return null;
+
+        Log.Error("CreateAttributeValueChanges: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but " +
+            "target attribute '{TargetAttr}' is single-valued. No Pending Export generated for this attribute. MVO {MvoId}",
+            source.MetaverseAttribute.Name, mvoValueCount, target.Name, mvo.Id);
+
+        return new AttributeFlowError
+        {
+            Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
+            SourceAttributeName = source.MetaverseAttribute.Name,
+            TargetAttributeName = target.Name,
+            ValueCount = mvoValueCount
+        };
+    }
+
+    /// <summary>
     /// The value a mapping exports as a whole (#2182): the one change it stages where the source and target are not both
     /// multi-valued, so the target is told what the attribute now holds rather than which values came and went. That is
     /// the value this pass gave the attribute (additions precede removals in <paramref name="changedAttributes"/>), else
@@ -778,6 +782,40 @@ public partial class SyncEngine
             : (changedValues.Count > 0, null);
 
         bool IsRemoved(MetaverseObjectAttributeValue value) => removedAttributes?.Contains(value) == true;
+    }
+
+    /// <summary>
+    /// The Pending Export changes an export Expression mapping stages for a Metaverse Object whose values are
+    /// <paramref name="mvAttributeDictionary"/>: the evaluation pipeline (#2055), then what export staging does with its
+    /// outcome. Missing Input Behaviour (#1361) and the expression's own exception mapping are shared with a generated
+    /// mapping's base expression (Unique Value Generation, #242) through <see cref="ContinueAfterExportSource"/>.
+    /// Stopped (FailMapping, its <see cref="AttributeFlowError"/> already recorded) and no value (ContributeNoValue, or a
+    /// null result, expected when the referenced attribute does not exist on this Metaverse Object) alike stage nothing,
+    /// so the Connected System keeps whatever it holds; the difference is whether it is reported. Drift Detection stages
+    /// its corrections for an expression mapping through here too (#2180), so it never asserts a state export staging
+    /// would not stage.
+    /// </summary>
+    /// <param name="heldValues">The Connected System Object's current values for the target attribute, or null when
+    /// there is no object yet (a Create) or none was supplied.</param>
+    /// <exception cref="SyncExpressionMissingInputException">An input is missing and Missing Input Behaviour is
+    /// FailObject.</exception>
+    /// <exception cref="SyncExpressionEvaluationException">The expression failed to evaluate.</exception>
+    internal static List<PendingExportAttributeValueChange> StageExportExpressionMapping(
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        SyncRule exportRule,
+        Dictionary<string, object?> mvAttributeDictionary,
+        IExpressionEvaluator expressionEvaluator,
+        IEnumerable<ConnectedSystemObjectAttributeValue>? heldValues,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var evaluation = AttributeFlowPipeline.EvaluateExport(mvAttributeDictionary, mapping, source, expressionEvaluator);
+
+        if (!ContinueAfterExportSource(evaluation.Source, mapping, source, mvAttributeDictionary, flowErrors) ||
+            evaluation.Outcome == AttributeFlowOutcome.NoValue)
+            return [];
+
+        return StageExportExpressionResult(mapping, source, exportRule, evaluation, heldValues, flowErrors);
     }
 
     /// <summary>

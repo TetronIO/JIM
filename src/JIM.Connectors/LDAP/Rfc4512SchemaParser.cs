@@ -225,6 +225,9 @@ internal static class Rfc4512SchemaParser
                 case "SYNTAX":
                     result.SyntaxOid = ReadSyntaxOid(tokens, ref i);
                     break;
+                case "EQUALITY":
+                    result.EqualityOid = ReadSingleValue(tokens, ref i);
+                    break;
                 case "SINGLE-VALUE":
                     result.IsSingleValued = true;
                     break;
@@ -238,6 +241,69 @@ internal static class Rfc4512SchemaParser
         }
 
         return result.Name != null ? result : null;
+    }
+
+    /// <summary>
+    /// The equality matching rules under which two values that differ only in case are different values (#2051),
+    /// by name and by OID, since a directory may publish either (RFC 4512 4.1.2: <c>oid = descr / numericoid</c>).
+    /// Every other rule, and no rule at all, ignores case or does not compare text.
+    /// </summary>
+    private static readonly HashSet<string> CaseExactMatchingRules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "caseExactMatch", "2.5.13.5",                          // RFC 4517 4.2.4
+        "caseExactIA5Match", "1.3.6.1.4.1.1466.109.114.1",     // RFC 4517 4.2.3
+        "octetStringMatch", "2.5.13.17",                       // RFC 4517 4.2.27
+        "uuidMatch", "1.3.6.1.1.16.2"                          // RFC 4530 3.3
+    };
+
+    /// <summary>
+    /// Whether an attribute type's EQUALITY matching rule compares values exactly, so <c>JBloggs</c> and
+    /// <c>jbloggs</c> are different values. <c>caseIgnore*</c>, <c>distinguishedNameMatch</c>, any other rule and
+    /// no rule at all ignore case.
+    /// </summary>
+    internal static bool IsCaseExactMatchingRule(string? equalityOid) =>
+        !string.IsNullOrWhiteSpace(equalityOid) && CaseExactMatchingRules.Contains(equalityOid.Trim());
+
+    /// <summary>
+    /// Resolves an attribute type's EQUALITY matching rule, walking the SUP chain when the attribute inherits it,
+    /// exactly as it inherits SYNTAX (RFC 4512 4.1.2). Null when no type in the chain declares one.
+    /// </summary>
+    internal static string? ResolveEqualityOid(
+        Rfc4512AttributeTypeDescription attributeType,
+        IReadOnlyDictionary<string, Rfc4512AttributeTypeDescription> allAttributeTypes) =>
+        ResolveInherited(attributeType, allAttributeTypes, type => type.EqualityOid);
+
+    /// <summary>
+    /// Resolves an attribute type's SYNTAX OID, walking the SUP chain when the attribute inherits it.
+    /// </summary>
+    internal static string? ResolveSyntaxOid(
+        Rfc4512AttributeTypeDescription attributeType,
+        IReadOnlyDictionary<string, Rfc4512AttributeTypeDescription> allAttributeTypes) =>
+        ResolveInherited(attributeType, allAttributeTypes, type => type.SyntaxOid);
+
+    /// <summary>
+    /// Reads a property an attribute type may inherit from its supertype: its own value if it has one, else the
+    /// nearest superior's. The walk stops at ten levels, so a SUP cycle in a broken schema ends rather than loops.
+    /// </summary>
+    private static string? ResolveInherited(
+        Rfc4512AttributeTypeDescription attributeType,
+        IReadOnlyDictionary<string, Rfc4512AttributeTypeDescription> allAttributeTypes,
+        Func<Rfc4512AttributeTypeDescription, string?> property)
+    {
+        var current = attributeType;
+        for (var depth = 0; depth <= 10; depth++)
+        {
+            var value = property(current);
+            if (value != null)
+                return value;
+
+            if (current.SuperiorName == null || !allAttributeTypes.TryGetValue(current.SuperiorName, out var superior))
+                return null;
+
+            current = superior;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -630,6 +696,13 @@ internal class Rfc4512AttributeTypeDescription
     public string? Description { get; set; }
     public string? SuperiorName { get; set; }
     public string? SyntaxOid { get; set; }
+
+    /// <summary>
+    /// The EQUALITY matching rule, by name or OID as the directory published it; null when the type declares none
+    /// of its own (it may inherit one through <see cref="SuperiorName"/>).
+    /// </summary>
+    public string? EqualityOid { get; set; }
+
     public bool IsSingleValued { get; set; }
     public bool IsNoUserModification { get; set; }
     public Rfc4512AttributeUsage Usage { get; set; } = Rfc4512AttributeUsage.UserApplications;

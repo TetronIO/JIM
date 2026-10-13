@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
+- ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
 - ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
 - ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
 - ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
@@ -68,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
 - 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
-- 🔄 Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged. (#2051)
+- 🔄 Object Matching Rules created through the REST API or PowerShell now take the portal's default: they ignore case unless a source attribute is case-exact. Existing rules are unchanged. (#2051)
 - 🔄 An object whose values match different Metaverse Objects, such as two email addresses held by two people, is now an **Ambiguous Match** instead of joining whichever value happened to be checked first. (#2052)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
@@ -99,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
 - 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
 - 🐛 An attribute now exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, a target is no longer cleared in error or left with stray values, and a SQL related table no longer accumulates rows. (#2182)
+- 🐛 Drift Detection now corrects expression-fed attributes as export writes them: a multi-valued target keeps the value export wrote, and a failing expression, missing input or several values for a single-valued target is reported on the object instead of clearing it. (#2180)
 - 🐛 Sync Preview now shows that an object with no import Synchronisation Rule would join through its Object Type's Object Matching Rules in simple mode, and no longer predicts such joins in advanced mode, where the synchronisation ignores those rules. (#2176)
 - 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
 - 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)
