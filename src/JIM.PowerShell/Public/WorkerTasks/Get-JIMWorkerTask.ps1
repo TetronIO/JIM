@@ -22,11 +22,13 @@ function Get-JIMWorkerTask {
         The number of Worker Tasks on each page.
 
     .OUTPUTS
-        Each Worker Task's header, with one property the module adds: StepDisplay, the step the run is on as
-        one sentence, such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in
-        Admin > Operations > Queue, and the one Start-JIMRunProfile -Wait shows live, so a run reads the same
-        wherever it is watched from. It is empty for a task that is not a Run Profile execution, since those
-        record no steps.
+        Each Worker Task's header, with one property the module adds.
+
+        JIM.WorkerTaskHeader
+        StepDisplay (string): The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It
+            is the sentence the portal shows in Admin > Operations > Queue, and the one Start-JIMRunProfile -Wait
+            shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run
+            Profile execution, since those record no steps.
 
     .EXAMPLE
         Get-JIMWorkerTask

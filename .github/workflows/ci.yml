@@ -68,7 +68,9 @@ jobs:
     # other coverage rules in changelog-lint. Generation reuses the build above and takes seconds. So does
     # the generated PowerShell reference (ACC-5, #1083): each cmdlet's Syntax, Parameters and Output on the
     # docs/powershell/ pages must be what Update-PowerShellReference.ps1 writes from the module, whose
-    # output properties come from the OpenAPI schemas.
+    # output properties come from the OpenAPI schemas. And every property an example reads from a JIM
+    # cmdlet's output must be one it returns (ACC-6); Lint-DocExamples.ps1 also runs in changelog-lint,
+    # but without the document, so that run skips this rule.
     - name: Check the docs' REST routes and PowerShell reference against the OpenAPI document
       shell: pwsh
       run: |
@@ -78,6 +80,8 @@ jobs:
         pwsh -File ./scripts/Test-DocsCoverage.ps1 -OpenApiPath $openApi -Rule ACC-3,COV-4
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         pwsh -File ./scripts/Update-PowerShellReference.ps1 -OpenApiPath $openApi -Check
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        pwsh -File ./scripts/Lint-DocExamples.ps1 -OpenApiPath $openApi
 
     # Every source file must carry the Tetron copyright notice. .editorconfig
     # only ever covered .cs (and only as a suggestion), so this is the gate for
