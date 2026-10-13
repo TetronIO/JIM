@@ -307,6 +307,30 @@ public class SynchronisationControllerObjectMatchingPreviewTests
     }
 
     [Test]
+    public async Task StartObjectMatchingPreview_ProposedRuleWithoutCaseSensitiveOnACaseExactSource_RespectsCaseAsync()
+    {
+        // The preview derives the default exactly as saving the rule would (#2051).
+        _csoType.Attributes.Single(a => a.Id == MailAttributeId).CaseExact = true;
+
+        await _controller.StartObjectMatchingPreviewAsync(ConnectedSystemId, new StartObjectMatchingPreviewRequest
+        {
+            Rules =
+            [
+                new ObjectMatchingRuleRequest
+                {
+                    Order = 0,
+                    ConnectedSystemObjectTypeId = CsoTypeId,
+                    MetaverseObjectTypeId = MvoTypeId,
+                    TargetMetaverseAttributeId = MailMetaverseAttributeId,
+                    Sources = [new ObjectMatchingRuleSourceRequest { Order = 0, ConnectedSystemAttributeId = MailAttributeId }]
+                }
+            ]
+        });
+
+        Assert.That(QueuedProposal().Rules.Single().CaseSensitive, Is.True);
+    }
+
+    [Test]
     public async Task StartObjectMatchingPreview_ExpressionSource_IsQueuedWithItsExpressionAsync()
     {
         // Expression sources are authorable (#2052), so a proposal carrying one is evaluated like any other, and the

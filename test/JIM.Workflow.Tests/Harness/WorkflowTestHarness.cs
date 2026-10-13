@@ -548,6 +548,18 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Text);
     }
 
+    public ObjectTypeBuilder WithMultiValuedStringAttribute(string name)
+    {
+        _attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Name = name,
+            Type = AttributeDataType.Text,
+            Selected = true,
+            AttributePlurality = AttributePlurality.MultiValued
+        });
+        return this;
+    }
+
     public ObjectTypeBuilder WithIntAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Number);

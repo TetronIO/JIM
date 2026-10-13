@@ -12,6 +12,29 @@ namespace JIM.Worker.Tests.Connectors;
 [TestFixture]
 public class LdapConnectorUtilitiesTests
 {
+    #region IsAdSyntaxCaseExact tests (#2051)
+
+    [TestCase(27, Description = "String(Case Sensitive), 2.5.5.3")]
+    [TestCase(22, Description = "String(IA5), 2.5.5.5")]
+    [TestCase(19, Description = "String(Printable), 2.5.5.5")]
+    public void IsAdSyntaxCaseExact_CaseSensitiveStringSyntaxes_ReturnsTrue(int omSyntax)
+    {
+        Assert.That(LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax), Is.True);
+    }
+
+    [TestCase(64, Description = "String(Unicode), 2.5.5.12: sAMAccountName, mail, displayName")]
+    [TestCase(20, Description = "String(Teletex), 2.5.5.4")]
+    [TestCase(18, Description = "String(Numeric), 2.5.5.6")]
+    [TestCase(6, Description = "String(Object-Identifier), 2.5.5.2")]
+    [TestCase(127, Description = "DN")]
+    [TestCase(2, Description = "Integer")]
+    public void IsAdSyntaxCaseExact_OtherSyntaxes_ReturnsFalse(int omSyntax)
+    {
+        Assert.That(LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax), Is.False);
+    }
+
+    #endregion
+
     #region GetLdapAttributeDataType tests
 
     [Test]

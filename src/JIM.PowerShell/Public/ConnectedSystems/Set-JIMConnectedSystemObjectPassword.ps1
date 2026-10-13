@@ -37,10 +37,10 @@ function Set-JIMConnectedSystemObjectPassword {
         off; you named it.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System the account lives in.
+        The ID of the Connected System the account is in.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object.
+        The ID of the Connected System Object.
 
     .PARAMETER Password
         The password to set, as a SecureString. Encrypted before JIM stores it and held only until delivered;
@@ -48,9 +48,8 @@ function Set-JIMConnectedSystemObjectPassword {
 
     .PARAMETER Generate
         Has JIM generate a password satisfying the policy it discovered on the Connected System, instead of you
-        supplying one. Use this rather than inventing a password in your own script: JIM knows what the target
-        demands, and a hand-rolled generator rediscovers the passphrase trap, where three words offer two
-        character categories against a directory that wants three.
+        supplying one. Use this rather than inventing a password in your own script: JIM knows what the Connected
+        System demands.
 
         The generated password is returned on the result's GeneratedPassword property as a SecureString. That is
         the only chance to capture it.
@@ -64,7 +63,7 @@ function Set-JIMConnectedSystemObjectPassword {
     .PARAMETER EnableAccount
         Enables the account as part of setting the password, whatever its Attribute Flows say. Omit it to leave the
         account's enabled state as it is, which is what a reset on an already-enabled account should do; the one
-        exception is a new Active Directory account JIM created disabled only until it had a password, which the
+        exception is an Active Directory account whose enable JIM held back until it had a password, which the
         password enables as its Attribute Flow asks. Directories that refuse to enable an account without a
         compliant password need the password first, which is why this belongs here.
 
@@ -75,33 +74,15 @@ function Set-JIMConnectedSystemObjectPassword {
         the Activity and the person's Password tab once it lands.
 
     .PARAMETER Force
-        Skips the confirmation prompt.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
-        One PSCustomObject describing the change, in the same shape Set-JIMMetaverseObjectPassword returns:
+        One object describing the change: the Activity that records it, and where delivery to the account stands. No
+        property carries the password you supplied.
 
-        | Property          | Description                                                                          |
-        |-------------------|--------------------------------------------------------------------------------------|
-        | ActivityId        | The Activity recording the change; its child holds the account's outcome             |
-        | Origin            | Always Explicit: the account was named                                               |
-        | Settled           | Whether the account had reached an outcome you need not wait on when this returned   |
-        | Targets           | One entry, for this account's Connected System, described below                      |
-        | GeneratedPassword | The password JIM produced, as a SecureString; present only with -Generate            |
-
-        The entry under Targets:
-
-        | Property                | Description                                                                    |
-        |-------------------------|--------------------------------------------------------------------------------|
-        | ConnectedSystemId       | The Connected System                                                           |
-        | ConnectedSystemName     | Its name                                                                       |
-        | ConnectedSystemObjectId | The account                                                                    |
-        | Enabled                 | Whether the system is taking propagated passwords; this account is delivered to either way |
-        | State                   | Queued, Delivering, Set, Retrying, Parked, Expired or Cancelled                |
-        | NextAttemptAt           | When the next attempt falls due, for a Retrying target                         |
-        | Message                 | The system's own words on its most recent outcome                              |
-        | AttemptCount            | How many delivery attempts this account has had                                |
-
-        No property carries the password you supplied.
+        JIM.SetConnectedSystemObjectPasswordResult
+        GeneratedPassword (securestring): The password JIM generated, present only with -Generate. This is the only
+            chance to read it.
 
     .EXAMPLE
         $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
@@ -138,7 +119,7 @@ function Set-JIMConnectedSystemObjectPassword {
         Set-JIMSyncRuleInitialPassword
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'SuppliedPassword')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SetConnectedSystemObjectPasswordResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

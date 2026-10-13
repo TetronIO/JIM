@@ -20,6 +20,7 @@ using Moq;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -219,6 +220,45 @@ public class SynchronisationControllerObjectMatchingRuleTests
 
         Assert.That(created(), Is.Not.Null);
         Assert.That(created()!.CaseSensitive, Is.False, "an Object Matching Rule ignores case unless asked not to");
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveOmittedOnACaseExactSource_RespectsCaseAsync()
+    {
+        // The default follows the source attribute's declaration (#2051): an identifier the Connected System
+        // compares exactly is matched exactly.
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(created()!.CaseSensitive, Is.True);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveOmittedOnACaseExactSource_RespectsCaseAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(created()!.CaseSensitive, Is.True);
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveFalseOnACaseExactSource_StoresFalseAsync()
+    {
+        // An explicit answer always wins over the derived default.
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.CaseSensitive = false;
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.False);
     }
 
     [TestCase(true)]

@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DynamicExpresso;
 using DynamicExpresso.Exceptions;
+using Microsoft.CSharp.RuntimeBinder;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Utilities;
@@ -43,6 +44,14 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     // This ensures expression compilation is only done once per expression string across all sync operations
     private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
 
+    /// <summary>
+    /// The evaluating context's <see cref="ExpressionContext.NowUtc"/>, for <c>Now()</c> and <c>Today()</c>. Compiled
+    /// Expressions are shared and their functions cannot see the context, so <see cref="Evaluate"/> holds it here for
+    /// the duration of the call, on the thread running it, and restores what was there before.
+    /// </summary>
+    [ThreadStatic]
+    private static DateTime? _contextNowUtc;
+
     // Static cache metrics for diagnostics (shared across instances)
     private static long _cacheHits;
     private static long _cacheMisses;
@@ -71,8 +80,25 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     public DynamicExpressoEvaluator()
     {
-        _interpreter = new Interpreter();
+        _interpreter = CreateInterpreter();
         RegisterBuiltInFunctions();
+    }
+
+    /// <summary>
+    /// The interpreter every expression is parsed by: DynamicExpresso's defaults, late-bound (#2053). An accessor reads
+    /// one value or several, so a transform's result is untyped; late binding is what lets <c>Upper(a) + Upper(b)</c>
+    /// parse and <c>Lower(x) == "abc"</c> compare text rather than references. Reflection is refused in depth (see
+    /// <c>engineering/EXPRESSION_SECURITY.md</c>, "Late binding"): at parse time by DynamicExpresso's own guard and by
+    /// <see cref="ReflectionRefusingVisitor"/>, which refuses any reflection-typed part of an expression, <c>GetType()</c>
+    /// and <c>typeof</c> included; and at run time by DynamicExpresso's late binder, by every function that hands a
+    /// value on (<see cref="ExpressionValueSets.RefuseReflection"/>) and by <see cref="Evaluate"/> refusing a reflection
+    /// result.
+    /// </summary>
+    private static Interpreter CreateInterpreter()
+    {
+        var interpreter = new Interpreter(InterpreterOptions.Default | InterpreterOptions.LateBindObject);
+        interpreter.Visitors.Add(new ReflectionRefusingVisitor());
+        return interpreter;
     }
 
     /// <inheritdoc/>
@@ -95,14 +121,16 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         var hostCulture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = ExpressionText.Culture;
+        var hostClock = _contextNowUtc;
+        _contextNowUtc = context.NowUtc;
         var sw = Stopwatch.StartNew();
         try
         {
             var lambda = GetOrCompileExpression(expression);
 
-            return lambda.Invoke(
+            return ExpressionValueSets.RefuseReflection(lambda.Invoke(
                 new Parameter("mv", context.Mv),
-                new Parameter("cs", context.Cs));
+                new Parameter("cs", context.Cs)));
         }
         // The failures an Expression can cause, from parsing it to running it, each made the one expression error.
         // Anything else (an out-of-memory condition, a JIM fault) propagates unchanged, as does an
@@ -116,9 +144,13 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         catch (KeyNotFoundException ex) { throw ToExpressionError(ex); }
         catch (NullReferenceException ex) { throw ToExpressionError(ex); }
         catch (IndexOutOfRangeException ex) { throw ToExpressionError(ex); }
+        // Late binding resolves a member or operator on a value while the expression runs: one the value does not have
+        // (a misspelt member, an operator its type lacks) is the expression's fault, reported like a parse error.
+        catch (RuntimeBinderException ex) { throw ToExpressionError(ex); }
         finally
         {
             CultureInfo.CurrentCulture = hostCulture;
+            _contextNowUtc = hostClock;
             sw.Stop();
             if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
             {
@@ -159,7 +191,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         try
         {
             // Create a test interpreter with mock parameters
-            var testInterpreter = new Interpreter();
+            var testInterpreter = CreateInterpreter();
             RegisterBuiltInFunctions(testInterpreter);
 
             testInterpreter.Parse(expression,
@@ -211,6 +243,9 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         }
     }
 
+    /// <summary>The instant <c>Now()</c> reads: the evaluating context's, or the real time.</summary>
+    private static DateTime CurrentUtc() => _contextNowUtc ?? DateTime.UtcNow;
+
     private Lambda GetOrCompileExpression(string expression)
     {
         // Check for cache hit first
@@ -248,65 +283,103 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     {
         var target = interpreter ?? _interpreter;
 
-        // String functions - accept object? to handle AttributeAccessor indexer returns
-        target.SetFunction("Trim", (Func<object?, string?>)(o => AsString(o)?.Trim()));
-        target.SetFunction("Upper", (Func<object?, string?>)(o => AsString(o)?.ToUpperInvariant()));
-        target.SetFunction("Lower", (Func<object?, string?>)(o => AsString(o)?.ToLowerInvariant()));
-        target.SetFunction("Capitalise", (Func<object?, string?>)(o => Capitalise(AsString(o))));
-        target.SetFunction("Left", (Func<object?, int, string?>)((o, count) => Left(AsString(o), count)));
-        target.SetFunction("Right", (Func<object?, int, string?>)((o, count) => Right(AsString(o), count)));
-        target.SetFunction("Substring", (Func<object?, int, int, string?>)((o, start, length) => SafeSubstring(AsString(o), start, length)));
-        target.SetFunction("Replace", (Func<object?, object?, object?, string?>)((o, oldVal, newVal) => AsString(o)?.Replace(AsString(oldVal) ?? "", AsString(newVal) ?? "")));
-        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) => AsString(o)?.StartsWith(AsString(prefix) ?? "") ?? false));
-        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) => AsString(o)?.EndsWith(AsString(suffix) ?? "") ?? false));
-        target.SetFunction("Length", (Func<object?, int>)(o => AsString(o)?.Length ?? 0));
-        // The presence tests ask whether there is a value, not what its text is, so a Binary value (which has no text
-        // form) is a value unless it holds no bytes, rather than an error.
-        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)(o => o is byte[] bytes ? bytes.Length == 0 : string.IsNullOrEmpty(AsString(o))));
-        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o => o is byte[] bytes ? bytes.Length == 0 : string.IsNullOrWhiteSpace(AsString(o))));
+        // Every function accepts object? (an accessor reads null, one value, or several values) and follows the
+        // several-values rules in ExpressionValueSets (#2053): a transform applies to each value, a comparison is true
+        // when any value satisfies it, and a one-value position refuses several values with an error naming the
+        // attribute and the count.
 
-        // Containment functions
-        target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) => AsString(o)?.Contains(AsString(value) ?? "") ?? false));
-        target.SetFunction("CollectionContains", (Func<object?, object?, bool>)((collection, value) => CollectionContains(collection, AsString(value) ?? "")));
+        // Text transforms: each value in, each result out, in the same order.
+        target.SetFunction("Trim", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.Trim())));
+        target.SetFunction("Upper", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.ToUpperInvariant())));
+        target.SetFunction("Lower", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.ToLowerInvariant())));
+        target.SetFunction("Capitalise", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => Capitalise(AsString(v)))));
+        target.SetFunction("Left", (Func<object?, int, object?>)((o, count) => ExpressionValueSets.Map(o, v => Left(AsString(v), count))));
+        target.SetFunction("Right", (Func<object?, int, object?>)((o, count) => ExpressionValueSets.Map(o, v => Right(AsString(v), count))));
+        target.SetFunction("Substring", (Func<object?, int, int, object?>)((o, start, length) => ExpressionValueSets.Map(o, v => SafeSubstring(AsString(v), start, length))));
+        target.SetFunction("Replace", (Func<object?, object?, object?, object?>)((o, oldVal, newVal) =>
+        {
+            var oldText = AsString(oldVal) ?? "";
+            var newText = AsString(newVal) ?? "";
+            return ExpressionValueSets.Map(o, v => AsString(v)?.Replace(oldText, newText));
+        }));
 
-        // Array/Collection functions - for converting delimited strings to multi-valued attributes
-        target.SetFunction("Split", (Func<object?, object?, string[]>)((o, delimiter) => Split(AsString(o), AsString(delimiter))));
+        // Comparisons: true when any value satisfies them, so ! means "no value does".
+        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) =>
+        {
+            var prefixText = AsString(prefix) ?? "";
+            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText, StringComparison.Ordinal) ?? false);
+        }));
+        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) =>
+        {
+            var suffixText = AsString(suffix) ?? "";
+            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText, StringComparison.Ordinal) ?? false);
+        }));
+        target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) =>
+        {
+            var valueText = AsString(value) ?? "";
+            return ExpressionValueSets.Any(o, v => AsString(v)?.Contains(valueText) ?? false);
+        }));
+
+        // One-value functions.
+        target.SetFunction("Length", (Func<object?, int>)(o => AsString(ExpressionValueSets.One(o))?.Length ?? 0));
+
+        // Presence: JIM's one definition of no value (null, empty text, or a list with no values). A Binary value
+        // (which has no text form) is a value unless it holds no bytes, rather than an error.
+        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)ExpressionValueSets.HasNoValue);
+        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o =>
+            ExpressionValueSets.HasNoValue(o) || ExpressionValueSets.Values(o).All(v => v is not byte[] && string.IsNullOrWhiteSpace(AsString(v)))));
+
+        // Whole-set functions. Split's result is several values in the order it found them, so Join gives back what
+        // Split was given.
+        target.SetFunction("Split", (Func<object?, object?, ExpressionValues>)((o, delimiter) => new ExpressionValues(Split(AsString(ExpressionValueSets.One(o)), AsString(delimiter)), null)));
         target.SetFunction("Join", (Func<object?, object?, string?>)((collection, delimiter) => Join(collection, AsString(delimiter))));
+        target.SetFunction("Count", (Func<object?, int>)(o => ExpressionValueSets.Values(o).Count));
+        target.SetFunction("Min", (Func<object?, object?>)(o => ExpressionValueSets.Extreme(o, largest: false, "Min")));
+        target.SetFunction("Max", (Func<object?, object?>)(o => ExpressionValueSets.Extreme(o, largest: true, "Max")));
+        target.SetFunction("Where", (Func<object?, object?, object?, object?>)((values, op, value) => ExpressionWhere.Filter(values, op, value, ignoreCase: false)));
+        target.SetFunction("Where", (Func<object?, object?, object?, bool, object?>)ExpressionWhere.Filter);
 
         // Conditional functions
-        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) => a ?? b));
-        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) => condition ? trueVal : falseVal));
+        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) =>
+            ExpressionValueSets.RefuseReflection(ExpressionValueSets.HasNoValue(a) ? b : a)));
+        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) =>
+            ExpressionValueSets.RefuseReflection(condition ? trueVal : falseVal)));
 
-        // Equality comparison function - IMPORTANT: The == operator doesn't work correctly
-        // when comparing object? to string because it uses reference equality.
-        // Use Eq() for value-based string/object comparisons in expressions.
-        target.SetFunction("Eq", (Func<object?, object?, bool>)ValueEquals);
+        // Value equality, true when any value of one side equals any value of the other. Expressions are late-bound, so
+        // == compares values too; Eq remains the one that reads text against a typed value as that type.
+        target.SetFunction("Eq", (Func<object?, object?, bool>)((a, b) =>
+            ExpressionResultValues.IsCollection(a) || ExpressionResultValues.IsCollection(b)
+                ? ExpressionValueSets.Any(a, x => ExpressionValueSets.Any(b, y => ValueEquals(x, y)))
+                : ValueEquals(a, b)));
 
         // Date functions. Now and Today (like RandomPassword and RandomPassphrase below) return a different value on
         // each evaluation; NonRepeatableFunctionDetector lists them, so keep it in step when adding another.
-        target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
-        target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
+        target.SetFunction("Now", (Func<DateTime>)(() => CurrentUtc()));
+        target.SetFunction("Today", (Func<DateTime>)(() => CurrentUtc().Date));
         // FormatDate and ParseDate are counterparts: one writes a date as text in a given format, the other reads text
         // in a given format as a date. Every other reading of text as a date uses the ISO 8601 rule (ExpressionDates).
-        target.SetFunction("FormatDate", (Func<object?, string, string?>)FormatDate);
-        target.SetFunction("ParseDate", (Func<object?, string, DateTime?>)ParseDate);
-        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(o)));
-        target.SetFunction("FromFileTime", (Func<object?, DateTime?>)(o => FromFileTime(o)));
+        target.SetFunction("FormatDate", (Func<object?, string, object?>)((o, format) => ExpressionValueSets.Map(o, v => FormatDate(v, format))));
+        target.SetFunction("ParseDate", (Func<object?, string, object?>)((o, format) => ExpressionValueSets.Map(o, v => ParseDate(v, format))));
+        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(ExpressionValueSets.One(o))));
+        target.SetFunction("FromFileTime", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => FromFileTime(v))));
 
         // Conversion functions
-        target.SetFunction("ToString", (Func<object?, string?>)AsString);
-        target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(o), out var i) ? i : 0));
+        target.SetFunction("ToString", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, AsString)));
+        target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(ExpressionValueSets.One(o)), out var i) ? i : 0));
         // ToDecimal: exact for decimal/int/long inputs; strings parse with invariant culture and accept
         // exponent notation (e.g. "1.5E3" becomes 1500). Deliberately no double/float path: binary
         // floating point cannot represent most decimal fractions exactly.
-        target.SetFunction("ToDecimal", (Func<object?, decimal>)(o =>
-            o is decimal d ? d :
-            o is int i ? i :
-            o is long l ? l :
-            DecimalAttributeValue.TryParse(AsString(o), out var parsed) ? parsed : 0m));
+        target.SetFunction("ToDecimal", (Func<object?, decimal>)(input =>
+        {
+            var o = ExpressionValueSets.One(input);
+            return o is decimal d ? d :
+                o is int i ? i :
+                o is long l ? l :
+                DecimalAttributeValue.TryParse(AsString(o), out var parsed) ? parsed : 0m;
+        }));
 
         // DN Helper functions
-        target.SetFunction("EscapeDN", (Func<object?, string?>)(o => EscapeDN(AsString(o))));
+        target.SetFunction("EscapeDN", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => EscapeDN(AsString(v)))));
 
         // Password generation functions
         target.SetFunction("RandomPassword", (Func<int, bool, string>)RandomPassword);
@@ -323,14 +396,13 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     /// <summary>
     /// A function's input as text, in JIM's one text form (#2153, N1): a date as <c>2026-03-15 10:30:00Z</c>, a
     /// number with <c>.</c> as the decimal point. A Binary value has no text form, so using one as text is an
-    /// expression error rather than the text <c>System.Byte[]</c>.
+    /// expression error rather than the text <c>System.Byte[]</c>. Text is a one-value position (#2053): several values
+    /// are the error naming the attribute and the count.
     /// </summary>
-    /// <remarks>
-    /// Several values keep their old text here for now: how a function treats several values is #2053's multi-valued
-    /// slice, which gives them their own error.
-    /// </remarks>
     private static string? AsString(object? value)
     {
+        value = ExpressionValueSets.One(value);
+
         if (ExpressionText.TryFormat(value, out var text))
             return text;
 
@@ -341,10 +413,11 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Converts an object to int, handling null and various types.
+    /// Converts an object to int, handling null and various types. A one-value position (#2053).
     /// </summary>
     private static int AsInt(object? value)
     {
+        value = ExpressionValueSets.One(value);
         if (value == null) return 0;
         if (value is int i) return i;
         if (value is long l) return (int)l;
@@ -412,30 +485,6 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     #endregion
 
-    #region Containment Functions
-
-    private static bool CollectionContains(object? collection, string value)
-    {
-        if (collection == null)
-            return false;
-
-        // Handle various collection types
-        if (collection is IEnumerable<string> stringEnumerable)
-        {
-            return stringEnumerable.Contains(value);
-        }
-
-        if (collection is IEnumerable<object> objectEnumerable)
-        {
-            return objectEnumerable.Any(item => string.Equals(item?.ToString(), value, StringComparison.Ordinal));
-        }
-
-        // If it's a single value, check if it matches
-        return string.Equals(collection.ToString(), value, StringComparison.Ordinal);
-    }
-
-    #endregion
-
     #region Array/Collection Functions
 
     /// <summary>
@@ -459,39 +508,19 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Joins a collection of values into a single string with a delimiter.
-    /// This is the reverse of Split - useful for converting multi-valued attributes
-    /// into a single delimited string for systems that don't support MVAs.
+    /// Joins values into one delimited text value, in the order they are read (#2053): an attribute's values in their
+    /// fixed order, or <c>Split</c>'s in the order it found them, so <c>Split</c> followed by <c>Join</c> gives back what it
+    /// was given. Values with no text (empty text) are left out; a Binary value is an error, as it has no text form.
     /// </summary>
-    /// <param name="collection">The collection to join.</param>
-    /// <param name="delimiter">The delimiter to use between values.</param>
-    /// <returns>A joined string, or null if collection is null/empty.</returns>
+    /// <returns>The joined text, or null when there are no values.</returns>
     private static string? Join(object? collection, string? delimiter)
     {
-        if (collection == null)
-            return null;
-
         delimiter ??= ",";
-
-        if (collection is IEnumerable<string> stringEnumerable)
-        {
-            var items = stringEnumerable.Where(s => !string.IsNullOrEmpty(s)).ToArray();
-            return items.Length > 0 ? string.Join(delimiter, items) : null;
-        }
-
-        if (collection is IEnumerable<object> objectEnumerable)
-        {
-            var items = objectEnumerable
-                .Where(o => o != null)
-                .Select(o => o.ToString())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .ToArray();
-            return items.Length > 0 ? string.Join(delimiter, items!) : null;
-        }
-
-        // Single value - just return it as-is
-        var singleValue = collection.ToString();
-        return string.IsNullOrEmpty(singleValue) ? null : singleValue;
+        var items = ExpressionValueSets.Values(collection)
+            .Select(AsString)
+            .Where(text => !string.IsNullOrEmpty(text))
+            .ToArray();
+        return items.Length > 0 ? string.Join(delimiter, items) : null;
     }
 
     #endregion

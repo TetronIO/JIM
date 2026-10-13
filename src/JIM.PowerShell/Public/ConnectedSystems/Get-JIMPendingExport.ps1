@@ -4,47 +4,53 @@
 function Get-JIMPendingExport {
     <#
     .SYNOPSIS
-        Gets Pending Exports from JIM.
+        Gets a Connected System's Pending Exports.
 
     .DESCRIPTION
-        Retrieves Pending Exports for a Connected System. Pending Exports represent changes
-        that need to be applied to a connected system, created when metaverse objects change
-        and need to be synchronised to target systems.
+        Gets the Pending Exports waiting to be written to a Connected System: a page of them, every one with -All,
+        one by ID, or how many there are with -Count.
 
-        Can list all pending exports for a connected system, retrieve a specific pending export
-        by ID, or get paginated attribute changes for a specific attribute.
+        A Pending Export read by ID carries at most 10 value changes for each multi-valued attribute. -AttributeName
+        pages through the rest of one attribute's changes.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System to retrieve pending exports for.
+        The ID of the Connected System.
 
     .PARAMETER Id
-        The unique identifier (GUID) of a specific Pending Export to retrieve.
+        The ID of the Pending Export to get.
 
     .PARAMETER AttributeName
-        When specified with -Id, retrieves paginated attribute value changes for the named
-        attribute. Use this to page through large multi-valued attribute changes (e.g. member
-        additions) that are capped in the detail response.
+        With -Id, gets the value changes for this attribute a page at a time, for a multi-valued attribute such as
+        member whose changes the Pending Export read by ID cuts short.
 
     .PARAMETER Search
-        Optional search text to filter results. For listing, filters by target object,
-        source MVO, or error message. For attribute changes, filters by value.
+        Returns only the Pending Exports whose target object, source Metaverse Object or error matches this text; or
+        with -AttributeName, only the changes whose value matches it.
 
     .PARAMETER Page
-        Page number for pagination. Defaults to 1.
+        The page to get.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 50.
+        How many Pending Exports or changes a page holds.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages of results. Fetches at most 1000
-        pages before stopping with a warning; use -Force to fetch beyond the cap.
+        Fetches every page instead of one. Stops after 1000 pages with a warning; -Force fetches the rest.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of how
-        large the result set is. Only valid with -All.
+        With -All, fetches every page, past the 1000-page limit.
+
+    .PARAMETER Count
+        Returns how many Pending Exports there are, rather than the Pending Exports.
+
+    .PARAMETER ChangeType
+        With -Count, counts only the Pending Exports that make this kind of change.
+
+    .PARAMETER Status
+        With -Count, counts only the Pending Exports with this status.
 
     .OUTPUTS
-        PSCustomObject representing Pending Export(s) or attribute value changes.
+        The Pending Exports, the one Pending Export, its value changes for -AttributeName, or with -Count how many
+        there are.
 
     .EXAMPLE
         Get-JIMPendingExport -ConnectedSystemId 2
@@ -95,7 +101,12 @@ function Get-JIMPendingExport {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PendingExportHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.PendingExportHeader', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.PendingExportDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.PendingExportAttributeValueChangeDto', ParameterSetName = 'AttributeChanges')]
+    [OutputType('JIM.PendingExportAttributeValueChangeDto', ParameterSetName = 'AttributeChangesAll')]
+    [OutputType([int], ParameterSetName = 'Count')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ListAll', ValueFromPipelineByPropertyName)]

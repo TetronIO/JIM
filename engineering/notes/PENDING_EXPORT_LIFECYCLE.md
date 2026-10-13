@@ -37,8 +37,8 @@ When an MVO changes and export rules target it:
 Location: `DriftDetectionService.EvaluateDrift()`.
 
 After an import sync on a joined CSO with `EnforceState = true`:
-1. Compare CSO actual attribute values vs expected values from export rule mappings
-2. Stage corrective PEs in memory (not immediately persisted)
+1. Compare CSO actual attribute values vs expected values from export rule mappings. An expression mapping's expected state and its correction come from export staging's own code (`SyncEngine.StageExportExpressionMapping`, which runs the `AttributeFlowPipeline` evaluation and stages its result, then `IsCsoAttributeAlreadyCurrent`), so drift never asserts a state export staging would not stage (#2180); a direct mapping refuses a multi-valued source holding several values for a single-valued target through the same `FindMultiValuedToSingleValuedError` predicate.
+2. Stage corrective PEs in memory (not immediately persisted). Drift is reported (and a `DriftCorrection` RPEI raised) only where a correction is staged; mapping-level errors come back on `DriftDetectionResult.AttributeFlowErrors`, and an expression failure or Fail the object throws, and the worker records each against the CSO and stages nothing for it.
 3. Merged with export evaluation PEs in `CreateOrUpdatePendingExportWithNoNetChangeAsync()`
 
 ## Attribute Change Creation (`CreateAttributeValueChanges`)

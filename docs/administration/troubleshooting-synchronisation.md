@@ -106,6 +106,14 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 
+## **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
+
+**What it means.** A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values, so JIM could not tell whether the object is in the rule's scope. It took no action for the object: nothing was brought into scope or taken out, and any join it already had is kept. The message names the rule, the attribute and the pattern. Every other object in the run carried on.
+
+**How to fix.** Simplify the pattern in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` or `(.*)*` is the usual cause: on a long value that does not match, the expression tries an enormous number of ways before giving up. Anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
+
+**Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error.
+
 ## A run ends **Failed with error** before processing anything
 
 **What it means.** JIM could not reach the Connected System, or the Connector could not start: the message is the reason the network, the server or the Connector gave, such as a refused connection, a name that does not resolve, or a certificate JIM does not trust. Nothing was imported or exported.

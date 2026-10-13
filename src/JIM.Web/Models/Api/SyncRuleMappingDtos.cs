@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -719,7 +720,97 @@ public class TestExpressionRequest
     /// Sample Connected System attribute values to use during evaluation.
     /// Keys are attribute names, values are the attribute values.
     /// </summary>
+    /// <remarks>
+    /// With an Attribute Flow (<c>SyncRuleId</c> and <c>MappingId</c>), each value is converted to its attribute's type
+    /// as the object would hold it: text, a number, a Boolean, null for no value (distinct from empty text), or an array
+    /// of these for a multi-valued attribute. The same applies to <c>MvAttributes</c>.
+    /// </remarks>
     public Dictionary<string, object?>? CsAttributes { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose Attribute Flow to test the expression as, given with <c>MappingId</c>. The test then
+    /// runs what synchronisation runs: each sample converted to its attribute's type, the Attribute Flow's Missing Input
+    /// Behaviour and value processing, and conversion to its target attribute's type. Omit both to evaluate the
+    /// expression alone.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow on the Synchronisation Rule to test the expression as, given with <c>SyncRuleId</c>. The
+    /// expression tested is <c>Expression</c>, so an edit can be tried before it is saved.
+    /// </summary>
+    public int? MappingId { get; set; }
+
+    /// <summary>
+    /// A Connected System Object of the Synchronisation Rule's Connected System whose values to test with, for an import
+    /// Attribute Flow. Its values for the attributes the expression reads are the inputs; a sample in
+    /// <c>CsAttributes</c> replaces the object's value for that attribute. An expression that also reads <c>mv[...]</c>
+    /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// A Metaverse Object whose values to test with, for an export Attribute Flow. A sample in <c>MvAttributes</c>
+    /// replaces the object's value for that attribute.
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The instant to test as of, in UTC: what <c>Now()</c> and <c>Today()</c> read. Omit it for the current time.
+    /// </summary>
+    public DateTime? AsOf { get; set; }
+}
+
+/// <summary>
+/// One input an expression read when it was tested as an Attribute Flow.
+/// </summary>
+public class TestExpressionInputDto
+{
+    /// <summary>
+    /// The input as the expression writes it, such as <c>cs["hireDate"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// The attribute's type, or null when the object being synchronised cannot hold a value for it.
+    /// </summary>
+    public AttributeDataType? Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or several; null when <c>Type</c> is null.
+    /// </summary>
+    public AttributePlurality? Plurality { get; set; }
+
+    /// <summary>
+    /// The values the input was given, one line per value in JIM's text form. Empty when it had no value.
+    /// </summary>
+    public IReadOnlyList<string> ValueLines { get; set; } = [];
+}
+
+/// <summary>
+/// What an Attribute Flow would do if one of its inputs had no value.
+/// </summary>
+public class TestExpressionAbsentInputDto
+{
+    /// <summary>
+    /// The input made absent, such as <c>cs["sn"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// What the target attribute would then be given.
+    /// </summary>
+    public AttributeFlowOutcome Outcome { get; set; }
+
+    /// <summary>
+    /// Why that outcome is an error; null when it is not.
+    /// </summary>
+    public AttributeFlowErrorReason? ErrorReason { get; set; }
+
+    /// <summary>
+    /// What synchronisation would then do, in one sentence.
+    /// </summary>
+    public string OutcomeDescription { get; set; } = null!;
 }
 
 /// <summary>
@@ -758,4 +849,71 @@ public class TestExpressionResponse
     /// Position in the expression where an error occurred (if applicable).
     /// </summary>
     public int? ErrorPosition { get; set; }
+
+    /// <summary>
+    /// What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an
+    /// Attribute Flow was given and its sample values could be used.
+    /// </summary>
+    public AttributeFlowOutcome? Outcome { get; set; }
+
+    /// <summary>
+    /// Why the outcome is an error. Set only when <c>Outcome</c> is Error.
+    /// </summary>
+    public AttributeFlowErrorReason? ErrorReason { get; set; }
+
+    /// <summary>
+    /// What synchronisation would do, in one sentence. Set only when an Attribute Flow was given.
+    /// </summary>
+    public string? OutcomeDescription { get; set; }
+
+    /// <summary>
+    /// The values the target attribute would hold after value processing and conversion to its type, one line per value
+    /// in JIM's text form. Set only when <c>Outcome</c> is Values.
+    /// </summary>
+    public IReadOnlyList<string>? ValueLines { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow's target attribute. Set only when an Attribute Flow was given.
+    /// </summary>
+    public string? TargetAttributeName { get; set; }
+
+    /// <summary>
+    /// The target attribute's type, which the values are converted to. Set only when an Attribute Flow was given.
+    /// </summary>
+    public AttributeDataType? TargetAttributeType { get; set; }
+
+    /// <summary>
+    /// The inputs the expression reads that have no value, such as <c>cs["sn"]</c>, when the Attribute Flow's Missing
+    /// Input Behaviour stopped it being evaluated.
+    /// </summary>
+    public IReadOnlyList<string>? MissingInputs { get; set; }
+
+    /// <summary>
+    /// Why the sample values could not be used, one message each, such as text that is not a date for a date and time
+    /// attribute. When present the expression was not evaluated.
+    /// </summary>
+    public IReadOnlyList<string>? InputErrors { get; set; }
+
+    /// <summary>
+    /// The inputs the expression read, with the values they were given: the samples, and any loaded from an object.
+    /// Set only when an Attribute Flow was given.
+    /// </summary>
+    public IReadOnlyList<TestExpressionInputDto>? Inputs { get; set; }
+
+    /// <summary>
+    /// The value processing the Attribute Flow applies to the expression's result, in the order it applies them. Set
+    /// only for an import Attribute Flow to a Text attribute whose expression returned a result; empty when none is set.
+    /// </summary>
+    public IReadOnlyList<AttributeFlowValueProcessingStep>? ValueProcessingSteps { get; set; }
+
+    /// <summary>
+    /// Whether value processing changed the expression's result. Set with <c>ValueProcessingSteps</c>.
+    /// </summary>
+    public bool? ValueProcessingChanged { get; set; }
+
+    /// <summary>
+    /// For each input given a value, what the Attribute Flow would do with that input absent. Set only when an Attribute
+    /// Flow was given and its sample values could be used.
+    /// </summary>
+    public IReadOnlyList<TestExpressionAbsentInputDto>? IfInputHasNoValue { get; set; }
 }

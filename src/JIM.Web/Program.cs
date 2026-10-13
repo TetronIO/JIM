@@ -966,7 +966,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
     }
 
     // Validate the key format
-    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix))
+    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix, StringComparison.Ordinal))
     {
         Log.Warning("InitialiseInfrastructureApiKeyAsync: {EnvVar} must start with '{Prefix}'. Key not created.",
             Constants.Config.InfrastructureApiKey, ApiKeyAuthenticationHandler.ApiKeyPrefix);
@@ -1240,7 +1240,7 @@ static string? ExtractApiAudience(string? apiScope, string? clientId)
 
     // For scopes like "api://client-id/access_as_user", extract "api://client-id"
     var lastSlashIndex = apiScope.LastIndexOf('/');
-    if (lastSlashIndex > 0 && apiScope.StartsWith("api://"))
+    if (lastSlashIndex > 0 && apiScope.StartsWith("api://", StringComparison.Ordinal))
         return apiScope[..lastSlashIndex];
 
     return clientId;

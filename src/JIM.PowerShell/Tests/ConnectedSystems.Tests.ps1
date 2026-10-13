@@ -328,6 +328,59 @@ Describe 'Set-JIMConnectedSystemAttribute' {
         }
     }
 
+    # Whether an attribute's values are case-exact is offered on every Connector (#2051), so the switch is on the
+    # Single set; the bulk hashtable carries it as caseExact like any other property.
+    Context 'Case-exact declaration' {
+
+        It 'Sends caseExact true when -CaseExact $true is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; caseExact = $true } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -CaseExact $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and $Body.ContainsKey('caseExact') -and $Body.caseExact -eq $true
+                }
+            }
+        }
+
+        It 'Sends caseExact false when -CaseExact $false is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; caseExact = $false } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -CaseExact $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('caseExact') -and $Body.caseExact -eq $false
+                }
+            }
+        }
+
+        It 'Leaves caseExact out when -CaseExact is not given, so the declaration is unchanged' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Selected $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.ContainsKey('caseExact') }
+            }
+        }
+
+        It 'Passes caseExact through a bulk update' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ updatedCount = 1; errors = $null } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeUpdates @{ 3 = @{ caseExact = $true } } -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Body.attributes['3'].caseExact -eq $true }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

@@ -581,8 +581,10 @@
                     @* Expression tester (#1405): the Expression field is where an administrator finds out whether
                        their Expression does what they meant, and until now the answer only arrived from a
                        Synchronisation. ExpressionEditor raises every keystroke, which is what lets the tester follow
-                       the text as it is typed. *@
-                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" />
+                       the text as it is typed. Given the Attribute Flow, it runs the flow as a Synchronisation would
+                       (#2055): typed inputs, Missing Input Behaviour, value processing and conversion to the target. *@
+                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" SyncRule="SyncRule"
+                                      Mapping="_attributeFlowMapping" Source="_attributeFlowMappingSource" />
 
                     @* ─── Derived Attribute Flow (#1750, mockups B and C): the live analysis of this flow ─── *@
                     <DerivedFlowPanel Analysis="_derivedFlowAnalysis" ConnectedSystemName="@SyncRule.ConnectedSystem?.Name" />
