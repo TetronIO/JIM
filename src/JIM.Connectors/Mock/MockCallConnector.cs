@@ -327,7 +327,13 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
         foreach (var pendingExport in pendingExports)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            // As every Connector must (#2083): a cancelled run starts nothing more, and says so per change rather than
+            // throwing away the results of the changes already written.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                results.Add(ConnectedSystemExportResult.NotAttempted());
+                continue;
+            }
 
             _exportedItems.Add(pendingExport);
 

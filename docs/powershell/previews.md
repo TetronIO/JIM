@@ -133,7 +133,7 @@ Without `-Wait`, the result of starting the preview: its Activity id, and what v
 
 Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection, or, with `-Deletion`, deleting it altogether, or, with `-FullSynchronisation`, running a Full Synchronisation of it. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
 
-An omitted setting is treated exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) and [`Set-JIMSyncRule`](synchronisation-rules.md#set-jimsyncrule) treat it, so passing the same parameters to the preview and to the change describes precisely what the change will do.
+An omitted setting is treated exactly as [`Set-JIMMetaverseObjectType`](metaverse-object-types.md#set-jimmetaverseobjecttype) and [`Set-JIMSyncRule`](synchronisation-rules.md#set-jimsyncrule) treat it, so passing the same parameters to the preview and to the change describes precisely what the change will do.
 
 Anything you leave out of `-SchemaObjectType` stays as it is. Leaving out `selected` does not deselect the Object Type, so a request that changes one attribute never proposes taking the whole Object Type out of management. Deselecting an External ID is refused with a blocking finding.
 
@@ -443,6 +443,6 @@ Stop-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e7
 - [Sync Preview cmdlets](sync-preview.md): what synchronising one object would do now, from PowerShell
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change): what a deletion settings preview evaluates
 - [Synchronisation Rules](../configuration/deprovisioning.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
-- [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype): applying a previewed change with `-PreviewActivityId`
+- [Metaverse cmdlets](metaverse-object-types.md#set-jimmetaverseobjecttype): applying a previewed change with `-PreviewActivityId`
 - [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule): applying a previewed toggle change with `-PreviewActivityId`
 - [Activities](activities.md): the Activity a preview runs as, and the one the change it informed is recorded under

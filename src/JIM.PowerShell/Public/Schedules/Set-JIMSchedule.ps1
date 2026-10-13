@@ -21,43 +21,54 @@ function Set-JIMSchedule {
         The new description for the Schedule.
 
     .PARAMETER TriggerType
-        How the schedule is triggered:
-        - Cron: Runs automatically based on a schedule
-        - Manual: Only runs when triggered manually
+        How the Schedule starts. Cron runs it automatically on its pattern;
+        Manual runs it only when started, from the portal or with
+        Start-JIMSchedule.
 
     .PARAMETER PatternType
-        The scheduling pattern type (for Cron triggers):
-        - SpecificTimes: Run at specific times each day
-        - Interval: Run at regular intervals
-        - Custom: Use a custom cron expression
+        How a Cron Schedule is timed. SpecificTimes runs it at set times of
+        day (RunTimes), Interval runs it every few hours or minutes
+        (IntervalValue and IntervalUnit), and Custom takes a cron expression
+        of your own (CronExpression).
 
     .PARAMETER DaysOfWeek
-        Days of the week to run (0=Sunday, 1=Monday, ..., 6=Saturday).
+        The days the Schedule runs, as numbers from 0 (Sunday) to 6
+        (Saturday). For example, @(1,2,3,4,5) for weekdays.
 
     .PARAMETER RunTimes
-        For SpecificTimes pattern: Array of times to run each day.
+        For a SpecificTimes pattern, the times of day to run, in 24-hour
+        format, for example @("06:00", "18:00"). Every time must be at the
+        same minute past the hour, because a Schedule holds one cron
+        expression; use a Custom pattern for times that differ.
 
     .PARAMETER IntervalValue
-        For Interval pattern: The interval value.
+        For an Interval pattern, how often to run, counted in IntervalUnit.
+        For Hours, no more than 23.
 
     .PARAMETER IntervalUnit
-        For Interval pattern: The interval unit (Hours or Minutes).
+        For an Interval pattern, the unit of IntervalValue: Hours or Minutes.
 
     .PARAMETER IntervalWindowStart
-        For Interval pattern: Start of the time window.
+        For an hourly Interval pattern, the start of the window the Schedule
+        runs in, in 24-hour format. Give IntervalWindowEnd with it.
 
     .PARAMETER IntervalWindowEnd
-        For Interval pattern: End of the time window.
+        For an hourly Interval pattern, the end of the window the Schedule
+        runs in, in 24-hour format.
 
     .PARAMETER CronExpression
-        For Custom pattern: The cron expression.
+        For a Custom pattern, the cron expression. For SpecificTimes and
+        Interval, JIM rebuilds the expression from the pattern, so changing
+        RunTimes or the interval retimes the Schedule.
 
     .PARAMETER OnStepFailure
-        What the Schedule does when a step fails, for every step that follows the Schedule:
-        - Stop: the remaining steps do not run, and the run ends Failed
-        - Continue: the remaining steps run, and a run that carried on past a failure ends CompleteWithError
-        A step with a setting of its own (see Set-JIMScheduleStep) overrides it. Omit to leave the setting unchanged.
-        A built-in Schedule's setting cannot be changed.
+        What the Schedule does when a step fails. With Stop, the remaining
+        steps do not run and the run ends Failed. With Continue, the remaining
+        steps run, and a run that carried on past a failure ends
+        CompleteWithError. A step with a setting of its own (see
+        Set-JIMScheduleStep) overrides it. Omit to leave the setting
+        unchanged. A built-in Schedule always stops, and JIM refuses a change
+        to it.
 
     .PARAMETER Steps
         Array of step objects to replace the existing steps. Give each step its failure setting as OnFailure
@@ -69,10 +80,10 @@ function Set-JIMSchedule {
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated Schedule object.
+        Returns the updated Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Schedule object.
+        With -PassThru, the updated Schedule in full; otherwise nothing.
 
     .EXAMPLE
         Set-JIMSchedule -Id "12345678-..." -Name "Updated Schedule Name"
@@ -101,7 +112,7 @@ function Set-JIMSchedule {
         Set-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]

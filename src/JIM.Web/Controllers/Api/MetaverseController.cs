@@ -530,8 +530,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetAttributesAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested metaverse attributes (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-        var headers = attributes?.Select(MetaverseAttributeHeader.FromEntity).AsQueryable();
+        // The header projection reads each attribute's Object Type bindings; mapping the entities instead would
+        // leave them empty, because the untracked entity load does not include the navigation.
+        var headers = (await _application.Metaverse.GetMetaverseAttributeHeadersAsync())?.AsQueryable();
 
         var result = headers != null
             ? headers.ApplySortAndFilter(pagination).ToPaginatedResponse(pagination)

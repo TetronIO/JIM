@@ -27,6 +27,17 @@ public class DynamicExpressoEvaluatorSecurityTests
         _evaluator = new DynamicExpressoEvaluator();
     }
 
+    /// <summary>
+    /// Asserts the attempt fails as the one expression error every consumer reports (#2153, N5), and that the guard
+    /// underneath it is the one this review relies on: the evaluator wraps the failure, it does not replace it.
+    /// </summary>
+    private static void AssertExpressionError<TGuard>(Action attempt) where TGuard : Exception
+    {
+        var error = Assert.Throws<ExpressionEvaluationException>(attempt);
+
+        Assert.That(error!.InnerException, Is.InstanceOf<TGuard>());
+    }
+
     #region Chained Reflection Escape Attempts
 
     [Test]
@@ -36,7 +47,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().GetMethods()", context));
     }
 
@@ -47,7 +58,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().Assembly", context));
     }
 
@@ -57,7 +68,7 @@ public class DynamicExpressoEvaluatorSecurityTests
         // The exact example DynamicExpresso's own documentation cites as blocked.
         var context = new ExpressionContext();
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("typeof(double).GetMethods()", context));
     }
 
@@ -66,7 +77,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("typeof(double).Assembly", context));
     }
 
@@ -77,7 +88,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().GetMethod(\"ToString\")", context));
     }
 
@@ -110,7 +121,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("System.Diagnostics.Process.Start(\"cmd\")", context));
     }
 
@@ -119,7 +130,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("new System.IO.FileStream(\"x\", 0)", context));
     }
 
@@ -128,7 +139,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("Environment.GetEnvironmentVariable(\"PATH\")", context));
     }
 
@@ -137,7 +148,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("Activator.CreateInstance(typeof(object))", context));
     }
 
@@ -146,7 +157,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("AppDomain.CurrentDomain", context));
     }
 
@@ -167,7 +178,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "original" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ParseException>(() =>
+        AssertExpressionError<ParseException>(() =>
             _evaluator.Evaluate("mv[\"a\"] = \"changed\"", context));
     }
 
@@ -201,7 +212,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<ParseException>(() => _evaluator.Evaluate("Upper(mv[\"a\"]", context));
+        AssertExpressionError<ParseException>(() => _evaluator.Evaluate("Upper(mv[\"a\"]", context));
     }
 
     [Test]

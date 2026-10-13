@@ -14,26 +14,33 @@ function Get-JIMScheduleExecution {
         The unique identifier (GUID) of a specific Schedule Execution to retrieve.
 
     .PARAMETER ScheduleId
-        Filter executions by Schedule ID.
+        Returns only the executions of this Schedule.
 
     .PARAMETER InputObject
-        A Schedule object from the pipeline (e.g., from Get-JIMSchedule). Its Id is used
-        to filter executions, equivalent to specifying -ScheduleId directly.
+        A Schedule from the pipeline, for example from Get-JIMSchedule. Its Id
+        filters the executions, as -ScheduleId does.
 
     .PARAMETER Status
-        Filter executions by status:
-        - Queued: Waiting to start
-        - InProgress: Currently running
-        - Complete: Finished successfully
-        - CompleteWithError: Finished, but one or more steps failed and were set to let the Schedule continue
-        - Failed: Stopped by a failed step, or failed to run
-        - Cancelled: Was cancelled
+        Returns only the executions with this status. Queued is waiting to
+        start and InProgress is running. Complete finished successfully;
+        CompleteWithError finished, but one or more steps failed and were set
+        to let the Schedule carry on. Failed was stopped by a failed step, or
+        failed to run, and Cancelled was stopped.
 
     .PARAMETER Active
-        If specified, returns only currently active (Queued or InProgress) executions.
+        Returns only the executions still under way: Queued or InProgress.
 
     .OUTPUTS
-        PSCustomObject representing Schedule Execution(s).
+        The list and -Active return a summary of each Schedule Execution; -Id returns one in full, with the progress
+        of each step group.
+
+        JIM.ScheduleExecutionSummary
+        StepDisplay (string): The step group the execution has reached, as its position, for example Step 2 of 5. A
+            summary carries the position only, not what the step group is called.
+
+        JIM.ScheduleExecution
+        StepDisplay (string): The step group the execution has reached, as one sentence naming it, for example Step
+            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue.
 
     .EXAMPLE
         Get-JIMScheduleExecution
@@ -66,7 +73,9 @@ function Get-JIMScheduleExecution {
         Get-JIMSchedule
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleExecutionSummary', ParameterSetName = 'List')]
+    [OutputType('JIM.ScheduleExecutionSummary', ParameterSetName = 'Active')]
+    [OutputType('JIM.ScheduleExecution', ParameterSetName = 'ById')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('ExecutionId')]

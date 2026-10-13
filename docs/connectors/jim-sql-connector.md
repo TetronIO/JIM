@@ -223,6 +223,7 @@ An Export writes each Pending Export to the Object Type's table. Everything belo
 | Update | Updates only the columns whose values changed. Key columns are never rewritten. |
 | Delete | Deletes the related-table rows, then the row. A row that has already gone counts as deleted. |
 | Add or remove a multi-valued value | Inserts or deletes one row of the related table. |
+| Set a multi-valued attribute to one value | Deletes the object's rows in the related table, then inserts one row holding the value (none, when the attribute is cleared). This is how a single-valued Metaverse attribute flowing to a related table is written, so the table holds exactly that value. |
 | Reference | Writes the referenced object's own key. If the referenced object does not exist in this database yet, JIM writes the rest of the object now and fills the reference in on a later run, once it does; see [Unresolved reference handling](../configuration/unresolved-references.md) for how a reference that cannot be resolved is reported. |
 
 JIM checks every write took effect. A statement the database accepted but which changed nothing (a trigger discarding the insert, a row deleted outside JIM) is reported as a failure for that object, with a message saying what to check, rather than being recorded as done. One object's failure never stops the rest of the batch, and the failed export is retried with JIM's normal backoff.

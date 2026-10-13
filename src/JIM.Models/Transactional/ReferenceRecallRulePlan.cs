@@ -53,8 +53,9 @@ public class ReferenceRecallDirectFlow
     public required ConnectedSystemObjectTypeAttribute TargetAttribute { get; init; }
 
     /// <summary>
-    /// The source Metaverse Attribute's plurality: multi-valued sources synthesise Remove changes
-    /// carrying the resolved value; single-valued sources synthesise a null-clearing Update change.
+    /// The source Metaverse Attribute's plurality. With a multi-valued <see cref="TargetAttribute"/>, a
+    /// multi-valued source synthesises a Remove change carrying the resolved value; every other combination
+    /// synthesises a null-clearing Update change, because the change's shape follows the target's plurality.
     /// </summary>
     public required AttributePlurality SourcePlurality { get; init; }
 }

@@ -258,8 +258,8 @@ public class ExportEvaluationMergeTests
     {
         // The Scenario 014 export failure. Drift staged Remove title="Consultant (Secondary)" (the value the
         // directory actually held), then export evaluation staged Update title="Consultant (Primary)", because
-        // the change type follows the Metaverse attribute's plurality (Job Title is single-valued) while the
-        // merge key follows the Connected System attribute's (LDAP `title` is multi-valued). The two keys
+        // a single-valued source (Job Title) is staged as an Update, which replaces the whole set, while the
+        // merge key follows the Connected System attribute's plurality (LDAP `title` is multi-valued). The two keys
         // therefore differed and both changes survived, so the connector emitted `replace title: Consultant
         // (Primary)` followed by `delete title: Consultant (Secondary)`. The replace had already removed the old
         // value, LDAP rejected the whole modify atomically with "modify/delete: title: no such value", and the

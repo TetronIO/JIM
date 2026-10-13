@@ -17,7 +17,7 @@ Expressions live inside **Synchronisation Rules**, in what is known as the **Att
 
 Within a Synchronisation Rule, expressions are used in:
 
-- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System.
+- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System. An export expression produces one value; written to a Multi-Valued attribute, it replaces every value the attribute holds (see [Multi-valued attributes](../configuration/attribute-mappings.md#multi-valued-attributes)).
 - **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the Metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
@@ -173,7 +173,7 @@ Eq(Lower(mv["Status"]), "active")
 |----------|-------------|---------|
 | `IIF(condition, trueValue, falseValue)` | Return one value if a condition is true, another if false | `IIF(Eq(mv["Status"], "Active"), 512, 514)` |
 | `Coalesce(value1, value2)` | Use the first value if it exists, otherwise use the second | `Coalesce(mv["Preferred Name"], mv["First Name"])` |
-| `Eq(value1, value2)` | Check if two values are equal (required for text comparisons) | `Eq(mv["Department"], "IT")` |
+| `Eq(value1, value2)` | Check if two values are equal (required for text comparisons); a date compares by [instant](#dates-and-numbers-as-text) | `Eq(mv["Department"], "IT")` |
 
 ### Conversion Functions
 
@@ -189,11 +189,30 @@ Eq(Lower(mv["Status"]), "active")
 |----------|-------------|---------|
 | `Now()` | Current date and time (UTC) | `Now()` |
 | `Today()` | Current date at midnight (UTC) | `Today()` |
-| `FormatDate(date, format)` | Format a date as text (e.g., "2026-03-15") | `FormatDate(mv["HireDate"], "yyyy-MM-dd")` |
-| `ToFileTime(date)` | Convert a date to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
+| `FormatDate(value, format)` | Write a date, or ISO 8601 text, in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings); nothing for other text or no value | `FormatDate(mv["Hire Date"], "yyyy-MM-dd")` |
+| `ParseDate(text, format)` | Read text in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) as a date, in UTC unless the format has an offset (`zzz` or `K`); nothing for empty text, an error for text that does not match | `ParseDate(cs["hireDate"], "dd/MM/yyyy")` |
+| `ToFileTime(date)` | Convert a date, or ISO 8601 text, to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
 | `FromFileTime(filetime)` | Convert an Active Directory FILETIME back to a date | `FromFileTime(cs["accountExpires"])` |
 
 `Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+
+### Dates and Numbers as Text
+
+**Writing.** Whatever the server's language, `ToString()`, a date flowing to a Text attribute, and the tester write a date as `2026-03-15 10:30:00Z`: UTC, with a fraction of a second only when there is one. Joining a date to text with `+` uses the same pattern in the zone the date carries. Numbers use `.` as the decimal point. For any other form, use `FormatDate()`:
+
+```csharp
+"Changed " + ToString(mv["Last Changed"])       // Changed 2026-03-15 10:30:00Z
+FormatDate(mv["Last Changed"], "dd MMM yyyy")   // 15 Mar 2026
+```
+
+**Reading.** Text, including text flowing to a DateTime attribute, is read as a date only in ISO 8601: `yyyy-MM-dd`, then optionally `T` or a space and a time (`HH:mm`, optional seconds and fraction), then `Z`, an offset such as `+01:00`, or nothing, which means UTC. Every other form is refused, including `03/04/2024`, which is 3 April in one country and 4 March in another; read those with `ParseDate()`:
+
+```csharp
+ParseDate(cs["startDate"], "dd/MM/yyyy")      // 15/03/2026 is 15 March 2026, 00:00 UTC
+ParseDate(cs["changed"], "yyyyMMddHHmmssK")   // 20260315103000Z is 15 March 2026, 10:30 UTC
+```
+
+A `ParseDate()` mismatch is an error, not "no value", so an unexpected form never clears the attribute. A Binary value has no text form: text functions such as `Upper()` refuse it with an error, while `IsNullOrEmpty()` and `IsNullOrWhitespace()` treat it as a value.
 
 ### Distinguished Name (DN) Functions
 
@@ -334,7 +353,9 @@ Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or 
 | Whitespace only, **Treat whitespace as no value** on (default) | No value | ❌ Clears any existing value |
 | Whitespace only, **Treat whitespace as no value** off | Literal whitespace | ✅ Stored (flagged `(whitespace)` in the portal) |
 | Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ✅ Stored as-is, bypassing the null/clear path |
-| A non-empty value | That value | ✅ Stored |
+| A non-empty value | That value, in the attribute's type | ✅ Stored |
+| A value the attribute cannot hold (for example text, for a Number attribute) | Nothing | ⚠️ Kept as it was; the object is reported with an expression error |
+| More than one value, for a single-valued attribute | Nothing | ⚠️ Kept as it was; the object is reported with a `Multi-Valued to Single-Valued` error |
 
 The "Effect on target" column describes an attribute with a single contributing Synchronisation Rule. Where several rules contribute, a "no value" outcome feeds [Attribute Priority](attribute-priority.md) resolution instead of clearing outright (see point 1).
 
@@ -476,6 +497,8 @@ This creates three separate values: `SOFT101`, `SOFT201`, and `SEC101`.
 - Whitespace is trimmed from each value
 - Returns nothing for missing or empty input
 - The delimiter can be any text (e.g., `","`, `"|"`, `";"`)
+- Each value is stored in the target attribute's type (`"1|2"` into a Number attribute stores 1 and 2); if any value cannot be, nothing flows and the object is reported
+- Into a single-valued attribute, a list of more than one value flows nothing and the object is reported
 
 ### Combining a List into a Single Value
 
@@ -499,7 +522,7 @@ If the attribute has the values Admin, Users, and Developers, this produces: `Ad
 
 The Attribute Flow dialog tests an expression as you write it, so you find out what it produces before you save it rather than from the next synchronisation.
 
-Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to.
+Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to, a list as one value per line.
 
 **Leave a box empty to see what happens when the object has no value for that attribute.** An empty box is passed to the expression as no value, not as an empty string, so this is how you check an expression against the hazard the previous section describes:
 

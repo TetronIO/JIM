@@ -69,7 +69,8 @@ public class ObjectMatchingServer
         {
             if (!ExpressionResultConverter.TryConvert(sample, attribute!.Type, out var typed) || typed == null)
                 return MatchValueResolution.Failed(
-                    $"The sample value '{sample}' for cs[\"{attribute.Name}\"] is not a {attribute.Type} value, the type of that attribute.",
+                    $"The sample value '{sample}' for cs[\"{attribute.Name}\"] is not a {attribute.Type} value, the type of that attribute." +
+                    (attribute.Type == AttributeDataType.DateTime ? " Enter a date in ISO 8601, such as 2026-03-15T10:30:00Z." : string.Empty),
                     rule.TargetMetaverseAttribute?.Type ?? AttributeDataType.NotSet,
                     rule.Sources.Count == 1 ? rule.Sources[0].Expression : null);
 

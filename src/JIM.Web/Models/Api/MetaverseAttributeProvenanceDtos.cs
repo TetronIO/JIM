@@ -8,36 +8,77 @@ using JIM.Models.Core.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of everything the attribute inspector shows for one attribute on one Metaverse Object
-/// (#399): current values and origin, the contributing Connected System Object, the change that last set the
-/// value, every contributing source in priority order, and the attribute's history.
+/// Everything the portal's attribute inspector shows for one attribute on one Metaverse Object.
 /// </summary>
 public class MetaverseAttributeProvenanceDto
 {
+    /// <summary>
+    /// The unique identifier of the Metaverse Object.
+    /// </summary>
     public Guid MetaverseObjectId { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the Metaverse Object's Object Type.
+    /// </summary>
     public int MetaverseObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the attribute.
+    /// </summary>
     public int AttributeId { get; set; }
 
+    /// <summary>
+    /// The attribute's name.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
 
+    /// <summary>
+    /// The kind of value the attribute holds.
+    /// </summary>
     public AttributeDataType AttributeType { get; set; }
 
+    /// <summary>
+    /// Whether the attribute holds one value or many.
+    /// </summary>
     public AttributePlurality AttributePlurality { get; set; }
 
+    /// <summary>
+    /// The values the attribute holds now, each with its origin; at most 50, CurrentValueTotalCount giving the full
+    /// count.
+    /// </summary>
     public List<ProvenanceValueDto> CurrentValues { get; set; } = new();
 
+    /// <summary>
+    /// How many values the attribute holds, including any beyond the 50 CurrentValues lists.
+    /// </summary>
     public int CurrentValueTotalCount { get; set; }
 
+    /// <summary>
+    /// The joined Connected System Object the current value came from; null when none can be identified.
+    /// </summary>
     public ProvenanceConnectedSystemObjectDto? ContributingConnectedSystemObject { get; set; }
 
+    /// <summary>
+    /// The most recent recorded change that set the current value, with its Activity; null when no change is
+    /// recorded.
+    /// </summary>
     public ProvenanceChangeDto? LastSet { get; set; }
 
+    /// <summary>
+    /// Every Attribute Flow that can contribute to the attribute on this Object Type, in priority order, each with
+    /// the value it would supply now and how that compares with the value in use.
+    /// </summary>
     public List<AttributeSourceCandidateDto> Sources { get; set; } = new();
 
+    /// <summary>
+    /// The attribute's change history, newest first: at most 50 entries, HistoryTruncated saying whether there were
+    /// more.
+    /// </summary>
     public List<AttributeHistoryEntryDto> History { get; set; } = new();
 
+    /// <summary>
+    /// Whether History stops short of the attribute's full history.
+    /// </summary>
     public bool HistoryTruncated { get; set; }
 
     public static MetaverseAttributeProvenanceDto FromModel(MetaverseAttributeProvenance model)

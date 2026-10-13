@@ -7,28 +7,27 @@ function Get-JIMPendingDeletion {
         Gets metaverse objects pending deletion in JIM.
 
     .DESCRIPTION
-        Retrieves metaverse objects that are pending deletion, either as a paginated list,
-        a count, or a summary of deletion states. Objects enter pending deletion when all
-        their connector space objects are disconnected and their object type has an automatic
-        deletion rule configured.
+        Gets the Metaverse Objects pending deletion: as a page of them, as a count, or as a summary of where their
+        deletions stand. A Metaverse Object becomes pending deletion when its Object Type's deletion rule is met.
 
     .PARAMETER ObjectTypeId
-        Filter results by Metaverse Object Type ID. Applicable to the List and Count parameter sets.
+        Returns only the Metaverse Objects of the Object Type with this ID.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Only applicable to the List parameter set.
+        The page of results to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 25. Maximum is 100. Only applicable to the List parameter set.
+        How many objects each page holds.
 
     .PARAMETER Count
-        Returns only the total count of pending deletions, optionally filtered by ObjectTypeId.
+        Returns only the number of Metaverse Objects pending deletion.
 
     .PARAMETER Summary
-        Returns a summary breakdown of pending deletion states across all object types.
+        Returns how many are pending deletion, and where their deletions stand, across every Object Type.
 
     .OUTPUTS
-        PSCustomObject representing pending deletion item(s), a count, or a summary.
+        By default, one page of Metaverse Objects pending deletion. With -Count, how many there are. With -Summary,
+        the counts by where each deletion stands.
 
     .EXAMPLE
         Get-JIMPendingDeletion
@@ -57,7 +56,9 @@ function Get-JIMPendingDeletion {
         Get-JIMMetaverseObjectType
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PendingDeletionDto', ParameterSetName = 'List')]
+    [OutputType([int], ParameterSetName = 'Count')]
+    [OutputType('JIM.PendingDeletionSummary', ParameterSetName = 'Summary')]
     param(
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'Count')]
