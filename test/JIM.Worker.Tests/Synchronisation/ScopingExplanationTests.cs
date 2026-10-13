@@ -251,7 +251,7 @@ public class ScopingExplanationTests
         foreach (var (type, expectedValues, samples) in TypeSamples())
         {
             var attribute = new ScopedAttribute(10, $"{type} attribute", type);
-            foreach (var op in SearchComparisonOperators.ValidOperatorsFor(type))
+            foreach (var op in SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.Scoping))
             foreach (var expected in expectedValues)
             foreach (var sample in samples.Where(s => side == Side.Metaverse || !s.AssertedNull))
             foreach (var caseSensitive in type == AttributeDataType.Text ? new[] { true, false } : [true])
@@ -261,9 +261,14 @@ public class ScopingExplanationTests
                 evaluated++;
 
                 var criterion = explanation.Groups.Single().Criteria.Single();
-                var expectedCriterionOutcome = inScope == true
-                    ? ScopingCriterionOutcome.Met
-                    : sample.Absent || sample.AssertedNull ? ScopingCriterionOutcome.NoValue : ScopingCriterionOutcome.NotMet;
+                // Synchronisation throws on a criterion it cannot evaluate (a pattern operator with no pattern), and the
+                // explanation records it as invalid.
+                var expectedCriterionOutcome = inScope switch
+                {
+                    true => ScopingCriterionOutcome.Met,
+                    null => ScopingCriterionOutcome.Invalid,
+                    _ => sample.Absent || sample.AssertedNull ? ScopingCriterionOutcome.NoValue : ScopingCriterionOutcome.NotMet
+                };
 
                 if (explanation.Outcome != Expected(inScope) || criterion.Outcome != expectedCriterionOutcome)
                     mismatches.Add($"{type} {op} expected={expected ?? "null"} held={sample.Label} caseSensitive={caseSensitive}: " +
@@ -283,7 +288,7 @@ public class ScopingExplanationTests
         [Values(Side.Metaverse, Side.ConnectedSystem)] Side side)
     {
         var mismatches = new List<string>();
-        foreach (var op in SearchComparisonOperators.ValidOperatorsFor(AttributeDataType.DateTime))
+        foreach (var op in SearchComparisonOperators.ValidOperatorsFor(AttributeDataType.DateTime, CriterionContext.Scoping))
         foreach (var unit in Enum.GetValues<RelativeDateUnit>())
         foreach (var direction in Enum.GetValues<RelativeDateDirection>())
         {
@@ -365,7 +370,7 @@ public class ScopingExplanationTests
             return Criterion(side, null, SearchComparisonType.Equals, "x");
 
         var attribute = attributes[random.Next(attributes.Length)];
-        var validOperators = SearchComparisonOperators.ValidOperatorsFor(attribute.Type);
+        var validOperators = SearchComparisonOperators.ValidOperatorsFor(attribute.Type, CriterionContext.Scoping);
         var op = random.Next(60) == 0
             ? Enum.GetValues<SearchComparisonType>().First(o => o != SearchComparisonType.NotSet && !validOperators.Contains(o))
             : validOperators[random.Next(validOperators.Count)];
@@ -786,16 +791,16 @@ public class ScopingExplanationTests
     }
 
     [Test]
-    public void Explain_EmptyExpectedValueAndNoValueHeld_BothRenderAsNull([Values(Side.Metaverse, Side.ConnectedSystem)] Side side)
+    public void Explain_HasNoValueAndNoValueHeld_BothRenderAsNull([Values(Side.Metaverse, Side.ConnectedSystem)] Side side)
     {
-        var rule = Rule(side, Group(SearchGroupType.All, Criterion(side, CostCentre, SearchComparisonType.Equals, null)));
+        var rule = Rule(side, Group(SearchGroupType.All, Criterion(side, CostCentre, SearchComparisonType.HasNoValue, null)));
 
         var (inScope, explanation) = Evaluate(side, rule, Jane);
 
         var criterion = explanation.Groups.Single().Criteria.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(inScope, Is.True, "Equals an empty value matches an object holding none");
+            Assert.That(inScope, Is.True, "has no value matches an object holding none");
             Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.Met));
             Assert.That(criterion.ExpectedDisplay, Is.Null);
             Assert.That(criterion.ActualDisplay, Is.Null);

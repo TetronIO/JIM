@@ -423,7 +423,7 @@ public class ScopingExplanationSummariserTests
     {
         var explanation = Explain(Rule(
             All(Criterion(WorkerType, SearchComparisonType.NotEquals, "Test")),
-            All(Criterion(WorkerType, SearchComparisonType.NotContains, "Temp"), Criterion(CostCentre, SearchComparisonType.NotEquals, null))));
+            All(Criterion(WorkerType, SearchComparisonType.NotContains, "Temp"), Criterion(CostCentre, SearchComparisonType.HasValue, null))));
 
         Assert.That(PlainText(ScopingExplanationSummariser.ToComeIntoScope(explanation)), Is.EqualTo(new[]
         {
@@ -435,9 +435,9 @@ public class ScopingExplanationSummariserTests
     }
 
     [Test]
-    public void ToComeIntoScope_EmptyExpectedValueButAValueHeld_SaysItMustHaveNone()
+    public void ToComeIntoScope_HasNoValueButAValueHeld_SaysItMustHaveNone()
     {
-        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Region, SearchComparisonType.Equals, null)))));
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Region, SearchComparisonType.HasNoValue, null)))));
 
         Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Region must have no value (currently \"APAC\")" }));
     }
@@ -515,7 +515,7 @@ public class ScopingExplanationSummariserTests
     {
         var person = Person((Department, "Sales"), (Department, "Legal"));
 
-        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, null))), person));
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.HasNoValue, null))), person));
 
         Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Department must have no value (currently 2 values)" }));
     }

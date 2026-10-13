@@ -248,15 +248,17 @@ public class ExampleDataTemplateAttributeDependencyRequest
     public int MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The comparison to apply to the depended-on attribute's value: one of Equals, NotEquals, LessThan,
-    /// GreaterThan, GreaterThanOrEqual, LessThanOrEqual or Like (case-insensitive).
+    /// The comparison to apply to the depended-on attribute's value, by its operator name (case-insensitive): the same
+    /// operators Synchronisation Rule scoping offers for that attribute's data type, such as Equals, NotEquals,
+    /// GreaterThanOrEquals, StartsWith, MatchesPattern, HasValue or HasNoValue.
     /// </summary>
     [Required]
     public string ComparisonType { get; set; } = null!;
 
     /// <summary>
-    /// The value the depended-on attribute's generated value is compared against.
+    /// The value the depended-on attribute's generated value is compared against, written as that attribute's data type
+    /// reads it: numbers with a full stop, dates in ISO 8601 (such as 2026-07-01), Booleans as true or false. Text is
+    /// compared case-sensitively. Omit it for HasValue and HasNoValue.
     /// </summary>
-    [Required]
-    public string StringValue { get; set; } = null!;
+    public string? StringValue { get; set; }
 }
