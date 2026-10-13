@@ -4,46 +4,43 @@
 function Get-JIMSyncRule {
     <#
     .SYNOPSIS
-        Gets Synchronisation Rules from JIM.
+        Gets Synchronisation Rules.
 
     .DESCRIPTION
-        Retrieves Synchronisation Rule configurations from JIM. Can retrieve all rules, a specific
-        rule by ID, or narrow the list by Connected System, Direction, Action type and Status.
-
-        The filters combine with AND and each accepts several values, which combine with OR. The
-        -Name filter narrows whatever the other filters left, so removing it returns those results.
+        Gets Synchronisation Rules: every rule by default, one by ID, or those matching the filters. The filters
+        combine with AND, and the values given to one filter combine with OR. -Name narrows whatever the other
+        filters return.
 
     .PARAMETER Id
-        The unique identifier of a specific Synchronisation Rule to retrieve.
+        The ID of the Synchronisation Rule to get.
 
     .PARAMETER ConnectedSystemId
-        Filter Synchronisation Rules by Connected System ID.
+        Returns only the rules for the Connected System with this ID.
 
     .PARAMETER ConnectedSystemName
-        Filter Synchronisation Rules by Connected System name. Must be an exact match.
+        Returns only the rules for the Connected System with this name, matched exactly.
 
     .PARAMETER InputObject
-        A Connected System object from the pipeline (e.g., from Get-JIMConnectedSystem). Its Id is
-        used to filter Synchronisation Rules, equivalent to specifying -ConnectedSystemId directly.
+        A Connected System from Get-JIMConnectedSystem, through the pipeline: returns only its rules, as
+        -ConnectedSystemId would.
 
     .PARAMETER Name
-        Filter Synchronisation Rules by name. Supports wildcards (e.g., "Inbound*").
+        Returns only the rules whose name matches.
 
     .PARAMETER Direction
-        Filter Synchronisation Rules by direction: Import for inbound rules, Export for outbound
-        rules. Accepts several values.
+        Returns only the rules of these directions: Import for rules that flow values into the Metaverse, Export for
+        rules that flow them out.
 
     .PARAMETER ActionType
-        Filter Synchronisation Rules by the action they perform: Projects for Import rules that
-        project new Metaverse Objects, Provisions for Export rules that provision new Connected
-        System Objects, and FlowOnly for rules that create no objects and only flow attribute
-        values. Accepts several values.
+        Returns only the rules that do one of these: Projects for import rules that create Metaverse Objects,
+        Provisions for export rules that create Connected System Objects, and FlowOnly for rules that create nothing
+        and only flow values.
 
     .PARAMETER Status
-        Filter Synchronisation Rules by state: Enabled or Disabled. Accepts several values.
+        Returns only the rules that are Enabled or Disabled.
 
     .OUTPUTS
-        PSCustomObject representing Synchronisation Rule(s).
+        The matching rules, or with -Id, the one rule.
 
     .EXAMPLE
         Get-JIMSyncRule
@@ -97,7 +94,7 @@ function Get-JIMSyncRule {
         Remove-JIMSyncRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleHeader')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$Id,

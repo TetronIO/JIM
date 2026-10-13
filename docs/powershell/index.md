@@ -72,7 +72,8 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
 | [Connected Systems](connected-systems.md) | 35 | Manage Connected Systems, schemas, partitions and containers, auxiliary classes, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 8 | Create and change Synchronisation Rules and their Attribute Flows |
+| [Synchronisation Rules](synchronisation-rules.md) | 4 | List, create, change and delete Synchronisation Rules |
+| [Attribute Mappings](attribute-mappings.md) | 4 | List, create, change and delete a Synchronisation Rule's Attribute Flows, including generated values |
 | [Scoping Criteria](scoping-criteria.md) | 7 | Decide which objects a Synchronisation Rule processes, with groups of criteria |
 | [Object Matching Rules](object-matching-rules.md) | 9 | Switch a Connected System's matching mode, and manage its Object Matching Rules |
 | [Initial Password](initial-password.md) | 2 | Read and change the initial password a Synchronisation Rule sets on the Connected System Objects it provisions |
