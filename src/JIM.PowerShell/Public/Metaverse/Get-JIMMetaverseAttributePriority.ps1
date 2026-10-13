@@ -14,13 +14,14 @@ function Get-JIMMetaverseAttributePriority {
         never contribute during resolution.
 
     .PARAMETER AttributeId
-        The unique identifier of the Metaverse Attribute.
+        The ID of the Metaverse Attribute.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Metaverse Object Type that scopes the priority list.
+        The ID of the Metaverse Object Type the priority order applies to.
 
     .OUTPUTS
-        PSCustomObject representing the Attribute's priority order and contributors.
+        The attribute's priority order on that Object Type: each contributing Attribute Flow, highest priority
+        first.
 
     .EXAMPLE
         Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
@@ -37,7 +38,7 @@ function Get-JIMMetaverseAttributePriority {
         Move-JIMMetaverseAttributePriority
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AttributePriorityOrderDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$AttributeId,

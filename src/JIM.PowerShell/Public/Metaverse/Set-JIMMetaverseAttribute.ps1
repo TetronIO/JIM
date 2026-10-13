@@ -19,41 +19,38 @@ function Set-JIMMetaverseAttribute {
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
 
     .PARAMETER Id
-        The unique identifier of the Attribute to update.
+        The ID of the attribute to change.
 
     .PARAMETER InputObject
-        Attribute object to update (from pipeline).
+        An attribute from the pipeline, for example from Get-JIMMetaverseAttribute.
 
     .PARAMETER Name
-        The new name for the Attribute. Subject to a case-insensitive uniqueness check.
+        A new name for the attribute. It must be unique, ignoring case.
 
     .PARAMETER RenderingHint
-        The rendering hint for multi-valued attributes.
-        Valid values: Default, Table, ChipSet, List
+        How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute.
 
     .PARAMETER Type
-        The new data type for the attribute.
-        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
+        A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses the change while
+        any Metaverse Object holds a value for the attribute.
 
     .PARAMETER AttributePlurality
-        The new plurality setting.
-        Valid values: SingleValued, MultiValued
+        Whether the attribute holds one value or many. JIM refuses the change while any Metaverse Object holds a
+        value for the attribute.
 
     .PARAMETER StandardMappings
-        The attribute's full set of Standard Mappings, replacing any existing ones; pass an empty
-        array (@()) to clear them. Each element is a hashtable with a Standard ('Scim', 'Ldap' or
-        'Jim'), a CounterpartName (the equivalent attribute name in that standard), and optional
-        Notes. Standard Mappings are guidance only and never affect synchronisation.
+        The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a
+        Standard (Scim, Ldap or Jim), a CounterpartName (the attribute's name in that standard) and optional Notes.
+        Standard Mappings are guidance only and never affect synchronisation.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the attribute's Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Attribute object.
+        Returns the updated attribute.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Attribute object.
+        With -PassThru, the updated attribute in full; otherwise nothing.
 
     .EXAMPLE
         Set-JIMMetaverseAttribute -Id 1 -Name "UpdatedName"
@@ -83,7 +80,7 @@ function Set-JIMMetaverseAttribute {
         Remove-JIMMetaverseObjectTypeAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseAttributeDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

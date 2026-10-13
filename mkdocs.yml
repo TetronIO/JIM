@@ -209,11 +209,19 @@ nav:
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
+      - Attribute Mappings: powershell/attribute-mappings.md
+      - Scoping Criteria: powershell/scoping-criteria.md
+      - Object Matching Rules: powershell/object-matching-rules.md
+      - Initial Password: powershell/initial-password.md
       - Data Flow: powershell/data-flow.md
       - Metaverse: powershell/metaverse.md
+      - Metaverse Object Types: powershell/metaverse-object-types.md
+      - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
+      - Generated Values: powershell/generated-values.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
+      - Schedule Executions: powershell/schedule-executions.md
       - Activities: powershell/activities.md
       - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md

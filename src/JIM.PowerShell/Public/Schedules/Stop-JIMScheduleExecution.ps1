@@ -14,13 +14,17 @@ function Stop-JIMScheduleExecution {
         The unique identifier (GUID) of the Schedule Execution to stop.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .PARAMETER PassThru
-        If specified, returns the cancelled Schedule Execution object.
+        Returns the cancelled Schedule Execution.
 
     .OUTPUTS
-        If -PassThru is specified, returns the cancelled Schedule Execution object.
+        With -PassThru, the cancelled Schedule Execution; otherwise nothing.
+
+        JIM.ScheduleExecution
+        StepDisplay (string): The step group the execution has reached, as one sentence naming it, for example Step
+            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue.
 
     .EXAMPLE
         Stop-JIMScheduleExecution -Id "12345678-1234-1234-1234-123456789012"
@@ -37,7 +41,7 @@ function Stop-JIMScheduleExecution {
         Start-JIMSchedule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleExecution')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ExecutionId')]
@@ -64,8 +68,8 @@ function Stop-JIMScheduleExecution {
                 Write-Verbose "Stopped Schedule Execution: $Id"
 
                 if ($PassThru) {
-                    # Return the updated execution
-                    Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$Id"
+                    # Return the updated execution, in the shape Get-JIMScheduleExecution -Id gives it
+                    Add-JIMScheduleExecutionStepDisplay -Execution (Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$Id")
                 }
             }
             catch {

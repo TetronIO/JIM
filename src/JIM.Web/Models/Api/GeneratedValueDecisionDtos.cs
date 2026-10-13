@@ -8,12 +8,13 @@ using JIM.Models.Transactional.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// One generated value held for an administrator's decision, or released from one (Unique Value Generation, #242,
-/// release 4): a target rejected it as already in use and JIM did not correct it.
+/// A generated value a target rejected as already in use, which JIM held for a decision rather than correcting.
 /// </summary>
 public class GeneratedValueDecisionDto
 {
-    /// <summary>The generated value's id: what <c>allow-rename</c> and <c>try-again</c> take.</summary>
+    /// <summary>
+    /// The ID of the value: what allowing a rename and trying again take.
+    /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -24,28 +25,39 @@ public class GeneratedValueDecisionDto
     public GeneratedValueDecisionStatus Status { get; set; }
 
     /// <summary>
-    /// Why the value is held: <c>AnchoredElsewhere</c> (another Connected System has already accepted it, so correcting
-    /// it would rename that account; <see cref="AnchoredByConnectedSystemId"/> names it), <c>CannotTell</c> (a Connected
-    /// System's connector space was cleared and has not been fully imported since, so JIM cannot tell whether it holds
-    /// the value; <see cref="AnchoredByConnectedSystemId"/> names it), <c>RemediationLimitReached</c> (corrected
-    /// <see cref="RemediationCount"/> times and still rejected), or <c>NoValueAvailable</c> (no other value could be
-    /// generated). Null when not recorded.
+    /// Why the value is held: AnchoredElsewhere when another Connected System has already accepted it, so
+    /// correcting it would rename that account; CannotTell when a Connected System's Connector Space was cleared
+    /// and has not been fully imported since, so JIM cannot tell whether it holds the value;
+    /// RemediationLimitReached when it has been corrected RemediationCount times and is still rejected; or
+    /// NoValueAvailable when no other value could be generated. Null when not recorded.
     /// </summary>
     public GeneratedValueNeedsDecisionReason? Reason { get; set; }
 
-    /// <summary>The Metaverse Object the value belongs to, or (export mode) the one its account is joined to.</summary>
+    /// <summary>
+    /// The ID of the Metaverse Object the value belongs to or, for a value generated on an export Synchronisation
+    /// Rule, the one its Connected System Object is joined to.
+    /// </summary>
     public Guid? MetaverseObjectId { get; set; }
 
-    /// <summary>The display name of <see cref="MetaverseObjectId"/>.</summary>
+    /// <summary>
+    /// That Metaverse Object's display name.
+    /// </summary>
     public string? MetaverseObjectDisplayName { get; set; }
 
-    /// <summary>The name of <see cref="MetaverseObjectId"/>'s Metaverse Object Type.</summary>
+    /// <summary>
+    /// The name of that Metaverse Object's type.
+    /// </summary>
     public string? MetaverseObjectTypeName { get; set; }
 
-    /// <summary>Export mode only: the Connected System Object (account) the value belongs to.</summary>
+    /// <summary>
+    /// For a value generated on an export Synchronisation Rule, the ID of the Connected System Object it belongs
+    /// to; null otherwise.
+    /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
 
-    /// <summary>Export mode only: the Connected System holding <see cref="ConnectedSystemObjectId"/>.</summary>
+    /// <summary>
+    /// The ID of the Connected System holding that Connected System Object; null when there is none.
+    /// </summary>
     public int? ConnectedSystemObjectConnectedSystemId { get; set; }
 
     /// <summary>The attribute the value was generated for.</summary>
@@ -57,34 +69,52 @@ public class GeneratedValueDecisionDto
     /// <summary>How many times Collision Remediation has already corrected this value.</summary>
     public int RemediationCount { get; set; }
 
-    /// <summary>The Connected System that rejected the value.</summary>
+    /// <summary>
+    /// The ID of the Connected System that rejected the value.
+    /// </summary>
     public int? RejectedByConnectedSystemId { get; set; }
 
-    /// <summary>The name of <see cref="RejectedByConnectedSystemId"/>; null when it has since been deleted.</summary>
+    /// <summary>
+    /// The name of the Connected System that rejected the value; null when it has since been deleted.
+    /// </summary>
     public string? RejectedByConnectedSystemName { get; set; }
 
-    /// <summary>The Connected System that anchors the value, or cannot tell whether it does.</summary>
+    /// <summary>
+    /// The ID of the Connected System that anchors the value, or cannot tell whether it does.
+    /// </summary>
     public int? AnchoredByConnectedSystemId { get; set; }
 
-    /// <summary>The name of <see cref="AnchoredByConnectedSystemId"/>; null when it has since been deleted.</summary>
+    /// <summary>
+    /// The name of that Connected System; null when it has since been deleted.
+    /// </summary>
     public string? AnchoredByConnectedSystemName { get; set; }
 
     /// <summary>When the value began waiting on a decision (UTC).</summary>
     public DateTime? Since { get; set; }
 
-    /// <summary>When the rename was allowed (UTC); only while <see cref="Status"/> is <c>RenameAllowed</c>.</summary>
+    /// <summary>
+    /// When the rename was allowed (UTC); only while Status is RenameAllowed.
+    /// </summary>
     public DateTime? RenameAllowedAt { get; set; }
 
-    /// <summary>Who allowed the rename; only while <see cref="Status"/> is <c>RenameAllowed</c>.</summary>
+    /// <summary>
+    /// Who allowed the rename; only while Status is RenameAllowed.
+    /// </summary>
     public string? RenameAllowedBy { get; set; }
 
-    /// <summary>The Synchronisation Rule whose Attribute Flow generated the value.</summary>
+    /// <summary>
+    /// The ID of the Synchronisation Rule whose mapping generated the value.
+    /// </summary>
     public int SyncRuleId { get; set; }
 
-    /// <summary>The name of <see cref="SyncRuleId"/>.</summary>
+    /// <summary>
+    /// The name of that Synchronisation Rule.
+    /// </summary>
     public string? SyncRuleName { get; set; }
 
-    /// <summary>The Attribute Flow (mapping) that generated the value.</summary>
+    /// <summary>
+    /// The ID of the mapping that generated the value.
+    /// </summary>
     public int SyncRuleMappingId { get; set; }
 
     public static GeneratedValueDecisionDto FromHeader(GeneratedValueDecisionHeader header) => new()

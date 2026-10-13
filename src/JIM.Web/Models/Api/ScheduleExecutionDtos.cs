@@ -110,7 +110,8 @@ public class ScheduleExecutionDto
 public class ScheduleExecutionDetailDto : ScheduleExecutionDto
 {
     /// <summary>
-    /// The worker tasks associated with this execution, showing step progress.
+    /// One entry per Schedule Step: its name, type, timings, errors and Activity id. A step group that runs three
+    /// Run Profiles concurrently appears here three times, and once in Progress.
     /// </summary>
     public List<ScheduleExecutionStepDto> Steps { get; set; } = new();
 
