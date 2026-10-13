@@ -4,7 +4,7 @@
 using System.Collections;
 using System.Text.Json;
 using JIM.Models.Expressions;
-using JIM.Models.Logic.Scoping;
+using JIM.Models.Logic;
 using JIM.Web.Models.Api;
 
 namespace JIM.Web.Extensions.Api;
@@ -45,12 +45,12 @@ public static class TestExpressionSampleValues
     }
 
     /// <summary>
-    /// The samples in <paramref name="attributes"/> as Scope tester inputs.
+    /// The samples in <paramref name="attributes"/> as configuration tester inputs, one per attribute.
     /// </summary>
-    public static IEnumerable<ScopeTestInput> ToScopeTestInputs(Dictionary<string, object?>? attributes) =>
+    public static IEnumerable<AttributeSample> ToAttributeSamples(Dictionary<string, object?>? attributes) =>
         attributes == null
             ? []
-            : attributes.Select(attribute => new ScopeTestInput(attribute.Key, Values(attribute.Value)));
+            : attributes.Select(attribute => new AttributeSample(attribute.Key, Values(attribute.Value)));
 
     private static List<object> Values(object? sample) => sample switch
     {

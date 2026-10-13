@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -28,13 +29,14 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class ObjectMatchingRuleEditorTests : JimComponentTestContext
 {
+    private readonly Mock<ISyncRepository> _syncRepository = new();
     private ConnectedSystemObjectType _objectType = null!;
     private MetaverseAttribute _employeeId = null!;
     private MetaverseAttribute _leaver = null!;
 
     protected override void ConfigureAdditionalServices()
     {
-        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(new Mock<IRepository>().Object));
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(new Mock<IRepository>().Object, _syncRepository.Object));
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
     }
 
@@ -197,6 +199,54 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
     }
 
     [Test]
+    public void TryIt_SampleThatIsNotItsAttributesType_ShowsTheInputErrorInsteadOfAResult()
+    {
+        _objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 104, Name = "hireDate", Type = AttributeDataType.DateTime, Selected = true });
+        var draft = new ObjectMatchingRuleDraft { SourceKind = ObjectMatchingRuleSourceKind.Expression, TargetAttribute = _employeeId };
+        var cut = RenderEditor(draft);
+        TypeExpression(cut, "FormatDate((DateTime)cs[\"hireDate\"], \"yyyy\")");
+
+        var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"hireDate\"]");
+        cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("soon"));
+        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-matching-rule-try-it-result']"), Is.Empty);
+            Assert.That(cut.FindComponent<MudAlert>().Markup, Does.Contain("soon"));
+        }
+    }
+
+    [Test]
+    public void TryIt_NoMetaverseObjectTypeKnown_OffersNoLookup()
+    {
+        var cut = RenderEditor(new ObjectMatchingRuleDraft { SourceAttribute = _objectType.Attributes[0], TargetAttribute = _employeeId });
+
+        Assert.That(cut.Markup, Does.Not.Contain("Also find the Metaverse Object"));
+    }
+
+    [Test]
+    public void TryIt_LookUp_ShowsTheMetaverseObjectASynchronisationWouldJoin()
+    {
+        var person = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" };
+        var identity = new MetaverseObject { Id = Guid.NewGuid(), Type = person };
+        identity.AttributeValues.Add(new MetaverseObjectAttributeValue { MetaverseObject = identity, Attribute = _employeeId, AttributeId = _employeeId.Id, StringValue = "E1007" });
+        _syncRepository.Setup(r => r.FindMetaverseObjectIdsByMatchValuesAsync(person.Id, _employeeId.Id, AttributeDataType.Text,
+                It.Is<IReadOnlyList<object>>(values => values.Single().Equals("E1007")), It.IsAny<bool>(), It.IsAny<int>()))
+            .ReturnsAsync([identity.Id]);
+        _syncRepository.Setup(r => r.GetMetaverseObjectForJoinMatchAsync(identity.Id)).ReturnsAsync(identity);
+        var cut = RenderEditor(new ObjectMatchingRuleDraft { SourceAttribute = _objectType.Attributes[0], TargetAttribute = _employeeId },
+            lookupType: person);
+
+        var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"employeeId\"]");
+        cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("E1007"));
+        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+
+        var lookup = cut.WaitForElement("[data-testid='jim-matching-rule-try-it-lookup']");
+        Assert.That(lookup.TextContent, Does.Contain("Would join").And.Contain("would join this object"));
+    }
+
+    [Test]
     public void Draft_ExpressionSource_BuildsARuleAndAProposalCarryingOnlyTheExpression()
     {
         var draft = new ObjectMatchingRuleDraft
@@ -225,9 +275,10 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
     }
 
     private IRenderedComponent<ObjectMatchingRuleEditor> RenderEditor(ObjectMatchingRuleDraft draft,
-        IReadOnlyList<MetaverseObjectType>? metaverseObjectTypes = null) =>
+        IReadOnlyList<MetaverseObjectType>? metaverseObjectTypes = null, MetaverseObjectType? lookupType = null) =>
         Render<ObjectMatchingRuleEditor>(p => p
             .Add(c => c.Draft, draft)
+            .Add(c => c.LookupMetaverseObjectType, lookupType)
             .Add(c => c.ObjectType, _objectType)
             .Add(c => c.MetaverseAttributes, new[] { _employeeId, _leaver })
             .Add(c => c.MetaverseObjectTypes, metaverseObjectTypes)
@@ -239,8 +290,8 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
         cut.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync(expression));
     }
 
-    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    private sealed class FakeJimApplicationFactory(IRepository repository, ISyncRepository syncRepository) : IJimApplicationFactory
     {
-        public JimApplication Create() => new(repository);
+        public JimApplication Create() => new(repository, syncRepository: syncRepository);
     }
 }

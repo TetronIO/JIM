@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2a and 2b complete)
+- **Status:** Doing (Phases 1, 2a, 2b and 2c complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -75,9 +75,12 @@ The scoping evaluator and its explanation: the criteria tree, each criterion met
 - **Next change:** a relative boundary can only cross an object's date at a few instants (the exact instant for Hours, the midnights around it otherwise), so the tester evaluates the rule at each in turn and reports the first that changes the outcome. No reasoning about how criteria combine, and the answer is synchronisation's own.
 - **Surfaces:** the Scope tab's **Test this scope** panel (criteria as they stand on the form), `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria/test` and `Test-JIMScope` (saved criteria); `asOf` on `test-expression`, `-AsOf` on `Test-JIMExpression` and **Run as of** in the Attribute Flow panel.
 
-#### Phase 2c: Object Matching tester
+#### Phase 2c: Object Matching tester ✅
 
 Both modes: the match values, and optionally the lookup against the current Metaverse (would join, no match, ambiguous), building on #2052's Try it.
+
+- **As built:** `ObjectMatchingServer.TestAsync` types samples through `TestSampleValues`, resolves them with the match-value resolver, and looks them up with `FindMatchingMetaverseObjectAsync` through a `ReadOnlySyncRepositoryGuard`. It then applies the join's own refusal of a Metaverse Object already joined from the Connected System, so the outcomes are would join, already joined, joined to another, no match and ambiguous (with candidates).
+- **Surfaces:** Try it in the Object Matching Rule editor (both modes, the draft as composed); `POST .../connected-systems/{id}/matching-rules/{ruleId}/test` and `.../sync-rules/{id}/matching-rules/{ruleId}/test` (saved rules); `Test-JIMMatchingRule`. The Scope tester's input records became the shared `AttributeSample` and `AttributeSampleDescriptor`, and the testers share one object picker (`TestObjectPicker`).
 
 #### Phase 2d: Generated Values and Example Data
 
