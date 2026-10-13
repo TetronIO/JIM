@@ -8,6 +8,17 @@ file_header_template = Copyright (c) Tetron Limited. All rights reserved.\nLicen
 # .ps1, .psm1, .psd1 and .sh; keep the two in step, exclusions included.
 dotnet_diagnostic.IDE0073.severity = warning
 
+# String comparisons state their culture rules (see docs/concepts/case-sensitivity.md
+# and engineering/plans/doing/CASE_SENSITIVITY_POLICY.md). CA1309 requires an ordinal
+# comparison where a StringComparison is given; CA1310 requires one to be given for
+# culture-sensitive overloads (StartsWith, EndsWith, Compare, CompareTo). Warnings are
+# errors here (TreatWarningsAsErrors).
+# CA1307 and CA1862 stay off deliberately: most of what they raise are char overloads,
+# PathString.StartsWithSegments or EF predicates, where a StringComparison overload
+# would stop the query translating to SQL.
+dotnet_diagnostic.CA1309.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+
 # Tool-generated code, excluded to match the lint script. A header added by
 # hand here is destroyed the next time the generator runs: EF Core rewrites the
 # whole Migrations folder, model snapshot included, on every

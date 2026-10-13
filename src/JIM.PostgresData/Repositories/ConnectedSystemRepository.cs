@@ -88,7 +88,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        // Configuration names ignore case (docs/concepts/case-sensitivity.md).
+        var nameLower = name.ToLowerInvariant();
+        return await query.SingleOrDefaultAsync(cd => cd.Name.ToLower() == nameLower);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)

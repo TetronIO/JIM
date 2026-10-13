@@ -257,8 +257,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Right", (Func<object?, int, string?>)((o, count) => Right(AsString(o), count)));
         target.SetFunction("Substring", (Func<object?, int, int, string?>)((o, start, length) => SafeSubstring(AsString(o), start, length)));
         target.SetFunction("Replace", (Func<object?, object?, object?, string?>)((o, oldVal, newVal) => AsString(o)?.Replace(AsString(oldVal) ?? "", AsString(newVal) ?? "")));
-        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) => AsString(o)?.StartsWith(AsString(prefix) ?? "") ?? false));
-        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) => AsString(o)?.EndsWith(AsString(suffix) ?? "") ?? false));
+        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) => AsString(o)?.StartsWith(AsString(prefix) ?? "", StringComparison.Ordinal) ?? false));
+        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) => AsString(o)?.EndsWith(AsString(suffix) ?? "", StringComparison.Ordinal) ?? false));
         target.SetFunction("Length", (Func<object?, int>)(o => AsString(o)?.Length ?? 0));
         // The presence tests ask whether there is a value, not what its text is, so a Binary value (which has no text
         // form) is a value unless it holds no bytes, rather than an error.

@@ -175,7 +175,7 @@ public class MvoDeletionCsoFetchDatabaseTests
             var cso = csos[0];
 
             Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
-            Assert.That(cso.AttributeValues.Any(av => av.StringValue != null && av.StringValue.StartsWith("CN=User")), Is.False,
+            Assert.That(cso.AttributeValues.Any(av => av.StringValue != null && av.StringValue.StartsWith("CN=User", StringComparison.Ordinal)), Is.False,
                 "The lean fetch must not materialise the group's membership values.");
             Assert.That(cso.AttributeValues.Count, Is.EqualTo(2),
                 "Only the external ID and secondary external ID values may be loaded.");
