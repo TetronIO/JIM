@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 An LDAP export whose distinguished name differs only in letter case from what the directory stored, such as `DC=panoply,DC=local` against a domain created as `PANOPLY.LOCAL`, is now confirmed instead of retried until it fails. Distinguished names are compared ignoring case. (#2195)
+- 🐛 An LDAP export whose distinguished name differs only in letter case from what the directory stored, such as `DC=panoply,DC=local` against a domain created as `PANOPLY.LOCAL`, is now confirmed instead of retried until it fails, and Enforce State no longer treats it as drift. Distinguished names are compared ignoring case. (#2195)
 - 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
 - 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)
 - 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
