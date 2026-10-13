@@ -242,5 +242,14 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// for the Metaverse Object (#2052). JIM cannot tell which account is the identity's, so it neither joined one nor
     /// provisioned another; the item lists the accounts it found. Previously the lowest-id account was joined.
     /// </summary>
-    AmbiguousProvisioningMatch
+    AmbiguousProvisioningMatch,
+
+    /// <summary>
+    /// A Synchronisation Rule's scoping criterion could not be evaluated for the object (#2053): its pattern ran past
+    /// its time limit on one of the object's values. JIM cannot tell whether the object is in scope, so it takes no
+    /// action for it this run: it is neither brought into scope nor taken out, and keeps any join it already has. The
+    /// message names the attribute and the pattern; the object is retried on the next synchronisation. Configuration
+    /// to act on, not a JIM defect, so it does not count as an unhandled error.
+    /// </summary>
+    ScopingCriterionFailed
 }

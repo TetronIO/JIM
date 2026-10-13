@@ -60,7 +60,10 @@
                 <ChildContent>@criteria.GetAttributeName()</ChildContent>
             </MudChip>
             <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
-            <MudChip T="string">@criteria.ToString()</MudChip>
+            @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
+            {
+                <MudChip T="string">@criteria.ToString()</MudChip>
+            }
             <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
                 <MudIconButton
                     Icon="@Icons.Material.Outlined.Delete"
@@ -161,7 +164,7 @@
                     @bind-Value="NewScopingComparisonType"
                     Class="mt-5"
                     Variant="Variant.Outlined">
-            @foreach (var op in CriterionOperatorOptions.ForType(GetSelectedAttributeType() ?? AttributeDataType.NotSet))
+            @foreach (var op in CriterionOperatorOptions.ForType(GetSelectedAttributeType() ?? AttributeDataType.NotSet, CriterionContext.Scoping))
             {
                 <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
             }
@@ -245,7 +248,7 @@
             return;
 
         var type = GetSelectedAttributeType();
-        if (type == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, type.Value))
+        if (type == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, type.Value, CriterionContext.Scoping))
             _newSyncRuleScopingCriteria.ComparisonType = SearchComparisonType.NotSet;
     }
 
@@ -266,27 +269,12 @@
                 return true;
         }
 
-        // Require a comparison operator that is valid for the selected attribute's data type.
+        // The same rule the Synchronisation Rule write path applies (#2053): an operator offered for the attribute's type
+        // in scoping, the value it compares against, and a pattern JIM can run.
         var attributeType = GetSelectedAttributeType();
-        if (attributeType == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, attributeType.Value))
-            return true;
-
-        // A relative DateTime criterion is valid once its count, unit and direction are set (no absolute value).
-        if (_newSyncRuleScopingCriteria.ValueMode == DateCriteriaValueMode.Relative)
-            return !(_newSyncRuleScopingCriteria.RelativeCount.HasValue &&
-                     _newSyncRuleScopingCriteria.RelativeUnit.HasValue &&
-                     _newSyncRuleScopingCriteria.RelativeDirection.HasValue);
-
-        if (!_newSyncRuleScopingCriteria.IntValue.HasValue &&
-            string.IsNullOrEmpty(_newSyncRuleScopingCriteria.StringValue) &&
-            !_newSyncRuleScopingCriteria.BoolValue.HasValue &&
-            !_newSyncRuleScopingCriteria.DateTimeValue.HasValue &&
-            !_newSyncRuleScopingCriteria.GuidValue.HasValue &&
-            !_newSyncRuleScopingCriteria.LongValue.HasValue &&
-            !_newSyncRuleScopingCriteria.DecimalValue.HasValue)
-            return true;
-
-        return false;
+        return attributeType == null ||
+               CriterionValidation.Validate(_newSyncRuleScopingCriteria, attributeType.Value, CriterionContext.Scoping,
+                   _newSyncRuleScopingCriteria.GetAttributeName() ?? "attribute") != null;
     }
 
     /// <summary>
@@ -308,6 +296,7 @@
         if (_newSyncRuleScopingCriteria == null)
             return;
 
+        CriterionValidation.ClearValues(_newSyncRuleScopingCriteria);
         SyncRuleScopingCriteriaGroup.Criteria.Add(_newSyncRuleScopingCriteria);
 
         // all done, reset
