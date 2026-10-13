@@ -381,6 +381,11 @@ public partial class SyncEngine
                 if (IsPendingChangeEmpty(attrChange))
                     return csoAttrValues.Count == 0;
 
+                // An Update against a multi-valued attribute sets its whole value set (#2182): it is confirmed only
+                // when the attribute holds exactly that value, never when the value is merely among others.
+                if (IsWholeSetUpdate(attrChange) && csoAttrValues.Count != 1)
+                    return false;
+
                 // For Add/Update with a real value, the value should exist on the CSO
                 return ValueExistsOnCso(csoAttrValues, attrChange);
 
@@ -710,6 +715,10 @@ public partial class SyncEngine
                 if (IsPendingChangeEmpty(attrChange))
                     return count == 0;
 
+                // An Update against a multi-valued attribute is confirmed only when it holds exactly that value (#2182).
+                if (IsWholeSetUpdate(attrChange) && count != 1)
+                    return false;
+
                 // For Add/Update with a real value, the value should exist on the CSO
                 return index != null && ValueExistsInIndex(index, attrChange);
 
@@ -742,6 +751,17 @@ public partial class SyncEngine
                change.ByteValue == null &&
                change.UnresolvedReferenceValue == null;
     }
+
+    /// <summary>
+    /// Whether a change is an Update against a multi-valued attribute, which sets the attribute's whole value set to
+    /// the one value it carries, or to nothing for an all-null Update (#2182). Export staging stages one where a
+    /// single-valued Metaverse Attribute flows to a multi-valued attribute. Every Connector applies it as a replacement
+    /// of the set, so no-net-change detection, export confirmation and optimistic apply all judge it done only when the
+    /// attribute holds exactly that value.
+    /// </summary>
+    internal static bool IsWholeSetUpdate(PendingExportAttributeValueChange change) =>
+        change.ChangeType == PendingExportAttributeChangeType.Update &&
+        change.Attribute?.AttributePlurality == AttributePlurality.MultiValued;
 
     /// <summary>
     /// Determines if an attribute change should be marked as Failed based on retry count.

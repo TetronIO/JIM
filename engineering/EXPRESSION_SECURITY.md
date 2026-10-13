@@ -103,7 +103,7 @@ On top of this, `RegisterBuiltInFunctions` (`DynamicExpressoEvaluator.cs`) regis
 pure, side-effect-free, in-process transforms: string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`,
 `Right`, `Substring`, `Replace`, `StartsWith`, `EndsWith`, `Length`, `IsNullOrEmpty`, `IsNullOrWhitespace`),
 containment (`Contains`, `CollectionContains`), collection (`Split`, `Join`), conditional (`Coalesce`, `IIF`,
-`Eq`), date (`Now`, `Today`, `FormatDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
+`Eq`), date (`Now`, `Today`, `FormatDate`, `ParseDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
 helper (`EscapeDN`), password generation (`RandomPassword`, `RandomPassphrase`, both backed by
 `RandomNumberGenerator`, not `System.Random`), and AD `userAccountControl` bitwise helpers (`EnableUser`,
 `DisableUser`, `SetBit`, `ClearBit`, `HasBit`). Every one of these is exercised end-to-end, with expressions
@@ -114,7 +114,23 @@ exists).
 The `mv` and `cs` parameters passed into every evaluation (`Evaluate`, `Test`, and the typed parse in
 `Validate`) are `AttributeAccessor` instances: a case-insensitive, get-only dictionary wrapper. They expose
 exactly one indexer (`this[string attributeName]`) and a `HasAttribute` / `AttributeNames` pair; there is no
-route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any other JIM type.
+route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any other JIM type. The
+indexer hands out a copy of a Binary value (a `byte[]`), because an array is mutable through its own members
+(`SetValue`): an expression can change its copy, never the attribute value it came from
+(`FlowInboundAttributes_ExpressionChangesABinaryInput_StoredBytesAreUnchanged`, `SyncEngineExpressionResultTests.cs`).
+
+Every evaluation runs under JIM's expression culture (`ExpressionText.Culture`: the invariant culture with dates
+written as `yyyy-MM-dd HH:mm:ss.FFFFFFK`), set on the evaluating thread and restored in a `finally`, so the
+text an expression produces does not depend on the host's `LANG`. It changes what text is written, not what an
+expression can reach. Every failure an expression can cause, the parse-time rejections below included, is thrown
+from `Evaluate` as one `ExpressionEvaluationException` wrapping the original, which every consumer reports as an
+expression error; the security tests assert the guard's own exception is that inner cause. `Test` additionally
+turns any other exception an expression raises (such as the `OutOfMemoryException` from
+`"x".PadLeft(2000000000)`, which exceeds the maximum string length without allocating) into a failure result, so
+the ad-hoc testing surfaces never throw
+(`Test_ExpressionRaisesAnExceptionOutsideTheExpressionErrors_ReportsAFailureRatherThanThrowing`,
+`DynamicExpressoEvaluatorDateAndTextTests.cs`). Error messages name the function and the expected form, never the
+value that failed (`ParseDate`, `ToFileTime`, `FromFileTime`), because they reach the worker's logs.
 
 ### What is blocked
 
@@ -180,16 +196,16 @@ narrow, non-exploitable, explicitly-flagged exception above.
 ## Guardrails added (non-subtractive)
 
 Both guardrails are sanity bounds against accidents, not capability restrictions; neither changes what any
-legitimate expression can do (proven by `DynamicExpressoEvaluatorFunctionalityRegressionTests.cs`, 46 tests
+legitimate expression can do (proven by `DynamicExpressoEvaluatorFunctionalityRegressionTests.cs`, 48 tests
 covering every built-in function and several composed real-world expressions, all passing with both guardrails
 active).
 
 1. **Expression length ceiling (`DynamicExpressoEvaluator.MaxExpressionLength = 10,000` characters).** `Evaluate`
-   throws `ArgumentException`; `Validate` and `Test` return a validation/test failure result (they have a result
+   throws `ExpressionEvaluationException`; `Validate` and `Test` return a validation/test failure result (they have a result
    type to carry the error, so they do not throw). 10,000 characters is roughly two orders of magnitude beyond
    any real expression in this codebase's own examples or documentation (the longest documented expression is a
    few hundred characters); it exists purely as a bound against an administrator accidentally pasting the wrong
-   clipboard contents into an expression field. Tests: `Evaluate_ExpressionExceedsMaxLength_ThrowsArgumentException`,
+   clipboard contents into an expression field. Tests: `Evaluate_ExpressionExceedsMaxLength_ThrowsExpressionEvaluationException`,
    `Evaluate_ExpressionAtMaxLength_EvaluatesSuccessfully` (boundary proof: exactly at the limit still works),
    `Validate_ExpressionExceedsMaxLength_ReturnsFailure`, `Validate_ExpressionAtMaxLength_ReturnsSuccess`,
    `Test_ExpressionExceedsMaxLength_ReturnsFailureWithoutEvaluating` (`DynamicExpressoEvaluatorTests.cs`).

@@ -136,3 +136,48 @@ Describe 'Get-JIMScheduleExecution step display' {
         }
     }
 }
+
+Describe 'Schedule Execution step display from the cmdlets that start and stop one' {
+    # Start-JIMSchedule and Stop-JIMScheduleExecution return the same Schedule Execution Get-JIMScheduleExecution -Id
+    # does, so a script reading StepDisplay from one gets it from all three.
+
+    BeforeAll {
+        $script:Detail = {
+            [PSCustomObject]@{
+                id       = [guid]::NewGuid()
+                status   = 'InProgress'
+                progress = [PSCustomObject]@{
+                    currentStepNumber = 1
+                    totalSteps        = 3
+                    steps             = @([PSCustomObject]@{ stepIndex = 0; name = 'HR - Delta Import'; status = 'Running' })
+                }
+            }
+        }
+    }
+
+    It 'Start-JIMSchedule -PassThru names the step the new execution has reached' {
+        InModuleScope JIM -Parameters @{ Detail = $script:Detail } {
+            param($Detail)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ executionId = [guid]::NewGuid() } } -ParameterFilter { $Endpoint -like '*/run' }
+            Mock Invoke-JIMApi $Detail -ParameterFilter { $Endpoint -like '/api/v1/schedule-executions/*' }
+
+            $execution = Start-JIMSchedule -Id ([guid]::NewGuid()) -PassThru
+
+            $execution.StepDisplay | Should -Be 'Step 1 of 3: HR - Delta Import'
+        }
+    }
+
+    It 'Stop-JIMScheduleExecution -PassThru names the step the cancelled execution had reached' {
+        InModuleScope JIM -Parameters @{ Detail = $script:Detail } {
+            param($Detail)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = [guid]::NewGuid() } } -ParameterFilter { $Endpoint -like '*/cancel' }
+            Mock Invoke-JIMApi $Detail -ParameterFilter { $Endpoint -notlike '*/cancel' }
+
+            $execution = Stop-JIMScheduleExecution -Id ([guid]::NewGuid()) -Force -PassThru
+
+            $execution.StepDisplay | Should -Be 'Step 1 of 3: HR - Delta Import'
+        }
+    }
+}

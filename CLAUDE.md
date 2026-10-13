@@ -303,17 +303,26 @@ Read the list from the ruleset rather than from here if it matters; this line ha
 
 ### Closing the loop after `--auto`
 
-Use the **Bash tool with `run_in_background: true`** and an until-loop so the harness notifies you when the PR transitions to `MERGED`:
+**Enabling auto-merge is not the end of the job; the PR is yours until it merges.** Plenty holds a queued merge without anyone being told: a failed CodeQL analysis or `changelog-lint`, a review thread nobody resolved (the documentation review, `docs-review.yml`, posts one thread per finding on any PR that changes customer pages, about two minutes after it opens), a conflict, a branch behind `main`, or an unsigned commit. A waiter that only watches for `MERGED` waits on all of these forever while you believe you are done. (Rule sharpened after PRs merged with docs findings unread, and others sat blocked on red CodeQL with their agent gone.)
+
+Run `scripts/Watch-PullRequest.ps1` with the **Bash tool and `run_in_background: true`**; it exits, saying why, on the first thing that needs you:
 
 ```bash
-until [ "$(gh pr view <n> --json state -q .state)" = "MERGED" ]; do sleep 30; done
+pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>
 ```
 
-This is the right primitive per the Monitor tool's own guidance: a single completion event ("tell me when X is true") is a Bash background command that exits when the condition is satisfied. The Monitor tool is for per-occurrence streams (a notification per matching log line) and is the wrong fit here.
+| It reports | Do |
+|---|---|
+| `Merged` | Clean up (below). |
+| `Closed` | Stop, and tell the user; do not clean up. |
+| `ChecksFailed` | Read the failed check's log, fix the cause, push. |
+| `UnresolvedThreads` | For each thread: fix it, or reply with why it stays; then **resolve** it (a reply alone does not clear the merge). See `/pr-merge`, "Resolve review threads", for the commands. |
+| `Conflict` / `Behind` | Merge `origin/main` in and push (never rebase; see below). |
+| `Blocked` | Every check passed and no thread is open: check the head commit is signed and every required check ran (see "`failures: none` is not `mergeable`"). |
 
-Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check. Wait for the notification.
+After acting, run it again; repeat until `Merged`. A thread you leave open on purpose (a security finding waiting on the user's call) goes in `-AcknowledgedThreadIds` so it stops ending the wait. A Bash background command is the right primitive per the Monitor tool's own guidance: a single completion event is a command that exits when its condition holds. Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check; wait for the notification. In Claude Code on the web there is no `gh`; `subscribe_pr_activity` delivers the same events instead.
 
-When it fires, run cleanup:
+When it reports `Merged`, run cleanup:
 
 ```bash
 git checkout main

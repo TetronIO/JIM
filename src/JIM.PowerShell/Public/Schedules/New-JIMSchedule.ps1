@@ -15,59 +15,72 @@ function New-JIMSchedule {
         The name for the Schedule.
 
     .PARAMETER Description
-        Optional description of what this schedule does.
+        An optional description of what the Schedule does.
 
     .PARAMETER TriggerType
-        How the schedule is triggered:
-        - Cron: Runs automatically based on a schedule
-        - Manual: Only runs when triggered manually
+        How the Schedule starts. Cron runs it automatically on the pattern
+        you give; Manual runs it only when started, from the portal or with
+        Start-JIMSchedule.
 
     .PARAMETER PatternType
-        The scheduling pattern type (for Cron triggers):
-        - SpecificTimes: Run at specific times each day
-        - Interval: Run at regular intervals
-        - Custom: Use a custom cron expression
+        How a Cron Schedule is timed. SpecificTimes runs it at set times of
+        day (RunTimes), Interval runs it every few hours or minutes
+        (IntervalValue and IntervalUnit), and Custom takes a cron expression
+        of your own (CronExpression).
 
     .PARAMETER DaysOfWeek
-        Days of the week to run (0=Sunday, 1=Monday, ..., 6=Saturday).
-        Example: @(1,2,3,4,5) for weekdays.
+        The days the Schedule runs, as numbers from 0 (Sunday) to 6
+        (Saturday). For example, @(1,2,3,4,5) for weekdays.
 
     .PARAMETER RunTimes
-        For SpecificTimes pattern: Array of times to run each day.
-        Example: @("06:00", "12:00", "18:00")
+        For a SpecificTimes pattern, the times of day to run, in 24-hour
+        format, for example @("06:00", "18:00"). Every time must be at the
+        same minute past the hour ("06:30" and "18:30", not "06:00" and
+        "18:30"), because a Schedule holds one cron expression; use a Custom
+        pattern for times that differ.
 
     .PARAMETER IntervalValue
-        For Interval pattern: The interval value (e.g., 2 for "every 2 hours").
+        For an Interval pattern, how often to run, counted in IntervalUnit.
+        For example, 2 with -IntervalUnit Hours runs every two hours. For
+        Hours, no more than 23.
 
     .PARAMETER IntervalUnit
-        For Interval pattern: The interval unit (Hours or Minutes).
+        For an Interval pattern, the unit of IntervalValue: Hours or Minutes.
 
     .PARAMETER IntervalWindowStart
-        For Interval pattern: Start of the time window (e.g., "06:00").
+        For an hourly Interval pattern, the start of the window the Schedule
+        runs in, in 24-hour format, for example "08:00". Give
+        IntervalWindowEnd with it. An interval in minutes runs all day.
 
     .PARAMETER IntervalWindowEnd
-        For Interval pattern: End of the time window (e.g., "18:00").
+        For an hourly Interval pattern, the end of the window the Schedule
+        runs in, in 24-hour format, for example "18:00".
 
     .PARAMETER CronExpression
-        For Custom pattern: The cron expression (e.g., "0 6 * * 1-5").
+        For a Custom pattern, the cron expression, for example
+        "0 6 * * 1-5". For SpecificTimes and Interval, JIM builds the
+        expression from the pattern, exactly as the portal's Schedule editor
+        does.
 
     .PARAMETER Enabled
-        Whether the schedule should be enabled after creation. Default is $false.
+        Enables the Schedule as soon as it is created. Without it, the
+        Schedule is created disabled.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER OnStepFailure
-        What the Schedule does when a step fails, for every step that follows the Schedule:
-        - Stop (the default): the remaining steps do not run, and the run ends Failed
-        - Continue: the remaining steps run, and a run that carried on past a failure ends CompleteWithError
-        A step with a setting of its own (Add-JIMScheduleStep -OnFailure) overrides it.
+        What the Schedule does when a step fails. With Stop (the default),
+        the remaining steps do not run and the run ends Failed. With Continue,
+        the remaining steps run, and a run that carried on past a failure ends
+        CompleteWithError. A step with a setting of its own
+        (Add-JIMScheduleStep -OnFailure) overrides it.
 
     .PARAMETER PassThru
-        If specified, returns the created Schedule object.
+        Returns the created Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Schedule object.
+        With -PassThru, the created Schedule in full; otherwise nothing.
 
     .EXAMPLE
         New-JIMSchedule -Name "Delta Sync" -TriggerType Manual
@@ -102,7 +115,7 @@ function New-JIMSchedule {
         Enable-JIMSchedule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]

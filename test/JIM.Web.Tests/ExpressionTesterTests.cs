@@ -99,6 +99,33 @@ public class ExpressionTesterTests : JimComponentTestContext
     }
 
     [Test]
+    public void ExpressionTester_ExpressionReturningSeveralValues_ShowsEachValueRatherThanTheTypeName()
+    {
+        // Several values used to be shown as the list's type name (#2179), which says nothing about what flows.
+        var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "Split(\"SOFT101|SEC101\", \"|\")"));
+
+        ClickRunTest(cut);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("System.String[]"));
+            Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()),
+                Is.EqualTo(new[] { "SOFT101", "SEC101" }), "one value per line");
+        }
+    }
+
+    [Test]
+    public void ExpressionTester_ExpressionReturningADate_ShowsJimsDateTextForm()
+    {
+        var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "ParseDate(\"2026-03-15 10:30\", \"yyyy-MM-dd HH:mm\")"));
+
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()),
+            Is.EqualTo(new[] { "2026-03-15 10:30:00Z" }), "the tester shows a date as JIM writes it to a Text attribute");
+    }
+
+    [Test]
     public void ExpressionTester_ExpressionThatCannotBeParsed_ShowsTheReason()
     {
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "cs[\"unclosed\""));

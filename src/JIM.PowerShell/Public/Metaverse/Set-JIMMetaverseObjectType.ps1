@@ -4,7 +4,7 @@
 function Set-JIMMetaverseObjectType {
     <#
     .SYNOPSIS
-        Updates a Metaverse Object Type's deletion rules in JIM.
+        Updates a Metaverse Object Type in JIM.
 
     .DESCRIPTION
         Updates an existing Metaverse Object Type: its identity (name, plural name, icon) and/or its
@@ -25,67 +25,60 @@ function Set-JIMMetaverseObjectType {
         are never listed.
 
     .PARAMETER Id
-        The unique identifier of the Object Type to update.
+        The ID of the Object Type to change.
 
     .PARAMETER Name
-        The name of a specific Object Type to update (used to locate it; use -NewName to rename).
+        The name of the Object Type to change. To rename it, use -NewName.
 
     .PARAMETER InputObject
-        Object Type object to update (from pipeline).
+        An Object Type from the pipeline, for example from Get-JIMMetaverseObjectType.
 
     .PARAMETER NewName
-        A new singular name for the Object Type (rename). Must be unique (compared case-insensitively).
-        Cannot be changed on a built-in type.
+        A new singular name for the Object Type. It must be unique, ignoring case. A built-in Object Type cannot be
+        renamed.
 
     .PARAMETER PluralName
-        A new plural name for the Object Type. Must be unique (compared case-insensitively). Cannot be
-        changed on a built-in type.
+        A new plural name for the Object Type. It must be unique, ignoring case. A built-in Object Type keeps its
+        plural name.
 
     .PARAMETER Icon
-        The MudBlazor icon name shown for the type in the UI (e.g. "Devices"). Pass $null or '' to clear
-        it. Cannot be changed on a built-in type.
+        The name of the MudBlazor icon the portal shows for the Object Type, such as Devices. $null or '' clears it.
+        A built-in Object Type keeps its icon.
 
     .PARAMETER DeletionRule
-        The deletion rule for objects of this type.
-        - Manual: Objects are never automatically deleted
-        - WhenLastConnectorDisconnected: Objects are deleted when all connectors are removed
-        - WhenAuthoritativeSourceDisconnected: Objects are deleted when any authoritative source disconnects (requires DeletionTriggerConnectedSystemIds)
+        When JIM deletes this type's Metaverse Objects on its own. With Manual, it never does. With
+        WhenLastConnectorDisconnected, it deletes an object once no Connected System Object is joined to it; an
+        account JIM has provisioned counts as one. With WhenAuthoritativeSourceDisconnected, it deletes an object
+        when the sources named in -DeletionTriggerConnectedSystemIds disconnect, as -DeletionTriggerMode decides.
 
     .PARAMETER DeletionGracePeriod
-        Grace period before deletion is executed, as a TimeSpan.
-        Examples: [TimeSpan]::FromMinutes(1), [TimeSpan]::FromDays(30), [TimeSpan]::FromHours(2)
-        Set to [TimeSpan]::Zero or omit for immediate deletion when conditions are met.
+        How long JIM waits, once the deletion rule is met, before it deletes the object, for example
+        [TimeSpan]::FromDays(30). [TimeSpan]::Zero deletes at once.
 
     .PARAMETER DeletionTriggerConnectedSystemIds
-        Array of Connected System IDs that are authoritative sources for deletion.
-        Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
-        How they trigger deletion is governed by -DeletionTriggerMode.
-        Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
+        The IDs of the Connected Systems whose disconnection triggers deletion. Required when the deletion rule is
+        WhenAuthoritativeSourceDisconnected, and ignored otherwise.
 
     .PARAMETER DeletionTriggerMode
-        For the WhenAuthoritativeSourceDisconnected deletion rule, controls how the
-        selected authoritative sources trigger deletion.
-        - AllSourcesDisconnect: the Metaverse Object is deleted only once no selected
-          source retains a joined Connected System Object.
-        - SpecificSourcesDisconnect: the Metaverse Object is deleted when any one of the
-          selected sources disconnects, even if others remain connected.
-        When omitted, the stored mode is left unchanged.
+        For WhenAuthoritativeSourceDisconnected, how the selected sources trigger deletion. With
+        AllSourcesDisconnect, an object is deleted only once no selected source keeps a joined Connected System
+        Object. With SpecificSourcesDisconnect, it is deleted when any one selected source disconnects, even while
+        others remain. Omit it to leave the mode unchanged.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the Object Type's Configuration Change History.
 
     .PARAMETER PreviewActivityId
-        The Configuration Change Preview read before making this change, if any. Pass the ActivityId
-        returned by New-JIMConfigurationChangePreview and the update's own Activity records the link, so
-        the audit answers not only what changed but what the caller was told it would do. Optional: a
-        preview is an affordance, not a precondition.
+        The ActivityId of the Configuration Change Preview read before making this change, from
+        New-JIMConfigurationChangePreview. The change's Activity records it, so the audit shows what the change was
+        expected to do as well as what it did.
 
     .PARAMETER PassThru
-        If specified, returns the updated Object Type object.
+        Returns the updated Object Type.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Object Type object.
+        With -PassThru, the updated Object Type in full; otherwise nothing. When its deletion settings draw a
+        warning, in DeletionRuleAdvisory or DeletionSourceWarnings, the cmdlet also writes it as a warning.
 
     .EXAMPLE
         Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -DeletionGracePeriod ([TimeSpan]::FromDays(30))
@@ -142,7 +135,7 @@ function Set-JIMMetaverseObjectType {
         New-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectTypeDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

@@ -14,18 +14,24 @@ function Start-JIMSchedule {
         The unique identifier (GUID) of the Schedule to start.
 
     .PARAMETER Wait
-        If specified, waits for the schedule execution to finish (Complete, CompleteWithError, Failed or
-        Cancelled) and returns the execution result.
+        Waits for the Schedule Execution to finish (Complete,
+        CompleteWithError, Failed or Cancelled), checking every 5 seconds and
+        showing progress, then returns it.
 
     .PARAMETER Timeout
-        Maximum time to wait for completion when -Wait is specified.
-        Default is 30 minutes.
+        How long -Wait waits before it gives up with a warning. The Schedule
+        Execution carries on in JIM.
 
     .PARAMETER PassThru
-        If specified, returns the ScheduleExecution object.
+        Returns the new Schedule Execution.
 
     .OUTPUTS
-        If -PassThru or -Wait is specified, returns the ScheduleExecution object.
+        With -PassThru, the new Schedule Execution as it stands; with -Wait, the execution once it has finished, or
+        as it stands when the timeout is reached; otherwise nothing.
+
+        JIM.ScheduleExecution
+        StepDisplay (string): The step group the execution has reached, as one sentence naming it, for example Step
+            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue.
 
     .EXAMPLE
         Start-JIMSchedule -Id "12345678-1234-1234-1234-123456789012"
@@ -48,7 +54,7 @@ function Start-JIMSchedule {
         Stop-JIMScheduleExecution
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleExecution')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]
@@ -89,6 +95,8 @@ function Start-JIMSchedule {
 
                     while ($true) {
                         $currentExecution = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$executionId"
+                        # Keep the latest state, so a wait that times out returns the run as it now stands
+                        $execution = $currentExecution
 
                         # The API serialises ScheduleExecutionStatus by name, never as an ordinal
                         # (JsonStringEnumConverter with allowIntegerValues:false; see ApiJsonConfiguration),
@@ -98,7 +106,6 @@ function Start-JIMSchedule {
                         # satisfied, and the loop exited on its first poll.
                         if ($currentExecution.status -in $terminalStatuses) {
                             Write-Verbose "Execution finished with status: $($currentExecution.status)"
-                            $execution = $currentExecution
                             break
                         }
 
@@ -122,10 +129,10 @@ function Start-JIMSchedule {
                     }
 
                     Write-Progress -Activity "Waiting for Schedule Execution" -Completed
-                    $execution
+                    Add-JIMScheduleExecutionStepDisplay -Execution $execution
                 }
                 elseif ($PassThru) {
-                    $execution
+                    Add-JIMScheduleExecutionStepDisplay -Execution $execution
                 }
             }
             catch {

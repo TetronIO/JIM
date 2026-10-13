@@ -16,6 +16,9 @@ public interface IExpressionEvaluator
     /// <param name="expression">The expression string to evaluate.</param>
     /// <param name="context">The evaluation context containing available variables.</param>
     /// <returns>The result of the expression evaluation.</returns>
+    /// <exception cref="ExpressionEvaluationException">The expression failed, for any reason an expression can fail:
+    /// it does not parse, it is too long, or it fails while running. This is the only exception a caller catches for
+    /// an expression's failure.</exception>
     object? Evaluate(string expression, ExpressionContext context);
 
     /// <summary>

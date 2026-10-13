@@ -11,25 +11,24 @@ function Get-JIMMetaverseObjectType {
         or a specific type by ID or name.
 
     .PARAMETER Id
-        The unique identifier of a specific Object Type to retrieve.
+        The ID of the Object Type to get.
 
     .PARAMETER Name
-        The name of a specific Object Type to retrieve.
+        The name of the Object Type to get.
 
     .PARAMETER IncludeChildObjects
-        If specified, includes child object counts in the response.
+        Loads each Object Type's attributes. In the list, AttributesCount then counts them; with -Id or -Name,
+        Attributes lists them. Without it, AttributesCount is 0 and Attributes is empty.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of Object Types to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100.
+        How many Object Types each page holds.
 
     .OUTPUTS
-        PSCustomObject representing Object Type(s). With -Id or -Name, the full Object Type, which includes
-        DeletionRuleAdvisory and DeletionSourceWarnings: the Connected Systems that project into the type without being
-        one of its authoritative sources under WhenAuthoritativeSourceDisconnected (each with ConnectedSystemId and
-        ConnectedSystemName; empty when there are none). The list form returns summaries without either.
+        By default, one page of Object Types, each in summary. With -Id or -Name, the Object Type in full, with its
+        deletion settings and any warning about them.
 
     .EXAMPLE
         Get-JIMMetaverseObjectType
@@ -62,7 +61,9 @@ function Get-JIMMetaverseObjectType {
         Get-JIMMetaverseAttribute
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectTypeHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.MetaverseObjectTypeDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.MetaverseObjectTypeDetailDto', ParameterSetName = 'ByName')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
