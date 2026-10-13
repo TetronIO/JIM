@@ -867,11 +867,16 @@ public class ExampleDataServer
         // handled before the pattern/data-set paths because an expression fully determines the value.
         if (dataGenerationTemplateAttribute.IsUsingExpression())
         {
-            metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+            // An expression that returns null gives the object no value for the attribute, not an empty one (#2179).
+            var expressionValue = EvaluateAttributeExpression(_expressionEvaluator, metaverseObject, dataGenerationTemplateAttribute);
+            if (expressionValue != null)
             {
-                Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
-                StringValue = EvaluateAttributeExpression(metaverseObject, dataGenerationTemplateAttribute)
-            });
+                metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                    StringValue = expressionValue
+                });
+            }
             return;
         }
 
@@ -948,21 +953,34 @@ public class ExampleDataServer
 
     /// <summary>
     /// Evaluates an attribute's generation expression against the Metaverse Object's already-generated attribute values
-    /// (exposed to the expression via the mv["Attribute Name"] accessor) and returns the resulting string.
-    /// Reuses the shared DynamicExpresso evaluator. A failed evaluation throws, failing the template execution with an
-    /// attributed error rather than silently producing a blank value.
+    /// (exposed to the expression via the mv["Attribute Name"] accessor) and returns the resulting text, in JIM's one
+    /// text form (#2153, N1), or null when the expression returns no value. A failed evaluation throws, failing the
+    /// template execution with an attributed error rather than silently producing a blank value, as does a result with
+    /// no single text form: several values, which an Example Data Template attribute does not yet take, or a Binary
+    /// value.
     /// </summary>
-    private string EvaluateAttributeExpression(MetaverseObject metaverseObject, ExampleDataTemplateAttribute templateAttribute)
+    internal static string? EvaluateAttributeExpression(
+        IExpressionEvaluator expressionEvaluator,
+        MetaverseObject metaverseObject,
+        ExampleDataTemplateAttribute templateAttribute)
     {
         var attributeName = templateAttribute.MetaverseAttribute!.Name;
         var context = BuildExpressionContext(metaverseObject);
 
         // Test() evaluates and captures any failure as a result rather than throwing, so we attribute the error here.
-        var result = _expressionEvaluator.Test(templateAttribute.Expression!, context);
+        var result = expressionEvaluator.Test(templateAttribute.Expression!, context);
         if (!result.IsValid)
             throw new InvalidDataException($"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {result.ErrorMessage}");
 
-        return result.Result?.ToString() ?? string.Empty;
+        if (ExpressionResultValues.IsCollection(result.Result))
+            throw new InvalidDataException($"ExampleDataServer: the generation expression for attribute '{attributeName}' returned several values; " +
+                "an Example Data Template attribute's expression must return one value.");
+
+        if (!ExpressionText.TryFormat(result.Result, out var text))
+            throw new InvalidDataException($"ExampleDataServer: the generation expression for attribute '{attributeName}' returned a Binary value, " +
+                "which has no text form.");
+
+        return text;
     }
 
     /// <summary>

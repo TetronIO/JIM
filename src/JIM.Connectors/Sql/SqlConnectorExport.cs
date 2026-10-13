@@ -477,64 +477,97 @@ internal sealed class SqlConnectorExport
         {
             var relatedTable = plan.RequireRelatedTable(change.Attribute.Name);
             var relatedColumns = plan.RequireRelatedTableColumns(change.Attribute.Name);
-            var statement = BuildRelatedTableStatement(relatedTable, relatedColumns, BuildJoinValues(relatedTable, relatedColumns, anchor), change);
-            var rowsAffected = await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
+            var joinValues = BuildJoinValues(relatedTable, relatedColumns, anchor);
 
-            // A removal that matched nothing has already reached the end state it asked for, so it is
-            // left alone. An add that matched nothing wrote nothing while raising nothing, which is a
-            // trigger or a rule discarding the write; confirming that value would be a lie.
-            if (statement.AddsARow && rowsAffected == 0)
-                throw new InvalidOperationException(
-                    $"Attribute '{change.Attribute.Name}' added no row to '{QualifiedName(relatedTable.SchemaName, relatedTable.TableName)}', though the database raised no error. " +
-                    "A trigger or a rule is discarding the write, so JIM would be confirming a value the table does not hold; the export is being rolled back. " +
-                    "Check what the table's triggers and rules do with an inserted row, and that the Connected System's credentials may write to it.");
+            foreach (var statement in BuildRelatedTableStatements(relatedTable, relatedColumns, joinValues, change))
+            {
+                var rowsAffected = await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
+
+                // A removal that matched nothing has already reached the end state it asked for, so it is
+                // left alone. An add that matched nothing wrote nothing while raising nothing, which is a
+                // trigger or a rule discarding the write; confirming that value would be a lie.
+                if (statement.AddsARow && rowsAffected == 0)
+                    throw new InvalidOperationException(
+                        $"Attribute '{change.Attribute.Name}' added no row to '{QualifiedName(relatedTable.SchemaName, relatedTable.TableName)}', though the database raised no error. " +
+                        "A trigger or a rule is discarding the write, so JIM would be confirming a value the table does not hold; the export is being rolled back. " +
+                        "Check what the table's triggers and rules do with an inserted row, and that the Connected System's credentials may write to it.");
+            }
         }
     }
 
     /// <summary>
-    /// The statement one multi-valued attribute change becomes: a row removed, every row removed, or a
-    /// row added.
+    /// The statements one multi-valued attribute change becomes: a row added, a row removed, every row removed, or,
+    /// for an Update, every row removed and then the one value added.
     /// </summary>
     /// <remarks>
-    /// Anything that is not a removal adds a row. A multi-valued attribute has no single value for an
-    /// update to replace, so a change type of Update against one is one more value rather than a
-    /// different one.
+    /// An Update against a multi-valued attribute means the attribute holds exactly that value (#2182): it is what a
+    /// single-valued Metaverse attribute flowing to a related table is staged as, and what every other Connector
+    /// applies as a replacement of the whole set. So the parent's rows are replaced, not added to; appending a row per
+    /// change left the table holding every value the attribute ever had. An Update carrying no value is a clear, and
+    /// inserts nothing. The statements run in the parent's own transaction, so the old rows never go without the new.
     /// </remarks>
-    private SqlExportStatement BuildRelatedTableStatement(
+    private List<SqlExportStatement> BuildRelatedTableStatements(
         SqlRelatedTableConfiguration relatedTable,
         SqlExportColumnTypes relatedColumns,
         IReadOnlyList<SqlExportColumnValue> joinValues,
         PendingExportAttributeValueChange change)
     {
-        if (change.ChangeType == PendingExportAttributeChangeType.RemoveAll)
+        return change.ChangeType switch
         {
-            var clear = new SqlDeleteCommand
-            {
-                SchemaName = relatedTable.SchemaName,
-                ObjectName = relatedTable.TableName,
-                KeyColumns = ToColumnParameters(joinValues)
-            };
+            PendingExportAttributeChangeType.RemoveAll => [ClearRelatedRows(relatedTable, joinValues)],
+            PendingExportAttributeChangeType.Update when CarriesNoValue(change) => [ClearRelatedRows(relatedTable, joinValues)],
+            PendingExportAttributeChangeType.Update => [ClearRelatedRows(relatedTable, joinValues), AddRelatedRow(relatedTable, relatedColumns, joinValues, change)],
+            PendingExportAttributeChangeType.Remove => [RemoveRelatedRow(relatedTable, relatedColumns, joinValues, change)],
+            _ => [AddRelatedRow(relatedTable, relatedColumns, joinValues, change)]
+        };
+    }
 
-            return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues, AddsARow: false);
-        }
-
-        var valueColumnType = relatedColumns.Require(relatedTable.ValueColumn);
-        var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0),
-            ToDatabaseValue(change, relatedTable.ValueColumn, valueColumnType), valueColumnType);
-        List<SqlExportColumnValue> boundValues = [.. joinValues, value];
-
-        if (change.ChangeType == PendingExportAttributeChangeType.Remove)
+    /// <summary>
+    /// Removes every row the parent has in a related table. The affected-row count is not read: a parent with no
+    /// values there has nothing to remove, which is the ordinary case rather than a fault.
+    /// </summary>
+    private SqlExportStatement ClearRelatedRows(SqlRelatedTableConfiguration relatedTable, IReadOnlyList<SqlExportColumnValue> joinValues)
+    {
+        var clear = new SqlDeleteCommand
         {
-            var remove = new SqlDeleteCommand
-            {
-                SchemaName = relatedTable.SchemaName,
-                ObjectName = relatedTable.TableName,
-                KeyColumns = ToColumnParameters(boundValues)
-            };
+            SchemaName = relatedTable.SchemaName,
+            ObjectName = relatedTable.TableName,
+            KeyColumns = ToColumnParameters(joinValues)
+        };
 
-            return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues, AddsARow: false);
-        }
+        return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues, AddsARow: false);
+    }
 
+    /// <summary>
+    /// Removes the one row holding a change's value, never every row the parent has.
+    /// </summary>
+    private SqlExportStatement RemoveRelatedRow(
+        SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
+        IReadOnlyList<SqlExportColumnValue> joinValues,
+        PendingExportAttributeValueChange change)
+    {
+        var boundValues = BindRelatedValue(relatedTable, relatedColumns, joinValues, change);
+        var remove = new SqlDeleteCommand
+        {
+            SchemaName = relatedTable.SchemaName,
+            ObjectName = relatedTable.TableName,
+            KeyColumns = ToColumnParameters(boundValues)
+        };
+
+        return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues, AddsARow: false);
+    }
+
+    /// <summary>
+    /// Adds a row holding a change's value.
+    /// </summary>
+    private SqlExportStatement AddRelatedRow(
+        SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
+        IReadOnlyList<SqlExportColumnValue> joinValues,
+        PendingExportAttributeValueChange change)
+    {
+        var boundValues = BindRelatedValue(relatedTable, relatedColumns, joinValues, change);
         var add = new SqlInsertCommand
         {
             SchemaName = relatedTable.SchemaName,
@@ -544,6 +577,35 @@ internal sealed class SqlConnectorExport
 
         return new SqlExportStatement(_provider.BuildInsertCommandText(add), boundValues, AddsARow: true);
     }
+
+    /// <summary>
+    /// The parent's join values followed by the change's value, bound as the related table's value column's own type.
+    /// </summary>
+    private List<SqlExportColumnValue> BindRelatedValue(
+        SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
+        IReadOnlyList<SqlExportColumnValue> joinValues,
+        PendingExportAttributeValueChange change)
+    {
+        var valueColumnType = relatedColumns.Require(relatedTable.ValueColumn);
+        var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0),
+            ToDatabaseValue(change, relatedTable.ValueColumn, valueColumnType), valueColumnType);
+        return [.. joinValues, value];
+    }
+
+    /// <summary>
+    /// Whether a change carries no value at all, which for an Update is a clear.
+    /// </summary>
+    private static bool CarriesNoValue(PendingExportAttributeValueChange change) =>
+        change.StringValue == null &&
+        change.IntValue == null &&
+        change.LongValue == null &&
+        change.DecimalValue == null &&
+        change.DateTimeValue == null &&
+        change.BoolValue == null &&
+        change.GuidValue == null &&
+        change.ByteValue == null &&
+        change.UnresolvedReferenceValue == null;
 
     /// <summary>
     /// The parent's anchor, expressed as the related table's own join columns. Every anchor column is
@@ -753,6 +815,8 @@ internal sealed class SqlConnectorExport
         if (!forCreate)
             RefuseAnchorColumns(plan, changes);
 
+        RefuseSeveralChangesForOneColumn(plan, changes);
+
         // The column's own type is required whether or not there is a value to write: a column the
         // catalogue does not describe is one this Object Type can no longer be written to at all.
         return [.. changes.Select((change, index) =>
@@ -799,6 +863,30 @@ internal sealed class SqlConnectorExport
             "A primary key cannot be rewritten: the row would keep a key JIM no longer holds for it, and the object would be orphaned without any error, so the update is being rolled back. " +
             "The attribute is set on creation only, and JIM does not flow one on an update; import the schema for this Connected System so that its writability is current, and check the Synchronisation Rule targeting it. " +
             "A business identifier that has genuinely been reissued is rejoined by an Object Matching Rule, not by rewriting the anchor.");
+    }
+
+    /// <summary>
+    /// Refuses an export carrying more than one change for one column of the parent row.
+    /// </summary>
+    /// <remarks>
+    /// A column holds one value, so two changes for it contradict each other. Export staging gives a single-valued
+    /// attribute exactly one change (#2182); this is the Connector's own guard behind that. Without it the changes
+    /// become two assignments to one column in one UPDATE, which Microsoft SQL Server and Oracle Database both
+    /// refuse in their own terms, naming neither the attribute nor the object; refusing here names the column.
+    /// </remarks>
+    private static void RefuseSeveralChangesForOneColumn(SqlExportPlan plan, IReadOnlyList<PendingExportAttributeValueChange> changes)
+    {
+        var contradicted = changes
+            .GroupBy(change => change.Attribute.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Skip(1).Any());
+
+        if (contradicted == null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Object Type '{plan.Name}' has an export carrying {contradicted.Count()} changes for column '{contradicted.Key}', which holds one value, so JIM cannot tell which to write; nothing is written for this object. " +
+            "A single-valued attribute is exported as one change carrying the value it should hold, so this export contradicts itself. " +
+            "Check whether more than one Attribute Flow writes to this attribute.");
     }
 
     private static bool IsRemoval(PendingExportAttributeValueChange change) =>

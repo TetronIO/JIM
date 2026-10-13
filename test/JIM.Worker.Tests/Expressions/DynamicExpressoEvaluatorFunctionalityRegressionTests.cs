@@ -197,8 +197,30 @@ public class DynamicExpressoEvaluatorFunctionalityRegressionTests
     [Test]
     public void FormatDate_DocumentedExample_FormatsAsIsoDate()
     {
-        var context = new ExpressionContext(new Dictionary<string, object?> { { "HireDate", new DateTime(2020, 3, 15) } });
-        Assert.That(_evaluator.Evaluate("FormatDate((DateTime)mv[\"HireDate\"], \"yyyy-MM-dd\")", context), Is.EqualTo("2020-03-15"));
+        var context = new ExpressionContext(new Dictionary<string, object?> { { "Hire Date", new DateTime(2020, 3, 15, 0, 0, 0, DateTimeKind.Utc) } });
+        Assert.That(_evaluator.Evaluate("FormatDate(mv[\"Hire Date\"], \"yyyy-MM-dd\")", context), Is.EqualTo("2020-03-15"));
+    }
+
+    [Test]
+    public void ParseDate_DocumentedExample_ReadsADayFirstDateAsUtcMidnight()
+    {
+        var context = new ExpressionContext(new Dictionary<string, object?>(), new Dictionary<string, object?> { { "hireDate", "15/03/2026" } });
+
+        var result = _evaluator.Evaluate("ParseDate(cs[\"hireDate\"], \"dd/MM/yyyy\")", context);
+
+        Assert.That(result, Is.EqualTo(new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc)));
+        Assert.That(((DateTime)result!).Kind, Is.EqualTo(DateTimeKind.Utc));
+    }
+
+    [Test]
+    public void ParseDate_DocumentedExampleWithAZoneDesignator_ReadsTheUtcInstant()
+    {
+        var context = new ExpressionContext(new Dictionary<string, object?>(), new Dictionary<string, object?> { { "changed", "20260315103000Z" } });
+
+        var result = _evaluator.Evaluate("ParseDate(cs[\"changed\"], \"yyyyMMddHHmmssK\")", context);
+
+        Assert.That(result, Is.EqualTo(new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Utc)));
+        Assert.That(((DateTime)result!).Kind, Is.EqualTo(DateTimeKind.Utc));
     }
 
     [Test]

@@ -398,6 +398,11 @@ internal sealed class LdapModifyBisection
     /// deleted from and added to, as one change (a delete, then an add), and returns what is left in the order it stood.
     /// Where any of the attribute's deletes names no value, the change deletes the attribute whole.
     /// </summary>
+    /// <remarks>
+    /// Defence in depth since #2182, not a path JIM's own exports take: export staging gives a single-valued attribute
+    /// one Update, sent as a Replace, and an export carrying two changes for one is refused before it reaches any
+    /// Connector. It stays so that a modify which does carry both is still applied in the one safe order.
+    /// </remarks>
     private static (List<DirectoryAttributeModification[]> Changes, List<DirectoryAttributeModification> Remaining) SeparateSingleValuedChanges(
         List<DirectoryAttributeModification> unpaired,
         IReadOnlySet<string> singleValuedAttributes)

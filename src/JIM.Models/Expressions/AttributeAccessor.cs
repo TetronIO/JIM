@@ -54,10 +54,13 @@ public class AttributeAccessor
     /// Returns null if the attribute is not found.
     /// </summary>
     /// <param name="attributeName">The name of the attribute to retrieve.</param>
-    /// <returns>The attribute value, or null if not found.</returns>
+    /// <returns>The attribute value, or null if not found. A Binary value is a copy (#2153, N6): an expression is
+    /// handed bytes of its own, so nothing it does can change the attribute value they came from.</returns>
     public object? this[string attributeName]
     {
-        get => _attributes.TryGetValue(attributeName, out var value) ? value : null;
+        get => !_attributes.TryGetValue(attributeName, out var value) ? null
+            : value is byte[] bytes ? (byte[])bytes.Clone()
+            : value;
     }
 
     /// <summary>
