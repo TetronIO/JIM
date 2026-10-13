@@ -73,10 +73,11 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Connected Systems](connected-systems.md) | 35 | Manage Connected Systems, schemas, partitions and containers, auxiliary classes, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
 | [Synchronisation Rules](synchronisation-rules.md) | 31 | Define Attribute Flows, Scoping Criteria, Object Matching Rules, initial passwords and generated values |
-| [Metaverse](metaverse.md) | 9 | Query Metaverse Objects, set their passwords, and review pending deletions |
+| [Metaverse](metaverse.md) | 6 | Find and read Metaverse Objects, explain their values and connections, and review pending deletions |
 | [Metaverse Object Types](metaverse-object-types.md) | 4 | List, create, change and delete Object Types, and set their deletion rules |
 | [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |
-| [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
+| [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and list, retry and cancel queued password changes |
+| [Generated Values](generated-values.md) | 2 | List the values JIM generated for a Metaverse Object, and the values it retired |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
 | [Schedule Executions](schedule-executions.md) | 3 | Run a Schedule now, and watch or stop its runs |

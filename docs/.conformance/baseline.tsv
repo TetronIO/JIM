@@ -7,7 +7,6 @@ LANG-3	powershell/expressions.md	2
 LANG-3	powershell/feature-flags.md	1
 LANG-3	powershell/history.md	2
 LANG-3	powershell/index.md	2
-LANG-3	powershell/metaverse.md	1
 LANG-3	powershell/security.md	1
 LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
@@ -30,8 +29,6 @@ STR-2	powershell/file-system.md	3
 STR-2	powershell/history.md	3
 STR-2	powershell/index.md	3
 STR-2	powershell/logs.md	3
-STR-2	powershell/metaverse.md	3
-STR-2	powershell/password-synchronisation.md	3
 STR-2	powershell/predefined-searches.md	3
 STR-2	powershell/previews.md	3
 STR-2	powershell/run-profiles.md	3

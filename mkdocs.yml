@@ -214,6 +214,7 @@ nav:
       - Metaverse Object Types: powershell/metaverse-object-types.md
       - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
+      - Generated Values: powershell/generated-values.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
       - Schedule Executions: powershell/schedule-executions.md
