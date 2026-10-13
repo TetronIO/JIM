@@ -202,6 +202,18 @@ public class ExpressionTesterTests : JimComponentTestContext
             .Single(f => f.Instance.Label == label).Instance.ValueChanged.InvokeAsync(value));
 
     [Test]
+    public async Task ExpressionTester_AttributeFlowRunAsOf_TodayReadsThatInstantAsync()
+    {
+        var cut = RenderFlow(ImportFlow("FormatDate(Today(), \"yyyy-MM-dd\")", AttributeDataType.Text));
+
+        await cut.InvokeAsync(() => cut.FindComponent<RunAsOfPicker>().Instance.ValueChanged
+            .InvokeAsync(new DateTime(2031, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("2031-06-01"));
+    }
+
+    [Test]
     public async Task ExpressionTester_AttributeFlowWithDateInputCast_ShowsTheValueAsASynchronisationWouldAsync()
     {
         // Scenario 14: without the Attribute Flow the sample is text and the cast fails.

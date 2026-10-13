@@ -108,6 +108,11 @@ else
         <SyncRuleDetailScopingCriteriaGroup SyncRule="SyncRule" SyncRuleScopingCriteriaGroup="rootCriteriaGroup"
             SyncRuleChanged="NotifyChangedAsync" SyncRuleScopingCriteriaGroupChanged="NotifyChangedAsync" />
     }
+
+    @if (SyncRule.ObjectScopingCriteriaGroups.Count > 0)
+    {
+        <ScopeTestPanel SyncRule="SyncRule" />
+    }
 }
 
 @code {

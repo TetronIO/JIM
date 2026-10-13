@@ -8,6 +8,7 @@ using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Servers.Scoping;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
@@ -18,6 +19,7 @@ using JIM.Models.Activities;
 using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
+using JIM.Models.Logic.Scoping;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Preview;
 using JIM.Models.Search;
@@ -6555,7 +6557,10 @@ public class SynchronisationController(
         // Build the context from the provided attribute values
         var context = new ExpressionContext(
             TestExpressionSampleValues.ToExpressionAttributes(request.MvAttributes),
-            TestExpressionSampleValues.ToExpressionAttributes(request.CsAttributes));
+            TestExpressionSampleValues.ToExpressionAttributes(request.CsAttributes))
+        {
+            NowUtc = AsUtc(request.AsOf)
+        };
 
         // Evaluate the expression
         var testResult = _expressionEvaluator.Test(request.Expression, context);
@@ -6612,7 +6617,7 @@ public class SynchronisationController(
                 sample.Source == fromObject.Source && string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
-        var tested = AttributeFlowTester.Test(syncRule, mapping, source, inputs, _expressionEvaluator);
+        var tested = AttributeFlowTester.Test(syncRule, mapping, source, inputs, _expressionEvaluator, AsUtc(request.AsOf));
         var response = new TestExpressionResponse
         {
             TargetAttributeName = target.Name,
@@ -6711,6 +6716,115 @@ public class SynchronisationController(
 
         return (inputs, null);
     }
+
+    #endregion
+
+    #region Scope Testing
+
+    /// <summary>
+    /// Test a Synchronisation Rule's scoping criteria
+    /// </summary>
+    /// <remarks>
+    /// Evaluates the rule's scoping criteria against an object holding the given values, by the same code a
+    /// synchronisation runs, and explains the outcome criterion by criterion. Relative date criteria resolve against
+    /// <c>asOf</c> (the current time when omitted), and <c>nextChange</c> says when the outcome would next change as
+    /// time passes. Values can be given as samples, loaded from a real object (a Connected System Object for an import
+    /// rule, a Metaverse Object for an export rule), or both, a sample replacing the object's value for its attribute.
+    /// </remarks>
+    /// <param name="syncRuleId">The Synchronisation Rule whose scoping criteria to test.</param>
+    /// <param name="request">The values to test, and the instant to test as of.</param>
+    /// <response code="200">The scoping criteria were evaluated, or the values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">An object was given for the wrong side of the rule.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Synchronisation Rule or object was not found.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/test", Name = "TestSyncRuleScope")]
+    [ProducesResponseType(typeof(TestScopeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestScopeAsync(int syncRuleId, [FromBody] TestScopeRequest request)
+    {
+        _logger.LogDebug("Testing the scope of Synchronisation Rule {Id}", syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var exporting = syncRule.Direction == SyncRuleDirection.Export;
+        if (exporting && request.ConnectedSystemObjectId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An export rule scopes Metaverse Objects, so give metaverseObjectId rather than connectedSystemObjectId."));
+        if (!exporting && request.MetaverseObjectId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An import rule scopes Connected System Objects, so give connectedSystemObjectId rather than metaverseObjectId."));
+
+        IReadOnlyList<ScopeTestInput> loaded = [];
+        if (request.ConnectedSystemObjectId is { } csoId)
+        {
+            var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(syncRule.ConnectedSystemId, csoId);
+            if (cso == null)
+                return NotFound(ApiErrorResponse.NotFound(
+                    $"Connected System Object with ID {csoId} not found in the Synchronisation Rule's Connected System."));
+            if (cso.TypeId != syncRule.ConnectedSystemObjectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"Connected System Object {csoId} is not a '{syncRule.ConnectedSystemObjectType.Name}', the object type this Synchronisation Rule synchronises."));
+            loaded = ScopeTester.InputsFromConnectedSystemObject(cso, syncRule);
+        }
+        else if (request.MetaverseObjectId is { } mvoId)
+        {
+            var mvo = await _application.Metaverse.GetMetaverseObjectAsync(mvoId);
+            if (mvo == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {mvoId} not found."));
+            loaded = ScopeTester.InputsFromMetaverseObject(mvo, syncRule);
+        }
+
+        // A sample replaces the loaded value for its attribute, so a real object's values can be edited.
+        var samples = TestExpressionSampleValues.ToScopeTestInputs(request.Attributes).ToList();
+        var inputs = samples
+            .Concat(loaded.Where(fromObject => !samples.Any(sample =>
+                string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+
+        var asOf = AsUtc(request.AsOf) ?? DateTime.UtcNow;
+        var tested = ScopeTester.Test(syncRule, inputs, asOf);
+        var response = new TestScopeResponse
+        {
+            IsValid = tested.Explanation != null,
+            EvaluatedAt = asOf,
+            Inputs = ScopeTester.DescribeInputs(syncRule)
+                .Select(input => new TestScopeInputDto
+                {
+                    Attribute = input.AttributeName,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = inputs
+                        .Where(given => string.Equals(given.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(given => given.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (tested.Explanation is not { } explanation)
+        {
+            response.InputErrors = tested.InputErrors;
+            return Ok(response);
+        }
+
+        response.Outcome = explanation.Outcome;
+        response.Explanation = ScopingExplanationDto.FromModel(explanation);
+        response.NextChange = tested.NextChange is { } change ? new TestScopeChangeDto { At = change.AtUtc, Outcome = change.Outcome } : null;
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// A test's as-of instant in UTC. A time given without an offset is read as UTC, the API's time zone, rather than
+    /// the server's local time.
+    /// </summary>
+    private static DateTime? AsUtc(DateTime? asOf) => asOf is not { } instant
+        ? null
+        : instant.Kind == DateTimeKind.Local ? instant.ToUniversalTime() : DateTime.SpecifyKind(instant, DateTimeKind.Utc);
 
     #endregion
 
