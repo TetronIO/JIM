@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -184,6 +185,36 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
+    /// <summary>
+    /// Where the enforced export expression fails, or Fail this mapping stops it, the run records the error against the
+    /// object and stages no correction (#2180). The preview says the same, rather than failing itself or proposing a
+    /// correction the run does not make.
+    /// </summary>
+    [TestCase("ToFileTime(42)", MissingInputBehaviour.EvaluateAnyway)]
+    [TestCase("mv[\"Nickname\"]", MissingInputBehaviour.FailMapping)]
+    [TestCase("mv[\"Nickname\"]", MissingInputBehaviour.FailObject)]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectWhoseEnforcedExpressionCannotBeEvaluated_ReportsTheErrorAndProposesNoCorrectionAsync(
+        string expression, MissingInputBehaviour missingInputBehaviour)
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var source = ctx.ExportRule.AttributeFlowRules.Single().Sources.Single();
+        source.MetaverseAttribute = null;
+        source.MetaverseAttributeId = null;
+        source.Expression = expression;
+        source.MissingInputBehaviour = missingInputBehaviour;
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preview.Errors.Any(e => e.Code == SyncPreviewMessageCode.ExpressionEvaluationError && e.AttributeName == "DisplayName"),
+                Is.True, "the error the run records against the object is reported");
+            Assert.That(preview.DriftCorrections, Is.Empty, "the run stages no correction");
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty);
+        }
+    }
+
     [Test]
     public async Task PreviewFullSyncAsync_OfATargetObjectThatWouldJoin_ProposesTheDriftCorrectionTheRunMakesAsync()
     {
@@ -237,7 +268,7 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
-    private sealed record DriftContext(ConnectedSystem Source, ConnectedSystem Target);
+    private sealed record DriftContext(ConnectedSystem Source, ConnectedSystem Target, SyncRule ExportRule);
 
     /// <summary>
     /// HR projects John Smith and flows his display name to a provisioned, confirmed Active Directory account, whose
@@ -277,7 +308,7 @@ public partial class SyncPreviewFidelityTests
         targetCso.LastUpdated = DateTime.UtcNow;
         SyncRepo.ClearAllPendingExports();
 
-        return new DriftContext(source, target);
+        return new DriftContext(source, target, exportRule);
     }
 
     private int UpdatesStagedFor(ConnectedSystem system) => SyncRepo.PendingExports.Values
