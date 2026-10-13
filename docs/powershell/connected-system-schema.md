@@ -52,7 +52,9 @@ With `-Preview`, what the refresh would change; with `-PassThru`, the Connected 
 | `AddedObjectTypes` | `string[]` | Object types that are new to the schema. |
 | `RemovedObjectTypes` | `string[]` | Object types the Connected System no longer reports. Retained in JIM, not deleted. |
 | `UpdatedObjectTypes` | `string[]` | Object types that already existed and were updated. |
+| `RenamedObjectTypes` | `object[]` | Object types the Connected System now reports under a name differing only in case. Each keeps its id and configuration and takes the new casing; it is not listed as added or removed. Each has `OldName` and `NewName`. |
 | `AddedAttributes` | `hashtable` | Attributes that are new, grouped by object type name. |
+| `RenamedAttributes` | `hashtable` | Attributes the Connected System now reports under a name differing only in case, grouped by object type name. Each keeps its id, so the Synchronisation Rule mappings and Object Matching Rules using it are unaffected, and takes the new casing; it is not listed as added or removed. |
 | `RemovedAttributes` | `hashtable` | Attributes the Connected System no longer reports, grouped by object type name. Retained in JIM, not deleted; their values stop refreshing. |
 | `ChangedAttributes` | `hashtable` | Attributes whose definition (data type or plurality) the Connector restated, grouped by object type name. |
 | `ChangedObjectTypeClassifications` | `hashtable` | Changes to how the Connected System classifies a selected Object Type (its class kind, or inheritance involving another selected Object Type), grouped by Object Type name. They can change which Object Type existing entries resolve to at the next import; see HasObjectTypeClassificationChanges. |
