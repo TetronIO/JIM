@@ -1662,7 +1662,8 @@ public partial class SyncRepository
 
     /// <summary>
     /// The reference recall existence query (#1003). Matches by resolved reference id or by
-    /// case-insensitive raw reference string (values pre-lowered by the caller; LOWER() here
+    /// case-insensitive raw reference string (values pre-lowered by the caller, as SQL's lower() lowers them; a
+    /// case-exact anchor's exact match is then decided by the caller, ReferenceValueIndex, #2051; LOWER() here
     /// mirrors the OrdinalIgnoreCase DN comparison export evaluation uses). Driven by the
     /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
     /// group's member rows - milliseconds - rather than materialising them all through EF Core.

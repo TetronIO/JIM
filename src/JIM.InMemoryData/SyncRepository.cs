@@ -1769,7 +1769,7 @@ public class SyncRepository : ISyncRepository
                 .Where(av => attributeIds.Contains(av.AttributeId) &&
                              ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
                               (av.UnresolvedReferenceValue != null &&
-                               loweredValues.Contains(av.UnresolvedReferenceValue.ToLowerInvariant()))))
+                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false)))))
                 .Select(av => new CsoReferenceValueMatch
                 {
                     AttributeValueId = av.Id,
