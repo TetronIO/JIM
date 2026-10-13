@@ -39,10 +39,17 @@ function Test-JIMExpression {
     .PARAMETER MappingId
         The ID of the Attribute Flow to test the expression as. The expression tested is Expression, so an edit can be tried before it is saved.
 
+    .PARAMETER ConnectedSystemObjectId
+        The ID of a Connected System Object whose values to test with, for an import Attribute Flow. Its values for the attributes the expression reads are the inputs, and a value in CsAttributes replaces the object's value for that attribute. An expression that also reads mv["..."] takes those inputs from the Metaverse Object it is joined to.
+
+    .PARAMETER MetaverseObjectId
+        The ID of a Metaverse Object whose values to test with, for an export Attribute Flow. A value in MvAttributes replaces the object's value for that attribute.
+
     .OUTPUTS
         The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester
         shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what
-        a synchronisation would give the target attribute.
+        a synchronisation would give the target attribute, Inputs lists the values each input was given, and
+        IfInputHasNoValue says what each input's absence would do.
 
     .EXAMPLE
         Test-JIMExpression -Expression '"Hello, " + mv["Display Name"] + "!"' -MvAttributes @{ "Display Name" = "John Doe" }
@@ -69,6 +76,12 @@ function Test-JIMExpression {
 
         Tests an expression as Attribute Flow 40 on Synchronisation Rule 12: the sample is converted to a date, as the
         Connected System Object would hold it, and the result is converted for the Attribute Flow's target attribute.
+
+    .EXAMPLE
+        Test-JIMExpression -Expression 'Lower(cs["givenName"]) + "." + Lower(cs["sn"])' -SyncRuleId 12 -MappingId 41 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01'
+
+        Tests an expression as Attribute Flow 41 with a real Connected System Object's values, then shows what each
+        input's absence would do through IfInputHasNoValue.
 
     .EXAMPLE
         Test-JIMExpression -Expression 'RandomPassword(16, true)'
@@ -100,7 +113,13 @@ function Test-JIMExpression {
         [int]$SyncRuleId,
 
         [Parameter(Mandatory, ParameterSetName = 'AttributeFlow')]
-        [int]$MappingId
+        [int]$MappingId,
+
+        [Parameter(ParameterSetName = 'AttributeFlow')]
+        [guid]$ConnectedSystemObjectId,
+
+        [Parameter(ParameterSetName = 'AttributeFlow')]
+        [guid]$MetaverseObjectId
     )
 
     process {
@@ -126,6 +145,14 @@ function Test-JIMExpression {
         if ($PSCmdlet.ParameterSetName -eq 'AttributeFlow') {
             $body.syncRuleId = $SyncRuleId
             $body.mappingId = $MappingId
+
+            if ($PSBoundParameters.ContainsKey('ConnectedSystemObjectId')) {
+                $body.connectedSystemObjectId = $ConnectedSystemObjectId
+            }
+
+            if ($PSBoundParameters.ContainsKey('MetaverseObjectId')) {
+                $body.metaverseObjectId = $MetaverseObjectId
+            }
         }
 
         Write-Verbose "Testing expression: $Expression"

@@ -551,25 +551,33 @@ If the attribute has the values Admin, Users, and Developers, this produces `Adm
 
 The Attribute Flow dialog tests an expression as you write it, so you find out what it produces before you save it rather than from the next synchronisation.
 
-Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to, a list as one value per line.
+Choose **Expression** as the source type and type your expression. Once the Attribute Flow has a target attribute, **Test this Attribute Flow** lists each attribute the expression reads, with its type from the schema and whether it holds one value or several. Give each a value, choose **Run test**, and the panel shows what a synchronisation would do, using the same code a synchronisation runs.
 
-The test runs the Attribute Flow the way a synchronisation runs it, using the same code:
+**Giving the inputs values:**
 
-- **Each sample is read as its attribute's type.** Type `2026-03-02` for a date and time attribute and the expression receives a date, so `FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")` produces `2026-03-02`. A sample that is not a value of the attribute's type is reported, naming the input.
-- **The Attribute Flow's own settings apply.** Its Missing Input Behaviour, its value processing (trimming, collapsing whitespace, case normalisation, whitespace as no value) and conversion to the target attribute's type all run in turn.
-- **"What a Synchronisation would do" gives the outcome.** It shows the values the target attribute would hold, or that it would get no value, or the error a synchronisation would record, such as a result the target's type cannot hold.
+- **Each value is read as its attribute's type.** Type `2026-03-02` for a date and time attribute and the expression receives a date, so `FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")` produces `2026-03-02`. A value that is not of the attribute's type is reported, naming the input.
+- **A multi-valued attribute takes several values.** Type each one and choose **Add value**.
+- **No value is a tick box.** An input you leave untouched has no value. Tick **No value** to make an input absent again after typing in it. Clearing the box gives the input empty text instead, which the expression sees as empty text rather than null. Missing Input Behaviour treats both as missing, as a synchronisation does.
+- **From an object** fills the inputs from a real object: search for a Connected System Object of the rule's Connected System for an import Attribute Flow, or a Metaverse Object for an export one, and pick it. Its values for each input are loaded, every value of a multi-valued attribute included, and you can change any of them to try a variation. An import Attribute Flow that reads `mv["..."]` also takes those inputs from the Metaverse Object the Connected System Object is joined to.
 
-Before a target attribute is chosen, the expression is evaluated on its own, with each sample as text.
+**Reading the result.** **What a Synchronisation would do** traces each step:
 
-**Leave a box empty to see what happens when the object has no value for that attribute.** An empty box is passed to the expression as no value, not as an empty string, so this is how you check an expression against the hazard the previous section describes:
+1. **Expression returned:** the expression's own result and its type, or why it was not evaluated or failed.
+2. **Value processing:** the Attribute Flow's trimming, whitespace and case settings, in the order they apply, and whether they changed the value. It applies to an import Attribute Flow into a Text attribute only.
+3. **Converted for** the target: the values the target attribute would hold, in its type.
+4. **Result:** what the target would be given: these values, no value, or the error a synchronisation would record, such as a result the target's type cannot hold.
+
+**If an input has no value** then runs the flow again for each input you gave a value, with that one input absent, and shows what the Attribute Flow's Missing Input Behaviour would do. This is how you check an expression against the hazard the previous section describes:
 
 ```csharp
 Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@corp.local"
 ```
 
-With both values supplied this produces `ada.lovelace@corp.local`. Clear the surname box and it produces `ada.@corp.local`: a syntactically fine string that is not an email address, which nothing downstream can tell apart from a good one. Seeing that before saving is the point.
+With both values supplied this produces `ada.lovelace@corp.local`. Without the surname it produces `ada.@corp.local`, a syntactically fine string that is not an email address, unless Missing Input Behaviour stops it. Seeing that before saving is the point.
 
-The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow; without them, the expression is evaluated on its own.
+Before a target attribute is chosen, the expression is evaluated on its own, with each value as text, and an empty box is no value.
+
+The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow, and optionally a Connected System Object or Metaverse Object to load the values from; without them, the expression is evaluated on its own.
 
 ### Validation
 

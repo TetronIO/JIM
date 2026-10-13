@@ -6534,6 +6534,9 @@ public class SynchronisationController(
         if (request.SyncRuleId.HasValue != request.MappingId.HasValue)
             return BadRequest(ApiErrorResponse.BadRequest("Give both syncRuleId and mappingId to test the expression as an Attribute Flow, or neither."));
 
+        if (!request.SyncRuleId.HasValue && (request.ConnectedSystemObjectId.HasValue || request.MetaverseObjectId.HasValue))
+            return BadRequest(ApiErrorResponse.BadRequest("Values can be loaded from an object only when testing the expression as an Attribute Flow: give syncRuleId and mappingId too."));
+
         // First validate the expression syntax
         var validationResult = _expressionEvaluator.Validate(request.Expression);
         if (!validationResult.IsValid)
@@ -6583,7 +6586,7 @@ public class SynchronisationController(
         if (mapping == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute Flow with ID {mappingId} not found on Synchronisation Rule {syncRuleId}."));
 
-        var target = (Name: mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name, 
+        var target = (Name: mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name,
             Type: mapping.TargetMetaverseAttribute?.Type ?? mapping.TargetConnectedSystemAttribute?.Type);
         if (target.Name == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Attribute Flow {mappingId} has no target attribute to test against."));
@@ -6596,15 +6599,37 @@ public class SynchronisationController(
                 ?? MissingInputBehaviour.EvaluateAnyway
         };
 
-        var inputs = TestExpressionSampleValues.ToTestInputs(request.CsAttributes, ExpressionInputSource.ConnectedSystem)
+        var loaded = await LoadTestInputsFromObjectsAsync(request, syncRule);
+        if (loaded.Problem != null)
+            return loaded.Problem;
+
+        // A sample replaces the loaded value for its attribute, so a real object's values can be edited.
+        var samples = TestExpressionSampleValues.ToTestInputs(request.CsAttributes, ExpressionInputSource.ConnectedSystem)
             .Concat(TestExpressionSampleValues.ToTestInputs(request.MvAttributes, ExpressionInputSource.Metaverse))
+            .ToList();
+        var inputs = samples
+            .Concat(loaded.Inputs.Where(fromObject => !samples.Any(sample =>
+                sample.Source == fromObject.Source && string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
         var tested = AttributeFlowTester.Test(syncRule, mapping, source, inputs, _expressionEvaluator);
         var response = new TestExpressionResponse
         {
             TargetAttributeName = target.Name,
-            TargetAttributeType = target.Type
+            TargetAttributeType = target.Type,
+            Inputs = AttributeFlowTester.DescribeInputs(syncRule, request.Expression)
+                .Select(input => new TestExpressionInputDto
+                {
+                    Input = input.Accessor,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = inputs
+                        .Where(given => given.Source == input.Source && string.Equals(given.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(given => given.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
         };
 
         if (tested.Evaluation is not { } evaluation)
@@ -6627,7 +6652,64 @@ public class SynchronisationController(
         response.ResultLines = expressionResult != null ? ExpressionText.ToDisplayLines(expressionResult) : null;
         response.ResultType = expressionResult?.GetType().Name;
         response.ValueLines = evaluation.Outcome == AttributeFlowOutcome.Values ? evaluation.Values.Select(ExpressionText.Describe).ToList() : null;
+        response.ValueProcessingSteps = tested.ValueProcessing?.Steps;
+        response.ValueProcessingChanged = tested.ValueProcessing?.Changed;
+        response.IfInputHasNoValue = tested.IfInputHasNoValue
+            .Select(absent => new TestExpressionAbsentInputDto
+            {
+                Input = absent.Accessor,
+                Outcome = absent.Evaluation.Outcome,
+                ErrorReason = absent.Evaluation.ErrorReason,
+                OutcomeDescription = AttributeFlowTester.Describe(absent.Evaluation, target.Name)
+            })
+            .ToList();
         return Ok(response);
+    }
+
+    /// <summary>
+    /// The inputs an Attribute Flow test takes from real objects (#2055): a Connected System Object of the rule's
+    /// Connected System for an import Attribute Flow, with the Metaverse Object it is joined to for any <c>mv[...]</c>
+    /// input, and a Metaverse Object for an export Attribute Flow (or to supply an import flow's <c>mv[...]</c> inputs).
+    /// </summary>
+    private async Task<(IReadOnlyList<AttributeFlowTestInput> Inputs, IActionResult? Problem)> LoadTestInputsFromObjectsAsync(
+        TestExpressionRequest request, SyncRule syncRule)
+    {
+        var inputs = new List<AttributeFlowTestInput>();
+        var metaverseObjectId = request.MetaverseObjectId;
+
+        if (request.ConnectedSystemObjectId is { } csoId)
+        {
+            if (syncRule.Direction == SyncRuleDirection.Export)
+                return ([], BadRequest(ApiErrorResponse.BadRequest(
+                    "An export Attribute Flow reads the Metaverse Object, so give metaverseObjectId rather than connectedSystemObjectId.")));
+
+            var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(syncRule.ConnectedSystemId, csoId);
+            if (cso == null)
+                return ([], NotFound(ApiErrorResponse.NotFound(
+                    $"Connected System Object with ID {csoId} not found in the Synchronisation Rule's Connected System.")));
+            if (cso.TypeId != syncRule.ConnectedSystemObjectType.Id)
+                return ([], BadRequest(ApiErrorResponse.BadRequest(
+                    $"Connected System Object {csoId} is not a '{syncRule.ConnectedSystemObjectType.Name}', the object type this Synchronisation Rule synchronises.")));
+
+            inputs.AddRange(AttributeFlowTester.InputsFromConnectedSystemObject(cso, syncRule.ConnectedSystemObjectType, request.Expression));
+
+            // A Metaverse-Derived Attribute Flow (#1750) also reads the Metaverse Object the CSO is joined to.
+            var readsMetaverse = ExpressionInputResolver.Resolve(request.Expression).Any(input => input.Source == ExpressionInputSource.Metaverse);
+            if (metaverseObjectId == null && readsMetaverse && cso.MetaverseObjectId is { } joinedId
+                && await _application.Metaverse.GetMetaverseObjectAsync(joinedId) is { } joined)
+                inputs.AddRange(AttributeFlowTester.InputsFromMetaverseObject(joined, request.Expression));
+        }
+
+        if (metaverseObjectId is { } mvoId)
+        {
+            var mvo = await _application.Metaverse.GetMetaverseObjectAsync(mvoId);
+            if (mvo == null)
+                return ([], NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {mvoId} not found.")));
+
+            inputs.AddRange(AttributeFlowTester.InputsFromMetaverseObject(mvo, request.Expression));
+        }
+
+        return (inputs, null);
     }
 
     #endregion

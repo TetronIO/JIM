@@ -112,4 +112,43 @@ Describe 'Test-JIMExpression' {
     It 'Requires -MappingId with -SyncRuleId' {
         { Test-JIMExpression -Expression '1' -SyncRuleId 12 -ErrorAction Stop } | Should -Throw
     }
+
+    It 'Posts the object to load values from' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Values' }
+            }
+            $csoId = [guid]'0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01'
+
+            Test-JIMExpression -Expression 'cs["givenName"]' -SyncRuleId 12 -MappingId 40 -ConnectedSystemObjectId $csoId | Out-Null
+
+            $script:capturedBody.connectedSystemObjectId | Should -Be $csoId
+            $script:capturedBody.ContainsKey('metaverseObjectId') | Should -BeFalse
+        }
+    }
+
+    It 'Posts the Metaverse Object to load values from' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Values' }
+            }
+            $mvoId = [guid]'7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f'
+
+            Test-JIMExpression -Expression 'mv["Display Name"]' -SyncRuleId 12 -MappingId 41 -MetaverseObjectId $mvoId | Out-Null
+
+            $script:capturedBody.metaverseObjectId | Should -Be $mvoId
+        }
+    }
+
+    It 'Offers loading from an object only with an Attribute Flow' {
+        $command = Get-Command Test-JIMExpression
+        $command.Parameters['ConnectedSystemObjectId'].ParameterSets.Keys | Should -Be @('AttributeFlow')
+        $command.Parameters['MetaverseObjectId'].ParameterSets.Keys | Should -Be @('AttributeFlow')
+    }
 }

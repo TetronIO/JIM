@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -126,13 +127,16 @@ public class SynchronisationControllerTestExpressionTests
 
     private const int SyncRuleId = 7;
     private const int MappingId = 70;
+    private const int ConnectedSystemId = 3;
 
     /// <summary>
     /// An application whose repository holds one import Synchronisation Rule with one Attribute Flow, from an object
     /// type with a DateTime <c>hireDate</c>, a Text <c>givenName</c> and a multi-valued <c>mail</c>, to the target.
     /// </summary>
     private SynchronisationController ControllerWithFlow(AttributeDataType targetType,
-        MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.EvaluateAnyway)
+        MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
+        Action<Mock<IConnectedSystemRepository>, Mock<IMetaverseRepository>, SyncRule>? arrange = null,
+        SyncRuleDirection direction = SyncRuleDirection.Import)
     {
         var csoType = new ConnectedSystemObjectType
         {
@@ -147,17 +151,23 @@ public class SynchronisationControllerTestExpressionTests
         var target = new MetaverseAttribute { Id = 21, Name = "Target", Type = targetType };
         var rule = new SyncRule
         {
-            Id = SyncRuleId, Name = "HR Inbound", Direction = SyncRuleDirection.Import,
-            ConnectedSystemObjectType = csoType, MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person", Attributes = [target] }
+            Id = SyncRuleId, Name = "HR Inbound", Direction = direction, ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectType = csoType, ConnectedSystemObjectTypeId = csoType.Id,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person", Attributes = [target, new MetaverseAttribute { Id = 22, Name = "Hire Date", Type = AttributeDataType.DateTime }] }
         };
-        var mapping = new SyncRuleMapping { Id = MappingId, SyncRule = rule, TargetMetaverseAttribute = target };
+        var mapping = direction == SyncRuleDirection.Export
+            ? new SyncRuleMapping { Id = MappingId, SyncRule = rule, TargetConnectedSystemAttribute = csoType.Attributes.Single(a => a.Name == "givenName") }
+            : new SyncRuleMapping { Id = MappingId, SyncRule = rule, TargetMetaverseAttribute = target };
         mapping.Sources.Add(new SyncRuleMappingSource { Expression = "cs[\"givenName\"]", MissingInputBehaviour = missingInputBehaviour });
         rule.AttributeFlowRules.Add(mapping);
 
         var connectedSystems = new Mock<IConnectedSystemRepository>();
         connectedSystems.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+        var metaverse = new Mock<IMetaverseRepository>();
+        arrange?.Invoke(connectedSystems, metaverse, rule);
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+        repository.Setup(r => r.Metaverse).Returns(metaverse.Object);
 
         _application.Dispose();
         _application = new JimApplication(repository.Object);
@@ -291,6 +301,147 @@ public class SynchronisationControllerTestExpressionTests
         var result = await controller.TestExpressionAsync(new TestExpressionRequest { Expression = "1", SyncRuleId = SyncRuleId, MappingId = 999 });
 
         Assert.That(result, Is.TypeOf<NotFoundObjectResult>());
+    }
+
+    #endregion
+
+    #region Load from an object, and the trace (#2055 Phase 2)
+
+    private static readonly Guid CsoId = Guid.NewGuid();
+
+    /// <summary>A Connected System Object of the flow's type holding a hire date and a given name.</summary>
+    private static void HoldsPriya(Mock<IConnectedSystemRepository> connectedSystems, Mock<IMetaverseRepository> _, SyncRule rule)
+    {
+        var cso = new ConnectedSystemObject { Id = CsoId, ConnectedSystemId = ConnectedSystemId, TypeId = rule.ConnectedSystemObjectType.Id };
+        var hireDate = rule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "hireDate");
+        var givenName = rule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "givenName");
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = hireDate, AttributeId = hireDate.Id, DateTimeValue = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc) });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = givenName, AttributeId = givenName.Id, StringValue = "Priya" });
+        connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(ConnectedSystemId, CsoId)).ReturnsAsync(cso);
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_FlowWithConnectedSystemObject_TestsItsValuesAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, arrange: HoldsPriya);
+        var request = FlowRequest("FormatDate((DateTime)cs[\"hireDate\"], \"yyyy-MM-dd\")");
+        request.ConnectedSystemObjectId = CsoId;
+
+        var response = Ok(await controller.TestExpressionAsync(request));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.ValueLines, Is.EqualTo(new[] { "2026-03-02" }));
+            Assert.That(response.Inputs!.Single().Input, Is.EqualTo("cs[\"hireDate\"]"));
+            Assert.That(response.Inputs!.Single().ValueLines, Is.EqualTo(new[] { "2026-03-02 00:00:00Z" }), "the inputs used are returned");
+            Assert.That(response.Inputs!.Single().Type, Is.EqualTo(AttributeDataType.DateTime));
+        }
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_SampleAndObjectForTheSameInput_SampleWinsAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, arrange: HoldsPriya);
+        var request = FlowRequest("cs[\"givenName\"]", new Dictionary<string, object?> { ["givenName"] = "Ada" });
+        request.ConnectedSystemObjectId = CsoId;
+
+        var response = Ok(await controller.TestExpressionAsync(request));
+
+        Assert.That(response.ValueLines, Is.EqualTo(new[] { "Ada" }), "a loaded value can be edited by giving a sample for it");
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_UnknownConnectedSystemObject_IsNotFoundAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text);
+        var request = FlowRequest("cs[\"givenName\"]");
+        request.ConnectedSystemObjectId = Guid.NewGuid();
+
+        Assert.That(await controller.TestExpressionAsync(request), Is.TypeOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_ConnectedSystemObjectForAnExportFlow_IsBadRequestAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, direction: SyncRuleDirection.Export);
+        var request = FlowRequest("mv[\"Target\"]");
+        request.ConnectedSystemObjectId = CsoId;
+
+        Assert.That(await controller.TestExpressionAsync(request), Is.TypeOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_ObjectWithoutAFlow_IsBadRequestAsync()
+    {
+        var result = await _controller.TestExpressionAsync(new TestExpressionRequest { Expression = "1", ConnectedSystemObjectId = CsoId });
+
+        Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_ExportFlowWithMetaverseObject_TestsItsValuesAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var controller = ControllerWithFlow(AttributeDataType.Text, direction: SyncRuleDirection.Export, arrange: (_, metaverse, rule) =>
+        {
+            var hireDate = rule.MetaverseObjectType.Attributes.Single(a => a.Name == "Hire Date");
+            var mvo = new MetaverseObject { Id = mvoId, Type = rule.MetaverseObjectType };
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = hireDate, AttributeId = hireDate.Id, DateTimeValue = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc) });
+            metaverse.Setup(r => r.GetMetaverseObjectAsync(mvoId)).ReturnsAsync(mvo);
+        });
+        var request = FlowRequest("FormatDate((DateTime)mv[\"Hire Date\"], \"yyyy-MM-dd\")");
+        request.MetaverseObjectId = mvoId;
+
+        var response = Ok(await controller.TestExpressionAsync(request));
+
+        Assert.That(response.ValueLines, Is.EqualTo(new[] { "2026-03-02" }));
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_DerivedFlowWithConnectedSystemObject_ReadsItsJoinedMetaverseObjectAsync()
+    {
+        // A Metaverse-Derived Attribute Flow (#1750) reads mv[...] as well as cs[...].
+        var mvoId = Guid.NewGuid();
+        var controller = ControllerWithFlow(AttributeDataType.Text, arrange: (connectedSystems, metaverse, rule) =>
+        {
+            HoldsPriya(connectedSystems, metaverse, rule);
+            var hireDate = rule.MetaverseObjectType.Attributes.Single(a => a.Name == "Hire Date");
+            var mvo = new MetaverseObject { Id = mvoId, Type = rule.MetaverseObjectType };
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = hireDate, AttributeId = hireDate.Id, DateTimeValue = new DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc) });
+            metaverse.Setup(r => r.GetMetaverseObjectAsync(mvoId)).ReturnsAsync(mvo);
+            connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(ConnectedSystemId, CsoId))
+                .ReturnsAsync((int _, Guid _) =>
+                {
+                    var cso = new ConnectedSystemObject { Id = CsoId, ConnectedSystemId = ConnectedSystemId, TypeId = rule.ConnectedSystemObjectType.Id, MetaverseObjectId = mvoId };
+                    var givenName = rule.ConnectedSystemObjectType.Attributes.Single(a => a.Name == "givenName");
+                    cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = givenName, AttributeId = givenName.Id, StringValue = "Priya" });
+                    return cso;
+                });
+        });
+        var request = FlowRequest("cs[\"givenName\"] + \" \" + FormatDate((DateTime)mv[\"Hire Date\"], \"yyyy\")");
+        request.ConnectedSystemObjectId = CsoId;
+
+        var response = Ok(await controller.TestExpressionAsync(request));
+
+        Assert.That(response.ValueLines, Is.EqualTo(new[] { "Priya 2025" }));
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_Flow_ReturnsTheProcessingStepAndWhatEachAbsentInputWouldDoAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, MissingInputBehaviour.FailMapping);
+
+        var response = Ok(await controller.TestExpressionAsync(FlowRequest("cs[\"givenName\"]",
+            new Dictionary<string, object?> { ["givenName"] = "Priya" })));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.ValueProcessingSteps, Is.EqualTo(new[] { AttributeFlowValueProcessingStep.TreatWhitespaceAsNoValue }));
+            Assert.That(response.ValueProcessingChanged, Is.False);
+            Assert.That(response.IfInputHasNoValue!.Single().Input, Is.EqualTo("cs[\"givenName\"]"));
+            Assert.That(response.IfInputHasNoValue!.Single().ErrorReason, Is.EqualTo(AttributeFlowErrorReason.MissingInputFailedMapping));
+            Assert.That(response.IfInputHasNoValue!.Single().OutcomeDescription, Is.Not.Empty);
+        }
     }
 
     #endregion
