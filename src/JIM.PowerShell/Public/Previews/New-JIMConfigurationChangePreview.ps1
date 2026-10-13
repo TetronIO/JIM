@@ -218,8 +218,9 @@ function New-JIMConfigurationChangePreview {
         (ConnectedSystemObjectTypeId in Simple mode, SyncRuleId in Advanced mode), a MetaverseObjectTypeId
         (required in Simple mode), a TargetMetaverseAttributeId, and a Sources array whose entries take an
         Order and either a ConnectedSystemAttributeId or an Expression over the Connected System Object
-        (cs["attributeName"]), judged as saving the rule would judge it. CaseSensitive is optional: omitted, the
-        rule ignores case, exactly as a rule created without it does.
+        (cs["attributeName"]), judged as saving the rule would judge it. CaseSensitive is optional: omitted, it
+        follows the sources exactly as a rule created without it does, respecting case only when a source
+        attribute's values are declared case-exact.
 
         Mandatory, and an empty array is a valid and deliberate value: it proposes removing every rule, so
         nothing would join and every unjoined object would project a new identity instead.

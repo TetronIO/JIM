@@ -19,24 +19,24 @@ function Set-JIMConnectedSystemAuxiliaryClass {
         several, or use -Clear to withdraw every selection.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type the classes are merged into.
+        The ID of the Object Type the classes are merged into.
 
     .PARAMETER AuxiliaryClassObjectTypeId
-        The auxiliary classes the Object Type should carry, by their own Object Type ids. Each must
-        be an auxiliary class in the same Connected System.
+        The auxiliary classes the Object Type should carry, by their own Object Type IDs. Each must be an auxiliary
+        class in the same Connected System.
 
     .PARAMETER Clear
-        Withdraw every auxiliary class selection from the Object Type.
+        Withdraws every auxiliary class from the Object Type.
 
     .PARAMETER PassThru
-        If specified, returns the updated Object Type.
+        Returns the Object Type as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Object Type, whose
-        MergedAuxiliaryClassObjectTypeIds property lists what it now carries.
+        With -PassThru, the Object Type as changed, whose MergedAuxiliaryClassObjectTypeIds lists the classes it now
+        carries; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -AuxiliaryClassObjectTypeId 12
@@ -61,7 +61,7 @@ function Set-JIMConnectedSystemAuxiliaryClass {
         Import-JIMConnectedSystemSchema
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'Set')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectTypeDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,

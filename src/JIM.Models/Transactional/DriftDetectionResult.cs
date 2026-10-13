@@ -3,6 +3,7 @@
 
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 
 namespace JIM.Models.Transactional;
 
@@ -25,6 +26,14 @@ public class DriftDetectionResult
     /// Pending Exports that were created to correct the drift.
     /// </summary>
     public List<PendingExport> CorrectiveExports { get; } = [];
+
+    /// <summary>
+    /// Mapping-level errors found while working out what the Connected System Object should hold (#2180): the same
+    /// errors export staging records for the same mapping, such as a Missing Input Behaviour of Fail this mapping, an
+    /// Expression result the target attribute cannot hold, or several source values for a single-valued target. No
+    /// correction is staged for an attribute with an error; the caller records each one on a Run Profile Execution Item.
+    /// </summary>
+    public List<AttributeFlowError> AttributeFlowErrors { get; } = [];
 }
 
 /// <summary>
@@ -51,4 +60,11 @@ public class DriftedAttribute
     /// The export rule that defines the expected value.
     /// </summary>
     public required SyncRule ExportRule { get; init; }
+
+    /// <summary>
+    /// The changes that correct this attribute, when they were staged by export staging's own code rather than
+    /// derived from <see cref="ExpectedValue"/> and <see cref="ActualValue"/>: an expression mapping's (#2180), so its
+    /// correction is exactly what export staging would stage. Null for an ordinary mapping.
+    /// </summary>
+    public IReadOnlyList<PendingExportAttributeValueChange>? CorrectiveChanges { get; init; }
 }

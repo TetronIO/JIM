@@ -44,7 +44,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(exportRule.ObjectScopingCriteriaGroups, new MvoScopingValueSource(mvo), nowUtc ?? DateTime.UtcNow);
+        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo), nowUtc ?? DateTime.UtcNow);
     }
 
     /// <summary>
@@ -85,7 +85,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(importRule.ObjectScopingCriteriaGroups, new CsoScopingValueSource(cso), nowUtc ?? DateTime.UtcNow);
+        return ScopingEvaluator.IsInScope(importRule, new CsoScopingValueSource(cso), nowUtc ?? DateTime.UtcNow);
     }
 
     /// <summary>

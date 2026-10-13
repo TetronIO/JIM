@@ -743,6 +743,21 @@ public class SqlServerProviderTests
     }
 
     [Test]
+    public void ColumnsCommandText_ReadsEachColumnsCaseExactnessFromItsCollation()
+    {
+        // #2051: a column's collation decides whether its values are case-exact; the ignore-case flag is the lowest
+        // bit of the collation's comparison style, the same reading the uniqueness probe makes.
+        var sql = _provider.ColumnsCommandText;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sql, Does.Contain("COLLATIONPROPERTY(COLLATION_NAME, 'ComparisonStyle')"));
+            Assert.That(sql, Does.Contain("AS " + SqlCatalogueColumns.CaseExact));
+            Assert.That(_provider.TextComparesExactlyByDefault, Is.False, "SQL Server's default collations ignore case.");
+        }
+    }
+
+    [Test]
     public void ColumnsCommandText_FiltersBySchemaAndObjectNameAsParameters()
     {
         var sql = _provider.ColumnsCommandText;

@@ -77,7 +77,7 @@ public static class ExpressionResultValues
             return ExpressionResultResolution.NoValue();
 
         return targetPlurality == AttributePlurality.SingleValued && values.Count > 1
-            ? ExpressionResultResolution.SeveralValues(values.Count)
+            ? ExpressionResultResolution.SeveralValues(values.Count, (result as ExpressionValues)?.SourceName)
             : ExpressionResultResolution.WithValues(values);
     }
 
