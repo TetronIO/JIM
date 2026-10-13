@@ -166,6 +166,11 @@ Each PR follows TDD, keeps the build and tests green, and updates the policy pag
 
 ### PR 4: Identity comparisons follow the declaration
 
+Delivered in two parts:
+
+- **PR 4a ✅ (change comparisons, #2195):** export confirmation (linear and indexed paths), export staging's no-net-change check and Drift Detection compare an identifier (Reference, External ID or Secondary External ID) through `AttributeValueComparison`: ignoring case unless the attribute is case-exact, with resolved references also matched by referenced Connected System Object id. Every other attribute stays exact. This is PRD decision 5 with a carve-out for references, in place of a Connector-declared "case-insensitive" flag (#2225).
+- **PR 4b:** the External ID and reference lookups below (import state, duplicate detection, the CSO cache, reference resolution in .NET and SQL, in-memory repository parity), with the `RequiresPostgres` and non-ASCII tests and Scenario 008.
+
 - **External IDs.** `IdentifierKey.For` is used in:
   - `GetAllCsoImportStateLookupAsync`, which projects the attribute's `CaseExact` by joining the attribute row;
   - `LookupCsoImportStateByExternalId`, where the attribute is in hand at 2801;

@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A distinguished name, External ID or member reference that a directory reports in a case of its own (`DC=PANOPLY` for the `DC=panoply` JIM wrote, say) is now confirmed rather than retried until the export fails, is no longer exported again every run, and is no longer reported as drift. An identifier declared case-exact still compares exactly. (#2195)
 - 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box now match themselves, so "starts with svc_" no longer also finds "svcX…" and a search agrees with a scoping criterion holding the same value. (#2053)
 - 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
 - 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)
