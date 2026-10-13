@@ -92,7 +92,7 @@
 <MudCheckBox T="bool" Value="@Draft.CaseSensitive" ValueChanged="SetCaseSensitiveAsync"
              Label="Case sensitive" Color="Color.Primary" Class="mt-3" />
 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
-    Off by default, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.
+    Follows the source: on when the source attribute's values are case-exact, otherwise off, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.
 </MudText>
 
 @if (Draft.Problem != null)

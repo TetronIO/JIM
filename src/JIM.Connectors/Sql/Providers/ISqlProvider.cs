@@ -316,6 +316,13 @@ internal interface ISqlProvider
     /// </summary>
     string? ColumnIgnoresCaseCommandText { get; }
 
+    /// <summary>
+    /// Whether this dialect compares text exactly where a column states no collation of its own, as an
+    /// administrator-supplied statement's columns never do. Oracle Database compares binary by default; SQL Server's
+    /// default collations ignore case. Schema discovery uses it as the case-exact declaration of such a column (#2051).
+    /// </summary>
+    bool TextComparesExactlyByDefault { get; }
+
     #endregion
 
     #region Type mapping

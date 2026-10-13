@@ -1,16 +1,16 @@
 # Docs conformance baseline: the existing debt each Ratchet rule allows, per page. Counts only ever fall.
 # Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
 # The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.
-LANG-3	powershell/connected-systems.md	20
+LANG-3	powershell/connected-systems.md	10
 LANG-3	powershell/example-data.md	2
 LANG-3	powershell/expressions.md	2
 LANG-3	powershell/feature-flags.md	1
 LANG-3	powershell/history.md	2
-LANG-3	powershell/index.md	2
+LANG-3	powershell/index.md	1
 LANG-3	powershell/security.md	1
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
-LANG-4	powershell/connected-systems.md	3
+LANG-4	powershell/connected-systems.md	2
 LANG-4	powershell/history.md	3
 LANG-7	powershell/connection.md	1
 LANG-7	powershell/index.md	1

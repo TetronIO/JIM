@@ -25,16 +25,32 @@ Objects that fall out of scope are **disconnected** from the rule. This is impor
 
 An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) can be **Remain joined (stop Attribute Flow)** instead of **Disconnect from Metaverse**. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md).
 
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter; criteria do not use the [expression language](../concepts/expressions.md).
+Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all; criteria do not use the [expression language](../concepts/expressions.md).
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
+
+## Operators
+
+The operators offered depend on the attribute's data type. They mean the same here as in a [Predefined Search](predefined-searches.md#operators-by-attribute-type), apart from the pattern operators, which a Predefined Search does not offer.
+
+| Attribute type | Operators |
+|----------------|-----------|
+| Text | equals, does not equal, starts with, does not start with, ends with, does not end with, contains, does not contain, matches pattern, does not match pattern, has a value, has no value |
+| Number, Long Number, Decimal | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to, has a value, has no value |
+| Date/Time | before, on or before, after, on or after, equals, does not equal, has a value, has no value |
+| Boolean, GUID | equals, does not equal, has a value, has no value |
+
+- **Has a value, has no value**<br /> Test whether the attribute holds anything at all, so they take no value. Use *has no value* rather than *equals* with an empty value, which JIM no longer accepts.
+- **Matches pattern, does not match pattern**<br /> Take a .NET regular expression. A pattern matches anywhere in the value unless you anchor it with `^` and `$`, and follows the criterion's case setting. JIM checks the pattern when you save the rule and refuses one that is not a valid expression. Each match has a time limit of 100 milliseconds: a pattern that runs past it on some value fails that object's synchronisation with an error, rather than guessing whether it is in scope.
+
+For example, to bring in only directory accounts that have an employee type and an email address in the organisation's domain, use an **All** group with `employeeType` *has a value* and `mail` *matches pattern* `^[a-z.]+@example\.org$`. An account with no employee type, or with an address that does not fit, is out of scope, and its Connections tab names the condition it fails.
 
 ## How criteria are evaluated
 
 Three rules decide outcomes that are easy to misread from the editor:
 
 - **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
-- **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
+- **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal* and *does not match pattern*, except *has no value*. "Department does not equal Test" therefore excludes an object with no Department.
 - **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
 
 To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
@@ -43,9 +59,9 @@ To see how one object evaluates against a rule, and which conditions it fails, o
 
 A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:
 
-- **Positive operators**<br /> *equals*, *starts with*, *ends with*, *contains*, and the ordering comparisons (*less than*, *before*, *greater than*, *after* and their *or equal to* forms) are met when **any** value matches.
-- **Negated operators**<br /> *does not equal*, *does not start with*, *does not end with* and *does not contain* are met when **no** value matches.
-- **No values at all**<br /> Handled exactly as for a single-valued attribute: only an *equals* criterion with an empty value matches.
+- **Positive operators**<br /> *equals*, *starts with*, *ends with*, *contains*, *matches pattern*, and the ordering comparisons (*less than*, *before*, *greater than*, *after* and their *or equal to* forms) are met when **any** value matches.
+- **Negated operators**<br /> *does not equal*, *does not start with*, *does not end with*, *does not contain* and *does not match pattern* are met when **no** value matches.
+- **Presence**<br /> *has a value* is met by one value or more, and *has no value* only when the attribute holds none.
 
 For example, an export rule scoped to `Groups` *contains* `Finance` includes a Metaverse Object whose groups are `All Staff` and `Finance Readers`, and `Groups` *does not contain* `Finance` excludes it. An import rule scoped to `objectClass` *equals* `user` includes a directory user whose classes are `top`, `person`, `organizationalPerson` and `user`.
 

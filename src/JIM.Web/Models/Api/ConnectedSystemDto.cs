@@ -14,17 +14,67 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class ConnectedSystemDetailDto
 {
+    /// <summary>
+    /// The ID of the Connected System.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// What the Connected System is for, for administrators; null when none is given.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// When the Connected System was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// When the Connected System was last changed (UTC); null if it never has been.
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System takes part in synchronisation: Active, Disabled, or Deleting while a deletion
+    /// is under way.
+    /// </summary>
     public ConnectedSystemStatus Status { get; set; }
+
+    /// <summary>
+    /// Whether the Connector has validated the Connected System's current settings. False on a new Connected
+    /// System, and again after any setting changes, until they are validated.
+    /// </summary>
     public bool SettingValuesValid { get; set; }
+
+    /// <summary>
+    /// The Connector the Connected System uses.
+    /// </summary>
     public ConnectorReferenceDto Connector { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's Object Types, from its imported schema.
+    /// </summary>
     public List<ConnectedSystemObjectTypeDto> ObjectTypes { get; set; } = new();
+
+    /// <summary>
+    /// How many Connected System Objects the Connected System holds.
+    /// </summary>
     public int ObjectCount { get; set; }
+
+    /// <summary>
+    /// How many Pending Exports are waiting to be exported to the Connected System.
+    /// </summary>
     public int PendingExportCount { get; set; }
+
+    /// <summary>
+    /// How many export batches run at once, where the Connector supports exporting in parallel; null or 1 exports
+    /// one batch at a time.
+    /// </summary>
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
@@ -42,9 +92,9 @@ public class ConnectedSystemDetailDto
     public bool RequireSecureTransport { get; set; }
 
     /// <summary>
-    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
-    /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
-    /// both the per-object error and the Activity warning while still logging the occurrence.
+    /// How an imported reference value that cannot be resolved to a Connected System Object is treated. The
+    /// default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while
+    /// still logging the occurrence.
     /// </summary>
     public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
 
@@ -57,7 +107,7 @@ public class ConnectedSystemDetailDto
     /// <summary>
     /// When a stranded-value sweep was armed by a Connector Space clear, or null when no sweep is armed.
     /// The sweep runs at the first Full Synchronisation of this Connected System after
-    /// <see cref="LastSuccessfulFullImportCompletedAt"/> is later than this timestamp; until then it stays
+    /// LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays
     /// armed and a Full Synchronisation does nothing beyond ordinary synchronisation.
     /// </summary>
     public DateTime? StrandedValueSweepArmedAt { get; set; }
@@ -150,11 +200,35 @@ public class ConnectorReferenceDto
 /// </summary>
 public class ConnectedSystemObjectTypeDto
 {
+    /// <summary>
+    /// The ID of the Object Type.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the Object Type, as the Connected System calls it.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// When JIM first imported the Object Type (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// Whether JIM manages objects of this type; objects of an unselected type are not imported.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// Whether the Metaverse attribute values a Connected System Object of this type contributed are recalled when
+    /// the object is deleted from the Connected System. True by default.
+    /// </summary>
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
+
+    /// <summary>
+    /// How many attributes the Object Type has.
+    /// </summary>
     public int AttributeCount { get; set; }
 
     /// <summary>
@@ -167,14 +241,14 @@ public class ConnectedSystemObjectTypeDto
 
     /// <summary>
     /// Whether the Connected System reported this object type as one it uses internally. Derived from
-    /// <see cref="Tags"/>, and offered here so callers can filter on it without matching tag strings themselves.
+    /// Tags, and offered here so callers can filter on it without matching tag strings themselves.
     /// The portal hides these object types by default.
     /// </summary>
     public bool IsInternal { get; set; }
 
     /// <summary>
     /// Whether the Connected System classified this object type as an auxiliary class: one that augments another
-    /// rather than standing alone. Derived from <see cref="Tags"/>, and offered here so callers need not match tag
+    /// rather than standing alone. Derived from Tags, and offered here so callers need not match tag
     /// strings themselves.
     /// </summary>
     public bool IsAuxiliary { get; set; }
@@ -187,8 +261,7 @@ public class ConnectedSystemObjectTypeDto
     public bool ManagesClassMembership { get; set; }
 
     /// <summary>
-    /// The auxiliary classes an administrator has merged into this object type, as their own object type ids. Set
-    /// through the object type's auxiliary-classes endpoint.
+    /// The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs.
     /// </summary>
     public List<int> MergedAuxiliaryClassObjectTypeIds { get; set; } = [];
 
@@ -198,6 +271,9 @@ public class ConnectedSystemObjectTypeDto
     /// </summary>
     public int? StructuralCarrierObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The Object Type's attributes; null when the response does not include them.
+    /// </summary>
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
@@ -238,6 +314,9 @@ public class AuxiliaryClassOfferDto
     /// </summary>
     public int ObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The name of the auxiliary class.
+    /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
@@ -252,9 +331,12 @@ public class AuxiliaryClassOfferDto
 
     /// <summary>
     /// The attributes merging this class would contribute, ordered by name and excluding any the Object Type
-    /// already carries. A count alone cannot inform the choice: an administrator merges a class for particular
-    /// attributes, and needs to see them before deciding.
+    /// already carries.
     /// </summary>
+    /// <remarks>
+    /// A count alone cannot inform the choice: an administrator merges a class for particular attributes, and needs
+    /// to see them before deciding.
+    /// </remarks>
     public List<AuxiliaryClassAttributeDto> ContributedAttributes { get; set; } = [];
 
     /// <summary>
@@ -339,7 +421,15 @@ public class AuxiliaryClassAttributeDto
 /// </summary>
 public class AuxiliaryClassDiscoveryRunDto
 {
+    /// <summary>
+    /// The ID of the discovery run.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// How much the run reads: QuickSample reads up to SampleSizePerObjectType entries per Object Type, which finds
+    /// the classes a population uses consistently but cannot prove one unused; FullScan reads every entry in scope.
+    /// </summary>
     public AuxiliaryClassDiscoveryScope Scope { get; set; }
 
     /// <summary>
@@ -347,7 +437,15 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public int? SampleSizePerObjectType { get; set; }
 
+    /// <summary>
+    /// Where the run has got to: InProgress, Complete, Cancelled or Failed. The results of a run that is not
+    /// Complete are partial.
+    /// </summary>
     public AuxiliaryClassDiscoveryStatus Status { get; set; }
+
+    /// <summary>
+    /// When the run started (UTC).
+    /// </summary>
     public DateTime Started { get; set; }
 
     /// <summary>
@@ -366,6 +464,9 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public Guid? ActivityId { get; set; }
 
+    /// <summary>
+    /// The name of whoever started the run.
+    /// </summary>
     public string? InitiatedByName { get; set; }
 
     /// <summary>
@@ -373,6 +474,9 @@ public class AuxiliaryClassDiscoveryRunDto
     /// </summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// Each auxiliary class the run found, by Object Type, with how many entries carry it.
+    /// </summary>
     public List<AuxiliaryClassDiscoveryResultDto> Results { get; set; } = [];
 
     public static AuxiliaryClassDiscoveryRunDto FromEntity(AuxiliaryClassDiscoveryRun entity)
@@ -430,22 +534,75 @@ public class ConnectedSystemObjectTypeTagDto
 /// </summary>
 public class ConnectedSystemAttributeDto
 {
+    /// <summary>
+    /// The ID of the attribute.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the attribute, as the Connected System calls it.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's description of the attribute; null when it gives none.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// On a Connected System whose classes inherit, such as an LDAP directory, the class the attribute comes from;
+    /// null elsewhere.
+    /// </summary>
     public string? ClassName { get; set; }
+
+    /// <summary>
+    /// When JIM first imported the attribute (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// The type of value the attribute holds, such as Text, Number or Reference.
+    /// </summary>
     public string Type { get; set; } = null!;
 
     /// <summary>
-    /// Whether <see cref="Type"/> was chosen by an administrator rather than inferred by schema discovery.
+    /// Whether Type was chosen by an administrator rather than inferred by schema discovery.
     /// A chosen type is left alone by a schema refresh; an inferred one is restated from the Connector.
     /// </summary>
     public bool TypeSetByAdministrator { get; set; }
 
+    /// <summary>
+    /// Whether the attribute holds one value (SingleValued) or several (MultiValued).
+    /// </summary>
     public string AttributePlurality { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the attribute's values are case-exact: when JIM asks whether two values identify the same thing,
+    /// <c>JBloggs</c> and <c>jbloggs</c> are different values. False means they are the same value. Only Text
+    /// attributes carry the declaration.
+    /// </summary>
+    public bool CaseExact { get; set; }
+
+    /// <summary>
+    /// Whether an administrator set the case-exact declaration, rather than it being discovered from the Connected
+    /// System's schema. A schema refresh keeps an administrator's declaration and restates a discovered one.
+    /// </summary>
+    public bool CaseExactSetByAdministrator { get; set; }
+
+    /// <summary>
+    /// Whether JIM imports and exports the attribute.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// Whether the attribute uniquely and permanently identifies an object of this type in the Connected System.
+    /// </summary>
     public bool IsExternalId { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System also identifies an object of this type by the attribute, as an LDAP directory
+    /// does by distinguished name.
+    /// </summary>
     public bool IsSecondaryExternalId { get; set; }
 
     /// <summary>
@@ -483,7 +640,7 @@ public class ConnectedSystemAttributeDto
     public int? ReferencedObjectTypeId { get; set; }
 
     /// <summary>
-    /// The name of the Object Type identified by <see cref="ReferencedObjectTypeId"/>, when declared.
+    /// The name of the Object Type identified by ReferencedObjectTypeId, when declared.
     /// </summary>
     /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
     public string? ReferencedObjectTypeName { get; set; }
@@ -500,6 +657,8 @@ public class ConnectedSystemAttributeDto
             Type = entity.Type.ToString(),
             TypeSetByAdministrator = entity.TypeSetByAdministrator,
             AttributePlurality = entity.AttributePlurality.ToString(),
+            CaseExact = entity.CaseExact,
+            CaseExactSetByAdministrator = entity.CaseExactSetByAdministrator,
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
@@ -534,24 +693,81 @@ public class ConnectedSystemAttributeDto
 /// </summary>
 public class ConnectedSystemObjectDetailDto
 {
+    /// <summary>
+    /// The ID of the Connected System Object.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// When the object first arrived in the Connector Space (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// When the object was last changed (UTC); null if it never has been.
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// Normal for an object taking part in synchronisation; Obsolete for one the last Full Import did not return;
+    /// PendingProvisioning for one JIM has decided to create and not yet confirmed.
+    /// </summary>
     public ConnectedSystemObjectStatus Status { get; set; }
+
+    /// <summary>
+    /// How the object came to be joined to a Metaverse Object: Projected, Provisioned, Joined, or NotJoined.
+    /// </summary>
     public ConnectedSystemObjectJoinType JoinType { get; set; }
+
+    /// <summary>
+    /// When the object was joined to its Metaverse Object (UTC); null when it is not joined.
+    /// </summary>
     public DateTime? DateJoined { get; set; }
+
+    /// <summary>
+    /// The object's display name, or its external identifier when it has none.
+    /// </summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the object belongs to.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The name of that Connected System.
+    /// </summary>
     public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>
+    /// The ID of the object's Object Type.
+    /// </summary>
     public int TypeId { get; set; }
+
+    /// <summary>
+    /// The name of the object's Object Type.
+    /// </summary>
     public string TypeName { get; set; } = null!;
+
+    /// <summary>
+    /// The ID of the Metaverse Object the object is joined to; null when it is not joined.
+    /// </summary>
     public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// That Metaverse Object's display name; null when it is not joined or has none.
+    /// </summary>
     public string? MetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The object's attribute values, one entry per value. A multi-valued attribute with many values may be cut
+    /// short; AttributeValueSummaries says so.
+    /// </summary>
     public List<ConnectedSystemObjectAttributeValueDto> AttributeValues { get; set; } = new();
 
     /// <summary>
-    /// Per-attribute metadata showing total value counts. Present when the detail was loaded
-    /// with a capped strategy so consumers know when values have been truncated.
+    /// For each attribute whose values were cut short, how many it holds and how many came back; null when nothing
+    /// was cut short. Get-JIMConnectedSystemObjectAttributeValue reads the rest.
     /// </summary>
     public List<AttributeValueSummaryDto>? AttributeValueSummaries { get; set; }
 
@@ -609,9 +825,24 @@ public class ConnectedSystemObjectDetailDto
 /// </summary>
 public class AttributeValueSummaryDto
 {
+    /// <summary>
+    /// The name of the attribute.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// How many values the attribute holds.
+    /// </summary>
     public int TotalCount { get; set; }
+
+    /// <summary>
+    /// How many of them came back.
+    /// </summary>
     public int ReturnedCount { get; set; }
+
+    /// <summary>
+    /// Whether there are values that did not come back.
+    /// </summary>
     public bool HasMore { get; set; }
 }
 
@@ -620,13 +851,44 @@ public class AttributeValueSummaryDto
 /// </summary>
 public class ConnectedSystemObjectAttributeValueDto
 {
+    /// <summary>
+    /// The ID of the value.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The ID of the attribute the value belongs to.
+    /// </summary>
     public int AttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that attribute.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The value of a Text attribute; null otherwise.
+    /// </summary>
     public string? StringValue { get; set; }
+
+    /// <summary>
+    /// The value of a DateTime attribute (UTC); null otherwise.
+    /// </summary>
     public DateTime? DateTimeValue { get; set; }
+
+    /// <summary>
+    /// The value of a Number attribute; null otherwise.
+    /// </summary>
     public int? IntValue { get; set; }
+
+    /// <summary>
+    /// The value of a LongNumber attribute; null otherwise.
+    /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The value of a Decimal attribute; null otherwise.
+    /// </summary>
     public decimal? DecimalValue { get; set; }
 
     /// <summary>
@@ -635,8 +897,20 @@ public class ConnectedSystemObjectAttributeValueDto
     /// </summary>
     public byte[]? ByteValue { get; set; }
 
+    /// <summary>
+    /// The value of a Guid attribute; null otherwise.
+    /// </summary>
     public Guid? GuidValue { get; set; }
+
+    /// <summary>
+    /// The value of a Boolean attribute; null otherwise.
+    /// </summary>
     public bool? BoolValue { get; set; }
+
+    /// <summary>
+    /// For a Reference attribute, the ID of the Connected System Object it refers to; null otherwise, or when the
+    /// reference is unresolved.
+    /// </summary>
     public Guid? ReferenceValueId { get; set; }
 
     public static ConnectedSystemObjectAttributeValueDto FromEntity(ConnectedSystemObjectAttributeValue entity)
@@ -664,11 +938,34 @@ public class ConnectedSystemObjectAttributeValueDto
 /// </summary>
 public class ConnectedSystemPartitionDto
 {
+    /// <summary>
+    /// The ID of the partition.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the partition.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The partition's identifier in the Connected System; on an LDAP directory, its distinguished name.
+    /// </summary>
     public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// Whether JIM imports from the partition.
+    /// </summary>
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the partition belongs to.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The partition's top-level containers, each with its child containers.
+    /// </summary>
     public List<ConnectedSystemContainerDto> Containers { get; set; } = new();
 
     public static ConnectedSystemPartitionDto FromEntity(ConnectedSystemPartition entity)
@@ -692,11 +989,34 @@ public class ConnectedSystemPartitionDto
 /// </summary>
 public class ConnectedSystemContainerDto
 {
+    /// <summary>
+    /// The ID of the container.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The name of the container.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The container's identifier in the Connected System; on an LDAP directory, its distinguished name.
+    /// </summary>
     public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's description of the container; null when it gives none.
+    /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System hides the container by default, so its objects are not exposed by accident.
+    /// </summary>
     public bool Hidden { get; set; }
+
+    /// <summary>
+    /// Whether JIM imports objects from the container.
+    /// </summary>
     public bool Selected { get; set; }
 
     /// <summary>
@@ -711,9 +1031,8 @@ public class ConnectedSystemContainerDto
     public ConnectedSystemContainerScope Scope { get; set; }
 
     /// <summary>
-    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
-    /// retrieval. Null where the Connector cannot report counts, or the hierarchy has not been retrieved since
-    /// counting was introduced.
+    /// How many objects sit directly in the container in the Connected System, as at the last hierarchy import.
+    /// Null where the Connector cannot count them, or the container has not been counted.
     /// </summary>
     /// <remarks>
     /// Zero and null mean different things: zero is a Container the Connector searched and found nothing in, null
@@ -723,13 +1042,24 @@ public class ConnectedSystemContainerDto
     public int? ObjectCount { get; set; }
 
     /// <summary>
-    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a Subtree statement over this
-    /// Container reaches. Null where this Container has not been counted.
+    /// ObjectCount plus that of every container beneath it: what a Subtree scope over the container reaches. Null
+    /// where the container has not been counted.
     /// </summary>
     public int? SubtreeObjectCount { get; set; }
 
+    /// <summary>
+    /// The ID of the partition the container is in; null on a Connected System without partitions.
+    /// </summary>
     public int? PartitionId { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the container belongs to.
+    /// </summary>
     public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The containers directly beneath this one, each with its own child containers.
+    /// </summary>
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
 
     public static ConnectedSystemContainerDto FromEntity(ConnectedSystemContainer entity)

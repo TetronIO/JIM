@@ -1001,10 +1001,10 @@ public partial class SyncRepository
 
         if (!string.IsNullOrWhiteSpace(filter.SearchText))
         {
-            var search = filter.SearchText.Trim();
+            var searchPattern = LikePattern.Contains(filter.SearchText.Trim());
             query = query.Where(h =>
-                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, $"%{search}%"))
-                || EF.Functions.ILike(h.ConnectedSystemName, $"%{search}%"));
+                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, searchPattern))
+                || EF.Functions.ILike(h.ConnectedSystemName, searchPattern));
         }
 
         return query;

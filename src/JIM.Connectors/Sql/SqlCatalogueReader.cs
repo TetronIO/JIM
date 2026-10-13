@@ -55,6 +55,7 @@ internal static class SqlCatalogueReader
         var precisionOrdinal = reader.GetOrdinal(SqlCatalogueColumns.NumericPrecision);
         var scaleOrdinal = reader.GetOrdinal(SqlCatalogueColumns.NumericScale);
         var isNullableOrdinal = reader.GetOrdinal(SqlCatalogueColumns.IsNullable);
+        var caseExactOrdinal = reader.GetOrdinal(SqlCatalogueColumns.CaseExact);
 
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -67,7 +68,10 @@ internal static class SqlCatalogueReader
             columns.Add(new SqlDiscoveredColumn(
                 reader.GetString(columnNameOrdinal),
                 columnType,
-                string.Equals(GetNullableString(reader, isNullableOrdinal), "YES", StringComparison.OrdinalIgnoreCase)));
+                string.Equals(GetNullableString(reader, isNullableOrdinal), "YES", StringComparison.OrdinalIgnoreCase),
+                GetNullableString(reader, caseExactOrdinal) is { } caseExact
+                    ? string.Equals(caseExact, "YES", StringComparison.OrdinalIgnoreCase)
+                    : null));
         }
 
         return columns;

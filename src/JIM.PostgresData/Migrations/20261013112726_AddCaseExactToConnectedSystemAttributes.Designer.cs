@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261013115747_AddPendingPasswordChangeCarriedObligation")]
-    partial class AddPendingPasswordChangeCarriedObligation
+    [Migration("20261013112726_AddCaseExactToConnectedSystemAttributes")]
+    partial class AddCaseExactToConnectedSystemAttributes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -3544,6 +3544,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributePlurality")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("CaseExact")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CaseExactSetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ClassName")
                         .HasColumnType("text");
 
@@ -4718,9 +4724,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Origin")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("ProvisionedConnectedSystemObjectId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -4736,10 +4739,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
-
-                    b.HasIndex("ProvisionedConnectedSystemObjectId")
-                        .HasDatabaseName("IX_PendingPasswordChanges_ProvisionedConnectedSystemObjectId")
-                        .HasFilter("\"ProvisionedConnectedSystemObjectId\" IS NOT NULL");
 
                     b.HasIndex("SyncRuleId")
                         .HasDatabaseName("IX_PendingPasswordChanges_SyncRuleId")
@@ -6336,11 +6335,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("MetaverseObjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
-                        .WithMany()
-                        .HasForeignKey("ProvisionedConnectedSystemObjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany()

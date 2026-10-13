@@ -1,12 +1,19 @@
 @using JIM.Models.Expressions
 @using JIM.Models.Interfaces
+@using JIM.Models.Logic
 @using JIM.Application.Expressions
 @inject IExpressionEvaluator ExpressionEvaluator
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (!string.IsNullOrWhiteSpace(Expression))
+@* Given the Attribute Flow being edited, the test runs it as a Synchronisation would (#2055); otherwise the Expression is
+   evaluated on its own. *@
+@if (TestsAttributeFlow)
+{
+    <AttributeFlowTestPanel Expression="@Expression" SyncRule="SyncRule!" Mapping="Mapping!" Source="Source!" />
+}
+else if (!string.IsNullOrWhiteSpace(Expression))
 {
     <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Expression</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
@@ -94,6 +101,32 @@
     /// </summary>
     [Parameter]
     public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule the Attribute Flow belongs to, whose object types give each sample its attribute's type.
+    /// With <see cref="Mapping"/> and <see cref="Source"/>, the test runs the Attribute Flow as a Synchronisation would
+    /// (#2055); without them, the Expression is evaluated alone.
+    /// </summary>
+    [Parameter]
+    public SyncRule? SyncRule { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow being edited: its target attribute and value processing, read as they stand when the test runs.
+    /// </summary>
+    [Parameter]
+    public SyncRuleMapping? Mapping { get; set; }
+
+    /// <summary>
+    /// The source being edited: its Missing Input Behaviour, read as it stands when the test runs.
+    /// </summary>
+    [Parameter]
+    public SyncRuleMappingSource? Source { get; set; }
+
+    /// <summary>
+    /// Whether the Attribute Flow can be tested as a whole: it needs a target attribute, by direction, and an Expression.
+    /// </summary>
+    private bool TestsAttributeFlow => SyncRule != null && Mapping != null && Source != null && !string.IsNullOrWhiteSpace(Expression)
+        && (SyncRule.Direction == SyncRuleDirection.Export ? Mapping.TargetConnectedSystemAttribute : (object?)Mapping.TargetMetaverseAttribute) != null;
 
     private IReadOnlyList<ExpressionInput> _inputs = Array.Empty<ExpressionInput>();
     private readonly Dictionary<string, string?> _sampleValues = new();

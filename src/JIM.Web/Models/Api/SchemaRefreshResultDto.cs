@@ -66,7 +66,7 @@ public class SchemaRefreshResultDto
     /// <summary>
     /// Changes to how the Connected System classifies a selected Object Type (its class kind, or inheritance
     /// involving another selected Object Type), grouped by Object Type name. They can change which Object Type
-    /// existing entries resolve to at the next import; see <see cref="HasObjectTypeClassificationChanges"/>.
+    /// existing entries resolve to at the next import; see HasObjectTypeClassificationChanges.
     /// </summary>
     public Dictionary<string, List<SchemaObjectTypeClassificationChangeDto>> ChangedObjectTypeClassifications { get; set; } = new();
 
@@ -74,7 +74,7 @@ public class SchemaRefreshResultDto
     /// Existing Object Types whose classification the Connected System now reports differently in a way that cannot
     /// change which Object Type an entry resolves to (an unselected type, inheritance naming no other selected type,
     /// or a class kind change that does not make a class auxiliary or stop it being one). Applying the refresh
-    /// records it; an Object Type listed in <see cref="ChangedObjectTypeClassifications"/> is not repeated here.
+    /// records it; an Object Type listed in ChangedObjectTypeClassifications is not repeated here.
     /// </summary>
     public List<string> ObjectTypesWithClassificationUpdates { get; set; } = new();
 
@@ -116,7 +116,7 @@ public class SchemaRefreshResultDto
     /// Object Type existing entries resolve to. By default each object that would change Object Type is refused at
     /// the next import, reported as an Object Type Changed error and kept as it is; a Full Import Run Profile with
     /// <c>allowObjectTypeChanges</c> enabled carries the change out. Not a destructive change: cancelling keeps
-    /// things as they are, so it never sets <see cref="HasRemovalsOrDefinitionChanges"/>.
+    /// things as they are, so it never sets HasRemovalsOrDefinitionChanges.
     /// </summary>
     public bool HasObjectTypeClassificationChanges { get; set; }
 

@@ -1,0 +1,553 @@
+@using JIM.Application.Expressions
+@using JIM.Application.Interfaces
+@using JIM.Models.Core
+@using JIM.Models.Expressions
+@using JIM.Models.Interfaces
+@using JIM.Models.Logic
+@inject IExpressionEvaluator ExpressionEvaluator
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Tests an Attribute Flow as a Synchronisation would run it (#2055): typed inputs from the schema, several values for a
+   multi-valued attribute, "No value" distinct from empty text, values loaded from a real object, and a trace of each
+   step of the pipeline synchronisation runs. *@
+<MudText Typo="Typo.subtitle2" Class="mt-5">Test this Attribute Flow</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Give each attribute the Expression reads a value, or load them from an object, and see what a Synchronisation would
+    do: each value is read as its attribute's type, and the result goes through this Attribute Flow's Missing Input
+    Behaviour, value processing and conversion to @_targetName.
+</MudText>
+
+<SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
+                 AriaLabel="Where the values come from" Dense="true" />
+
+@if (_fromObject)
+{
+    <div class="mt-3">
+        <SearchField Value="@_objectSearch" ValueChanged="SearchObjectsAsync" Label="@ObjectSearchLabel"
+                     Placeholder="Search by name" />
+        @if (_objectResults.Count > 0)
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+                @foreach (var found in _objectResults)
+                {
+                    var choice = found;
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="pa-0" OnClick="@(() => LoadObjectAsync(choice))"
+                               aria-label="@($"Load values from {choice.Name}")">
+                        <ObjectChip Kind="ObjectKind" TypeName="@choice.TypeName" Name="@choice.Name" Class="ma-0" />
+                    </MudButton>
+                }
+            </MudStack>
+        }
+        else if (!string.IsNullOrWhiteSpace(_objectSearch) && _searched)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No objects match.</MudText>
+        }
+        @if (_loadedObjectName != null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">
+                Values loaded from <strong>@_loadedObjectName</strong>. Change any of them to try a variation.
+            </MudText>
+        }
+    </div>
+}
+
+@if (_inputs.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        This Expression reads no attributes, so it produces the same value for every object. Run the test to see it.
+    </MudText>
+}
+else
+{
+    <MudSimpleTable Dense="true" Outlined="true" Class="mt-3" Style="overflow-x: auto">
+        <thead>
+            <tr><th>Input</th><th>Type</th><th>Value</th><th>No value</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var input in _inputs)
+            {
+                var descriptor = input;
+                var accessor = descriptor.Accessor;
+                var absent = _noValue.Contains(accessor);
+                <tr @key="accessor">
+                    <td>
+                        <AttributeChip Kind="@(descriptor.Source == ExpressionInputSource.Metaverse ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
+                                       Name="@descriptor.AttributeName" />
+                    </td>
+                    <td class="mud-text-secondary">@DescribeType(descriptor)</td>
+                    <td style="min-width: 16rem">
+                        @if (!descriptor.InSchema)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@NotHeldExplanation(descriptor)</MudText>
+                        }
+                        else if (descriptor.Plurality == AttributePlurality.MultiValued)
+                        {
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
+                                @foreach (var value in ValuesOf(accessor).ToList())
+                                {
+                                    var held = value;
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                             OnClose="@(() => RemoveValue(accessor, held))">@held</MudChip>
+                                }
+                            </MudStack>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                              Placeholder="@Placeholder(descriptor.Type)" Value="@_pendingValues.GetValueOrDefault(accessor)"
+                                              ValueChanged="@(v => _pendingValues[accessor] = v)"
+                                              OnKeyDown="@(e => AddOnEnter(e, accessor))" />
+                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => AddPendingValue(accessor))">Add value</MudButton>
+                            </MudStack>
+                        }
+                        else if (descriptor.Type == AttributeDataType.Boolean)
+                        {
+                            <MudSelect T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                                       Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))">
+                                <MudSelectItem T="string" Value="@("True")">True</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("False")">False</MudSelectItem>
+                            </MudSelect>
+                        }
+                        else
+                        {
+                            <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                          Placeholder="@Placeholder(descriptor.Type)"
+                                          Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))" />
+                        }
+                    </td>
+                    <td>
+                        @if (descriptor.InSchema)
+                        {
+                            <MudCheckBox T="bool" Value="absent" ValueChanged="@(v => SetNoValue(accessor, v))" Dense="true"
+                                         aria-label="@($"{accessor} has no value")" />
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+<MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
+
+@if (_parseError != null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-3">
+        @_parseError
+        @if (_errorPosition.HasValue)
+        {
+            var position = _errorPosition.Value;
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Position @position</MudText>
+        }
+    </MudAlert>
+}
+
+@if (_result is { Evaluation: null } inputProblem)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-3">
+        @foreach (var inputError in inputProblem.InputErrors)
+        {
+            <MudText Typo="Typo.body2">@inputError</MudText>
+        }
+    </MudAlert>
+}
+
+@if (_result is { Evaluation: { } evaluation } tested)
+{
+    var source = evaluation.Source;
+    <MudPaper Outlined="true" Class="pa-3 mt-3">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">What a Synchronisation would do</MudText>
+        <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
+            <tbody>
+                <tr>
+                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">1. Expression returned</td>
+                    <td>
+                        @switch (source.Outcome)
+                        {
+                            case ExpressionSourceOutcome.Result:
+                                @foreach (var line in ExpressionText.ToDisplayLines(source.Result))
+                                {
+                                    <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @source.Result!.GetType().Name</MudText>
+                                break;
+                            case ExpressionSourceOutcome.NoValue when source.MissingInputs.Count == 0:
+                                <EmptyValue />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">No value</MudText>
+                                break;
+                            case ExpressionSourceOutcome.EvaluationFailed:
+                                <MudText Typo="Typo.body2">Failed: @source.EvaluationException?.Message</MudText>
+                                break;
+                            default:
+                                <MudText Typo="Typo.body2">Not evaluated: no value for @string.Join(", ", source.MissingInputs)</MudText>
+                                break;
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">2. Value processing</td>
+                    <td><MudText Typo="Typo.body2">@DescribeValueProcessing(tested, evaluation)</MudText></td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">3. Converted for @_targetName</td>
+                    <td>
+                        @if (evaluation.Outcome == AttributeFlowOutcome.Values)
+                        {
+                            @foreach (var line in evaluation.Values.Select(ExpressionText.Describe))
+                            {
+                                <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@evaluation.TargetType</MudText>
+                        }
+                        else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultNotConvertible)
+                        {
+                            <MudText Typo="Typo.body2">'@evaluation.Resolution?.UnconvertibleValue' is not a @evaluation.TargetType value</MudText>
+                        }
+                        else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultMultiValued)
+                        {
+                            <MudText Typo="Typo.body2">@evaluation.Resolution?.ValueCount values, for an attribute that holds one</MudText>
+                        }
+                        else if (evaluation.Resolution != null && evaluation.Outcome == AttributeFlowOutcome.NoValue)
+                        {
+                            <EmptyValue />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Nothing to convert</MudText>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">4. Result</td>
+                    <td>
+                        @if (evaluation.Outcome == AttributeFlowOutcome.Error)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.Describe(evaluation, _targetName)</MudAlert>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2">@AttributeFlowTester.Describe(evaluation, _targetName)</MudText>
+                        }
+                    </td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+
+    @if (tested.IfInputHasNoValue.Count > 0)
+    {
+        <MudPaper Outlined="true" Class="pa-3 mt-3">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">If an input has no value</MudText>
+            <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
+                <tbody>
+                    @foreach (var absentOutcome in tested.IfInputHasNoValue)
+                    {
+                        <tr @key="absentOutcome.Accessor">
+                            <td style="width: 13rem; vertical-align: top"><code>@absentOutcome.Accessor</code></td>
+                            <td style="width: 7rem; vertical-align: top">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
+                                         Color="@OutcomeColour(absentOutcome.Evaluation.Outcome)">@OutcomeLabel(absentOutcome.Evaluation.Outcome)</MudChip>
+                            </td>
+                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.Describe(absentOutcome.Evaluation, _targetName)</MudText></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+}
+
+@code {
+    /// <summary>
+    /// The Expression to test, as typed in the editor.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Expression { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The Synchronisation Rule the Attribute Flow belongs to: its direction and object types type the inputs.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRule SyncRule { get; set; } = null!;
+
+    /// <summary>
+    /// The Attribute Flow being edited: its target attribute and value processing, read as they stand when the test runs.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMapping Mapping { get; set; } = null!;
+
+    /// <summary>
+    /// The source being edited: its Missing Input Behaviour, read as it stands when the test runs.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMappingSource Source { get; set; } = null!;
+
+    private sealed record FoundObject(Guid Id, string? Name, string? TypeName);
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
+    [
+        new(false, "Sample values"),
+        new(true, "From an object")
+    ];
+
+    private IReadOnlyList<AttributeFlowTestInputDescriptor> _inputs = [];
+    private readonly Dictionary<string, List<string>> _values = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _noValue = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> _pendingValues = new(StringComparer.Ordinal);
+    private string? _resolvedFrom;
+    private string _targetName = string.Empty;
+    private bool _fromObject;
+    private string? _objectSearch;
+    private bool _searched;
+    private List<FoundObject> _objectResults = [];
+    private string? _loadedObjectName;
+    private AttributeFlowTestResult? _result;
+    private string? _parseError;
+    private int? _errorPosition;
+
+    private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
+
+    private ObjectChipKind ObjectKind => Exporting ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject;
+
+    private string ObjectSearchLabel => Exporting
+        ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
+        : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
+
+    protected override void OnParametersSet()
+    {
+        _targetName = (Exporting ? Mapping.TargetConnectedSystemAttribute?.Name : Mapping.TargetMetaverseAttribute?.Name) ?? "the target";
+
+        // Inputs follow the Expression as it is edited; values entered for an input that is still read are kept.
+        if (_resolvedFrom == Expression)
+            return;
+
+        _resolvedFrom = Expression;
+        _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
+        foreach (var input in _inputs.Where(input => !_values.ContainsKey(input.Accessor)))
+        {
+            _values[input.Accessor] = [];
+            _noValue.Add(input.Accessor);
+        }
+
+        ClearResult();
+    }
+
+    private void ClearResult()
+    {
+        _result = null;
+        _parseError = null;
+        _errorPosition = null;
+    }
+
+    private List<string> ValuesOf(string accessor) => _values.TryGetValue(accessor, out var values) ? values : [];
+
+    /// <summary>
+    /// Typing a value means the input has one, so "No value" is cleared; clearing the box leaves it as empty text until
+    /// "No value" is ticked again. The editor is never disabled, so an untouched input can simply be typed into.
+    /// </summary>
+    private void SetSingleValue(string accessor, string? value)
+    {
+        _values[accessor] = [value ?? string.Empty];
+        _noValue.Remove(accessor);
+        ClearResult();
+    }
+
+    private void SetNoValue(string accessor, bool noValue)
+    {
+        if (noValue)
+            _noValue.Add(accessor);
+        else
+            _noValue.Remove(accessor);
+        ClearResult();
+    }
+
+    private void AddPendingValue(string accessor)
+    {
+        var pending = _pendingValues.GetValueOrDefault(accessor);
+        if (string.IsNullOrEmpty(pending))
+            return;
+
+        ValuesOf(accessor).Add(pending);
+        _values[accessor] = ValuesOf(accessor);
+        _pendingValues[accessor] = null;
+        _noValue.Remove(accessor);
+        ClearResult();
+    }
+
+    private void AddOnEnter(KeyboardEventArgs e, string accessor)
+    {
+        if (e.Key == "Enter")
+            AddPendingValue(accessor);
+    }
+
+    private void RemoveValue(string accessor, string value)
+    {
+        ValuesOf(accessor).Remove(value);
+        if (ValuesOf(accessor).Count == 0)
+            _noValue.Add(accessor);
+        ClearResult();
+    }
+
+    private void SetFromObject(bool fromObject)
+    {
+        _fromObject = fromObject;
+        _objectResults = [];
+        _objectSearch = null;
+        _searched = false;
+    }
+
+    private async Task SearchObjectsAsync(string? search)
+    {
+        _objectSearch = search;
+        _searched = false;
+        _objectResults = [];
+        if (string.IsNullOrWhiteSpace(search))
+            return;
+
+        using var jim = JimFactory.Create();
+        if (Exporting)
+        {
+            var found = await jim.Metaverse.GetMetaverseObjectsAsync(1, 8, SyncRule.MetaverseObjectType?.Id, search);
+            _objectResults = found.Results.Select(mvo => new FoundObject(mvo.Id, mvo.NameOrId, mvo.TypeName)).ToList();
+        }
+        else
+        {
+            var found = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(SyncRule.ConnectedSystemId, 1, 8, search,
+                objectTypeFilter: [SyncRule.ConnectedSystemObjectType.Id]);
+            _objectResults = found.Results
+                .Select(cso => new FoundObject(cso.Id, ObjectDescription.ChipName(cso.DisplayName, cso.ExternalIdValue), SyncRule.ConnectedSystemObjectType.Name))
+                .ToList();
+        }
+
+        _searched = true;
+    }
+
+    /// <summary>
+    /// Fills the inputs from a real object (#2055): every value it holds for each attribute the Expression reads, as the
+    /// text the inputs take, and "No value" for an attribute it holds none for. An import flow that reads mv[...] also
+    /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
+    /// </summary>
+    private async Task LoadObjectAsync(FoundObject found)
+    {
+        using var jim = JimFactory.Create();
+        var loaded = new List<AttributeFlowTestInput>();
+        if (Exporting)
+        {
+            if (await jim.Metaverse.GetMetaverseObjectAsync(found.Id) is { } mvo)
+                loaded.AddRange(AttributeFlowTester.InputsFromMetaverseObject(mvo, Expression));
+        }
+        else if (await jim.ConnectedSystems.GetConnectedSystemObjectAsync(SyncRule.ConnectedSystemId, found.Id) is { } cso)
+        {
+            loaded.AddRange(AttributeFlowTester.InputsFromConnectedSystemObject(cso, SyncRule.ConnectedSystemObjectType, Expression));
+            if (cso.MetaverseObjectId is { } joinedId && await jim.Metaverse.GetMetaverseObjectAsync(joinedId) is { } joined)
+                loaded.AddRange(AttributeFlowTester.InputsFromMetaverseObject(joined, Expression));
+        }
+
+        foreach (var input in loaded)
+        {
+            _values[input.Accessor] = input.Values.Select(ToEditableText).ToList();
+            if (input.Values.Count == 0)
+                _noValue.Add(input.Accessor);
+            else
+                _noValue.Remove(input.Accessor);
+        }
+
+        _loadedObjectName = found.Name ?? found.Id.ToString();
+        _objectResults = [];
+        _searched = false;
+        ClearResult();
+    }
+
+    /// <summary>
+    /// A loaded value as text the input converts back to the same value: JIM's text form, and base64 for Binary.
+    /// </summary>
+    private static string ToEditableText(object value) => value switch
+    {
+        byte[] bytes => Convert.ToBase64String(bytes),
+        _ => ExpressionText.TryFormat(value, out var text) ? text ?? string.Empty : value.ToString() ?? string.Empty
+    };
+
+    private void RunTest()
+    {
+        ClearResult();
+        if (string.IsNullOrWhiteSpace(Expression))
+            return;
+
+        var validation = ExpressionEvaluator.Validate(Expression);
+        if (!validation.IsValid)
+        {
+            _parseError = validation.ErrorMessage ?? "The Expression could not be parsed.";
+            _errorPosition = validation.ErrorPosition;
+            return;
+        }
+
+        var inputs = _inputs
+            .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName,
+                _noValue.Contains(input.Accessor) ? [] : ValuesOf(input.Accessor).Cast<object>().ToList()))
+            .ToList();
+
+        // The source as it stands in the editor, with the Expression as typed.
+        var source = new SyncRuleMappingSource { Expression = Expression, MissingInputBehaviour = Source.MissingInputBehaviour };
+        _result = AttributeFlowTester.Test(SyncRule, Mapping, source, inputs, ExpressionEvaluator);
+    }
+
+    private static string DescribeType(AttributeFlowTestInputDescriptor input) => input.Type is { } type
+        ? $"{type} · {(input.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")}"
+        : "Not available";
+
+    private string NotHeldExplanation(AttributeFlowTestInputDescriptor input) =>
+        input.Source == ExpressionInputSource.ConnectedSystem && Exporting
+            ? "An export Attribute Flow reads only the Metaverse Object, so this input never has a value."
+            : $"'{(input.Source == ExpressionInputSource.ConnectedSystem ? SyncRule.ConnectedSystemObjectType?.Name : SyncRule.MetaverseObjectType?.Name)}' has no attribute of this name, so this input never has a value.";
+
+    private static string? Placeholder(AttributeDataType? type) => type switch
+    {
+        AttributeDataType.DateTime => "2026-03-15 or 2026-03-15T10:30:00Z",
+        AttributeDataType.Number or AttributeDataType.LongNumber => "A whole number",
+        AttributeDataType.Decimal => "A number, such as 12.5",
+        AttributeDataType.Guid => "A GUID",
+        AttributeDataType.Reference => "The id of the object it refers to",
+        AttributeDataType.Binary => "Base64",
+        _ => null
+    };
+
+    private static string DescribeValueProcessing(AttributeFlowTestResult tested, AttributeFlowEvaluation evaluation)
+    {
+        if (tested.ValueProcessing is not { } processing)
+            return evaluation.Source.Outcome != ExpressionSourceOutcome.Result
+                ? "Nothing to process"
+                : "Not applied: value processing applies to Text attributes on import only";
+
+        if (processing.Steps.Count == 0)
+            return "None set";
+
+        var steps = string.Join(", then ", processing.Steps.Select(StepLabel));
+        return $"{steps}: {(processing.Changed ? "changed the value" : "unchanged")}";
+    }
+
+    private static string StepLabel(AttributeFlowValueProcessingStep step) => step switch
+    {
+        AttributeFlowValueProcessingStep.TrimWhitespace => "Trim leading and trailing whitespace",
+        AttributeFlowValueProcessingStep.CollapseInternalWhitespace => "Collapse internal whitespace",
+        AttributeFlowValueProcessingStep.UpperCase => "Upper case",
+        AttributeFlowValueProcessingStep.LowerCase => "Lower case",
+        AttributeFlowValueProcessingStep.TitleCase => "Title case",
+        AttributeFlowValueProcessingStep.TreatWhitespaceAsNoValue => "Treat whitespace as no value",
+        _ => step.ToString()
+    };
+
+    private static string OutcomeLabel(AttributeFlowOutcome outcome) => outcome switch
+    {
+        AttributeFlowOutcome.Values => "Values",
+        AttributeFlowOutcome.NoValue => "No value",
+        _ => "Error"
+    };
+
+    private static Color OutcomeColour(AttributeFlowOutcome outcome) => outcome switch
+    {
+        AttributeFlowOutcome.Values => Color.Success,
+        AttributeFlowOutcome.NoValue => Color.Default,
+        _ => Color.Error
+    };
+}
