@@ -123,6 +123,18 @@ public class SynchronisationControllerTestExpressionTests
         }
     }
 
+    [Test]
+    public void TestExpression_AsOf_NowReadsThatInstant()
+    {
+        var response = Ok(_controller.TestExpressionAsync(new TestExpressionRequest
+        {
+            Expression = "FormatDate(Now(), \"yyyy-MM-dd HH:mm\")",
+            AsOf = new DateTime(2027, 2, 14, 9, 30, 0, DateTimeKind.Utc)
+        }).GetAwaiter().GetResult());
+
+        Assert.That(response.ResultLines, Is.EqualTo(new[] { "2027-02-14 09:30" }));
+    }
+
     #region With an Attribute Flow (#2055): the same pipeline synchronisation runs
 
     private const int SyncRuleId = 7;
@@ -200,6 +212,18 @@ public class SynchronisationControllerTestExpressionTests
             Assert.That(response.ValueLines, Is.EqualTo(new[] { "2026-03-02" }));
             Assert.That(response.TargetAttributeName, Is.EqualTo("Target"));
         }
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_FlowAsOf_TodayReadsThatInstantAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text);
+        var request = FlowRequest("FormatDate(Today(), \"yyyy-MM-dd\")");
+        request.AsOf = new DateTime(2031, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var response = Ok(await controller.TestExpressionAsync(request));
+
+        Assert.That(response.ValueLines, Is.EqualTo(new[] { "2031-06-01" }));
     }
 
     [Test]

@@ -32,12 +32,15 @@ public static class AttributeFlowTester
     /// <param name="mapping">The Attribute Flow: its target attribute and value processing.</param>
     /// <param name="source">The source being tested: its Expression and Missing Input Behaviour. It need not be saved,
     /// so an edit can be tried before saving it.</param>
+    /// <param name="asOfUtc">The instant to run the test as of: what <c>Now()</c> and <c>Today()</c> read. Null for
+    /// the real time.</param>
     public static AttributeFlowTestResult Test(
         SyncRule syncRule,
         SyncRuleMapping mapping,
         SyncRuleMappingSource source,
         IReadOnlyList<AttributeFlowTestInput> inputs,
-        IExpressionEvaluator expressionEvaluator)
+        IExpressionEvaluator expressionEvaluator,
+        DateTime? asOfUtc = null)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         ArgumentNullException.ThrowIfNull(mapping);
@@ -46,7 +49,7 @@ public static class AttributeFlowTester
         ArgumentNullException.ThrowIfNull(expressionEvaluator);
         ArgumentException.ThrowIfNullOrWhiteSpace(source.Expression);
 
-        var tested = TestOnce(syncRule, mapping, source, inputs, expressionEvaluator);
+        var tested = TestOnce(syncRule, mapping, source, inputs, expressionEvaluator, asOfUtc);
         if (tested.Evaluation is not { } evaluation)
             return tested;
 
@@ -58,7 +61,7 @@ public static class AttributeFlowTester
             .Select(absent => new AttributeFlowAbsentInputOutcome(absent.Accessor,
                 TestOnce(syncRule, mapping, source,
                     inputs.Select(input => ReferenceEquals(input, absent) ? input with { Values = [] } : input).ToList(),
-                    expressionEvaluator).Evaluation!))
+                    expressionEvaluator, asOfUtc).Evaluation!))
             .ToList();
 
         return new AttributeFlowTestResult
@@ -124,9 +127,7 @@ public static class AttributeFlowTester
                     ? []
                     : connectedSystemObject.AttributeValues
                         .Where(value => value.AttributeId == attribute.Id)
-                        .Select(value => attribute.Type == AttributeDataType.Reference
-                            ? (object?)(value.ReferenceValueId ?? value.ReferenceValue?.Id)
-                            : SyncEngine.ToExpressionValue(value, attribute.Type))
+                        .Select(value => TestSampleValues.FromConnectedSystemValue(value, attribute.Type))
                         .Where(value => value != null)
                         .Select(value => value!)
                         .ToList();
@@ -149,25 +150,11 @@ public static class AttributeFlowTester
             .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName, metaverseObject.AttributeValues
                 .Where(value => !value.NullValue && value.Attribute != null
                     && string.Equals(value.Attribute.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase))
-                .Select(value => MetaverseValue(value))
+                .Select(value => TestSampleValues.FromMetaverseValue(value, value.Attribute!.Type))
                 .Where(value => value != null)
                 .Select(value => value!)
                 .ToList()))
             .ToList();
-
-        static object? MetaverseValue(MetaverseObjectAttributeValue value) => value.Attribute!.Type switch
-        {
-            AttributeDataType.Text => value.StringValue,
-            AttributeDataType.Number => value.IntValue,
-            AttributeDataType.LongNumber => value.LongValue,
-            AttributeDataType.Decimal => value.DecimalValue,
-            AttributeDataType.DateTime => value.DateTimeValue,
-            AttributeDataType.Boolean => value.BoolValue,
-            AttributeDataType.Guid => value.GuidValue,
-            AttributeDataType.Binary => value.ByteValue,
-            AttributeDataType.Reference => value.ReferenceValueId ?? value.ReferenceValue?.Id,
-            _ => null
-        };
     }
 
     /// <summary>
@@ -209,7 +196,8 @@ public static class AttributeFlowTester
         SyncRuleMapping mapping,
         SyncRuleMappingSource source,
         IReadOnlyList<AttributeFlowTestInput> inputs,
-        IExpressionEvaluator expressionEvaluator)
+        IExpressionEvaluator expressionEvaluator,
+        DateTime? asOfUtc)
     {
         var errors = new List<string>();
         var exporting = syncRule.Direction == SyncRuleDirection.Export;
@@ -234,8 +222,8 @@ public static class AttributeFlowTester
                     continue;
                 }
 
-                foreach (var typed in TypedValues(input, attribute.Type, attribute.AttributePlurality, errors))
-                    connectedSystemValues.Add(ToConnectedSystemValue(attribute, typed));
+                foreach (var typed in TestSampleValues.Typed(input.Accessor, input.Values, attribute.Type, attribute.AttributePlurality, errors))
+                    connectedSystemValues.Add(TestSampleValues.ToConnectedSystemValue(attribute, typed));
             }
             else
             {
@@ -247,8 +235,8 @@ public static class AttributeFlowTester
                     continue;
                 }
 
-                foreach (var typed in TypedValues(input, attribute.Type, attribute.AttributePlurality, errors))
-                    metaverseValues.Add(ToMetaverseValue(attribute, typed));
+                foreach (var typed in TestSampleValues.Typed(input.Accessor, input.Values, attribute.Type, attribute.AttributePlurality, errors))
+                    metaverseValues.Add(TestSampleValues.ToMetaverseValue(attribute, typed));
             }
         }
 
@@ -266,7 +254,7 @@ public static class AttributeFlowTester
         {
             // Export evaluates against the Metaverse Object's persisted values.
             var exportView = SyncEngine.BuildAttributeDictionary(metaverseObject);
-            return new AttributeFlowTestResult { Evaluation = AttributeFlowPipeline.EvaluateExport(exportView, mapping, source, expressionEvaluator) };
+            return new AttributeFlowTestResult { Evaluation = AttributeFlowPipeline.EvaluateExport(exportView, mapping, source, expressionEvaluator, asOfUtc) };
         }
 
         var connectedSystemObjectType = syncRule.ConnectedSystemObjectType ?? new ConnectedSystemObjectType();
@@ -286,7 +274,7 @@ public static class AttributeFlowTester
         return new AttributeFlowTestResult
         {
             Evaluation = AttributeFlowPipeline.EvaluateInbound(connectedSystemObject, connectedSystemObjectType, mapping, source,
-                expressionEvaluator, metaverseView)
+                expressionEvaluator, metaverseView, asOfUtc)
         };
     }
 
@@ -343,116 +331,4 @@ public static class AttributeFlowTester
         $"{input.Accessor} has a value, but {(objectTypeName == null ? "the object type" : $"'{objectTypeName}'")} has no attribute " +
         $"named '{input.AttributeName}', so the Expression would never see one.";
 
-    /// <summary>
-    /// The input's samples converted to the attribute's type, as an imported value of it would be held. A sample that
-    /// cannot be converted, or several samples for a single-valued attribute, adds an error instead.
-    /// </summary>
-    private static List<object> TypedValues(AttributeFlowTestInput input, AttributeDataType type, AttributePlurality plurality, List<string> errors)
-    {
-        if (plurality == AttributePlurality.SingleValued && input.Values.Count > 1)
-        {
-            errors.Add($"{input.Accessor} has {input.Values.Count} values, but the attribute is single-valued, so an object holds at most one.");
-            return [];
-        }
-
-        var typedValues = new List<object>();
-        foreach (var sample in input.Values)
-        {
-            if (TryConvertSample(sample, type, out var typed))
-            {
-                typedValues.Add(typed);
-                continue;
-            }
-
-            errors.Add($"The value '{ExpressionText.Describe(sample)}' for {input.Accessor} is not a {type} value, the type of that attribute." +
-                type switch
-                {
-                    AttributeDataType.DateTime => " Enter a date in ISO 8601, such as 2026-03-15 or 2026-03-15T10:30:00Z.",
-                    AttributeDataType.Reference => " Enter the id of the object it refers to.",
-                    AttributeDataType.Binary => " Enter the value in base64.",
-                    _ => string.Empty
-                });
-        }
-
-        return typedValues;
-    }
-
-    private static bool TryConvertSample(object sample, AttributeDataType type, out object typed)
-    {
-        typed = null!;
-        switch (type)
-        {
-            case AttributeDataType.Reference:
-                // A reference reads as the id of the object it refers to.
-                if (sample is Guid guid || Guid.TryParse(sample as string, out guid))
-                {
-                    typed = guid;
-                    return true;
-                }
-                return false;
-
-            case AttributeDataType.Binary when sample is string base64:
-                var buffer = new byte[base64.Length];
-                if (!Convert.TryFromBase64String(base64, buffer, out var written))
-                    return false;
-                typed = buffer[..written];
-                return true;
-
-            default:
-                if (!ExpressionResultConverter.TryConvert(sample, type, out var converted) || converted == null)
-                    return false;
-                typed = converted;
-                return true;
-        }
-    }
-
-    private static ConnectedSystemObjectAttributeValue ToConnectedSystemValue(ConnectedSystemObjectTypeAttribute attribute, object value)
-    {
-        var attributeValue = new ConnectedSystemObjectAttributeValue { Attribute = attribute, AttributeId = attribute.Id };
-        if (attribute.Type == AttributeDataType.Reference)
-        {
-            var id = (Guid)value;
-            attributeValue.ReferenceValue = new ConnectedSystemObject { Id = id };
-            attributeValue.ReferenceValueId = id;
-            return attributeValue;
-        }
-
-        switch (value)
-        {
-            case string text: attributeValue.StringValue = text; break;
-            case int number: attributeValue.IntValue = number; break;
-            case long longNumber: attributeValue.LongValue = longNumber; break;
-            case decimal decimalNumber: attributeValue.DecimalValue = decimalNumber; break;
-            case DateTime date: attributeValue.DateTimeValue = date; break;
-            case bool flag: attributeValue.BoolValue = flag; break;
-            case Guid guid: attributeValue.GuidValue = guid; break;
-            case byte[] bytes: attributeValue.ByteValue = bytes; break;
-        }
-
-        return attributeValue;
-    }
-
-    private static MetaverseObjectAttributeValue ToMetaverseValue(MetaverseAttribute attribute, object value)
-    {
-        var attributeValue = new MetaverseObjectAttributeValue { Attribute = attribute, AttributeId = attribute.Id };
-        if (attribute.Type == AttributeDataType.Reference)
-        {
-            attributeValue.ReferenceValueId = (Guid)value;
-            return attributeValue;
-        }
-
-        switch (value)
-        {
-            case string text: attributeValue.StringValue = text; break;
-            case int number: attributeValue.IntValue = number; break;
-            case long longNumber: attributeValue.LongValue = longNumber; break;
-            case decimal decimalNumber: attributeValue.DecimalValue = decimalNumber; break;
-            case DateTime date: attributeValue.DateTimeValue = date; break;
-            case bool flag: attributeValue.BoolValue = flag; break;
-            case Guid guid: attributeValue.GuidValue = guid; break;
-            case byte[] bytes: attributeValue.ByteValue = bytes; break;
-        }
-
-        return attributeValue;
-    }
 }

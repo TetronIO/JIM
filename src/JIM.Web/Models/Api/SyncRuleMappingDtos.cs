@@ -754,6 +754,11 @@ public class TestExpressionRequest
     /// replaces the object's value for that attribute.
     /// </summary>
     public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The instant to test as of, in UTC: what <c>Now()</c> and <c>Today()</c> read. Omit it for the current time.
+    /// </summary>
+    public DateTime? AsOf { get; set; }
 }
 
 /// <summary>
