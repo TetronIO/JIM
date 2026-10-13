@@ -3,7 +3,6 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
-using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Search;
@@ -176,17 +175,6 @@ public class AttributeDataTypeCompletenessTests
         // Assert - a missing switch arm presents the attribute as null inside export expressions
         Assert.That(dictionary["attr"], Is.Not.Null,
             $"{type} must be exposed to export expression evaluation; a null here means a missing dispatch arm.");
-    }
-
-    [TestCaseSource(nameof(ValueBearingTypes))]
-    public void DriftDetectionService_BuildAttributeDictionary_ValueBearingType_ExposesValue(AttributeDataType type)
-    {
-        // Act
-        var dictionary = DriftDetectionService.BuildAttributeDictionary(BuildMvoWithValue(type));
-
-        // Assert
-        Assert.That(dictionary["attr"], Is.Not.Null,
-            $"{type} must be exposed to Drift Detection expression evaluation; a null here means a missing dispatch arm.");
     }
 
     [TestCaseSource(nameof(ValueBearingTypes))]
