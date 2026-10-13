@@ -228,6 +228,21 @@ public class SynchronisationControllerTestExpressionTests
     }
 
     [Test]
+    public void TestExpression_JsonArraySample_ReadsAsSeveralValues()
+    {
+        // #2053: a JSON array is several values on the plain tester too, exactly as an Attribute Flow test reads it.
+        var json = JsonSerializer.Deserialize<Dictionary<string, object?>>("{\"Groups\": [\"Users\", \"Admins\"]}");
+
+        var response = Test("Count(mv[\"Groups\"]) + \":\" + Join(mv[\"Groups\"], \";\")", json);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.IsValid, Is.True, response.ErrorMessage);
+            Assert.That(response.Result, Is.EqualTo("2:Admins;Users"));
+        }
+    }
+
+    [Test]
     public async Task TestExpressionAsync_FlowWithJsonArray_GivesAMultiValuedInputSeveralValuesAsync()
     {
         var controller = ControllerWithFlow(AttributeDataType.Text);
@@ -235,10 +250,12 @@ public class SynchronisationControllerTestExpressionTests
 
         var response = Ok(await controller.TestExpressionAsync(FlowRequest("cs[\"mail\"]", json)));
 
+        // Both values reach the expression (#2053), so a single-valued target is refused rather than given one of them.
         using (Assert.EnterMultipleScope())
         {
             Assert.That(response.InputErrors, Is.Null.Or.Empty);
-            Assert.That(response.Outcome, Is.EqualTo(AttributeFlowOutcome.Values));
+            Assert.That(response.Outcome, Is.EqualTo(AttributeFlowOutcome.Error));
+            Assert.That(response.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.ResultMultiValued));
         }
     }
 

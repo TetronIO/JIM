@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
 using JIM.Models.Expressions;
@@ -755,52 +756,11 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
-    /// The dictionary keys are attribute names, and values are the attribute values.
+    /// The <c>mv[...]</c> dictionary a drift expression evaluates against: export's own
+    /// (<see cref="SyncEngine.BuildAttributeDictionary(MetaverseObject)"/>), so drift detection reads every value of a
+    /// multi-valued attribute exactly as export staging does (#2053).
     /// </summary>
-    internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
-    {
-        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        if (mvo.Type == null)
-        {
-            Log.Warning("BuildAttributeDictionary: MVO {MvoId} has null Type, cannot build attribute dictionary", mvo.Id);
-            return attributes;
-        }
-
-        // Exclude asserted-null markers (#91): drift expressions must evaluate against real values only.
-        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
-        {
-            if (attributeValue.Attribute == null)
-            {
-                Log.Warning("BuildAttributeDictionary: MVO {MvoId} has attribute value with AttributeId={AttrId} but Attribute navigation property is null",
-                    mvo.Id, attributeValue.AttributeId);
-                continue;
-            }
-
-            var attributeName = attributeValue.Attribute.Name;
-
-            // Use the appropriate typed value based on the attribute type
-            object? value = attributeValue.Attribute.Type switch
-            {
-                AttributeDataType.Text => attributeValue.StringValue,
-                AttributeDataType.Number => attributeValue.IntValue,
-                AttributeDataType.LongNumber => attributeValue.LongValue,
-                AttributeDataType.Decimal => attributeValue.DecimalValue,
-                AttributeDataType.DateTime => attributeValue.DateTimeValue,
-                AttributeDataType.Boolean => attributeValue.BoolValue,
-                AttributeDataType.Guid => attributeValue.GuidValue,
-                AttributeDataType.Binary => attributeValue.ByteValue,
-                // Use scalar FK with navigation fallback for test compatibility
-                AttributeDataType.Reference => (attributeValue.ReferenceValueId ?? attributeValue.ReferenceValue?.Id)?.ToString(),
-                _ => null
-            };
-
-            attributes[attributeName] = value;
-        }
-
-        return attributes;
-    }
+    internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo) => SyncEngine.BuildAttributeDictionary(mvo);
 
     /// <summary>
     /// Gets the actual value(s) of a CSO attribute.
