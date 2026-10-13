@@ -48,9 +48,8 @@ function Set-JIMConnectedSystemObjectPassword {
 
     .PARAMETER Generate
         Has JIM generate a password satisfying the policy it discovered on the Connected System, instead of you
-        supplying one. Use this rather than inventing a password in your own script: JIM knows what the target
-        demands, and a hand-rolled generator rediscovers the passphrase trap, where three words offer two
-        character categories against a directory that wants three.
+        supplying one. Use this rather than inventing a password in your own script: JIM knows what the Connected
+        System demands.
 
         The generated password is returned on the result's GeneratedPassword property as a SecureString. That is
         the only chance to capture it.
