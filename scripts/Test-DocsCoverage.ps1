@@ -268,10 +268,21 @@ function Get-EnvironmentVariableRead {
 
 function Get-ExpressionFunction {
     param([string]$Root, $Config)
-    $lines = [System.IO.File]::ReadAllLines((Join-Path $Root $Config.ExpressionEvaluator))
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        foreach ($m in [regex]::Matches($lines[$i], 'SetFunction\(\s*"(?<name>\w+)"')) {
-            [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = $Config.ExpressionEvaluator; Line = $i + 1 }
+    # The evaluator and its partial files (DynamicExpressoEvaluator.Library.cs, say): a function registered in either is
+    # one an expression can call. Each name is reported once, at its first registration (an overload registers it again).
+    $evaluator = Join-Path $Root $Config.ExpressionEvaluator
+    $partials = Get-ChildItem -Path (Split-Path $evaluator) -Filter ("{0}.*.cs" -f [System.IO.Path]::GetFileNameWithoutExtension($evaluator)) |
+        Sort-Object Name
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($file in @((Get-Item $evaluator)) + @($partials)) {
+        $relative = Get-RelativePath $Root $file.FullName
+        $lines = [System.IO.File]::ReadAllLines($file.FullName)
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            foreach ($m in [regex]::Matches($lines[$i], 'SetFunction\(\s*"(?<name>\w+)"')) {
+                if ($seen.Add($m.Groups['name'].Value)) {
+                    [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = $relative; Line = $i + 1 }
+                }
+            }
         }
     }
 }
