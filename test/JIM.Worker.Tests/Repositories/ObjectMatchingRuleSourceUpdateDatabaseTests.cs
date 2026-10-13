@@ -181,4 +181,35 @@ public class ObjectMatchingRuleSourceUpdateDatabaseTests
             Assert.That(saved.CaseSensitive, Is.Not.EqualTo(ObjectMatchingDefaults.CaseSensitive));
         }
     }
+
+    [Test]
+    public async Task UpdateObjectMatchingRuleAsync_KeptSourceEditedInPlace_PersistsTheEditAsync()
+    {
+        // A caller may edit the source the rule already holds rather than replace it; the edit must not be dropped.
+        var seeded = await SeedAsync();
+        int sourceId;
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            using var application = new JimApplication(repository, syncRepository: repository.Sync);
+            var rule = await application.ConnectedSystems.GetObjectMatchingRuleAsync(seeded.RuleId);
+            var apiKey = await application.Repository.ApiKeys.GetByIdAsync(seeded.ApiKeyId);
+            var source = rule!.Sources.Single();
+            sourceId = source.Id;
+            source.ConnectedSystemAttributeId = null;
+            source.ConnectedSystemAttribute = null;
+            source.Expression = "Trim(cs[\"employeeId\"])";
+            await application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey!);
+        }
+
+        await using var assertCtx = NewContext();
+        var sources = await assertCtx.ObjectMatchingRuleSources.Where(s => s.ObjectMatchingRuleId == seeded.RuleId).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sources.Select(s => s.Id), Is.EqualTo(new[] { sourceId }), "the source is kept, not replaced");
+            Assert.That(sources[0].Expression, Is.EqualTo("Trim(cs[\"employeeId\"])"));
+            Assert.That(sources[0].ConnectedSystemAttributeId, Is.Null);
+        }
+    }
 }

@@ -880,9 +880,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     /// <remarks>
     /// A rule's sources are saved as a set: a source with no id is added, a persisted source the rule no longer holds
-    /// is deleted, and the ones it keeps are left as they are. The rule usually arrives untracked (JIM.Web loads
-    /// NoTracking), so marking only the rule modified would save none of a change to its sources while reporting
-    /// success, which is how a REST or PowerShell change of a rule's source was silently lost.
+    /// is deleted, and the ones it keeps are saved as they now stand, since a caller may have edited one in place.
+    /// The rule usually arrives untracked (JIM.Web loads NoTracking), so marking only the rule modified would save
+    /// none of a change to its sources while reporting success, which is how a REST or PowerShell change of a rule's
+    /// source was silently lost.
     /// <para>
     /// The context may already track another instance of the rule: loading its Synchronisation Rule does, since that
     /// load tracks the rules it includes. The values are then applied to the tracked instance, as attaching the copy
@@ -913,6 +914,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                          Repository.Database.ObjectMatchingRuleSources.Local.FirstOrDefault(source => source.Id == id)
                          ?? new ObjectMatchingRuleSource { Id = id }))
                 Repository.Database.Entry(removed).State = EntityState.Deleted;
+
+            // A kept source may have been edited in place, so it is saved too rather than assumed unchanged.
+            foreach (var kept in rule.Sources.Where(source => source.Id != 0))
+            {
+                kept.ObjectMatchingRuleId = rule.Id;
+                var trackedSource = Repository.Database.ObjectMatchingRuleSources.Local.FirstOrDefault(source => source.Id == kept.Id);
+                if (trackedSource != null && !ReferenceEquals(trackedSource, kept))
+                    Repository.Database.Entry(trackedSource).CurrentValues.SetValues(kept);
+                else
+                    Repository.Database.Entry(kept).State = EntityState.Modified;
+            }
 
             foreach (var added in rule.Sources.Where(source => source.Id == 0))
             {
