@@ -87,6 +87,8 @@ An object's timeline lists every execution item about it, newest first: when the
 
 Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button, and **Copy link** gives an address that opens the same focus with the same trail, to send to a colleague. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
 
+The trail and re-centring belong to the portal. The REST API and PowerShell read the same timelines and the same runs, and a script follows a story by passing each row's execution item to the causes and consequences reads instead (see [PowerShell: Execution Items](../powershell/execution-items.md)).
+
 A deleted object stays explorable: its timeline is read through the records its deletion kept, and the focus header says when it was deleted, and **View deletion record** opens what its deletion kept. A Metaverse Object's timeline on a deployment that does not record Metaverse Object changes holds only what its joined Connected System Objects recorded, and says so above the list.
 
 **Queued by** answers the question an export raises on its own: why is this change waiting? A Pending Export can be queued by several synchronisations before it exports, and each is listed with its own nearest cause. A Pending Export queued before your deployment recorded its queueing runs says that no run is recorded rather than showing an empty list, and runs whose records retention has removed are counted rather than listed.
