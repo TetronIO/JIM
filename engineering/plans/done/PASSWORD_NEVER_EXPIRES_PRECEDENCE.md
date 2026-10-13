@@ -1,6 +1,7 @@
 # Password Delivery Leaves "Password Never Expires" to Whoever Owns userAccountControl
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** Runtime verification on Samba AD (Scenario 001 with `-InitialPasswordExpiry NeverExpires`, Scenario 020 Test 6b, the sign-in check) and the Active Directory lab hold path are still to run.
 - **Issue:** [#2159](https://github.com/TetronIO/JIM/issues/2159)
 - **Created:** 2026-10-13
 
