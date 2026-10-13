@@ -85,3 +85,89 @@ public enum ExpressionResultResolutionKind
     /// </summary>
     SeveralValues
 }
+
+/// <summary>
+/// How far an Attribute Flow's Expression got, before its result is resolved against the target attribute (#2055):
+/// it returned a result, it supplied no value, or it failed.
+/// </summary>
+public enum ExpressionSourceOutcome
+{
+    /// <summary>
+    /// The Expression was evaluated and returned a result, which is not yet converted to the target's type.
+    /// </summary>
+    Result,
+
+    /// <summary>
+    /// No value: Missing Input Behaviour is Contribute no value and an input is absent, or the Expression returned
+    /// null.
+    /// </summary>
+    NoValue,
+
+    /// <summary>
+    /// The Expression was not evaluated because an input is absent and Missing Input Behaviour is Fail this mapping.
+    /// </summary>
+    MissingInputFailedMapping,
+
+    /// <summary>
+    /// The Expression was not evaluated because an input is absent and Missing Input Behaviour is Fail the object.
+    /// </summary>
+    MissingInputFailedObject,
+
+    /// <summary>
+    /// The Expression failed while it was evaluated.
+    /// </summary>
+    EvaluationFailed
+}
+
+/// <summary>
+/// What an Attribute Flow's Expression gives its target attribute once the whole pipeline has run (#2055): values,
+/// no value, or an error. Synchronisation and the tester read the same outcome.
+/// </summary>
+public enum AttributeFlowOutcome
+{
+    /// <summary>
+    /// One or more values, each converted to the target attribute's type.
+    /// </summary>
+    Values,
+
+    /// <summary>
+    /// No value, resolved by Attribute Priority and "Null is a value" on import; nothing is staged on export.
+    /// </summary>
+    NoValue,
+
+    /// <summary>
+    /// An error: the attribute keeps its current value, and the error is reported.
+    /// </summary>
+    Error
+}
+
+/// <summary>
+/// Why an Attribute Flow produced an error (#2055).
+/// </summary>
+public enum AttributeFlowErrorReason
+{
+    /// <summary>
+    /// An input has no value and Missing Input Behaviour is Fail this mapping: the mapping is reported and skipped.
+    /// </summary>
+    MissingInputFailedMapping,
+
+    /// <summary>
+    /// An input has no value and Missing Input Behaviour is Fail the object: nothing on the object is synchronised.
+    /// </summary>
+    MissingInputFailedObject,
+
+    /// <summary>
+    /// The Expression failed while it was evaluated: nothing on the object is synchronised.
+    /// </summary>
+    EvaluationFailed,
+
+    /// <summary>
+    /// The Expression returned a value the target attribute's type cannot hold.
+    /// </summary>
+    ResultNotConvertible,
+
+    /// <summary>
+    /// The Expression returned several values for a single-valued target attribute.
+    /// </summary>
+    ResultMultiValued
+}

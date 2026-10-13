@@ -6484,21 +6484,32 @@ public class SynchronisationController(
     /// <summary>
     /// Test an expression with sample Attribute data
     /// </summary>
+    /// <remarks>
+    /// Given <c>syncRuleId</c> and <c>mappingId</c>, the expression is tested as that Attribute Flow, by the same code a
+    /// synchronisation runs: each sample is converted to its attribute's type, then the Attribute Flow's Missing Input
+    /// Behaviour, the expression, value processing and conversion to the target attribute's type apply in turn, and
+    /// <c>outcome</c> says what the target would be given. Without them, the expression is evaluated alone.
+    /// </remarks>
     /// <param name="request">The test expression request containing the expression and sample Attribute Values.</param>
     /// <returns>The result of evaluating the expression.</returns>
     /// <response code="200">Expression evaluated successfully.</response>
     /// <response code="400">Invalid expression or test data.</response>
     /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Synchronisation Rule or Attribute Flow was not found.</response>
     [HttpPost("test-expression", Name = "TestExpression")]
     [ProducesResponseType(typeof(TestExpressionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public IActionResult TestExpression([FromBody] TestExpressionRequest request)
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestExpressionAsync([FromBody] TestExpressionRequest request)
     {
         _logger.LogDebug("Testing expression: {Expression}", LogSanitiser.Sanitise(request.Expression));
 
         if (string.IsNullOrWhiteSpace(request.Expression))
             return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
+
+        if (request.SyncRuleId.HasValue != request.MappingId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest("Give both syncRuleId and mappingId to test the expression as an Attribute Flow, or neither."));
 
         // First validate the expression syntax
         var validationResult = _expressionEvaluator.Validate(request.Expression);
@@ -6511,6 +6522,9 @@ public class SynchronisationController(
                 ErrorPosition = validationResult.ErrorPosition
             });
         }
+
+        if (request.SyncRuleId is { } syncRuleId && request.MappingId is { } mappingId)
+            return await TestExpressionAsAttributeFlowAsync(request, syncRuleId, mappingId);
 
         // Build the context from the provided attribute values
         var mvAttributes = request.MvAttributes ?? new Dictionary<string, object?>();
@@ -6530,6 +6544,67 @@ public class SynchronisationController(
             ResultType = testResult.ResultType,
             ErrorMessage = testResult.ErrorMessage
         });
+    }
+
+    /// <summary>
+    /// Tests the request's expression as an Attribute Flow (#2055), through <see cref="AttributeFlowTester"/>: the
+    /// evaluation pipeline synchronisation runs.
+    /// </summary>
+    private async Task<IActionResult> TestExpressionAsAttributeFlowAsync(TestExpressionRequest request, int syncRuleId, int mappingId)
+    {
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var mapping = syncRule.AttributeFlowRules.FirstOrDefault(m => m.Id == mappingId);
+        if (mapping == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute Flow with ID {mappingId} not found on Synchronisation Rule {syncRuleId}."));
+
+        var target = (Name: mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name, 
+            Type: mapping.TargetMetaverseAttribute?.Type ?? mapping.TargetConnectedSystemAttribute?.Type);
+        if (target.Name == null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Attribute Flow {mappingId} has no target attribute to test against."));
+
+        // The expression under test takes the Attribute Flow's own Missing Input Behaviour.
+        var source = new SyncRuleMappingSource
+        {
+            Expression = request.Expression,
+            MissingInputBehaviour = mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression))?.MissingInputBehaviour
+                ?? MissingInputBehaviour.EvaluateAnyway
+        };
+
+        var inputs = TestExpressionSampleValues.ToTestInputs(request.CsAttributes, ExpressionInputSource.ConnectedSystem)
+            .Concat(TestExpressionSampleValues.ToTestInputs(request.MvAttributes, ExpressionInputSource.Metaverse))
+            .ToList();
+
+        var tested = AttributeFlowTester.Test(syncRule, mapping, source, inputs, _expressionEvaluator);
+        var response = new TestExpressionResponse
+        {
+            TargetAttributeName = target.Name,
+            TargetAttributeType = target.Type
+        };
+
+        if (tested.Evaluation is not { } evaluation)
+        {
+            response.IsValid = false;
+            response.InputErrors = tested.InputErrors;
+            response.ErrorMessage = string.Join(" ", tested.InputErrors);
+            return Ok(response);
+        }
+
+        var description = AttributeFlowTester.Describe(evaluation, target.Name);
+        var expressionResult = evaluation.Source.Result;
+        response.IsValid = evaluation.Outcome != AttributeFlowOutcome.Error;
+        response.Outcome = evaluation.Outcome;
+        response.ErrorReason = evaluation.ErrorReason;
+        response.OutcomeDescription = description;
+        response.ErrorMessage = evaluation.Outcome == AttributeFlowOutcome.Error ? description : null;
+        response.MissingInputs = evaluation.Source.MissingInputs.Count > 0 ? evaluation.Source.MissingInputs : null;
+        response.Result = expressionResult;
+        response.ResultLines = expressionResult != null ? ExpressionText.ToDisplayLines(expressionResult) : null;
+        response.ResultType = expressionResult?.GetType().Name;
+        response.ValueLines = evaluation.Outcome == AttributeFlowOutcome.Values ? evaluation.Values.Select(ExpressionText.Describe).ToList() : null;
+        return Ok(response);
     }
 
     #endregion

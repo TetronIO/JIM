@@ -280,16 +280,19 @@ public class DriftDetectionService
         DriftDetectionResult result)
     {
         var target = mapping.TargetConnectedSystemAttribute!;
-        var evaluation = SyncEngine.EvaluateExportExpressionSource(mapping, source, mvAttributeDictionary, _expressionEvaluator, result.AttributeFlowErrors);
-        if (evaluation.Stopped || evaluation.NoValue)
+        var heldValues = cso.AttributeValues.Where(av => av.AttributeId == target.Id).ToList();
+
+        // Exactly what export staging stages for this mapping: the evaluation pipeline (#2055) and the same handling of
+        // its outcome. Nothing staged (no value, or a mapping-level error already recorded) leaves the target as it is.
+        var staged = SyncEngine.StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
+            _expressionEvaluator, heldValues, result.AttributeFlowErrors);
+        if (staged.Count == 0)
         {
-            Log.Debug("EvaluateDrift: Expression for attribute {AttrName} supplies no value for MVO {MvoId}; export staging stages nothing for it, " +
-                "so the Connected System keeps its value and nothing is compared", target.Name, targetMvo.Id);
+            Log.Debug("EvaluateDrift: Expression for attribute {AttrName} stages nothing for MVO {MvoId}, so the Connected System keeps its value",
+                target.Name, targetMvo.Id);
             return;
         }
 
-        var heldValues = cso.AttributeValues.Where(av => av.AttributeId == target.Id).ToList();
-        var staged = SyncEngine.StageExportExpressionResult(mapping, source, exportRule, evaluation.Result!, heldValues, result.AttributeFlowErrors);
         var corrections = staged.Where(change => !SyncEngine.IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
         if (corrections.Count == 0)
             return;
