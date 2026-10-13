@@ -25,47 +25,45 @@ function New-JIMMetaverseObjectType {
         are never listed.
 
     .PARAMETER Name
-        The singular name of the new Object Type. Must be unique. Example: "User", "Group".
+        The singular name of the new Object Type, such as Device. It must be unique.
 
     .PARAMETER PluralName
-        The plural name of the new Object Type. Must be unique. Example: "Users", "Groups".
+        The plural name of the new Object Type, such as Devices. It must be unique.
 
     .PARAMETER Icon
-        Optional MudBlazor icon name to associate with the type in the UI.
+        The name of the MudBlazor icon the portal shows for the Object Type, such as Devices.
 
     .PARAMETER AttributeIds
-        Optional array of existing Metaverse Attribute IDs to associate with this type.
-        Attributes can also be associated later via Set-JIMMetaverseAttribute.
+        The IDs of existing Metaverse Attributes to bind to the new Object Type. Attributes can also be bound later,
+        with Add-JIMMetaverseObjectTypeAttribute.
 
     .PARAMETER DeletionRule
-        Optional deletion rule controlling when Metaverse Objects of this type are
-        automatically deleted. Defaults to 'Manual'.
-        Valid values: Manual, WhenLastConnectorDisconnected, WhenAuthoritativeSourceDisconnected.
+        When JIM deletes this type's Metaverse Objects on its own. With Manual, it never does. With
+        WhenLastConnectorDisconnected, it deletes an object once no Connected System Object is joined to it; an
+        account JIM has provisioned counts as one. With WhenAuthoritativeSourceDisconnected, it deletes an object
+        when the sources named in -DeletionTriggerConnectedSystemIds disconnect, as -DeletionTriggerMode decides.
+        Manual is the default.
 
     .PARAMETER DeletionGracePeriod
-        Optional grace period before deletion is executed (TimeSpan). Set to TimeSpan.Zero
-        for immediate deletion. Ignored when DeletionRule is Manual.
+        How long JIM waits, once the deletion rule is met, before it deletes the object. [TimeSpan]::Zero deletes at
+        once. Ignored when -DeletionRule is Manual.
 
     .PARAMETER DeletionTriggerConnectedSystemIds
-        Required when DeletionRule is WhenAuthoritativeSourceDisconnected: the connected
-        system IDs whose disconnect should trigger deletion. How they trigger deletion is
-        governed by -DeletionTriggerMode.
+        The IDs of the Connected Systems whose disconnection triggers deletion. Required when -DeletionRule is
+        WhenAuthoritativeSourceDisconnected.
 
     .PARAMETER DeletionTriggerMode
-        Optional. For the WhenAuthoritativeSourceDisconnected deletion rule, controls how
-        the selected authoritative sources trigger deletion.
-        - AllSourcesDisconnect: the Metaverse Object is deleted only once no selected
-          source retains a joined Connected System Object.
-        - SpecificSourcesDisconnect: the Metaverse Object is deleted when any one of the
-          selected sources disconnects, even if others remain connected.
-        When omitted, the server default (AllSourcesDisconnect) applies.
+        For WhenAuthoritativeSourceDisconnected, how the selected sources trigger deletion. With
+        AllSourcesDisconnect, an object is deleted only once no selected source keeps a joined Connected System
+        Object. With SpecificSourcesDisconnect, it is deleted when any one selected source disconnects, even while
+        others remain. AllSourcesDisconnect is the default.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the Object Type's Configuration Change History.
 
     .OUTPUTS
-        PSCustomObject representing the created Object Type (id, name, pluralName, etc.).
+        The created Object Type in full. When its deletion settings draw a warning, in DeletionRuleAdvisory or
+        DeletionSourceWarnings, the cmdlet also writes it as a warning.
 
     .EXAMPLE
         New-JIMMetaverseObjectType -Name "Device" -PluralName "Devices"
@@ -100,7 +98,7 @@ function New-JIMMetaverseObjectType {
         Set-JIMMetaverseObjectType
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectTypeDetailDto')]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]

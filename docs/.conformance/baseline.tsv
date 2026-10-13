@@ -2,12 +2,12 @@
 # Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
 # The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.
 LANG-3	powershell/connected-systems.md	20
-LANG-3	powershell/example-data.md	3
+LANG-3	powershell/example-data.md	2
 LANG-3	powershell/expressions.md	2
 LANG-3	powershell/feature-flags.md	1
 LANG-3	powershell/history.md	2
 LANG-3	powershell/index.md	2
-LANG-3	powershell/metaverse.md	18
+LANG-3	powershell/metaverse.md	1
 LANG-3	powershell/security.md	1
 LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3

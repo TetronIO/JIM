@@ -639,5 +639,5 @@ Invoke-JIMExampleDataTemplate -Id $template.Id -Wait
 
 ## See also
 
-- [Metaverse](metaverse.md): cmdlets for managing the metaverse schema and querying identity objects
+- [Metaverse](metaverse.md): cmdlets for querying Metaverse Objects; the schema has [Metaverse Object Types](metaverse-object-types.md) and [Metaverse Attributes](metaverse-attributes.md)
 - [Activities](activities.md): cmdlets for reviewing activity history and execution results
