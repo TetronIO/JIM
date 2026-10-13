@@ -151,6 +151,38 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
+    #region Case-insensitive attributes (#2195)
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_CaseInsensitiveUpdateDifferingOnlyInCase_ReturnsTrue()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "distinguishedName", Type = AttributeDataType.Text, CaseInsensitive = true };
+        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "CN=Joe Bloggs,OU=Users,DC=PANOPLY,DC=LOCAL");
+        csoAttributeValue.Attribute = attribute;
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "CN=Joe Bloggs,OU=Users,DC=panoply,DC=local");
+        pendingChange.Attribute = attribute;
+
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        Assert.That(result, Is.True, "A DN differing only in case names the same entry, so there is nothing to export");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_CaseSensitiveUpdateDifferingOnlyInCase_ReturnsFalse()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "displayName", Type = AttributeDataType.Text };
+        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "joe bloggs");
+        csoAttributeValue.Attribute = attribute;
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "Joe Bloggs");
+        pendingChange.Attribute = attribute;
+
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        Assert.That(result, Is.False, "A case-only change to an attribute nobody declared case-insensitive is a real change");
+    }
+
+    #endregion
+
     #region Single-Valued Update Tests (Other Types)
 
     [Test]

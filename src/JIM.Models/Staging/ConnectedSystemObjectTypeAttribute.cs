@@ -93,6 +93,18 @@ public class ConnectedSystemObjectTypeAttribute
     public AttributeWritability Writability { get; set; }
 
     /// <summary>
+    /// Whether the Connected System treats two values of this attribute that differ only in letter case as the same
+    /// value. An LDAP distinguished name is the case in point: <c>DC=CONTOSO,DC=COM</c> and <c>dc=contoso,dc=com</c>
+    /// name the same entry, and the directory reports whichever case it stored, not the case JIM wrote.
+    /// </summary>
+    /// <remarks>
+    /// Connector-stated, like <see cref="Writability"/>: a schema refresh restates it, and administrators cannot set it.
+    /// Confirming an export and deciding whether an export would change anything both honour it (#2195), so a value
+    /// that differs only in case is confirmed rather than retried until it fails.
+    /// </remarks>
+    public bool CaseInsensitive { get; set; }
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
     /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
     /// Null when the schema does not say; import reference resolution then searches every Object Type and

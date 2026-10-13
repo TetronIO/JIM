@@ -40,6 +40,13 @@ public class ConnectorSchemaAttribute
     public AttributeWritability Writability { get; set; }
 
     /// <summary>
+    /// Whether the Connected System treats two values of this attribute that differ only in letter case as the same
+    /// value, as an LDAP directory does a distinguished name. JIM then confirms an exported value the Connected System
+    /// reports back in a different case, rather than retrying it.
+    /// </summary>
+    public bool CaseInsensitive { get; set; }
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the name of the Object Type in this schema
     /// that the reference points at, when the Connected System's schema states one (the SQL Connector's
     /// <c>referencesObjectType</c>). Null when the schema cannot or does not say, which is the norm for

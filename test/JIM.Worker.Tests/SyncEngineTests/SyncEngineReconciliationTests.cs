@@ -1411,6 +1411,137 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
+    #region Case-insensitive attributes (#2195)
+
+    private const string WrittenDn = "CN=Joe Bloggs,OU=Users,DC=panoply,DC=local";
+    private const string StoredDn = "CN=Joe Bloggs,OU=Users,DC=PANOPLY,DC=LOCAL";
+
+    [Test]
+    public void IsAttributeChangeConfirmed_CaseInsensitiveTextDifferingOnlyInCase_ReturnsTrue()
+    {
+        var attribute = DistinguishedNameAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, stringValue: StoredDn);
+        var change = ChangeTo(attribute, PendingExportAttributeChangeType.Update, stringValue: WrittenDn);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_CaseSensitiveTextDifferingOnlyInCase_ReturnsFalse()
+    {
+        var attribute = DistinguishedNameAttribute(caseInsensitive: false);
+        var cso = CsoHolding(attribute, stringValue: StoredDn);
+        var change = ChangeTo(attribute, PendingExportAttributeChangeType.Update, stringValue: WrittenDn);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False,
+            "A case-only difference is a real difference on an attribute the Connector has not declared case-insensitive.");
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_CaseInsensitiveReferenceDifferingOnlyInCase_ReturnsTrue()
+    {
+        var attribute = MemberAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, unresolvedReferenceValue: StoredDn);
+        var change = ChangeTo(attribute, PendingExportAttributeChangeType.Add, unresolvedReferenceValue: WrittenDn);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_CaseInsensitiveRemoveOfValueStillPresentInAnotherCase_ReturnsFalse()
+    {
+        var attribute = MemberAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, unresolvedReferenceValue: StoredDn);
+        var change = ChangeTo(attribute, PendingExportAttributeChangeType.Remove, unresolvedReferenceValue: WrittenDn);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False,
+            "The value is still there, in the case the directory stored it, so the removal has not happened.");
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_CaseInsensitiveTextDifferingOnlyInCase_ConfirmsIt()
+    {
+        var attribute = DistinguishedNameAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, stringValue: StoredDn);
+        var result = ReconcileOne(cso, ChangeTo(attribute, PendingExportAttributeChangeType.Update, stringValue: WrittenDn));
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_CaseSensitiveTextDifferingOnlyInCase_DoesNotConfirmIt()
+    {
+        var attribute = DistinguishedNameAttribute(caseInsensitive: false);
+        var cso = CsoHolding(attribute, stringValue: StoredDn);
+        var result = ReconcileOne(cso, ChangeTo(attribute, PendingExportAttributeChangeType.Update, stringValue: WrittenDn));
+
+        Assert.That(result.ConfirmedChanges, Is.Empty);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_CaseInsensitiveReferenceDifferingOnlyInCase_ConfirmsIt()
+    {
+        var attribute = MemberAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, unresolvedReferenceValue: StoredDn);
+        var result = ReconcileOne(cso, ChangeTo(attribute, PendingExportAttributeChangeType.Add, unresolvedReferenceValue: WrittenDn));
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_CaseInsensitiveReferenceExportedAsResolvedStringDifferingOnlyInCase_ConfirmsIt()
+    {
+        var attribute = MemberAttribute(caseInsensitive: true);
+        var cso = CsoHolding(attribute, unresolvedReferenceValue: StoredDn);
+        var result = ReconcileOne(cso, ChangeTo(attribute, PendingExportAttributeChangeType.Add, stringValue: WrittenDn));
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    private static ConnectedSystemObjectTypeAttribute DistinguishedNameAttribute(bool caseInsensitive) =>
+        new() { Id = 1, Name = "distinguishedName", Type = AttributeDataType.Text, CaseInsensitive = caseInsensitive };
+
+    private static ConnectedSystemObjectTypeAttribute MemberAttribute(bool caseInsensitive) =>
+        new() { Id = 2, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued, CaseInsensitive = caseInsensitive };
+
+    private static ConnectedSystemObject CsoHolding(ConnectedSystemObjectTypeAttribute attribute, string? stringValue = null, string? unresolvedReferenceValue = null)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = attribute.Id,
+            Attribute = attribute,
+            StringValue = stringValue,
+            UnresolvedReferenceValue = unresolvedReferenceValue
+        });
+        return cso;
+    }
+
+    private static PendingExportAttributeValueChange ChangeTo(
+        ConnectedSystemObjectTypeAttribute attribute,
+        PendingExportAttributeChangeType changeType,
+        string? stringValue = null,
+        string? unresolvedReferenceValue = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        AttributeId = attribute.Id,
+        Attribute = attribute,
+        ChangeType = changeType,
+        StringValue = stringValue,
+        UnresolvedReferenceValue = unresolvedReferenceValue,
+        Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+    };
+
+    private PendingExportReconciliationResult ReconcileOne(ConnectedSystemObject cso, PendingExportAttributeValueChange change)
+    {
+        var pendingExport = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [change] };
+        var result = new PendingExportReconciliationResult();
+        _engine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+        return result;
+    }
+
+    #endregion
+
     #region Helpers
 
     private static ConnectedSystemObject CreateCsoWithAttributeValue(

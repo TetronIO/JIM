@@ -54,6 +54,19 @@ public class ConnectedSystemAttributeDtoTests
         }
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void FromEntity_CarriesWhetherValuesCompareIgnoringCase(bool caseInsensitive)
+    {
+        // Explains to an API client why a DN the directory reports in another case is confirmed (#2195).
+        var dto = ConnectedSystemAttributeDto.FromEntity(new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1, Name = "distinguishedName", Type = AttributeDataType.Text, CaseInsensitive = caseInsensitive
+        });
+
+        Assert.That(dto.CaseInsensitive, Is.EqualTo(caseInsensitive));
+    }
+
     [Test]
     public void FromEntity_ADeclaredReferenceTarget_CarriesItsIdAndNameForApiClients()
     {

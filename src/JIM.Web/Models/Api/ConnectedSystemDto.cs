@@ -474,6 +474,16 @@ public class ConnectedSystemAttributeDto
     public string Writability { get; set; } = null!;
 
     /// <summary>
+    /// Whether the Connected System treats two values of this attribute that differ only in letter case as the same
+    /// value, as an LDAP directory does a distinguished name. JIM confirms an exported value the Connected System
+    /// reports back in a different case, and does not export a change of case alone.
+    /// </summary>
+    /// <remarks>
+    /// Read-only: declared by the Connector at schema discovery (#2195), never set through this API.
+    /// </remarks>
+    public bool CaseInsensitive { get; set; }
+
+    /// <summary>
     /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
     /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
     /// resolution resolves the reference within that Object Type alone; null means the schema does not say
@@ -506,6 +516,7 @@ public class ConnectedSystemAttributeDto
             Required = entity.Required,
             SelectionLocked = entity.SelectionLocked,
             Writability = entity.Writability.ToString(),
+            CaseInsensitive = entity.CaseInsensitive,
             ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
             ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };

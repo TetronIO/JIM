@@ -144,6 +144,7 @@ internal static class AuxiliaryClassAttributeMerger
                     AttributePlurality = attribute.AttributePlurality,
                     Type = attribute.Type,
                     Writability = attribute.Writability,
+                    CaseInsensitive = attribute.CaseInsensitive,
 
                     // The auxiliary class's own requirement travels with the attribute: an entry that carries the
                     // class must satisfy its MUSTs, whichever structural class it is merged onto.

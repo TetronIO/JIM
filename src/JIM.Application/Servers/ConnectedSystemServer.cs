@@ -2820,6 +2820,7 @@ public partial class ConnectedSystemServer
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
+                        existingAttribute.CaseInsensitive = schemaAttribute.CaseInsensitive;
                         existingAttribute.Required = schemaAttribute.Required;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
@@ -2835,6 +2836,7 @@ public partial class ConnectedSystemServer
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
+                            CaseInsensitive = schemaAttribute.CaseInsensitive,
                             Required = schemaAttribute.Required
                         });
                     }
@@ -2866,6 +2868,7 @@ public partial class ConnectedSystemServer
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
+                        CaseInsensitive = a.CaseInsensitive,
                         Required = a.Required
                     }).ToList()
                 };

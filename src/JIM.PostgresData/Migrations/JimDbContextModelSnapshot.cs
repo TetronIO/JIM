@@ -3541,6 +3541,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributePlurality")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("CaseInsensitive")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ClassName")
                         .HasColumnType("text");
 

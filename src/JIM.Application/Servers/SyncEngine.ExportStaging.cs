@@ -1246,11 +1246,13 @@ public partial class SyncEngine
             return string.Equals(pendingChange.StringValue, existingValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Compare based on which value type is set
-        // String comparison (case-sensitive for regular attributes)
+        // Compare based on which value type is set. Text is compared ordinally, unless the Connector declared the
+        // attribute case-insensitive (an LDAP distinguished name, #2195): there a value differing only in case is the
+        // value the Connected System already holds, and staging it would only send a change the Connector skips.
+        var textComparison = TextComparisonFor(pendingChange.Attribute ?? existingValue.Attribute);
         if (pendingChange.StringValue != null || existingValue.StringValue != null)
         {
-            return string.Equals(pendingChange.StringValue, existingValue.StringValue, StringComparison.Ordinal);
+            return string.Equals(pendingChange.StringValue, existingValue.StringValue, textComparison);
         }
 
         // Integer comparison
@@ -1302,7 +1304,7 @@ public partial class SyncEngine
         // Unresolved reference comparison (only if neither side used cross-field DN)
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
-            return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
+            return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, textComparison);
         }
 
         // Both null/empty - consider them matching

@@ -114,6 +114,20 @@ public class AuxiliaryClassAttributeMergerTests
     }
 
     [Test]
+    public void Merge_WithACaseInsensitiveAuxiliaryAttribute_CarriesThatDeclarationAcross()
+    {
+        // The Connector's statement that values differ only in case travels with the attribute (#2195), or a DN-valued
+        // attribute contributed by an auxiliary class would retry every export the directory reports in its own case.
+        var connectedSystem = BuildSystem();
+        connectedSystem.ObjectTypes!.Single(ot => ot.Id == PosixAccountId).Attributes.Single(a => a.Name == "uidNumber").CaseInsensitive = true;
+        Extend(connectedSystem, PersonId, PosixAccountId);
+
+        AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        Assert.That(Person(connectedSystem).Attributes!.Single(a => a.Name == "uidNumber").CaseInsensitive, Is.True);
+    }
+
+    [Test]
     public void Merge_WithASelectedAuxiliaryClass_RecordsWhichClassEachAttributeCameFrom()
     {
         // Provenance is what lets the portal say why an attribute is on this type, and is how the merger later

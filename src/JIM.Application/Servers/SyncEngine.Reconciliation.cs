@@ -412,12 +412,13 @@ public partial class SyncEngine
             return false;
 
         var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
+        var comparison = TextComparisonFor(attrChange.Attribute);
 
         return attrType switch
         {
             AttributeDataType.Text =>
                 !string.IsNullOrEmpty(attrChange.StringValue) &&
-                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, StringComparison.Ordinal)),
+                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, comparison)),
 
             AttributeDataType.Number =>
                 attrChange.IntValue.HasValue &&
@@ -453,13 +454,24 @@ public partial class SyncEngine
                 // 2. StringValue — set during export resolution (when UnresolvedReferenceValue is cleared)
                 // We need to check both the Pending Export value AND the CSO values to handle both cases
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal))) ||
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, comparison))) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, StringComparison.Ordinal))),
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, comparison))),
 
             _ => false
         };
     }
+
+    /// <summary>
+    /// How two text values of an attribute compare: ignoring case where the Connector declared the attribute
+    /// case-insensitive (an LDAP distinguished name, #2195), and ordinally otherwise.
+    /// </summary>
+    internal static StringComparison TextComparisonFor(ConnectedSystemObjectTypeAttribute? attribute) =>
+        attribute?.CaseInsensitive == true ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    /// <inheritdoc cref="TextComparisonFor"/>
+    private static StringComparer TextComparerFor(bool caseInsensitive) =>
+        caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     /// <summary>
     /// Per-attribute value index (#988): a comparison-ready structure built once per CSO attribute
@@ -488,6 +500,12 @@ public partial class SyncEngine
         /// </summary>
         public required List<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
 
+        /// <summary>
+        /// Whether <see cref="TextValues"/> and <see cref="ReferenceValues"/> were built ignoring case, as the values'
+        /// own attribute declares (#2195). A probe whose attribute says otherwise takes the linear fallback.
+        /// </summary>
+        public bool CaseInsensitive { get; init; }
+
         public HashSet<string>? TextValues { get; init; }
         public HashSet<string>? ReferenceValues { get; init; }
         public HashSet<int>? NumberValues { get; init; }
@@ -505,13 +523,17 @@ public partial class SyncEngine
     /// </summary>
     private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
     {
+        var caseInsensitive = values.Count > 0 && values[0].Attribute?.CaseInsensitive == true;
+        var textComparer = TextComparerFor(caseInsensitive);
+
         return attrType switch
         {
             AttributeDataType.Text => new AttributeValueIndex
             {
                 Count = values.Count,
                 RawValues = values,
-                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(StringComparer.Ordinal)
+                CaseInsensitive = caseInsensitive,
+                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(textComparer)
             },
 
             AttributeDataType.Reference => new AttributeValueIndex
@@ -521,7 +543,8 @@ public partial class SyncEngine
                 // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
                 // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
                 // so a single index built from that one CSO-side field covers both probes.
-                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(StringComparer.Ordinal)
+                CaseInsensitive = caseInsensitive,
+                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(textComparer)
             },
 
             AttributeDataType.Number => new AttributeValueIndex
@@ -619,7 +642,14 @@ public partial class SyncEngine
             // for uniformity.
             _ => false
         };
-        if (!typedSetAvailableForProbe)
+        // The same guard for text comparison: an index built ignoring case cannot answer an ordinal probe, nor the
+        // reverse, so a disagreement between the two sides' attributes takes the comparison the change's own
+        // attribute asks for.
+        var probeCaseInsensitive = attrChange.Attribute?.CaseInsensitive == true;
+        var textSetMatchesProbe = attrType is not (AttributeDataType.Text or AttributeDataType.Reference)
+                                  || index.CaseInsensitive == probeCaseInsensitive;
+
+        if (!typedSetAvailableForProbe || !textSetMatchesProbe)
             return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch

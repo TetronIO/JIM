@@ -120,6 +120,7 @@ internal class LdapConnectorSchema
                 if (AddObjectTypeAttributes(objectType))
                 {
                     ApplyExternalIdRecommendations(objectType);
+                    DeclareDistinguishedNamesCaseInsensitive(objectType);
                     _schema.ObjectTypes.Add(objectType);
                 }
             }
@@ -548,6 +549,7 @@ internal class LdapConnectorSchema
                 objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
 
                 ApplyExternalIdRecommendations(objectType);
+                DeclareDistinguishedNamesCaseInsensitive(objectType);
                 _schema.ObjectTypes.Add(objectType);
             }
 
@@ -817,6 +819,24 @@ internal class LdapConnectorSchema
             // needs it writable because the DN is provided by the client in Add requests to specify where
             // the object is created. It's not written as an attribute — it's the target of the LDAP Add operation.
             dnSchemaAttribute.Writability = AttributeWritability.Writable;
+        }
+    }
+
+    /// <summary>
+    /// Declares every distinguished name on an object type case-insensitive (#2195): <c>distinguishedName</c> itself,
+    /// and every attribute of DN syntax, which discovery types as a Reference. A directory compares DNs ignoring case
+    /// and reports one in the case it stored, so a DN JIM wrote as <c>DC=panoply,DC=local</c> comes back as
+    /// <c>DC=PANOPLY,DC=LOCAL</c> when that is how the domain was created. Other text keeps its case: a directory
+    /// stores a display name as given, so changing its case is a real change to export.
+    /// Must run after <see cref="ApplyExternalIdRecommendations"/>, which retypes <c>distinguishedName</c> as Text.
+    /// </summary>
+    private static void DeclareDistinguishedNamesCaseInsensitive(ConnectorSchemaObjectType objectType)
+    {
+        foreach (var attribute in objectType.Attributes.Where(a =>
+                     a.Type == AttributeDataType.Reference ||
+                     a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase)))
+        {
+            attribute.CaseInsensitive = true;
         }
     }
 }
