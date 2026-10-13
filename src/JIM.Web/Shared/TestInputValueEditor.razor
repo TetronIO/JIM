@@ -1,0 +1,95 @@
+@using JIM.Models.Core
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One configuration tester input's value editor (#2055), typed from the schema: a value per line for a multi-valued
+   attribute, True or False for a Boolean, otherwise a text box with the type's format as its placeholder. Never
+   disabled: an untouched input has no value, and typing into it gives it one. The Attribute Flow and Scope testers
+   share it, so an input reads and behaves the same in both. *@
+@if (Plurality == AttributePlurality.MultiValued)
+{
+    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
+        @foreach (var value in State.Values.ToList())
+        {
+            var held = value;
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" OnClose="@(() => ChangeAsync(() => State.Remove(held)))">@held</MudChip>
+        }
+    </MudStack>
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+        <MudTextField T="string" Label="@Label" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                      Placeholder="@Placeholder(Type)" Value="@State.Pending" ValueChanged="@(v => State.Pending = v)"
+                      OnKeyDown="AddOnEnterAsync" />
+        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => ChangeAsync(State.AddPending))">Add value</MudButton>
+    </MudStack>
+}
+else if (Type == AttributeDataType.Boolean)
+{
+    <MudSelect T="string" Label="@Label" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+               Value="@State.Values.FirstOrDefault()" ValueChanged="@(v => ChangeAsync(() => State.SetSingle(v)))">
+        <MudSelectItem T="string" Value="@("True")">True</MudSelectItem>
+        <MudSelectItem T="string" Value="@("False")">False</MudSelectItem>
+    </MudSelect>
+}
+else
+{
+    <MudTextField T="string" Label="@Label" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                  Placeholder="@Placeholder(Type)"
+                  Value="@State.Values.FirstOrDefault()" ValueChanged="@(v => ChangeAsync(() => State.SetSingle(v)))" />
+}
+
+@code {
+    /// <summary>
+    /// The field's label: what the input is called where it is tested (an Expression's accessor, or an attribute's name).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The attribute's type, which decides the editor and how the tester reads the text.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public AttributeDataType Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or several.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public AttributePlurality Plurality { get; set; }
+
+    /// <summary>
+    /// The input's state, edited in place.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public TestInputState State { get; set; } = null!;
+
+    /// <summary>
+    /// Raised after each edit, so the host can clear a result the edit has made stale and redraw "No value".
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private async Task ChangeAsync(Action change)
+    {
+        change();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task AddOnEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await ChangeAsync(State.AddPending);
+    }
+
+    private static string? Placeholder(AttributeDataType type) => type switch
+    {
+        AttributeDataType.DateTime => "2026-03-15 or 2026-03-15T10:30:00Z",
+        AttributeDataType.Number or AttributeDataType.LongNumber => "A whole number",
+        AttributeDataType.Decimal => "A number, such as 12.5",
+        AttributeDataType.Guid => "A GUID",
+        AttributeDataType.Reference => "The id of the object it refers to",
+        AttributeDataType.Binary => "Base64",
+        _ => null
+    };
+}

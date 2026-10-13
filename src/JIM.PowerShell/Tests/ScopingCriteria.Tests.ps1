@@ -237,3 +237,81 @@ Describe 'New-JIMScopingCriterion presence and pattern operators' {
     }
 }
 
+
+Describe 'Test-JIMScope' {
+    It 'Posts the sample values and as-of time to the scoping criteria test endpoint' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'InScope' }
+            }
+
+            Test-JIMScope -SyncRuleId 12 -Attributes @{ department = 'Finance' } -AsOf '2027-01-31' | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/12/scoping-criteria/test'
+            $script:capturedBody.attributes.department | Should -Be 'Finance'
+            $script:capturedBody.asOf | Should -Be '2027-01-31T00:00:00'
+            $script:capturedBody.ContainsKey('connectedSystemObjectId') | Should -BeFalse
+        }
+    }
+
+    It 'Posts the object to load values from' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'OutOfScope' }
+            }
+
+            Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' | Out-Null
+
+            $script:capturedBody.connectedSystemObjectId | Should -Be ([guid]'0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01')
+            $script:capturedBody.ContainsKey('asOf') | Should -BeFalse
+        }
+    }
+
+    It 'Takes the Synchronisation Rule from the pipeline' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                [PSCustomObject]@{ isValid = $true; outcome = 'InScope' }
+            }
+
+            [PSCustomObject]@{ Id = 15; Name = 'Finance App Users' } | Test-JIMScope -MetaverseObjectId '6f9619ff-8b86-d011-b42d-00c04fc964ff' | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/15/scoping-criteria/test'
+        }
+    }
+
+    It 'Refuses a Connected System Object and a Metaverse Object together' {
+        { Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId ([guid]::NewGuid()) -MetaverseObjectId ([guid]::NewGuid()) } |
+            Should -Throw -ErrorId 'AmbiguousParameterSet,Test-JIMScope'
+    }
+
+    It 'Returns the API object, so the explanation and next change reach the caller' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    IsValid     = $true
+                    Outcome     = 'InScope'
+                    Explanation = [PSCustomObject]@{ Criteria = @([PSCustomObject]@{ Met = $true }) }
+                    NextChange  = [PSCustomObject]@{ At = '2026-12-01T00:00:00Z'; Outcome = 'OutOfScope' }
+                }
+            }
+
+            $result = Test-JIMScope -SyncRuleId 12
+
+            $result.Outcome | Should -Be 'InScope'
+            $result.NextChange.Outcome | Should -Be 'OutOfScope'
+            $result.Explanation.Criteria[0].Met | Should -BeTrue
+        }
+    }
+}

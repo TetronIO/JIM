@@ -873,6 +873,30 @@ public class DynamicExpressoEvaluatorTests
     }
 
     [Test]
+    public void Evaluate_NowWithContextClock_ReturnsTheContextsInstant()
+    {
+        var asOf = new DateTime(2027, 2, 14, 9, 30, 0, DateTimeKind.Utc);
+        var context = new ExpressionContext { NowUtc = asOf };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_evaluator.Evaluate("Now()", context), Is.EqualTo(asOf));
+            Assert.That(_evaluator.Evaluate("Today()", context), Is.EqualTo(asOf.Date));
+        }
+    }
+
+    [Test]
+    public void Evaluate_NowAfterAContextClock_ReturnsTheRealTimeAgain()
+    {
+        _evaluator.Evaluate("Now()", new ExpressionContext { NowUtc = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+        var before = DateTime.UtcNow;
+
+        var result = _evaluator.Evaluate("Now()", new ExpressionContext());
+
+        Assert.That((DateTime)result!, Is.GreaterThanOrEqualTo(before));
+    }
+
+    [Test]
     public void Evaluate_FormatDate_FormatsCorrectlyAsync()
     {
         var context = new ExpressionContext(

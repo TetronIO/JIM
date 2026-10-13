@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1 and 2a complete)
+- **Status:** Doing (Phases 1, 2a and 2b complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -67,9 +67,13 @@ Split by kind into reviewable PRs, in the order other work needs them.
 - **Surfaces:** the portal's `AttributeFlowTestPanel`; `test-expression` gains `connectedSystemObjectId`, `metaverseObjectId`, `inputs`, `valueProcessingSteps` and `ifInputHasNoValue`; `Test-JIMExpression -ConnectedSystemObjectId -MetaverseObjectId`.
 - **As built:** Missing Input Behaviour treats empty text as missing, as synchronisation does, so "No value" and empty text differ in what the Expression sees, not in whether an input counts as missing.
 
-#### Phase 2b: Scope tester and run as of
+#### Phase 2b: Scope tester and run as of ✅
 
 The scoping evaluator and its explanation: the criteria tree, each criterion met or not and why, and when the object would enter or leave scope. **Run as of** fixes the time used by `Now`, `Today` and relative-date criteria (the evaluator gains an injectable clock), for scope and Attribute Flow alike. #2054 builds on this.
+
+- **As built:** `ScopeTester` (JIM.Application) types samples from the schema through the same conversion as the Attribute Flow tester (`TestSampleValues`), holds them on a transient Connected System Object or Metaverse Object, and explains it through `ScopingEvaluationServer`. The clock is `ExpressionContext.NowUtc`, which `Now()` and `Today()` read for the duration of one evaluation; synchronisation leaves it unset.
+- **Next change:** a relative boundary can only cross an object's date at a few instants (the exact instant for Hours, the midnights around it otherwise), so the tester evaluates the rule at each in turn and reports the first that changes the outcome. No reasoning about how criteria combine, and the answer is synchronisation's own.
+- **Surfaces:** the Scope tab's **Test this scope** panel (criteria as they stand on the form), `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria/test` and `Test-JIMScope` (saved criteria); `asOf` on `test-expression`, `-AsOf` on `Test-JIMExpression` and **Run as of** in the Attribute Flow panel.
 
 #### Phase 2c: Object Matching tester
 

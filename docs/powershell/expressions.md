@@ -15,10 +15,10 @@ Tests an expression with sample metaverse and Connected System attribute values.
 
 ```powershell
 # Expression (default)
-Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
+Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-AsOf <datetime>]
 
 # AttributeFlow
-Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-MetaverseObjectId <guid>]
+Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-MetaverseObjectId <guid>] [-AsOf <datetime>]
 ```
 
 ### Parameters
@@ -32,6 +32,7 @@ Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-M
 | `MappingId` | `int` | Yes (AttributeFlow) |  | The ID of the Attribute Flow to test the expression as. The expression tested is Expression, so an edit can be tried before it is saved. |
 | `ConnectedSystemObjectId` | `guid` | No (AttributeFlow) |  | The ID of a Connected System Object whose values to test with, for an import Attribute Flow. Its values for the attributes the expression reads are the inputs, and a value in CsAttributes replaces the object's value for that attribute. An expression that also reads mv["..."] takes those inputs from the Metaverse Object it is joined to. |
 | `MetaverseObjectId` | `guid` | No (AttributeFlow) |  | The ID of a Metaverse Object whose values to test with, for an export Attribute Flow. A value in MvAttributes replaces the object's value for that attribute. |
+| `AsOf` | `datetime` | No |  | The instant to test as of: what Now() and Today() read. A time without a time zone is read as UTC. |
 
 ### Output
 

@@ -1,0 +1,62 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The instant a configuration test runs as of (#2055): what Now() and Today() read, and what relative date criteria
+   such as "30 days ago" resolve against. Empty is the current time. Both fields are UTC, the time JIM synchronises in. *@
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="@Class">
+    <div style="width: 13rem">
+        <MudDatePicker Label="Run as of (UTC)" Date="_date" DateChanged="SetDateAsync" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Clearable="true" Editable="true" Placeholder="Now" DateFormat="yyyy-MM-dd" />
+    </div>
+    <div style="width: 10rem">
+        <MudTimePicker Label="Time (UTC)" Time="_time" TimeChanged="SetTimeAsync" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Disabled="@(_date == null)" />
+    </div>
+</MudStack>
+
+@code {
+    /// <summary>
+    /// The instant, in UTC; null for the current time.
+    /// </summary>
+    [Parameter]
+    public DateTime? Value { get; set; }
+
+    /// <summary>
+    /// Raised when the date or time changes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<DateTime?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// The surrounding geometry, such as a top margin.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private DateTime? _date;
+    private TimeSpan? _time;
+
+    protected override void OnParametersSet()
+    {
+        _date = Value?.Date;
+        _time = Value?.TimeOfDay;
+    }
+
+    private Task SetDateAsync(DateTime? date)
+    {
+        _date = date?.Date;
+        if (_date == null)
+            _time = null;
+        return RaiseAsync();
+    }
+
+    private Task SetTimeAsync(TimeSpan? time)
+    {
+        _time = time;
+        return RaiseAsync();
+    }
+
+    private Task RaiseAsync() => ValueChanged.InvokeAsync(_date is { } date
+        ? DateTime.SpecifyKind(date + (_time ?? TimeSpan.Zero), DateTimeKind.Utc)
+        : null);
+}

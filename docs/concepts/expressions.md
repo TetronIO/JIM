@@ -558,6 +558,7 @@ Choose **Expression** as the source type and type your expression. Once the Attr
 - **Each value is read as its attribute's type.** Type `2026-03-02` for a date and time attribute and the expression receives a date, so `FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")` produces `2026-03-02`. A value that is not of the attribute's type is reported, naming the input.
 - **A multi-valued attribute takes several values.** Type each one and choose **Add value**.
 - **No value is a tick box.** An input you leave untouched has no value. Tick **No value** to make an input absent again after typing in it. Clearing the box gives the input empty text instead, which the expression sees as empty text rather than null. Missing Input Behaviour treats both as missing, as a synchronisation does.
+- **Run as of** sets the date and time (UTC) that `Now()` and `Today()` return, so an expression that depends on the date can be checked for the day it matters. Leave it empty for the current time.
 - **From an object** fills the inputs from a real object: search for a Connected System Object of the rule's Connected System for an import Attribute Flow, or a Metaverse Object for an export one, and pick it. Its values for each input are loaded, every value of a multi-valued attribute included, and you can change any of them to try a variation. An import Attribute Flow that reads `mv["..."]` also takes those inputs from the Metaverse Object the Connected System Object is joined to.
 
 **Reading the result.** **What a Synchronisation would do** traces each step:
@@ -577,7 +578,7 @@ With both values supplied this produces `ada.lovelace@corp.local`. Without the s
 
 Before a target attribute is chosen, the expression is evaluated on its own, with each value as text, and an empty box is no value.
 
-The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow, and optionally a Connected System Object or Metaverse Object to load the values from; without them, the expression is evaluated on its own.
+The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow, and optionally a Connected System Object or Metaverse Object to load the values from; without them, the expression is evaluated on its own. Either way, `-AsOf` (`asOf` over REST) sets the time `Now()` and `Today()` return.
 
 ### Validation
 
