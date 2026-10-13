@@ -45,9 +45,22 @@ public class SchemaRefreshResult
     public List<string> UpdatedObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// Object Types the Connector now reports under a name differing only in case. Each keeps its id and takes the
+    /// new casing (#2051); it is not listed as removed or added.
+    /// </summary>
+    public List<SchemaNameChange> RenamedObjectTypes { get; set; } = new();
+
+    /// <summary>
     /// Attributes that were added, grouped by object type name.
     /// </summary>
     public Dictionary<string, List<string>> AddedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Attributes the Connector now reports under a name differing only in case, grouped by object type name. Each
+    /// keeps its id, so the mappings referring to it survive, and takes the new casing (#2051); it is not listed as
+    /// removed or added.
+    /// </summary>
+    public Dictionary<string, List<SchemaNameChange>> RenamedAttributes { get; set; } = new();
 
     /// <summary>
     /// Attributes that were removed, grouped by object type name.
@@ -127,11 +140,14 @@ public class SchemaRefreshResult
     public bool ActionRequired => AttributesInUse.Count > 0;
 
     /// <summary>
-    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, so a
-    /// refresh carrying only those is offered for applying rather than reported as up to date and discarded.
+    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, and
+    /// case-only renames, so a refresh carrying only those is offered for applying rather than reported as up to date
+    /// and discarded.
     /// </summary>
     public bool HasChanges => AddedObjectTypes.Count > 0 ||
                               RemovedObjectTypes.Count > 0 ||
+                              RenamedObjectTypes.Count > 0 ||
+                              RenamedAttributes.Values.Sum(v => v.Count) > 0 ||
                               AddedAttributes.Values.Sum(v => v.Count) > 0 ||
                               RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
                               ChangedAttributes.Values.Sum(v => v.Count) > 0 ||
@@ -154,6 +170,25 @@ public class SchemaRefreshResult
     /// warrant the destructive decision; see <see cref="ChangedObjectTypeClassifications"/>.
     /// </summary>
     public bool HasObjectTypeClassificationChanges => ChangedObjectTypeClassifications.Values.Sum(v => v.Count) > 0;
+
+    /// <summary>
+    /// The Object Type as JIM held it before the refresh, for a type this result names. The result names a type the
+    /// way the Connector now reports it, so a type renamed only in case (#2051) is found under its old name. An exact
+    /// name wins, so a schema holding two names that differ only in case resolves each to its own type.
+    /// </summary>
+    /// <param name="objectTypeName">The Object Type name as this result reports it.</param>
+    /// <returns>The pre-refresh type, or null when JIM did not hold it before the refresh.</returns>
+    public SchemaRefreshPreRefreshType? FindPreRefreshType(string objectTypeName)
+    {
+        var exact = PreRefreshSchema.FirstOrDefault(type => string.Equals(type.Name, objectTypeName, StringComparison.Ordinal));
+        if (exact != null)
+            return exact;
+
+        var rename = RenamedObjectTypes.FirstOrDefault(r => string.Equals(r.NewName, objectTypeName, StringComparison.Ordinal));
+        return rename == null
+            ? null
+            : PreRefreshSchema.FirstOrDefault(type => string.Equals(type.Name, rename.OldName, StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// Records a definition change the merge applied to an existing attribute, grouped under its object type.

@@ -25,6 +25,13 @@
                 <td class="jim-text-code">@string.Join(", ", Result.UpdatedObjectTypes)</td>
             </tr>
         }
+        @if (ShowAdditions && Result.RenamedObjectTypes.Count > 0)
+        {
+            <tr>
+                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.DriveFileRenameOutline" Color="Color.Info" Class="me-1" /><span>Object Types Renamed</span></div></td>
+                <td class="jim-text-code">@string.Join(", ", Result.RenamedObjectTypes.Select(DescribeRename))</td>
+            </tr>
+        }
         @if (ShowAdditions && Result.ObjectTypesWithClassificationUpdates.Count > 0)
         {
             <tr>
@@ -39,6 +46,13 @@
                 <tr>
                     <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Attributes Added (@kvp.Key)</span></div></td>
                     <td class="jim-text-code">@string.Join(", ", kvp.Value)</td>
+                </tr>
+            }
+            @foreach (var kvp in Result.RenamedAttributes)
+            {
+                <tr>
+                    <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.DriveFileRenameOutline" Color="Color.Info" Class="me-1" /><span>Attributes Renamed (@kvp.Key)</span></div></td>
+                    <td class="jim-text-code">@string.Join(", ", kvp.Value.Select(DescribeRename))</td>
                 </tr>
             }
         }
@@ -106,6 +120,8 @@
         var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
         return $"{change.AttributeName}: {aspect} {change.OldValue} → {change.NewValue}";
     }
+
+    private static string DescribeRename(SchemaNameChange rename) => $"{rename.OldName} → {rename.NewName}";
 
     private static string DescribeClassification(SchemaObjectTypeClassificationChange change)
     {

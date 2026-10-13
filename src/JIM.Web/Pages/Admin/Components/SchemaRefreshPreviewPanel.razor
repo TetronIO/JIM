@@ -355,6 +355,8 @@
     private bool HasAdditions =>
         Result.AddedObjectTypes.Count > 0 ||
         Result.UpdatedObjectTypes.Count > 0 ||
+        Result.RenamedObjectTypes.Count > 0 ||
+        Result.RenamedAttributes.Values.Sum(v => v.Count) > 0 ||
         Result.ObjectTypesWithClassificationUpdates.Count > 0 ||
         Result.AddedAttributes.Values.Sum(v => v.Count) > 0;
 

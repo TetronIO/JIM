@@ -558,7 +558,7 @@ public class DriftDetectionService
                     // Check if any of the mappings for this system target this attribute
                     foreach (var mapping in kvp.Value)
                     {
-                        if (mapping.TargetMetaverseAttribute?.Name == attributeName)
+                        if (string.Equals(mapping.TargetMetaverseAttribute?.Name, attributeName, StringComparison.OrdinalIgnoreCase))
                         {
                             Log.Debug("IsContributorForExpressionAttributes: System {SystemId} is a contributor " +
                                 "for attribute {AttrName} referenced in expression: {Expression}",
