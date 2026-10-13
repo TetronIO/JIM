@@ -26,6 +26,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
+using JIM.Models.Search;
 using JIM.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -8533,10 +8534,11 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates that every scoping criterion uses a comparison operator applicable to its attribute's data type,
-    /// using the shared <see cref="SearchComparisonOperators"/> rule. Throws <see cref="ArgumentException"/> on the
-    /// first invalid combination found, so a Synchronisation Rule with, for example, "Starts With" on a DateTime
-    /// attribute can never be persisted (the evaluator could never satisfy it, silently dropping objects from scope).
+    /// Validates every scoping criterion with the shared <see cref="CriterionValidation"/> rule (#2053): an operator
+    /// applicable to its attribute's data type in scoping, the value it compares against, and a pattern JIM can run.
+    /// Throws <see cref="ArgumentException"/> on the first invalid criterion found, so a Synchronisation Rule with, for
+    /// example, "Starts With" on a DateTime attribute can never be persisted (the evaluator could never satisfy it,
+    /// silently dropping objects from scope).
     /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
     /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
     /// </summary>
@@ -8554,11 +8556,14 @@ public partial class ConnectedSystemServer
             if (attributeType == null)
                 continue;
 
-            if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, attributeType.Value))
+            // A criterion whose operator takes no value is stored without one, whatever the caller sent.
+            CriterionValidation.ClearValues(criterion);
+            var attributeName = criterion.GetAttributeName() ?? "an attribute";
+            var error = CriterionValidation.Validate(criterion, attributeType.Value, CriterionContext.Scoping, attributeName);
+            if (error != null)
             {
-                var message = $"Comparison operator '{criterion.ComparisonType}' is not valid for the {attributeType.Value} " +
-                              $"attribute '{criterion.GetAttributeName()}' on scoping criteria.";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", message);
+                var message = $"Scoping criterion on '{attributeName}' cannot be saved: {error}";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
                 throw new ArgumentException(message);
             }
         }

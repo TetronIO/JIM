@@ -189,6 +189,13 @@
 
         void Add(string label, string value) => rules.Add(new KeyValuePair<string, string>(label, value));
 
+        // The condition comes first: it decides whether any of the rules below apply at all.
+        if (attribute.AttributeDependency is { } dependency)
+        {
+            Add("Only when", CriterionOperatorOptions.DescribeCondition(dependency.MetaverseAttribute.Name, dependency.ComparisonType,
+                dependency.MetaverseAttribute.Type, dependency.StringValue));
+        }
+
         switch (attribute.MetaverseAttribute?.Type)
         {
             case AttributeDataType.Text:

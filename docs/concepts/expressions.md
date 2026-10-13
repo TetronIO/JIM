@@ -524,6 +524,14 @@ The Attribute Flow dialog tests an expression as you write it, so you find out w
 
 Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to, a list as one value per line.
 
+The test runs the Attribute Flow the way a synchronisation runs it, using the same code:
+
+- **Each sample is read as its attribute's type.** Type `2026-03-02` for a date and time attribute and the expression receives a date, so `FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")` produces `2026-03-02`. A sample that is not a value of the attribute's type is reported, naming the input.
+- **The Attribute Flow's own settings apply.** Its Missing Input Behaviour, its value processing (trimming, collapsing whitespace, case normalisation, whitespace as no value) and conversion to the target attribute's type all run in turn.
+- **"What a Synchronisation would do" gives the outcome.** It shows the values the target attribute would hold, or that it would get no value, or the error a synchronisation would record, such as a result the target's type cannot hold.
+
+Before a target attribute is chosen, the expression is evaluated on its own, with each sample as text.
+
 **Leave a box empty to see what happens when the object has no value for that attribute.** An empty box is passed to the expression as no value, not as an empty string, so this is how you check an expression against the hazard the previous section describes:
 
 ```csharp
@@ -532,7 +540,7 @@ Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@corp.local"
 
 With both values supplied this produces `ada.lovelace@corp.local`. Clear the surname box and it produces `ada.@corp.local`: a syntactically fine string that is not an email address, which nothing downstream can tell apart from a good one. Seeing that before saving is the point.
 
-The same evaluation is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API, for testing an expression from a script.
+The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow; without them, the expression is evaluated on its own.
 
 ### Validation
 
