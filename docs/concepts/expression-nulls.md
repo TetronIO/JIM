@@ -108,10 +108,10 @@ Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or 
 | `null` (for example `Trim()` of an absent attribute) | No value | ❌ Clears any existing value |
 | Whitespace only, **Treat whitespace as no value** on (default) | No value | ❌ Clears any existing value |
 | Whitespace only, **Treat whitespace as no value** off | Literal whitespace | ✅ Stored (flagged `(whitespace)` in the portal) |
-| Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ✅ Stored as-is, bypassing the null/clear path |
+| Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ❌ Stored as-is, bypassing the null/clear path; the malformed value reaches the target |
 | A non-empty value | That value, in the attribute's type | ✅ Stored |
-| A value the attribute cannot hold (for example text, for a Number attribute) | Nothing | ⚠️ Kept as it was; the object is reported with an expression error |
-| More than one value, for a single-valued attribute | Nothing | ⚠️ Kept as it was; the object is reported with a `Multi-Valued to Single-Valued` error |
+| A value the attribute cannot hold (for example text, for a Number attribute) | Nothing | Kept as it was; the object is reported with an expression error |
+| More than one value, for a single-valued attribute | Nothing | Kept as it was; the object is reported with a `Multi-Valued to Single-Valued` error |
 
 The "Effect on target" column describes an attribute with a single contributing Synchronisation Rule. Where several rules contribute, a "no value" outcome feeds [Attribute Priority](attribute-priority.md) resolution instead of clearing outright (see point 1).
 
