@@ -1,6 +1,6 @@
 # One Operator Catalogue and Function Library
 
-- **Status:** Doing (PR A in progress)
+- **Status:** Doing (PR A complete; PRs B and C outstanding)
 - **Issue:** [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2 of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 2: One operator catalogue and function library", Scenarios 8, 9 and 13)
 
@@ -88,7 +88,7 @@ Predefined Search SQL ----> parity tests against CriterionComparer
 
 ## Implementation Phases
 
-### PR A: The operator catalogue and one comparison
+### PR A: The operator catalogue and one comparison ✅
 
 Needs neither in-flight dependency.
 
