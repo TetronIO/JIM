@@ -619,6 +619,7 @@ public partial class SyncEngine
                 {
                     Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
                     TargetAttributeName = target.Name,
+                    SourceAttributeName = evaluation.Resolution.SourceAttributeName,
                     Expression = source.Expression,
                     ValueCount = evaluation.Resolution.ValueCount
                 });
@@ -1455,7 +1456,8 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Builds the <c>cs[...]</c> attribute dictionary an Expression evaluates against. Internal (rather than
+    /// Builds the <c>cs[...]</c> attribute dictionary an Expression evaluates against: every value of each attribute,
+    /// as <see cref="ExpressionAttributeDictionary"/> reads them (#2053). Internal (rather than
     /// private) so the provenance inspector (#399) can evaluate an Attribute Priority candidate's expression
     /// exactly as the engine would, without duplicating this projection logic.
     /// </summary>
@@ -1463,7 +1465,7 @@ public partial class SyncEngine
         ConnectedSystemObject cso,
         ConnectedSystemObjectType csoType)
     {
-        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var attributes = new ExpressionAttributeDictionary();
 
         foreach (var attributeValue in cso.AttributeValues)
         {
@@ -1475,16 +1477,10 @@ public partial class SyncEngine
                 continue;
             }
 
-            var attributeName = csotAttribute.Name;
-            var value = ToExpressionValue(attributeValue, csotAttribute.Type);
-
-            if (!attributes.ContainsKey(attributeName))
-            {
-                attributes[attributeName] = value;
-            }
+            attributes.Add(csotAttribute.Name, ToExpressionValue(attributeValue, csotAttribute.Type));
         }
 
-        return attributes;
+        return attributes.Build();
     }
 
     /// <summary>

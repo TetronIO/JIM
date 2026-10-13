@@ -163,6 +163,9 @@ public static class AttributeFlowTester
                 AttributeFlowErrorReason.ResultNotConvertible =>
                     $"The Expression returned '{evaluation.Resolution?.UnconvertibleValue}', which a {evaluation.TargetType} attribute cannot hold, so " +
                     $"{keepsValue}.",
+                AttributeFlowErrorReason.ResultMultiValued when evaluation.Resolution?.SourceAttributeName is { } sourceAttribute =>
+                    $"'{sourceAttribute}' has {evaluation.Resolution.ValueCount} values, but {target} is single-valued, so {keepsValue}. " +
+                    "Use Where, Join, Count, Min or Max to say which value it should have.",
                 AttributeFlowErrorReason.ResultMultiValued =>
                     $"The Expression returned {evaluation.Resolution?.ValueCount} values, but {target} is single-valued, so " +
                     $"{keepsValue}.",

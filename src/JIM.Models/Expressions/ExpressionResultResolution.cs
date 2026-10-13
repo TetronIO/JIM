@@ -40,6 +40,13 @@ public sealed class ExpressionResultResolution
     public int ValueCount { get; private init; }
 
     /// <summary>
+    /// The attribute every value of which the result held, where it held one attribute's values (<c>cs["proxyAddresses"]</c>,
+    /// or a transform of them), so the error can name it (#2053). Populated only for
+    /// <see cref="ExpressionResultResolutionKind.SeveralValues"/>, and null where the values did not come from one attribute.
+    /// </summary>
+    public string? SourceAttributeName { get; private init; }
+
+    /// <summary>
     /// The result supplies no value.
     /// </summary>
     public static ExpressionResultResolution NoValue() => new(ExpressionResultResolutionKind.NoValue);
@@ -59,6 +66,6 @@ public sealed class ExpressionResultResolution
     /// <summary>
     /// The result held more than one distinct value for a single-valued attribute.
     /// </summary>
-    public static ExpressionResultResolution SeveralValues(int valueCount) =>
-        new(ExpressionResultResolutionKind.SeveralValues) { ValueCount = valueCount };
+    public static ExpressionResultResolution SeveralValues(int valueCount, string? sourceAttributeName = null) =>
+        new(ExpressionResultResolutionKind.SeveralValues) { ValueCount = valueCount, SourceAttributeName = sourceAttributeName };
 }

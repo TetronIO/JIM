@@ -22,6 +22,27 @@ public static class TestExpressionSampleValues
             ? []
             : attributes.Select(attribute => new AttributeFlowTestInput(source, attribute.Key, Values(attribute.Value)));
 
+    /// <summary>
+    /// The samples in <paramref name="attributes"/> as an expression's attribute dictionary (#2053): null is no value,
+    /// an array is several values (read in their fixed order by the accessor), and anything else is one value.
+    /// </summary>
+    public static Dictionary<string, object?> ToExpressionAttributes(Dictionary<string, object?>? attributes)
+    {
+        var expressionAttributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (attributes == null)
+            return expressionAttributes;
+
+        foreach (var (name, sample) in attributes)
+        {
+            var values = Values(sample);
+            expressionAttributes[name] = sample is JsonElement { ValueKind: JsonValueKind.Array } or (IEnumerable and not string and not byte[])
+                ? values
+                : values.FirstOrDefault();
+        }
+
+        return expressionAttributes;
+    }
+
     private static List<object> Values(object? sample) => sample switch
     {
         null => [],

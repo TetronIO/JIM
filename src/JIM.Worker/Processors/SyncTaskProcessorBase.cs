@@ -6730,6 +6730,13 @@ public abstract class SyncTaskProcessorBase
                     $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
                     $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
 
+            case AttributeFlowErrorKind.ExpressionResultMultiValued when error.SourceAttributeName != null:
+                // The Expression handed on every value of one attribute (#2053): name it, and how to choose one.
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"'{error.SourceAttributeName}' has {error.ValueCount} values but target attribute {target} is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Use Where, " +
+                    $"Join, Count, Min or Max in the Expression to say which value it should have, or map it to a multi-valued attribute: '{error.Expression}'.");
+
             case AttributeFlowErrorKind.ExpressionResultMultiValued:
                 return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
                     $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
