@@ -165,7 +165,8 @@ function Split-OutputsHelp {
 
 # Text from help or a DTO comment, made fit for the page: a cmdlet with its parameters, a parameter, and $true,
 # $false and $null in code, which Get-Help cannot show and so the help leaves plain; and "empty" for null, a word
-# from the source the page does not use (VOI-1). Text already in code is left as it is.
+# from the source the page does not use (VOI-1). Text already in code is left as it is, and so is a quoted label,
+# which is the product's own wording ("Null is a value").
 function ConvertTo-PageText {
     param([AllowNull()][string]$Text)
 
@@ -173,7 +174,10 @@ function ConvertTo-PageText {
     $code = '(?<![\w-])[A-Z][a-z]+-JIM[A-Za-z0-9]*(?:\s+-[A-Z][A-Za-z0-9]*(?::\$\w+)?)*|(?<![\w-])-[A-Z][A-Za-z0-9]*(?::\$\w+)?(?![\w-])|(?<!\w)\$(?:true|false|null)\b'
     $parts = foreach ($part in [regex]::Split($Text, '(`[^`]*`)')) {
         if ($part.StartsWith('`')) { $part; continue }
-        $part = $part -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        $part = @(foreach ($piece in [regex]::Split($part, '("[^"]*")')) {
+            if ($piece.StartsWith('"')) { $piece; continue }
+            $piece -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        }) -join ''
         [regex]::Replace($part, $code, { param($match) '`' + $match.Value + '`' })
     }
     $parts -join ''

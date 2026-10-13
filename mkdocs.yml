@@ -211,6 +211,8 @@ nav:
       - Synchronisation Rules: powershell/synchronisation-rules.md
       - Data Flow: powershell/data-flow.md
       - Metaverse: powershell/metaverse.md
+      - Metaverse Object Types: powershell/metaverse-object-types.md
+      - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
