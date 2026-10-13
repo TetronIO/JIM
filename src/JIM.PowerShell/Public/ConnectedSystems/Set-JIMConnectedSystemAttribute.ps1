@@ -21,7 +21,7 @@ function Set-JIMConnectedSystemAttribute {
 
     .PARAMETER AttributeUpdates
         The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings
-        to change: for example @{ 10 = @{ selected = $true }; 11 = @{ selected = $true } }.
+        to change (selected, isExternalId, isSecondaryExternalId); the examples show one.
 
     .PARAMETER Selected
         Whether JIM imports and exports the attribute.

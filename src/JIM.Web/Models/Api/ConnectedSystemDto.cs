@@ -92,9 +92,9 @@ public class ConnectedSystemDetailDto
     public bool RequireSecureTransport { get; set; }
 
     /// <summary>
-    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
-    /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
-    /// both the per-object error and the Activity warning while still logging the occurrence.
+    /// How an imported reference value that cannot be resolved to a Connected System Object is treated. The
+    /// default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while
+    /// still logging the occurrence.
     /// </summary>
     public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
 
@@ -107,7 +107,7 @@ public class ConnectedSystemDetailDto
     /// <summary>
     /// When a stranded-value sweep was armed by a Connector Space clear, or null when no sweep is armed.
     /// The sweep runs at the first Full Synchronisation of this Connected System after
-    /// <see cref="LastSuccessfulFullImportCompletedAt"/> is later than this timestamp; until then it stays
+    /// LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays
     /// armed and a Full Synchronisation does nothing beyond ordinary synchronisation.
     /// </summary>
     public DateTime? StrandedValueSweepArmedAt { get; set; }
@@ -241,14 +241,14 @@ public class ConnectedSystemObjectTypeDto
 
     /// <summary>
     /// Whether the Connected System reported this object type as one it uses internally. Derived from
-    /// <see cref="Tags"/>, and offered here so callers can filter on it without matching tag strings themselves.
+    /// Tags, and offered here so callers can filter on it without matching tag strings themselves.
     /// The portal hides these object types by default.
     /// </summary>
     public bool IsInternal { get; set; }
 
     /// <summary>
     /// Whether the Connected System classified this object type as an auxiliary class: one that augments another
-    /// rather than standing alone. Derived from <see cref="Tags"/>, and offered here so callers need not match tag
+    /// rather than standing alone. Derived from Tags, and offered here so callers need not match tag
     /// strings themselves.
     /// </summary>
     public bool IsAuxiliary { get; set; }
@@ -261,8 +261,7 @@ public class ConnectedSystemObjectTypeDto
     public bool ManagesClassMembership { get; set; }
 
     /// <summary>
-    /// The auxiliary classes an administrator has merged into this object type, as their own object type ids. Set
-    /// through the object type's auxiliary-classes endpoint.
+    /// The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs.
     /// </summary>
     public List<int> MergedAuxiliaryClassObjectTypeIds { get; set; } = [];
 
@@ -332,9 +331,12 @@ public class AuxiliaryClassOfferDto
 
     /// <summary>
     /// The attributes merging this class would contribute, ordered by name and excluding any the Object Type
-    /// already carries. A count alone cannot inform the choice: an administrator merges a class for particular
-    /// attributes, and needs to see them before deciding.
+    /// already carries.
     /// </summary>
+    /// <remarks>
+    /// A count alone cannot inform the choice: an administrator merges a class for particular attributes, and needs
+    /// to see them before deciding.
+    /// </remarks>
     public List<AuxiliaryClassAttributeDto> ContributedAttributes { get; set; } = [];
 
     /// <summary>
@@ -564,7 +566,7 @@ public class ConnectedSystemAttributeDto
     public string Type { get; set; } = null!;
 
     /// <summary>
-    /// Whether <see cref="Type"/> was chosen by an administrator rather than inferred by schema discovery.
+    /// Whether Type was chosen by an administrator rather than inferred by schema discovery.
     /// A chosen type is left alone by a schema refresh; an inferred one is restated from the Connector.
     /// </summary>
     public bool TypeSetByAdministrator { get; set; }
@@ -625,7 +627,7 @@ public class ConnectedSystemAttributeDto
     public int? ReferencedObjectTypeId { get; set; }
 
     /// <summary>
-    /// The name of the Object Type identified by <see cref="ReferencedObjectTypeId"/>, when declared.
+    /// The name of the Object Type identified by ReferencedObjectTypeId, when declared.
     /// </summary>
     /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
     public string? ReferencedObjectTypeName { get; set; }

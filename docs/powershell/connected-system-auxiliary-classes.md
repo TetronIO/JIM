@@ -45,7 +45,7 @@ The auxiliary classes, merged first, then suggested, then the rest by name.
 | `Name` | `string` | The name of the auxiliary class. |
 | `Merged` | `bool` | Whether this class is currently merged into the object type the offers were requested for. |
 | `ContributedAttributeCount` | `int` | How many attributes merging this class would contribute. |
-| `ContributedAttributes` | `object[]` | The attributes merging this class would contribute, ordered by name and excluding any the Object Type already carries. A count alone cannot inform the choice: an administrator merges a class for particular attributes, and needs to see them before deciding. Each has `Name`, `Type`, `AttributePlurality`, `Required` and `IsCredential`. |
+| `ContributedAttributes` | `object[]` | The attributes merging this class would contribute, ordered by name and excluding any the Object Type already carries. Each has `Name`, `Type`, `AttributePlurality`, `Required` and `IsCredential`. |
 | `PermittedByTheConnectedSystem` | `bool` | Whether the Connected System itself says this class may attach, i.e. an RFC 4512 DIT Content Rule names it. Most directories publish no such statement, so its absence says nothing. |
 | `EntriesObservedOn` | `int` | How many of the entries the last discovery run read were carrying this class, or empty when no run has observed it. Read against that run's scope: a quick sample counts within the sample, not the population. |
 | `IsSuggested` | `bool` | Whether anything suggests this class, as opposed to it merely being defined in the schema. |
@@ -116,7 +116,7 @@ With `-PassThru`, the Object Type as changed, whose MergedAuxiliaryClassObjectTy
 | `IsInternal` | `bool` | Whether the Connected System reported this object type as one it uses internally. Derived from Tags, and offered here so callers can filter on it without matching tag strings themselves. The portal hides these object types by default. |
 | `IsAuxiliary` | `bool` | Whether the Connected System classified this object type as an auxiliary class: one that augments another rather than standing alone. Derived from Tags, and offered here so callers need not match tag strings themselves. |
 | `ManagesClassMembership` | `bool` | Whether the Connected System hands this object type's class membership to JIM to compose, which is what makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own auxiliary classes into each structural class. |
-| `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this object type, as their own object type ids. Set through the object type's auxiliary-classes endpoint. |
+| `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs. |
 | `StructuralCarrierObjectTypeId` | `int` | For an auxiliary object type, the structural object type JIM writes alongside it when creating an object, or empty when none has been named and JIM therefore cannot create one. |
 | `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 <!-- END GENERATED: Set-JIMConnectedSystemAuxiliaryClass -->
