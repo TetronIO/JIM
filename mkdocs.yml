@@ -209,6 +209,7 @@ nav:
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
+      - Attribute Mappings: powershell/attribute-mappings.md
       - Scoping Criteria: powershell/scoping-criteria.md
       - Object Matching Rules: powershell/object-matching-rules.md
       - Initial Password: powershell/initial-password.md
