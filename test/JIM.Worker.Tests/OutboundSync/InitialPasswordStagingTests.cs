@@ -618,7 +618,6 @@ public class InitialPasswordStagingTests
         {
             Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
             Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
-            Assert.That(result.InitialPasswordsConflictedCount, Is.Zero);
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
             Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
             Assert.That(SyncRepo.Activities.Values.Any(a => a.ParentActivityId == replacedChangeActivityId), Is.True);
@@ -646,18 +645,16 @@ public class InitialPasswordStagingTests
         {
             Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
             Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
-            Assert.That(result.InitialPasswordsConflictedCount, Is.Zero);
         }
     }
 
     /// <summary>
-    /// The one case that holds the queue's row (#2160): the person's own live change is for the Object Type the system's
-    /// Password Synchronisation sets passwords on, which the new account is not, so it cannot reach it. Nothing is
-    /// written, the export counts the Initial Password as not queued for that reason (not as a failure to record it),
-    /// and the Activity, completed with an error, names the account and says what to do.
+    /// The person's own live change is for the Object Type the system's Password Synchronisation sets passwords on, which
+    /// the new account is not, so it cannot reach it, nor any other account of theirs there while this one is joined to
+    /// them. The Initial Password replaces it with a warning, and the person's change records that it was not set there.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_PropagatedRowForAnotherObjectType_IsConflictedAndSaysWhatToDoAsync()
+    public async Task ExecuteExportsAsync_PropagatedRowForAnotherObjectType_IsReplacedByTheInitialPasswordAsync()
     {
         var metaverseObjectId = Guid.NewGuid();
         var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
@@ -665,21 +662,22 @@ public class InitialPasswordStagingTests
         system.PasswordSynchronisation!.TargetObjectTypeId = cso.TypeId + 1;
         var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
             PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending);
+        var replacedChangeActivityId = existing.ActivityId;
 
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         var row = SyncRepo.PendingPasswordChanges.Values.Single();
         var note = NewestProvisionedActivity();
+        var notSet = SyncRepo.Activities.Values.SingleOrDefault(a => a.ParentActivityId == replacedChangeActivityId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(row.Id, Is.EqualTo(existing.Id));
-            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
-            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.Null);
-            Assert.That(result.InitialPasswordsConflictedCount, Is.EqualTo(1));
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
             Assert.That(result.InitialPasswordStagingFailedCount, Is.Zero);
-            Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
-            Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
-            Assert.That(note.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(notSet?.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
         }
     }
 

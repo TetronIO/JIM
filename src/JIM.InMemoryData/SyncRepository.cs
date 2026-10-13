@@ -3412,7 +3412,7 @@ public class SyncRepository : ISyncRepository
             var requestedId = change.Id;
 
             // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema and the
-            // staging statement's three-way decision (#1697, #2160), which this mirrors over the data this repository
+            // staging statement's decision (#1697, #2160), which this mirrors over the data this repository
             // holds: the Connected Systems seeded with their Password Synchronisation, and the Connected System Objects.
             var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
                 c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
@@ -3432,20 +3432,15 @@ public class SyncRepository : ISyncRepository
             var before = Copy(existing);
             var held = before.IsPropagated && !IsTakingPasswords(before.ConnectedSystemId);
             var accountGone = before.IsExplicit && !IsStillThePersons(before.ConnectedSystemObjectId, before.MetaverseObjectId);
-            var takeover = before.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
+            var givesWay = before.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
                            || IsParkedBeyondCure(before) || held || accountGone || before.IsProvisioned;
+            var forAnotherObjectType = before.IsPropagated
+                                       && !ReachesPasswordSynchronisationTarget(before.ConnectedSystemId, change.ConnectedSystemObjectId);
             var reaches = (before.IsExplicit && before.ConnectedSystemObjectId == change.ConnectedSystemObjectId)
-                          || (before.IsPropagated && ReachesPasswordSynchronisationTarget(before.ConnectedSystemId, change.ConnectedSystemObjectId));
+                          || (before.IsPropagated && !forAnotherObjectType);
 
             ProvisionedPasswordStagingDisposition disposition;
-            if (takeover)
-            {
-                // The row now in the table keeps its own id rather than taking the change's, matching the real
-                // repository, so the caller must adopt it for anything it does with the change afterwards.
-                existing.Supersede(change);
-                disposition = ProvisionedPasswordStagingDisposition.Superseded;
-            }
-            else if (reaches)
+            if (!givesWay && reaches)
             {
                 existing.CarryInitialPassword(change.ConnectedSystemObjectId!.Value, change.SyncRuleId!.Value,
                     change.EnabledStateSetByAttributeFlow, change.ExpiresAt);
@@ -3453,13 +3448,10 @@ public class SyncRepository : ISyncRepository
             }
             else
             {
-                outcomes.Add(new ProvisionedPasswordStagingOutcome
-                {
-                    RowId = Guid.Empty,
-                    RequestedId = requestedId,
-                    Disposition = ProvisionedPasswordStagingDisposition.Conflicted
-                });
-                continue;
+                // The row now in the table keeps its own id rather than taking the change's, matching the real
+                // repository, so the caller must adopt it for anything it does with the change afterwards.
+                existing.Supersede(change);
+                disposition = ProvisionedPasswordStagingDisposition.Superseded;
             }
 
             change.Id = existing.Id;
@@ -3474,7 +3466,8 @@ public class SyncRepository : ISyncRepository
                 ExistingTargetMessage = before.TargetMessage,
                 ExistingActivityId = before.ActivityId,
                 ExistingHeld = held,
-                ExistingAccountGone = accountGone
+                ExistingAccountGone = accountGone,
+                ExistingForAnotherObjectType = forAnotherObjectType
             });
         }
 

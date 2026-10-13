@@ -558,8 +558,6 @@ public class SyncExportTaskProcessor
             AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
 
         // #2160: an Initial Password not queued because another account's change holds the queue's one row.
-        if (result.InitialPasswordsConflictedCount > 0)
-            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordsConflicted(result.InitialPasswordsConflictedCount));
 
         // Set completion message based on mode and results
         string completionMessage;

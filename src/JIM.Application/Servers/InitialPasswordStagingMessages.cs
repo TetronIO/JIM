@@ -10,8 +10,8 @@ namespace JIM.Application.Servers;
 /// <summary>
 /// What export staging says, on its Activities, about the Initial Password of an account it has just provisioned
 /// where the queue already held a password change for the person on that Connected System (#2160): carried by that
-/// change, replacing it, or not queued at all. Every one of these is recorded, so an account's first password is never
-/// decided without a word.
+/// change, or replacing it. Every one of these is recorded, so an account's first password is never decided without a
+/// word.
 /// </summary>
 internal static class InitialPasswordStagingMessages
 {
@@ -52,23 +52,15 @@ internal static class InitialPasswordStagingMessages
         if (outcome.ExistingAccountGone)
             return "it was set on a Connected System Object that no longer exists there, or is no longer this person's.";
 
+        if (outcome.ExistingForAnotherObjectType)
+            return $"it is for the Object Type that Password Synchronisation sets passwords on in {connectedSystemName}, which this Connected " +
+                   "System Object is not, so it could not reach it, nor any other of this person's there while this one is theirs.";
+
         if (outcome.ExistingStatus == PendingPasswordChangeStatus.Parked && outcome.ExistingOrigin != PendingPasswordChangeOrigin.Provisioned)
             return $"JIM had stopped trying to deliver it ({Describe(outcome)}).";
 
         return null;
     }
-
-    /// <summary>
-    /// The queue's one row for the person and Connected System holds their own password change for the Object Type the
-    /// system's Password Synchronisation sets passwords on, which the new account is not, so nothing was queued. A person
-    /// has at most one joined Connected System Object per Connected System, so that change cannot be delivered while this
-    /// one is theirs; says what to do about it.
-    /// </summary>
-    internal static string Conflicted(string connectedSystemName) =>
-        $"Initial password not queued for {connectedSystemName}: this person's own password change is waiting there for the Object Type that " +
-        "Password Synchronisation sets passwords on, which this Connected System Object is not, and JIM holds one password change per person " +
-        "per Connected System. That change cannot be delivered while this Connected System Object is the person's: cancel it on Operations > " +
-        "Passwords, then set a password on this Connected System Object with the set-password action, choosing to enable it if it should be.";
 
     private static string Describe(ProvisionedPasswordStagingOutcome outcome)
     {

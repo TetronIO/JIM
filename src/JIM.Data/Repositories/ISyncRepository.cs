@@ -727,10 +727,9 @@ public interface ISyncRepository
     /// Decided per account in one statement against the row already there, if any
     /// (<see cref="ProvisionedPasswordStagingDisposition"/>): the Initial Password replaces a row that can deliver
     /// nothing to this account (expired, cancelled, parked for a reason no attempt cures, held by a paused system, an
-    /// administrator's set whose account is gone, or an Initial Password for an account gone); a live change that will
-    /// reach the account (a propagated change for the targeted Object Type, or an administrator's set naming it) is
-    /// given the obligation instead and released to be delivered at once; and a row owing another live account of the
-    /// person its first password, or carrying a change for one, is left alone and reported Conflicted.
+    /// administrator's set whose account is gone or disjoined, a propagated change for another Object Type, or an earlier
+    /// Initial Password); and a live change that will reach the account (a propagated change for the targeted Object
+    /// Type, or an administrator's set naming it) is given the obligation instead and released to be delivered at once.
     /// </para>
     /// </summary>
     Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);

@@ -141,10 +141,13 @@ public enum ProvisionedPasswordStagingDisposition
     /// A row existed that the account's Initial Password replaces in place: an expired or cancelled change; an Initial
     /// Password for an account since deleted, disjoined or provisioned again; a password change JIM had stopped
     /// trying because no attempt can deliver it (a policy rejection, an unreadable password, an unsupported operation);
-    /// an administrator's set whose account is gone; or a propagated change held because Password Synchronisation is
-    /// switched off on the system, which has not reached the system and would not, while the account's first password
-    /// is delivered whatever the pause (#2160). The row keeps its own id rather than taking the change's, so a caller
-    /// must adopt the row's id for anything it does with the change afterwards.
+    /// an administrator's set whose account is gone or no longer the person's; a propagated change held because Password
+    /// Synchronisation is switched off on the system, which has not reached the system and would not, while the
+    /// account's first password is delivered whatever the pause; or a propagated change for another Object Type than
+    /// the account's (#2160). A person has at most one joined Connected System Object per Connected System, so a row
+    /// that cannot reach this account cannot reach any of theirs there, and nothing the queue holds is ever left in the
+    /// account's way. The row keeps its own id rather than taking the change's, so a caller must adopt the row's id for
+    /// anything it does with the change afterwards.
     /// </summary>
     Superseded = 1,
 
@@ -155,17 +158,7 @@ public enum ProvisionedPasswordStagingDisposition
     /// rule, and whether the Create wrote the account's flags. Released to be delivered at once, its claim taken back
     /// where it was being delivered, and a park the account cures released.
     /// </summary>
-    Coalesced = 2,
-
-    /// <summary>
-    /// A row existed holding the person's own live password change for the Object Type the system's Password
-    /// Synchronisation sets passwords on, which the new account is not, so nothing was written (#2160). The queue holds
-    /// one password change per person per Connected System; the export reports the Initial Password as not queued, and
-    /// says to cancel that change, which cannot reach any account of the person there while the new one is theirs. No
-    /// other row can conflict: a person has at most one joined Connected System Object per Connected System, so a row
-    /// for any other account is for one that is gone or no longer theirs, and gives way.
-    /// </summary>
-    Conflicted = 3
+    Coalesced = 2
 }
 
 /// <summary>

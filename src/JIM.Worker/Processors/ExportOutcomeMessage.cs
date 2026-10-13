@@ -119,26 +119,6 @@ internal static class ExportOutcomeMessage
               "Connected System Object; the service log names the accounts and the cause.";
 
     /// <summary>
-    /// The warning for newly provisioned accounts whose Initial Password was not queued because the person's own password
-    /// change is waiting in that Connected System for another Object Type than the account's (#2160): JIM holds one per
-    /// person per Connected System, and that change cannot reach the account. Not <see cref="ForInitialPasswordsNotStaged"/>,
-    /// whose remedy (set the password now) the waiting change would block; this one is to cancel that change first.
-    /// </summary>
-    /// <param name="accounts">How many accounts were not queued an Initial Password.</param>
-    internal static string ForInitialPasswordsConflicted(int accounts) =>
-        accounts == 1
-            ? "1 newly provisioned account was not queued an Initial Password, because the person's own password change is waiting in this " +
-              "Connected System for an Object Type its Password Synchronisation sets passwords on, which this account is not, and JIM holds " +
-              "one per person per Connected System. That change cannot reach any account of the person here while this one is theirs: cancel " +
-              "it on Operations > Passwords, then set this account's password with the set-password action, choosing to enable it if it " +
-              "should be; its Activity names it."
-            : $"{accounts:N0} newly provisioned accounts were not queued an Initial Password, because each person's own password change is " +
-              "waiting in this Connected System for an Object Type its Password Synchronisation sets passwords on, which their account is " +
-              "not, and JIM holds one per person per Connected System. Those changes cannot reach any account of the person here while these " +
-              "are theirs: cancel each on Operations > Passwords, then set the account's password with the set-password action, choosing to " +
-              "enable it if it should be; their Activities name them.";
-
-    /// <summary>
     /// The warning for accounts whose enabled state an export wrote where JIM could not check, and record against, any
     /// Initial Password still owed to them (#2064). Delivering such a password would then follow the Synchronisation
     /// Rule's setting rather than the Attribute Flow, which is why the export run says so; most accounts are owed

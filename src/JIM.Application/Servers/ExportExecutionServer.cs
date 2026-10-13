@@ -247,13 +247,12 @@ public class ExportExecutionServer
         // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
         // deployment would otherwise get a pair of zeroes on every export.
         if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0 || result.InitialPasswordMarkingFailedCount > 0
-            || result.InitialPasswordsCarriedCount > 0 || result.InitialPasswordsConflictedCount > 0)
+            || result.InitialPasswordsCarriedCount > 0)
         {
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
                 "recorded as owed an initial password, {CarriedCount} given a password change already waiting for them as their first password, " +
-                "{ConflictedCount} not queued one because the person's own change there is waiting for another Object Type, " +
                 "{FailedCount} that could not be recorded, {MarkingFailedCount} whose written enabled state could not be recorded on the password still owed",
-                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordsCarriedCount, result.InitialPasswordsConflictedCount,
+                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordsCarriedCount,
                 result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
         }
 
@@ -1771,7 +1770,6 @@ public class ExportExecutionServer
         into.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
         into.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
         into.InitialPasswordsCarriedCount += batchResult.InitialPasswordsCarriedCount;
-        into.InitialPasswordsConflictedCount += batchResult.InitialPasswordsConflictedCount;
         into.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
         into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
         into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
@@ -2732,7 +2730,6 @@ public class ExportExecutionServer
             var activities = new List<Activity>(outcomes.Count);
             var stagedCount = 0;
             var carriedCount = 0;
-            var conflicted = new List<Guid>();
             foreach (var outcome in outcomes)
             {
                 var change = byRequestedId[outcome.RequestedId];
@@ -2768,13 +2765,6 @@ public class ExportExecutionServer
                     case ProvisionedPasswordStagingDisposition.Coalesced:
                         carriedCount++;
                         activity.Message = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
-                        break;
-
-                    case ProvisionedPasswordStagingDisposition.Conflicted:
-                        conflicted.Add(change.ProvisionedConnectedSystemObjectId!.Value);
-                        activity.Status = ActivityStatus.CompleteWithError;
-                        activity.Message = InitialPasswordStagingMessages.Conflicted(connectedSystemName);
-                        activity.ErrorMessage = activity.Message;
                         break;
 
                     default:
@@ -2822,16 +2812,6 @@ public class ExportExecutionServer
             }
 
             result.InitialPasswordsCarriedCount += carriedCount;
-            result.InitialPasswordsConflictedCount += conflicted.Count;
-            if (conflicted.Count > 0)
-            {
-                Log.Error("StageInitialPasswordsForBatchAsync: {Count} newly provisioned accounts on Connected System {ConnectedSystemId} were not queued an " +
-                    "initial password, because the person's own password change is waiting there for the Object Type Password Synchronisation sets " +
-                    "passwords on, which these accounts are not, and the queue holds one per person per Connected System. Cancel each such change, " +
-                    "then set a password on each with the set-password action. Connected System Objects: {ConnectedSystemObjectIds}",
-                    conflicted.Count, provisionedAccounts[0].ConnectedSystemId, DescribeConnectedSystemObjectIds(conflicted));
-            }
-
             if (activities.Count > 0)
                 await repository.CreateActivitiesAsync(activities);
 

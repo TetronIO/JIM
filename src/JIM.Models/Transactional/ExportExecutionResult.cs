@@ -196,14 +196,6 @@ public class ExportExecutionResult
     /// </summary>
     public int InitialPasswordsCarriedCount { get; set; }
 
-    /// <summary>
-    /// Number of newly provisioned accounts whose Initial Password was not queued because the queue's one row for the
-    /// person and Connected System holds their own live password change for the Object Type the system's Password
-    /// Synchronisation sets passwords on, which the account is not (#2160). Reported as a warning of its own rather than
-    /// counted in <see cref="InitialPasswordStagingFailedCount"/>, whose remedy (set a password now) that change would
-    /// block; this one's is to cancel it first.
-    /// </summary>
-    public int InitialPasswordsConflictedCount { get; set; }
 
     /// <summary>
     /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was

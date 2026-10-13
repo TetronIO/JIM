@@ -5,15 +5,13 @@ namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
 /// What became of one provisioned password change offered to the queue (#1697, #2160): whether it inserted a new row,
-/// took over an existing one, gave its obligation to a password change already waiting for the account, or was not
-/// queued because the row holds the person's own change for another Object Type.
+/// took over an existing one, or gave its obligation to a password change already waiting for the account.
 /// </summary>
 public class ProvisionedPasswordStagingOutcome
 {
     /// <summary>
     /// The id of the row now in the table for this change's (Metaverse Object, Connected System) key: the inserted
-    /// row, the row taken over, or the waiting change now carrying the account's first password. <see cref="Guid.Empty"/>
-    /// for <see cref="ProvisionedPasswordStagingDisposition.Conflicted"/>, where nothing was written.
+    /// row, the row taken over, or the waiting change now carrying the account's first password.
     /// </summary>
     public Guid RowId { get; init; }
 
@@ -60,4 +58,10 @@ public class ProvisionedPasswordStagingOutcome
     /// longer this person's.
     /// </summary>
     public bool ExistingAccountGone { get; init; }
+
+    /// <summary>
+    /// Whether the existing row was a propagated change for the Object Type the system's Password Synchronisation sets
+    /// passwords on, which the account just provisioned is not, so it could not reach it.
+    /// </summary>
+    public bool ExistingForAnotherObjectType { get; init; }
 }

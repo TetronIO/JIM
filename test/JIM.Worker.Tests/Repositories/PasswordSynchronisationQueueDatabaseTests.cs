@@ -1368,20 +1368,33 @@ public class PasswordSynchronisationQueueDatabaseTests
     }
 
     /// <summary>
-    /// A propagated change for a system whose Password Synchronisation targets another Object Type will never reach this
-    /// account, and is still the person's live password for the account it does target.
+    /// A propagated change for a system whose Password Synchronisation targets another Object Type cannot reach this
+    /// account, nor any other of the person's there while this one is joined to them: the Initial Password replaces it,
+    /// and the outcome says why.
     /// </summary>
     [Test]
-    public async Task StageProvisionedPasswordChangesAsync_PropagatedRowWhoseSystemTargetsAnotherType_IsConflictedAsync()
+    public async Task StageProvisionedPasswordChangesAsync_PropagatedRowWhoseSystemTargetsAnotherType_IsSupersededAsync()
     {
         var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
         var syncRuleId = await SeedSyncRuleAsync(systemId);
         await TargetAnotherObjectTypeAsync(systemId);
-        await QueueWaitingChangeAsync(mvoId, systemId);
+        var existing = await QueueWaitingChangeAsync(mvoId, systemId);
 
         var outcome = await StageAsync(NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow));
 
-        Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Conflicted));
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Superseded));
+            Assert.That(outcome.ExistingForAnotherObjectType, Is.True);
+            Assert.That(outcome.ExistingActivityId, Is.EqualTo(existing.ActivityId));
+            Assert.That(stored.Id, Is.EqualTo(existing.Id));
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(stored.EncryptedPassword, Is.Null);
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
+        }
     }
 
     /// <summary>
