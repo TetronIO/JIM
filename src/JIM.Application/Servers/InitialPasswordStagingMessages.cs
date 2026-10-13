@@ -59,13 +59,16 @@ internal static class InitialPasswordStagingMessages
     }
 
     /// <summary>
-    /// The queue's one row for the person and Connected System still carries another of their Connected System Objects'
-    /// change, so nothing was queued; says what to do, and when, without inviting a set that would replace that change.
+    /// The queue's one row for the person and Connected System holds their own password change for the Object Type the
+    /// system's Password Synchronisation sets passwords on, which the new account is not, so nothing was queued. A person
+    /// has at most one joined Connected System Object per Connected System, so that change cannot be delivered while this
+    /// one is theirs; says what to do about it.
     /// </summary>
     internal static string Conflicted(string connectedSystemName) =>
-        $"Initial password not queued for {connectedSystemName}: a password change for another of this person's Connected System Objects there " +
-        "is still waiting, and JIM holds one password change per person per Connected System. Once it has been delivered, set a password on " +
-        "this Connected System Object with the set-password action, choosing to enable it if it should be.";
+        $"Initial password not queued for {connectedSystemName}: this person's own password change is waiting there for the Object Type that " +
+        "Password Synchronisation sets passwords on, which this Connected System Object is not, and JIM holds one password change per person " +
+        "per Connected System. That change cannot be delivered while this Connected System Object is the person's: cancel it on Operations > " +
+        "Passwords, then set a password on this Connected System Object with the set-password action, choosing to enable it if it should be.";
 
     private static string Describe(ProvisionedPasswordStagingOutcome outcome)
     {

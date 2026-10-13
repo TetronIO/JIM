@@ -2370,23 +2370,22 @@ public class PasswordDeliveryTests
     }
 
     /// <summary>
-    /// The change reached another of the person's accounts than the one it owes its first password (the system now
-    /// targets another Object Type): the promises are never applied to an account they were not made for, and the
-    /// Activity says the other account still has no first password.
+    /// The change reached another account than the one it owes its first password (that one was disjoined from the
+    /// person, and another of theirs joined without JIM provisioning it): the promises are never applied to an account
+    /// they were not made for, and the run counts them as not applied.
     /// </summary>
     [Test]
     public async Task Deliver_PropagatedRowCarryingAFirstPassword_ResolvesToAnotherAccount_DoesNotEnableItAsync()
     {
         await QueueCarryingAFirstPasswordAsync(owedAccountId: Guid.NewGuid());
 
-        await _server.DeliverDuePasswordChangesAsync(
+        var result = await _server.DeliverDuePasswordChangesAsync(
             _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
-        var outcome = _createdActivities.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
-            Assert.That(outcome.Message, Does.Contain("did not reach"));
+            Assert.That(result.FirstPasswordPromisesNotAppliedCount, Is.EqualTo(1));
         }
     }
 

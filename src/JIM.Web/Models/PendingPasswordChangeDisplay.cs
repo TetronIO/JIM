@@ -160,8 +160,8 @@ public static class PendingPasswordChangeDisplay
 
     /// <summary>
     /// Whether cancelling the change leaves a Connected System Object without its first password: an Initial Password,
-    /// or a change carrying the first password in its place (#2160).
+    /// or a change carrying the first password in its place (#2160). Where it does, the portal asks before cancelling it.
     /// </summary>
-    private static bool OwesFirstPassword(PendingPasswordChangeHeader change) =>
+    public static bool OwesFirstPassword(PendingPasswordChangeHeader change) =>
         change.Origin == PendingPasswordChangeOrigin.Provisioned || change.CarriesFirstPassword;
 }

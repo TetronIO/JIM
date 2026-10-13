@@ -265,5 +265,22 @@ public class PendingPasswordChangeDisplayTests
         }
     }
 
+    /// <summary>
+    /// Where the portal asks before cancelling: an Initial Password (even one an older writer queued without naming the
+    /// account it owes), or a change carrying a first password in its place; an ordinary change is cancelled at once.
+    /// </summary>
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, false, true)]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, true, true)]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, false, false)]
+    [TestCase(PendingPasswordChangeOrigin.Explicit, false, false)]
+    public void OwesFirstPassword_IsTrueForAnInitialPasswordOrAChangeCarryingOne(PendingPasswordChangeOrigin origin, bool carries, bool owes)
+    {
+        var change = Change(origin: origin);
+        change.ProvisionedConnectedSystemObjectId = carries ? Guid.NewGuid() : null;
+
+        Assert.That(PendingPasswordChangeDisplay.OwesFirstPassword(change), Is.EqualTo(owes));
+    }
+
     #endregion
 }

@@ -1334,19 +1334,20 @@ public class PasswordSynchronisationQueueDatabaseTests
     }
 
     /// <summary>
-    /// An administrator's set for another of the person's accounts in the system still holds the queue's one row:
-    /// nothing is written, nothing is returned, and the caller reports the Initial Password as not queued.
+    /// An administrator's set naming another account in the system: that account cannot still be the person's, because
+    /// the new account is joined to them and a person has at most one joined Connected System Object per Connected
+    /// System. Disjoined, it has nothing to go to, so the Initial Password replaces it and the outcome says why.
     /// </summary>
     [Test]
-    public async Task StageProvisionedPasswordChangesAsync_ExplicitRowForAnotherAccount_IsConflictedAndWritesNothingAsync()
+    public async Task StageProvisionedPasswordChangesAsync_ExplicitRowForADisjoinedAccount_IsSupersededAsync()
     {
         var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
         var syncRuleId = await SeedSyncRuleAsync(systemId);
-        var otherCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId, mvoId);
+        var disjoinedCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId, metaverseObjectId: null);
         var existing = await QueueWaitingChangeAsync(mvoId, systemId, c =>
         {
             c.Origin = PendingPasswordChangeOrigin.Explicit;
-            c.ConnectedSystemObjectId = otherCsoId;
+            c.ConnectedSystemObjectId = disjoinedCsoId;
         });
 
         var outcome = await StageAsync(NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow));
@@ -1356,12 +1357,13 @@ public class PasswordSynchronisationQueueDatabaseTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Conflicted));
-            Assert.That(outcome.RowId, Is.EqualTo(Guid.Empty));
+            Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Superseded));
+            Assert.That(outcome.ExistingAccountGone, Is.True);
+            Assert.That(outcome.ExistingActivityId, Is.EqualTo(existing.ActivityId));
             Assert.That(stored.Id, Is.EqualTo(existing.Id));
-            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(otherCsoId));
-            Assert.That(stored.ProvisionedConnectedSystemObjectId, Is.Null);
-            Assert.That(stored.SyncRuleId, Is.Null);
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
+            Assert.That(stored.ProvisionedConnectedSystemObjectId, Is.EqualTo(csoId));
         }
     }
 
@@ -1383,16 +1385,17 @@ public class PasswordSynchronisationQueueDatabaseTests
     }
 
     /// <summary>
-    /// Two accounts for one person in one system: the first's Initial Password is still owed, so the second's is not
-    /// queued over it.
+    /// An Initial Password still owed to an earlier account of the person that has since been disjoined (a person has at
+    /// most one joined Connected System Object per Connected System, so it cannot still be theirs): the new account's
+    /// replaces it, owing the new account.
     /// </summary>
     [Test]
-    public async Task StageProvisionedPasswordChangesAsync_LiveInitialPasswordForAnotherAccount_IsConflictedAsync()
+    public async Task StageProvisionedPasswordChangesAsync_LiveInitialPasswordForADisjoinedAccount_IsSupersededAsync()
     {
         var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
         var syncRuleId = await SeedSyncRuleAsync(systemId);
-        var otherCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId, mvoId);
-        await StageAsync(NewProvisionedChange(mvoId, systemId, otherCsoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow));
+        var disjoinedCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId, metaverseObjectId: null);
+        await StageAsync(NewProvisionedChange(mvoId, systemId, disjoinedCsoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow));
 
         var outcome = await StageAsync(NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow));
 
@@ -1401,8 +1404,9 @@ public class PasswordSynchronisationQueueDatabaseTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Conflicted));
-            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(otherCsoId));
+            Assert.That(outcome.Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Superseded));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
+            Assert.That(stored.ProvisionedConnectedSystemObjectId, Is.EqualTo(csoId));
         }
     }
 

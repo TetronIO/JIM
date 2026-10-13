@@ -467,7 +467,8 @@
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
             { x => x.SetPassword, SetPasswordAsync },
-            { x => x.StopTrying, StopPasswordChangeAsync }
+            { x => x.StopTrying, StopPasswordChangeAsync },
+            { x => x.ConfirmStopTrying, ConfirmStopPasswordChangeAsync }
         };
 
         await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
@@ -507,6 +508,22 @@
             EnableAccount = submission.EnableAccount,
             InitiatedBy = user
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Asked before the dialog's Stop trying: where the person's change is this Connected System Object's first password
+    /// (#2160), cancelling it leaves the object without one, so the administrator is asked first.
+    /// </summary>
+    private async Task<bool> ConfirmStopPasswordChangeAsync(int connectedSystemId)
+    {
+        if (ConnectedSystemObject?.MetaverseObjectId is not { } metaverseObjectId)
+            return true;
+
+        PendingPasswordChangeHeader? queued;
+        using (var jim = JimFactory.Create())
+            queued = await PasswordChangeCancellation.FindQueuedAsync(jim, metaverseObjectId, connectedSystemId);
+
+        return await PasswordChangeCancellation.ConfirmAsync(DialogService, queued);
     }
 
     /// <summary>

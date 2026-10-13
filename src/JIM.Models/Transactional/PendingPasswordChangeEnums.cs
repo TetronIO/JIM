@@ -158,9 +158,12 @@ public enum ProvisionedPasswordStagingDisposition
     Coalesced = 2,
 
     /// <summary>
-    /// A row existed carrying another of this person's Connected System Objects' first password or a change for one,
-    /// still live, so nothing was written (#2160). The queue holds one password change per person per Connected System,
-    /// and replacing it would lose that account's password; the export reports the Initial Password as not queued.
+    /// A row existed holding the person's own live password change for the Object Type the system's Password
+    /// Synchronisation sets passwords on, which the new account is not, so nothing was written (#2160). The queue holds
+    /// one password change per person per Connected System; the export reports the Initial Password as not queued, and
+    /// says to cancel that change, which cannot reach any account of the person there while the new one is theirs. No
+    /// other row can conflict: a person has at most one joined Connected System Object per Connected System, so a row
+    /// for any other account is for one that is gone or no longer theirs, and gives way.
     /// </summary>
     Conflicted = 3
 }
@@ -271,10 +274,10 @@ public enum InitialPasswordStandIn
     NoLongerSet = 2,
 
     /// <summary>
-    /// The change reached another of this person's Connected System Objects than the one it owes its first password:
-    /// the system's Password Synchronisation now targets another Object Type, or an administrator's set named another
-    /// account. The promises are not applied to an account they were never made for, and the account they were for is
-    /// left without its first password, which the delivery's Activity says.
+    /// The change reached another Connected System Object than the one it owes its first password: that one has since
+    /// been disjoined from the person, and another of theirs joined in the system without being provisioned by JIM (a
+    /// person has at most one joined Connected System Object per Connected System). The promises are not applied to an
+    /// account they were never made for, which the delivery's Activity says.
     /// </summary>
     OtherAccount = 3
 }

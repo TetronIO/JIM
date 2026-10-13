@@ -945,8 +945,8 @@ public class PasswordSynchronisationServer
         if (change.ProvisionedConnectedSystemObjectId != account.Id)
         {
             Log.Warning("DeliverDuePasswordChangesAsync: Password change {PendingPasswordChangeId} on Connected System {ConnectedSystemId} owes account " +
-                "{OwedConnectedSystemObjectId} its first password but reached account {ConnectedSystemObjectId}; the Initial Password's settings are not " +
-                "applied to it, and the owed account still has no first password from JIM",
+                "{OwedConnectedSystemObjectId} its first password but reached account {ConnectedSystemObjectId}, the person's account there now; the Initial " +
+                "Password's settings are not applied to it",
                 change.Id, connectedSystem.Id, change.ProvisionedConnectedSystemObjectId, account.Id);
             return (InitialPasswordStandIn.OtherAccount, null);
         }
@@ -1395,9 +1395,9 @@ public class PasswordSynchronisationServer
             InitialPasswordStandIn.NoLongerSet => $"Password set on {system} as this Connected System Object's first password. The Synchronisation Rule " +
                                                   "that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling " +
                                                   "the Connected System Object and for whether its password never expires were not applied",
-            InitialPasswordStandIn.OtherAccount => $"Password set on {system}. It was also to be the first password of another of this person's Connected " +
-                                                   "System Objects there, which it did not reach, so that Connected System Object still has no password from " +
-                                                   "JIM; set one on it with the set-password action",
+            InitialPasswordStandIn.OtherAccount => $"Password set on {system}. It was also to be the first password of a Connected System Object there " +
+                                                   "that is no longer this person's, so that Initial Password's settings for enabling the Connected System " +
+                                                   "Object and for whether its password never expires were not applied to this one",
             _ => $"Password set on {system}"
         };
 

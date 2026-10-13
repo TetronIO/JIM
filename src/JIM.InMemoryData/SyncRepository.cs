@@ -3432,9 +3432,8 @@ public class SyncRepository : ISyncRepository
             var before = Copy(existing);
             var held = before.IsPropagated && !IsTakingPasswords(before.ConnectedSystemId);
             var accountGone = before.IsExplicit && !IsStillThePersons(before.ConnectedSystemObjectId, before.MetaverseObjectId);
-            var owesAnother = OwesAnotherLiveAccount(before, change.ConnectedSystemObjectId);
             var takeover = before.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
-                           || (!owesAnother && (IsParkedBeyondCure(before) || held || accountGone || before.IsProvisioned));
+                           || IsParkedBeyondCure(before) || held || accountGone || before.IsProvisioned;
             var reaches = (before.IsExplicit && before.ConnectedSystemObjectId == change.ConnectedSystemObjectId)
                           || (before.IsPropagated && ReachesPasswordSynchronisationTarget(before.ConnectedSystemId, change.ConnectedSystemObjectId));
 
@@ -3446,7 +3445,7 @@ public class SyncRepository : ISyncRepository
                 existing.Supersede(change);
                 disposition = ProvisionedPasswordStagingDisposition.Superseded;
             }
-            else if (!owesAnother && reaches)
+            else if (reaches)
             {
                 existing.CarryInitialPassword(change.ConnectedSystemObjectId!.Value, change.SyncRuleId!.Value,
                     change.EnabledStateSetByAttributeFlow, change.ExpiresAt);
@@ -3517,18 +3516,6 @@ public class SyncRepository : ISyncRepository
         && system.PasswordSynchronisation is { } configuration
         && connectedSystemObjectId is { } id && _csos.TryGetValue(id, out var cso)
         && cso.TypeId == configuration.TargetObjectTypeId;
-
-    /// <summary>
-    /// Whether a live row owes another of the person's existing accounts its first password, which nothing staged for
-    /// a different account may take over (#2160).
-    /// </summary>
-    private bool OwesAnotherLiveAccount(PendingPasswordChange row, Guid? provisionedAccountId)
-    {
-        var owed = row.ProvisionedConnectedSystemObjectId ?? (row.IsProvisioned ? row.ConnectedSystemObjectId : null);
-        return owed.HasValue && owed != provisionedAccountId
-               && row.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked
-               && IsStillThePersons(owed, row.MetaverseObjectId);
-    }
 
     /// <summary>
     /// Whether a row is parked for a reason no attempt with the new account can cure: anything but a missing account or

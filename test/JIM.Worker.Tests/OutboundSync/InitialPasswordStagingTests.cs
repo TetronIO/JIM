@@ -595,20 +595,76 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
-    /// The queue holds one change per person per Connected System. A live set for another of this person's accounts
-    /// there keeps it: nothing is written, the export counts the Initial Password as not queued for that reason (not as
-    /// a failure to record it, whose remedy would throw the other account's password away), and the Activity says what
-    /// to do once the other change has landed.
+    /// An administrator's set naming another account in the system: that account cannot still be the person's (a person
+    /// has at most one joined Connected System Object per Connected System, and the new one is joined to them), so it has
+    /// nothing to go to. The Initial Password replaces it, and the person's change records that it was not set there.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_ExplicitRowForAnotherAccount_IsConflictedAndSaysWhatToDoAsync()
+    public async Task ExecuteExportsAsync_ExplicitRowForADisjoinedAccount_IsReplacedByTheInitialPasswordAsync()
     {
         var metaverseObjectId = Guid.NewGuid();
         var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
         ArrangePasswordSynchronisation(system, cso, enabled: true);
-        var otherAccount = SeedOtherAccountOfThePerson(system, cso, metaverseObjectId);
+        var disjoined = SeedDisjoinedAccount(system, cso);
         var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
-            PendingPasswordChangeOrigin.Explicit, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: otherAccount.Id);
+            PendingPasswordChangeOrigin.Explicit, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: disjoined.Id);
+        var replacedChangeActivityId = existing.ActivityId;
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        var note = NewestProvisionedActivity();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsConflictedCount, Is.Zero);
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+            Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(SyncRepo.Activities.Values.Any(a => a.ParentActivityId == replacedChangeActivityId), Is.True);
+        }
+    }
+
+    /// <summary>
+    /// An Initial Password still owed to an earlier account of the person that has since been disjoined: the new
+    /// account's replaces it, owing the new account.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_LiveInitialPasswordForADisjoinedAccount_IsSupersededAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        var disjoined = SeedDisjoinedAccount(system, cso);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: disjoined.Id);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var row = SyncRepo.PendingPasswordChanges[existing.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.InitialPasswordsConflictedCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// The one case that holds the queue's row (#2160): the person's own live change is for the Object Type the system's
+    /// Password Synchronisation sets passwords on, which the new account is not, so it cannot reach it. Nothing is
+    /// written, the export counts the Initial Password as not queued for that reason (not as a failure to record it),
+    /// and the Activity, completed with an error, names the account and says what to do.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_PropagatedRowForAnotherObjectType_IsConflictedAndSaysWhatToDoAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        system.PasswordSynchronisation!.TargetObjectTypeId = cso.TypeId + 1;
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending);
 
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
@@ -617,38 +673,13 @@ public class InitialPasswordStagingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(row.Id, Is.EqualTo(existing.Id));
-            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
-            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(otherAccount.Id));
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
             Assert.That(row.ProvisionedConnectedSystemObjectId, Is.Null);
             Assert.That(result.InitialPasswordsConflictedCount, Is.EqualTo(1));
             Assert.That(result.InitialPasswordStagingFailedCount, Is.Zero);
             Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
             Assert.That(note.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
             Assert.That(note.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
-            Assert.That(note.Message, Does.Contain("set-password"));
-        }
-    }
-
-    /// <summary>
-    /// Two accounts for one person in one Connected System: the first account's Initial Password is still owed, so the
-    /// second must not silently replace it.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_LiveInitialPasswordForAnotherAccount_IsConflictedAsync()
-    {
-        var metaverseObjectId = Guid.NewGuid();
-        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
-        ArrangePasswordSynchronisation(system, cso, enabled: true);
-        var otherAccount = SeedOtherAccountOfThePerson(system, cso, metaverseObjectId);
-        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
-            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: otherAccount.Id);
-
-        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(SyncRepo.PendingPasswordChanges[existing.Id].ConnectedSystemObjectId, Is.EqualTo(otherAccount.Id));
-            Assert.That(result.InitialPasswordsConflictedCount, Is.EqualTo(1));
         }
     }
 
@@ -1301,8 +1332,11 @@ public class InitialPasswordStagingTests
         SyncRepo.SeedConnectedSystemObject(cso);
     }
 
-    /// <summary>Another account of the same person in the same Connected System.</summary>
-    private ConnectedSystemObject SeedOtherAccountOfThePerson(ConnectedSystem system, ConnectedSystemObject cso, Guid metaverseObjectId)
+    /// <summary>
+    /// Another account in the same Connected System that is joined to nobody: a person has at most one joined Connected
+    /// System Object per Connected System, so an earlier account of theirs alongside the new one is always disjoined.
+    /// </summary>
+    private ConnectedSystemObject SeedDisjoinedAccount(ConnectedSystem system, ConnectedSystemObject cso)
     {
         var other = new ConnectedSystemObject
         {
@@ -1311,7 +1345,7 @@ public class InitialPasswordStagingTests
             Type = cso.Type,
             TypeId = cso.TypeId,
             AttributeValues = [],
-            MetaverseObjectId = metaverseObjectId
+            MetaverseObjectId = null
         };
         SyncRepo.SeedConnectedSystemObject(other);
         return other;

@@ -198,10 +198,10 @@ public class ExportExecutionResult
 
     /// <summary>
     /// Number of newly provisioned accounts whose Initial Password was not queued because the queue's one row for the
-    /// person and Connected System is still carrying a password change for another of their Connected System Objects
-    /// there (#2160). Reported as a warning of its own rather than counted in
-    /// <see cref="InitialPasswordStagingFailedCount"/>, whose remedy (set a password now) would replace that other
-    /// change; this one's is to wait until it has been delivered.
+    /// person and Connected System holds their own live password change for the Object Type the system's Password
+    /// Synchronisation sets passwords on, which the account is not (#2160). Reported as a warning of its own rather than
+    /// counted in <see cref="InitialPasswordStagingFailedCount"/>, whose remedy (set a password now) that change would
+    /// block; this one's is to cancel it first.
     /// </summary>
     public int InitialPasswordsConflictedCount { get; set; }
 

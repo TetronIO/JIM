@@ -251,7 +251,7 @@ public class ExportExecutionServer
         {
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
                 "recorded as owed an initial password, {CarriedCount} given a password change already waiting for them as their first password, " +
-                "{ConflictedCount} not queued one because a change for another of the person's accounts there is still waiting, " +
+                "{ConflictedCount} not queued one because the person's own change there is waiting for another Object Type, " +
                 "{FailedCount} that could not be recorded, {MarkingFailedCount} whose written enabled state could not be recorded on the password still owed",
                 connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordsCarriedCount, result.InitialPasswordsConflictedCount,
                 result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
@@ -2826,9 +2826,9 @@ public class ExportExecutionServer
             if (conflicted.Count > 0)
             {
                 Log.Error("StageInitialPasswordsForBatchAsync: {Count} newly provisioned accounts on Connected System {ConnectedSystemId} were not queued an " +
-                    "initial password, because a password change for another of the same person's Connected System Objects there is still waiting, and " +
-                    "the queue holds one per person per Connected System. Once it has been delivered, set a password on each with the set-password " +
-                    "action. Connected System Objects: {ConnectedSystemObjectIds}",
+                    "initial password, because the person's own password change is waiting there for the Object Type Password Synchronisation sets " +
+                    "passwords on, which these accounts are not, and the queue holds one per person per Connected System. Cancel each such change, " +
+                    "then set a password on each with the set-password action. Connected System Objects: {ConnectedSystemObjectIds}",
                     conflicted.Count, provisionedAccounts[0].ConnectedSystemId, DescribeConnectedSystemObjectIds(conflicted));
             }
 

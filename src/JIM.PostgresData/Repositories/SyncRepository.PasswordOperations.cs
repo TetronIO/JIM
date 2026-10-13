@@ -113,16 +113,21 @@ public partial class SyncRepository
         //   no attempt can cure (a policy rejection, an unreadable password, an unsupported operation); a propagated
         //   change held because Password Synchronisation is switched off on the system, which has not reached the
         //   system and would not while the account's first password is delivered whatever the pause; an
-        //   administrator's set whose account is gone or no longer this person's; or an Initial Password for an account
-        //   gone or the same. None of these may take over a row still owing another live account of this person its
-        //   first password.
+        //   administrator's set whose account is gone or no longer this person's; or an earlier Initial Password.
         // - Given the obligation (the row carries the account's first password, #2160): a live change that will reach
         //   the new account, being a propagated change for the Object Type the system's Password Synchronisation
         //   targets, or an administrator's set naming the account. It keeps its password, origin, expiry and Activity,
         //   takes the account, the rule and whether the Create wrote the account's flags, is due at once (its claim
         //   taken back, a park the account cures released, attempts against a missing account reset), and its window
         //   extends to the Initial Password's.
-        // - Anything else is another live account's change: the WHERE declines the update and nothing is returned.
+        // - Anything else is a live propagated change for another Object Type than the new account's: the WHERE
+        //   declines the update and nothing is returned (Conflicted).
+        //
+        // No row can owe another live account of this person its first password: the new account is joined to the
+        // person, and a person has at most one joined Connected System Object per Connected System
+        // (IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique). So an earlier Initial Password, and an
+        // administrator's set naming any other account, are for an account that is gone or no longer the person's, and
+        // both give way; a change that carried an earlier account's first password is judged on its own terms.
         //
         // RETURNING reads the row as it stood before (PostgreSQL 18's OLD), so the caller's Activity describes exactly
         // what was decided on. Run through raw Npgsql rather than EF's Database.SqlQueryRaw: EF composes a SqlQuery as a
@@ -130,22 +135,14 @@ public partial class SyncRepository
         //
         // Column lists come from the constants so they cannot drift from the model; the parameters are added in
         // PendingPasswordChangeBulkColumns.PendingPasswordChanges order by AddPendingPasswordChangeParameters.
-        var owedAccount = OwedAccountSql("existing");
-        var owesAnotherLiveAccount = $"""
-            ({owedAccount} IS DISTINCT FROM EXCLUDED."ConnectedSystemObjectId"
-             AND existing."Status" IN ({LiveStatusesSql})
-             AND EXISTS (SELECT 1 FROM "ConnectedSystemObjects" owed
-                         WHERE owed."Id" = {owedAccount} AND owed."MetaverseObjectId" = existing."MetaverseObjectId"))
-            """;
         var takeover = $"""
             (existing."Status" IN ({(int)PendingPasswordChangeStatus.Expired}, {(int)PendingPasswordChangeStatus.Cancelled})
-             OR (NOT {owesAnotherLiveAccount}
-                 AND ((existing."Status" = {(int)PendingPasswordChangeStatus.Parked}
-                       AND existing."FailureReason" IS DISTINCT FROM {(int)PasswordSetFailureReason.TargetObjectNotFound}
-                       AND existing."FailureReason" IS DISTINCT FROM {(int)PasswordSetFailureReason.Transient})
-                      OR (existing."Origin" = {(int)PendingPasswordChangeOrigin.Propagated} AND NOT {PasswordSynchronisationEnabledSql("existing")})
-                      OR (existing."Origin" = {(int)PendingPasswordChangeOrigin.Explicit} AND NOT {AccountStillThePersonsSql("existing")})
-                      OR existing."Origin" = {(int)PendingPasswordChangeOrigin.Provisioned})))
+             OR (existing."Status" = {(int)PendingPasswordChangeStatus.Parked}
+                 AND existing."FailureReason" IS DISTINCT FROM {(int)PasswordSetFailureReason.TargetObjectNotFound}
+                 AND existing."FailureReason" IS DISTINCT FROM {(int)PasswordSetFailureReason.Transient})
+             OR (existing."Origin" = {(int)PendingPasswordChangeOrigin.Propagated} AND NOT {PasswordSynchronisationEnabledSql("existing")})
+             OR (existing."Origin" = {(int)PendingPasswordChangeOrigin.Explicit} AND NOT {AccountStillThePersonsSql("existing")})
+             OR existing."Origin" = {(int)PendingPasswordChangeOrigin.Provisioned})
             """;
         var reachesTheAccount = $"""
             ((existing."Origin" = {(int)PendingPasswordChangeOrigin.Explicit} AND existing."ConnectedSystemObjectId" = EXCLUDED."ConnectedSystemObjectId")
@@ -190,7 +187,7 @@ public partial class SyncRepository
                 SELECT
                     {values}
                 FROM (SELECT {takeover} AS takeover, {curedByTheAccount} AS cured) AS decided)
-            WHERE {takeover} OR (NOT {owesAnotherLiveAccount} AND {reachesTheAccount})
+            WHERE {takeover} OR {reachesTheAccount}
             RETURNING new."Id", new."Origin", old."Origin", old."Status", old."FailureReason", old."TargetMessage", old."ActivityId",
                 COALESCE(old."Origin" = {(int)PendingPasswordChangeOrigin.Propagated} AND NOT {PasswordSynchronisationEnabledSql("old")}, FALSE),
                 COALESCE(old."Origin" = {(int)PendingPasswordChangeOrigin.Explicit} AND NOT {AccountStillThePersonsSql("old")}, FALSE)
@@ -210,7 +207,7 @@ public partial class SyncRepository
             await using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
             {
-                // The WHERE declined: the row belongs to another of this person's accounts, and nothing was written.
+                // The WHERE declined: a live propagated change for another Object Type holds the row, and nothing was written.
                 outcomes.Add(new ProvisionedPasswordStagingOutcome
                 {
                     RowId = Guid.Empty,

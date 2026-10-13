@@ -6,7 +6,7 @@ namespace JIM.Models.Transactional.DTOs;
 /// <summary>
 /// What became of one provisioned password change offered to the queue (#1697, #2160): whether it inserted a new row,
 /// took over an existing one, gave its obligation to a password change already waiting for the account, or was not
-/// queued because the row belongs to another of the person's accounts.
+/// queued because the row holds the person's own change for another Object Type.
 /// </summary>
 public class ProvisionedPasswordStagingOutcome
 {
