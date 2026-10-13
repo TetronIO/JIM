@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Staging;
 
 namespace JIM.Worker.Tests;
 
@@ -60,5 +61,41 @@ public class ActivityOutcomeEvaluatorTests
     public void Evaluate_RefusedObjectTypeChangesBesideSuccesses_CompletesWithWarning()
     {
         Assert.That(ActivityOutcomeEvaluator.Evaluate(new(2, 5, 0, 2), hasWarningMessage: false), Is.EqualTo(ActivityStatus.CompleteWithWarning));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Imports, whose unchanged objects get no item (#2066)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void Evaluate_ImportWhoseOnlyItemErroredAmongManyObjects_CompletesWithWarning()
+    {
+        Assert.That(ActivityOutcomeEvaluator.Evaluate(new(1, 1, 0, 0), hasWarningMessage: false, ConnectedSystemRunType.FullImport, objectsProcessed: 100),
+            Is.EqualTo(ActivityStatus.CompleteWithWarning), "99 of the 100 objects imported; the run did not fail.");
+    }
+
+    [TestCase(ConnectedSystemRunType.FullImport)]
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    public void Evaluate_ImportWhereEveryObjectErrored_Fails(ConnectedSystemRunType runType)
+    {
+        Assert.That(ActivityOutcomeEvaluator.Evaluate(new(3, 3, 0, 0), hasWarningMessage: false, runType, objectsProcessed: 3),
+            Is.EqualTo(ActivityStatus.FailedWithError));
+    }
+
+    [Test]
+    public void Evaluate_ImportThatRecordedNoObjectCount_KeepsTheItemRule()
+    {
+        Assert.That(ActivityOutcomeEvaluator.Evaluate(new(2, 2, 0, 0), hasWarningMessage: false, ConnectedSystemRunType.FullImport, objectsProcessed: 0),
+            Is.EqualTo(ActivityStatus.FailedWithError));
+    }
+
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public void Evaluate_OtherRunTypesWhereEveryItemErrored_StillFail(ConnectedSystemRunType runType)
+    {
+        // Their object counters describe their last step rather than the run, so they keep the item rule.
+        Assert.That(ActivityOutcomeEvaluator.Evaluate(new(1, 1, 0, 0), hasWarningMessage: false, runType, objectsProcessed: 100),
+            Is.EqualTo(ActivityStatus.FailedWithError));
     }
 }

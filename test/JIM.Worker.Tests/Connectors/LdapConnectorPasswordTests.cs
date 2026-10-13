@@ -386,8 +386,7 @@ public class LdapConnectorPasswordTests
         Assert.That(result.Success, Is.True, result.ErrorMessage);
         Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
 
-        var userAccountControl = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl);
-        Assert.That(userAccountControl.Modifications[0][0], Is.EqualTo((0x0200 | UacDontExpirePassword).ToString()));
+        Assert.That(WrittenUserAccountControl(), Is.EqualTo((0x0200 | UacDontExpirePassword).ToString()));
 
         Assert.That(ModifiesFor(LdapConnectorPassword.AttributePwdLastSet), Is.Empty,
             "'Never expires' and 'must change at next sign-in' are mutually exclusive, so pwdLastSet must not be written.");
@@ -409,12 +408,77 @@ public class LdapConnectorPasswordTests
 
         Assert.That(result.Success, Is.True, result.ErrorMessage);
 
-        var userAccountControl = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl);
-        Assert.That(userAccountControl.Modifications[0][0], Is.EqualTo("512"), "0x0202 with the disable bit cleared is 0x0200.");
+        Assert.That(WrittenUserAccountControl(), Is.EqualTo("512"), "0x0202 with the disable bit cleared is 0x0200.");
 
         Assert.That(IndexOfModifyFor(LdapConnectorPassword.AttributeUnicodePwd),
             Is.LessThan(IndexOfModifyFor(LdapConnectorPassword.AttributeUserAccountControl)),
             "The account cannot be enabled until it holds a compliant password.");
+    }
+
+    /// <summary>
+    /// The flags are written only if they are still the ones read (#2161): the value read is deleted and the new one
+    /// added in one request, which the directory refuses if the value has changed in between. A Replace would apply
+    /// whatever was there.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_WritesTheFlagsOnlyIfTheyAreStillTheOnesReadAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 0x0202);
+
+        await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn, EnableAccount = true },
+            CancellationToken.None);
+
+        var modifications = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl).Modifications
+            .Cast<DirectoryAttributeModification>().ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(modifications.Select(m => m.Operation),
+                Is.EqualTo(new[] { DirectoryAttributeOperation.Delete, DirectoryAttributeOperation.Add }));
+            Assert.That(modifications[0][0], Is.EqualTo("514"), "the value read, which must still be there");
+            Assert.That(modifications[1][0], Is.EqualTo("512"));
+        }
+    }
+
+    /// <summary>
+    /// An export changed the account's flags between the read and the write (a leaver's disable, say). The directory
+    /// refuses the delete of the value read, and JIM does not overwrite what the export wrote: the password is set, the
+    /// flags are left as the export left them, and the delivery is reported as worth another attempt, when JIM decides
+    /// afresh what the password may do to the account.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_WhenTheFlagsChangeBetweenTheReadAndTheWrite_LeavesThemAndReportsATransientFailureAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .Returns((DirectoryRequest request) =>
+            {
+                _sentRequests.Add(request);
+                DirectoryResponse response = request switch
+                {
+                    SearchRequest => CreateSearchResponseWithUserAccountControl(0x0202),
+                    ModifyRequest modify when modify.Modifications.Cast<DirectoryAttributeModification>()
+                        .Any(m => m.Name == LdapConnectorPassword.AttributeUserAccountControl)
+                        => CreateResponse<ModifyResponse>(ResultCode.NoSuchAttribute, "00002083: AtrErr: DSID-03151F8E, #1: 0: 00002083: DSID-03151F8E, problem 1001 (NO_ATTRIBUTE_OR_VAL), data 0, Att 90008 (userAccountControl)"),
+                    _ => CreateResponse<ModifyResponse>(ResultCode.Success)
+                };
+                return Task.FromResult(response);
+            });
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn, EnableAccount = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(result.ErrorMessage, Does.Contain("changed"));
+            Assert.That(result.ErrorMessage, Does.Not.Contain(TestPassword));
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl).Count(), Is.EqualTo(1),
+                "one attempt at the swap, and no blind write after it");
+        }
     }
 
     [Test]
@@ -731,6 +795,14 @@ public class LdapConnectorPasswordTests
     }
 
     private int IndexOfModifyFor(string attributeName) => _sentRequests.IndexOf(SingleModifyFor(attributeName));
+
+    /// <summary>
+    /// The userAccountControl value JIM wrote: the value added by the one modification of the attribute.
+    /// </summary>
+    private string WrittenUserAccountControl() =>
+        (string)SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl).Modifications
+            .Cast<DirectoryAttributeModification>()
+            .Single(m => m.Operation != DirectoryAttributeOperation.Delete)[0];
 
     private const BindingFlags NonPublicInstance = BindingFlags.NonPublic | BindingFlags.Instance;
 

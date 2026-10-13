@@ -526,6 +526,104 @@ public class OptimisticExportApplyCalculatorTests
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
     }
 
+    /// <summary>
+    /// An export Attribute Flow expression stages its result in the column of the result's own type, so "TRUE" for a
+    /// Boolean attribute is staged as text (#2183). The Connector writes it, but the calculator copies only the column of
+    /// the attribute's type, which holds nothing: it must not store a value holding nothing (whose removal by the
+    /// confirming import errored the object). The Update still replaced what the target held, so the recorded value is
+    /// removed, as an Update with no value removes it (#1936): kept, it would let a later export of that same value be
+    /// judged already current and never sent. The change is reported as unrecorded, not counted as a no-op.
+    /// </summary>
+    [TestCase(AttributeDataType.Boolean, "TRUE", null, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.DateTime, "2026-10-12T09:30:00Z", null, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Number, "42", null, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Text, null, 7, AttributeDataType.Number)]
+    [TestCase(AttributeDataType.Reference, null, 7, AttributeDataType.Number)]
+    public void CalculateDelta_UpdatePayloadHoldsNothingInItsAttributesColumn_RemovesTheRecordedValueAndReportsTheChangeUnrecorded(
+        AttributeDataType type, string? stringValue, int? intValue, AttributeDataType heldType)
+    {
+        var cso = CreateCso();
+        var recorded = AddRecordedValue(cso, 1, type);
+        var change = CreateChange(1, type, PendingExportAttributeChangeType.Update, stringValue: stringValue, intValue: intValue);
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty, "No value holding nothing in its attribute's column is stored.");
+            Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { recorded.Id }), "The target no longer holds the recorded value.");
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(0), "A change that could not be recorded is not a no-op.");
+            Assert.That(delta.UnresolvedReferenceCount, Is.EqualTo(0));
+            Assert.That(delta.UnrecordedChanges.Select(u => (u.PendingExportId, u.ConnectedSystemObjectId, u.AttributeType, u.HeldDataType)),
+                Is.EqualTo(new (Guid, Guid, AttributeDataType, AttributeDataType?)[] { (pe.Id, cso.Id, type, heldType) }));
+        }
+    }
+
+    [TestCase(AttributeDataType.Boolean, "TRUE", null)]
+    [TestCase(AttributeDataType.DateTime, "2026-10-12T09:30:00Z", null)]
+    [TestCase(AttributeDataType.Number, "42", null)]
+    [TestCase(AttributeDataType.Text, null, 7)]
+    [TestCase(AttributeDataType.Reference, null, 7)]
+    public void CalculateDelta_AddPayloadHoldsNothingInItsAttributesColumn_AddsNoValueAndReportsTheChangeUnrecorded(
+        AttributeDataType type, string? stringValue, int? intValue)
+    {
+        var cso = CreateCso();
+        var change = CreateChange(1, type, PendingExportAttributeChangeType.Add, stringValue: stringValue, intValue: intValue);
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty);
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(0));
+            Assert.That(delta.UnresolvedReferenceCount, Is.EqualTo(0));
+            Assert.That(delta.UnrecordedChanges.Select(u => u.PendingExportId), Is.EqualTo(new[] { pe.Id }));
+        }
+    }
+
+    /// <summary>
+    /// D3 idempotency holds for a change that cannot be recorded (#2183): once the recorded value is removed, applying
+    /// the same export again (an auto-confirmed export left unconfirmed is sent again) removes and adds nothing, and the
+    /// change is still reported as unrecorded.
+    /// </summary>
+    [Test]
+    public void CalculateDelta_UnrecordedUpdateAppliedAgain_ChangesNothingAndStillReportsItUnrecorded()
+    {
+        var cso = CreateCso();
+        var recorded = AddRecordedValue(cso, 1, AttributeDataType.Boolean);
+        var pe = CreatePendingExport(cso, CreateChange(1, AttributeDataType.Boolean, PendingExportAttributeChangeType.Update, stringValue: "TRUE"));
+        OptimisticExportApplyCalculator.CalculateDelta([pe]);
+        cso.AttributeValues.Remove(recorded);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty);
+            Assert.That(delta.RemovalValueIds, Is.Empty);
+            Assert.That(delta.UnrecordedChanges, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ExportWithARecordableAndAnUnrecordableChange_RecordsTheOneItCanAndReportsTheExport()
+    {
+        var cso = CreateCso();
+        var pe = CreatePendingExport(cso,
+            CreateChange(1, AttributeDataType.Boolean, PendingExportAttributeChangeType.Update, stringValue: "TRUE"),
+            CreateChange(2, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "foo"));
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions.Select(a => (a.AttributeId, a.StringValue)), Is.EqualTo(new (int, string?)[] { (2, "foo") }));
+            Assert.That(delta.UnrecordedChanges.Select(u => u.PendingExportId), Is.EqualTo(new[] { pe.Id }));
+        }
+    }
+
     #endregion
 
     #region External-Id dedupe (D9)
@@ -614,6 +712,16 @@ public class OptimisticExportApplyCalculatorTests
         cso.AttributeValues.Add(value);
         return value;
     }
+
+    private static ConnectedSystemObjectAttributeValue AddRecordedValue(ConnectedSystemObject cso, int attributeId, AttributeDataType attributeType) => attributeType switch
+    {
+        AttributeDataType.Text => AddCsoValue(cso, attributeId, attributeType, stringValue: "recorded"),
+        AttributeDataType.Number => AddCsoValue(cso, attributeId, attributeType, intValue: 1),
+        AttributeDataType.DateTime => AddCsoValue(cso, attributeId, attributeType, dateTimeValue: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+        AttributeDataType.Boolean => AddCsoValue(cso, attributeId, attributeType, boolValue: false),
+        AttributeDataType.Reference => AddCsoValue(cso, attributeId, attributeType, unresolvedReferenceValue: "CN=Recorded,DC=test"),
+        _ => throw new ArgumentOutOfRangeException(nameof(attributeType), attributeType, "No recorded value is defined for this type.")
+    };
 
     private static PendingExportAttributeValueChange CreateChange(
         int attributeId,

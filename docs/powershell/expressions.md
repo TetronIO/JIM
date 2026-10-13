@@ -10,23 +10,34 @@ Test Synchronisation Rule expressions with sample data before deploying them to 
 
 Tests an expression with sample metaverse and Connected System attribute values.
 
+<!-- BEGIN GENERATED: Test-JIMExpression -->
 ### Syntax
 
 ```powershell
-Test-JIMExpression -Expression <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
+Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| Expression | string | Yes | | The expression to test (DynamicExpresso syntax) |
-| MvAttributes | hashtable | No | | Sample metaverse attribute values (name-value pairs) |
-| CsAttributes | hashtable | No | | Sample Connected System attribute values (name-value pairs) |
+| `Expression` | `string` | Yes |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. Can be given by position, as the first argument. |
+| `MvAttributes` | `hashtable` | No |  | A hashtable of sample Metaverse attribute values. Keys are attribute names, values are the attribute values. |
+| `CsAttributes` | `hashtable` | No |  | A hashtable of sample Connected System attribute values. Keys are attribute names, values are the attribute values. |
 
 ### Output
 
-Object with properties: `IsValid` (bool), `Result` (the computed value), `ResultType` (string), `ErrorMessage` (string, null if valid), `ErrorPosition` (int, null if valid).
+The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester shows it, one value per line.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsValid` | `bool` | Indicates whether the expression is valid and evaluated successfully. |
+| `Result` | `object` | The result of evaluating the expression (if successful). |
+| `ResultLines` | `string[]` | The result as the portal's expression tester shows it: one line per value, each written as JIM writes the value as text (a date as 2026-03-15 10:30:00Z, a Binary value described by its size). Empty when the expression produced no value. Not set when it failed; `ErrorMessage` says why. |
+| `ResultType` | `string` | The type of the result (e.g., "String", "Int32", "Boolean"). |
+| `ErrorMessage` | `string` | Error message if the expression is invalid or evaluation failed. |
+| `ErrorPosition` | `int` | Position in the expression where an error occurred (if applicable). |
+<!-- END GENERATED: Test-JIMExpression -->
 
 ### Examples
 

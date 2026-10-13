@@ -15,19 +15,19 @@ function Get-JIMCertificate {
         The unique identifier (GUID) of a specific certificate to retrieve.
 
     .PARAMETER Name
-        Filter certificates by name. Supports wildcards (e.g., "Contoso*").
+        Filters certificates by name, such as "Contoso*".
 
     .PARAMETER EnabledOnly
-        If specified, returns only enabled certificates.
+        Returns only the certificates that are enabled.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of results to return.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100.
+        The number of certificates on each page.
 
     .OUTPUTS
-        PSCustomObject representing certificate(s).
+        Listing returns each certificate's summary; -Id returns the certificate in full.
 
     .EXAMPLE
         Get-JIMCertificate
@@ -57,7 +57,9 @@ function Get-JIMCertificate {
         Export-JIMCertificate
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TrustedCertificateHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.TrustedCertificateHeader', ParameterSetName = 'Enabled')]
+    [OutputType('JIM.TrustedCertificateDetailDto', ParameterSetName = 'ById')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,

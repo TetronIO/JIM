@@ -80,19 +80,12 @@ else
                                 <div class="d-flex flex-wrap align-center gap-2">
                                     <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)" Icon="@OperationIcon(item.Operation)">@OperationLabel(item.Operation)</MudChip>
                                     <MudText Typo="Typo.subtitle2">v@(item.Version)</MudText>
-                                    <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
-                                    @{
-                                        var initiatorName = string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName;
-                                        var initiatorHref = Helpers.GetInitiatorHref(item.InitiatedByType, item.InitiatedById);
-                                    }
-                                    @if (initiatorHref != null)
-                                    {
-                                        <MudLink Typo="Typo.body2" Href="@initiatorHref">@initiatorName</MudLink>
-                                    }
-                                    else
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@initiatorName</MudText>
-                                    }
+                                    <MudText Typo="Typo.body2">
+                                        <ActivityInitiator InitiatedByType="@item.InitiatedByType"
+                                                           InitiatedById="@item.InitiatedById"
+                                                           InitiatedByName="@item.InitiatedByName"
+                                                           Dense="true" />
+                                    </MudText>
                                     <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
                                     <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@item.When.ToLocalTime().ToRelativeTime()</MudText>
@@ -139,7 +132,7 @@ else
     @if (_items.Count < _totalResults)
     {
         <div class="d-flex justify-center mt-3">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
+            <MudButton Variant="Variant.Outlined" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
         </div>
     }
 }
@@ -294,13 +287,5 @@ else
         ActivityTargetOperationType.Delete => "Deleted",
         ActivityTargetOperationType.Revert => "Reverted",
         _ => operation.ToString()
-    };
-
-    private static string InitiatorIcon(ActivityInitiatorType initiatorType) => initiatorType switch
-    {
-        ActivityInitiatorType.User => Icons.Material.Filled.Person,
-        ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
-        ActivityInitiatorType.System => Icons.Material.Filled.Settings,
-        _ => Icons.Material.Filled.HelpOutline
     };
 }

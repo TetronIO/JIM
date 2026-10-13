@@ -10,25 +10,25 @@ function Remove-JIMRunProfile {
         Permanently deletes a Run Profile from a Connected System.
 
     .PARAMETER ConnectedSystemId
-        The ID of the Connected System the Run Profile belongs to.
+        The Connected System the Run Profile belongs to.
 
     .PARAMETER ConnectedSystemName
         The name of the Connected System the Run Profile belongs to. Must be an exact match.
 
     .PARAMETER RunProfileId
-        The unique identifier of the Run Profile to delete.
+        The Run Profile to delete.
 
     .PARAMETER InputObject
-        Run Profile object to delete (from pipeline).
+        The Run Profile to delete, as Get-JIMRunProfile returns it.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .PARAMETER PassThru
-        If specified, returns the deleted Run Profile object.
+        Returns the deleted Run Profile.
 
     .OUTPUTS
-        If -PassThru is specified, returns the deleted Run Profile object.
+        With -PassThru, the deleted Run Profile, as it was before the deletion; otherwise nothing.
 
     .EXAMPLE
         Remove-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1
@@ -57,7 +57,7 @@ function Remove-JIMRunProfile {
         Start-JIMRunProfile
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RunProfileDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
@@ -121,7 +121,7 @@ function Remove-JIMRunProfile {
 
         $displayName = $existing.name ?? $profileId
 
-        if ($Force -or $PSCmdlet.ShouldProcess($displayName, "Delete Run Profile")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $displayName -Action "Delete Run Profile" -Force:$Force) {
             Write-Verbose "Deleting Run Profile: $profileId from Connected System $csId"
 
             try {

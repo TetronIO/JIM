@@ -577,6 +577,18 @@ public class SyncPreviewServerTests
         Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
         Assert.That(result.OutcomeTree[0].OutcomeType,
             Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Joined));
+
+        // Which rule would find the Metaverse Object, and on what value (#2052): the same record a real join keeps on
+        // its Activity item, on the summary and on the Joined node alike.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.WouldJoinObjectMatchingRuleId, Is.EqualTo(objectMatchingRule.Id));
+            Assert.That(result.Inbound!.WouldJoinObjectMatchingRuleDescription, Is.EqualTo(objectMatchingRule.DescribeComparison()));
+            Assert.That(result.Inbound!.WouldJoinMatchedValue, Is.EqualTo("E123"));
+            Assert.That(result.OutcomeTree[0].ObjectMatchingRuleId, Is.EqualTo(objectMatchingRule.Id));
+            Assert.That(result.OutcomeTree[0].ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo(objectMatchingRule.DescribeComparison()));
+            Assert.That(result.OutcomeTree[0].MatchedValue, Is.EqualTo("E123"));
+        }
     }
 
     [Test]

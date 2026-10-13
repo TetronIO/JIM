@@ -42,7 +42,7 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 **What it means.** A rootless container cannot publish a port below the kernel's unprivileged-port threshold. The installer lowers it in `/etc/sysctl.d/90-jim.conf`; that file is missing, or something set the threshold back.
 
-**How to fix.** As root: `echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system`, then `jim-systemctl restart jim.service`. Or move JIM to a port of 1024 or above (see [Port Mapping](deployment.md#port-mapping)).
+**How to fix.** As root: `echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system`, then `jim-systemctl restart jim.service`. Or move JIM to a port of 1024 or above (see [Port Mapping](tls-and-reverse-proxy.md#port-mapping)).
 
 ## On Ubuntu, JIM never becomes ready, and its logs show `Permission denied` or `Resource temporarily unavailable`
 

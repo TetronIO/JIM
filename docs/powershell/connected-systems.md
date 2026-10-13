@@ -194,7 +194,7 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 #### Stranded-value sweep (ById only)
 
 Whether a stranded-value sweep is armed following a Connector Space clear, and what it is waiting for. See
-[Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+[Clearing the connector space](../configuration/connector-space.md#clearing-the-connector-space).
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -298,9 +298,9 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
-| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on a Connected System Object it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and Connected System Objects stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/passwords.md#password-synchronisation). |
+| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on a Connected System Object it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and Connected System Objects stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/password-synchronisation.md). |
 | `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long a Connected System Object provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; Connected System Objects provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
-| `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
+| `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/unresolved-references.md). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 
@@ -442,7 +442,7 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-Disab
 
 ### Output
 
-With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `ChangedObjectTypeClassifications` (keyed by Object Type name, each entry an `Aspect` of `ClassKind` or `Inheritance` with its `OldValues` and `NewValues`), `HasObjectTypeClassificationChanges`, `ObjectTypesWithClassificationUpdates` (Object Types whose classification changed in a way that cannot change which Object Type an entry resolves to; applying records it, and no warning is written), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input. Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings). `-Preview` also writes one warning per Object Type classification change, because a class whose kind or inheritance changed can change the Object Type that existing entries import as; see [When an object changes Object Type](../configuration/connected-systems.md#when-an-object-changes-object-type). Applying such a refresh completes its Activity with a warning listing the same changes.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `ChangedObjectTypeClassifications` (keyed by Object Type name, each entry an `Aspect` of `ClassKind` or `Inheritance` with its `OldValues` and `NewValues`), `HasObjectTypeClassificationChanges`, `ObjectTypesWithClassificationUpdates` (Object Types whose classification changed in a way that cannot change which Object Type an entry resolves to; applying records it, and no warning is written), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input. Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings). `-Preview` also writes one warning per Object Type classification change, because a class whose kind or inheritance changed can change the Object Type that existing entries import as; see [When an object changes Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type). Applying such a refresh completes its Activity with a warning listing the same changes.
 
 ### Examples
 
@@ -482,7 +482,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ### Notes
 
-- A refresh never deletes on its own: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. Deletion only happens when you explicitly choose `-RemoveDependents`, and only across what the preview listed. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
+- A refresh never deletes on its own: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. Deletion only happens when you explicitly choose `-RemoveDependents`, and only across what the preview listed. See [Refreshing the schema](../configuration/connected-system-schema.md#refreshing-the-schema).
 - Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
 - Schema import is required before creating Synchronisation Rules for a Connected System.
 - Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.
@@ -725,7 +725,7 @@ Object type definitions with their attributes, selection state, and external ID 
 
 Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
 
-Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
+Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-system-attributes.md#attribute-writability) for what each one means for Attribute Flow.
 
 Each attribute also carries `required`: whether the Connected System's schema demands it for the attribute's class (an RFC 4512 MUST). JIM refuses an export that would add a class whose required attributes have no value, so this is what to check when deciding which of a merged auxiliary class's attributes to flow. Read-only: discovered from the schema, never settable.
 
@@ -798,7 +798,7 @@ Get-JIMSyncRule -ConnectedSystemId 3 | Where-Object { $_.connectedSystemObjectTy
 Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected $false
 ```
 
-Deselecting an Object Type takes it out of management: the next Full Import marks every Connected System Object of that type obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. Preview it first with `New-JIMConfigurationChangePreview -ConnectedSystemId 3 -SchemaObjectType @(@{ objectTypeId = 2; selected = $false }) -Wait`, and see [What deselecting means](../configuration/connected-systems.md#what-deselecting-means).
+Deselecting an Object Type takes it out of management: the next Full Import marks every Connected System Object of that type obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. Preview it first with `New-JIMConfigurationChangePreview -ConnectedSystemId 3 -SchemaObjectType @(@{ objectTypeId = 2; selected = $false }) -Wait`, and see [What deselecting means](../configuration/connected-system-schema.md#what-deselecting-means).
 
 ### Notes
 
@@ -839,7 +839,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
 | `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. A data type cannot be set in bulk. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated attribute(s) |
 
-`-Type` is accepted only where the Connector's schema cannot state a type definitively, which today means the JIM File Connector and the JIM SQL Connector. It is refused once the attribute is referenced by a Synchronisation Rule or holds values. See [Attribute data types](../configuration/connected-systems.md#attribute-data-types) for when an override is needed and why.
+`-Type` is accepted only where the Connector's schema cannot state a type definitively, which today means the JIM File Connector and the JIM SQL Connector. It is refused once the attribute is referenced by a Synchronisation Rule or holds values. See [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types) for when an override is needed and why.
 
 ### Output
 
@@ -1052,7 +1052,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $
 - `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
 - Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
 - `Selected` and `Excluded` are mutually exclusive: a container states one thing about itself. A request that would leave both set is rejected with a 400, whether it names both or names one against a stored other, so moving a container from a selection to an exclusion means setting both in the same call.
-- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector.md#excluding-a-container).
+- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector-topology.md#excluding-a-container).
 - Supports `ShouldProcess` (Medium impact).
 
 ---
@@ -1414,7 +1414,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## Get-JIMConnectedSystemUnresolvedReferenceSummary
 
-Summarises every unresolved reference across a Connected System's Connector Space: how many there are and on how many objects, how they split by likely cause, and every distinct next step with how many references and objects it addresses. It is what the portal shows as **Where they point** above the Connector Space filtered to unresolved references. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+Summarises every unresolved reference across a Connected System's Connector Space: how many there are and on how many objects, how they split by likely cause, and every distinct next step with how many references and objects it addresses. It is what the portal shows as **Where they point** above the Connector Space filtered to unresolved references. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
 ### Syntax
 
@@ -1460,7 +1460,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## Get-JIMConnectedSystemObjectUnresolvedReference
 
-Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
 ### Syntax
 
@@ -1630,7 +1630,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 - Metaverse Objects are **not** deleted by the clear itself; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 - Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
-- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the connector space](../configuration/connector-space.md#clearing-the-connector-space).
 
 ---
 
@@ -1675,7 +1675,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes. Each attribute change carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced it; both are `$null` if the contributing rule has since been deleted. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export). `ValueSources` names where each attribute's queued value came from: `ConnectedSystemAttributeId` identifies the attribute, `IsComputed` is `$true` for an expression, chained mapping or generated value (`Expression` describes an expression or chained mapping; for a generated value `IsGeneratedValue` is `$true` and `Expression` is `$null`), and otherwise `SourceMetaverseAttributeId`/`SourceMetaverseAttributeName` name the single Metaverse attribute it was read from, with `Origin` (the same shape [`Get-JIMMetaverseObjectProvenance`](metaverse.md#get-jimmetaverseobjectprovenance) returns) giving that attribute's current source and `HasSeveralOrigins` flagging a multi-valued attribute whose values came from more than one source. There is no entry for an attribute whose export mapping cannot be resolved (its staging rule has since been deleted).
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. Each attribute change carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced it; both are `$null` if the contributing rule has since been deleted. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/unresolved-references.md#on-export). `ValueSources` names where each attribute's queued value came from: `ConnectedSystemAttributeId` identifies the attribute, `IsComputed` is `$true` for an expression, chained mapping or generated value (`Expression` describes an expression or chained mapping; for a generated value `IsGeneratedValue` is `$true` and `Expression` is `$null`), and otherwise `SourceMetaverseAttributeId`/`SourceMetaverseAttributeName` name the single Metaverse attribute it was read from, with `Origin` (the same shape [`Get-JIMMetaverseObjectProvenance`](metaverse.md#get-jimmetaverseobjectprovenance) returns) giving that attribute's current source and `HasSeveralOrigins` flagging a multi-valued attribute whose values came from more than one source. There is no entry for an attribute whose export mapping cannot be resolved (its staging rule has since been deleted).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples
@@ -1753,7 +1753,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 Sets the password on one Connected System Object.
 
-The Connected System Object-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one Connected System Object named, for scripts that hold the Connected System Object rather than the Metaverse Object. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the Connected System Object did with the password. JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
+The Connected System Object-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](password-synchronisation.md#set-jimmetaverseobjectpassword) with this one Connected System Object named, for scripts that hold the Connected System Object rather than the Metaverse Object. The change is queued, encrypted, and the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the Connected System Object did with the password. JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
 
 This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a Metaverse Object, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
 
@@ -1776,7 +1776,7 @@ Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Genera
 | `Password` | `securestring` | Yes (unless `-Generate`) | | The password to set. Encrypted before JIM stores it and held only until delivered. |
 | `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate a password satisfying the policy it discovered on the Connected System. |
 | `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password. Omitting it leaves the account's enabled state untouched. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password, whatever its Attribute Flows say. Omitting it leaves the account's enabled state as it is, with one exception that [Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) describes. |
 | `Wait` | `int` | No | `10` | Seconds, 0 to 30, to wait for the account to answer. Pass `0` to return as soon as the change is recorded. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
 
@@ -1832,7 +1832,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and says so in the target's `Message`; the password is still set.
 - A system that refused the password parks it, with its own reason in `Message`. A system that could not be reached is `Retrying`, because nothing was established about the password itself; JIM tries again on its own clock, and nothing is lost while the system is down.
 - The account must be joined to a Metaverse Object. An unjoined object is reported as not found, with the remedy: join it first.
-- Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
+- Routine initial passwords belong on the Synchronisation Rule that provisions the account; see [`Set-JIMSyncRuleInitialPassword`](initial-password.md#set-jimsyncruleinitialpassword).
 - Pass `-Generate` instead of `-Password` to have JIM produce a password satisfying the policy it discovered on
   the Connected System. Prefer this to inventing one in your own script: JIM knows what the target demands, and
   a hand-rolled generator rediscovers the passphrase trap, where three words offer two character categories
@@ -1850,7 +1850,7 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 
 Lists the auxiliary classes that can be merged into a Connected System Object Type, and which of them are merged already.
 
-Merging an auxiliary class brings its attributes into the Object Type, so JIM can import and export them. See [Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes) for what this means on a directory.
+Merging an auxiliary class brings its attributes into the Object Type, so JIM can import and export them. See [Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md) for what this means on a directory.
 
 Nothing is returned for an Object Type whose Connected System does not let JIM compose class membership (Active Directory resolves its own auxiliary classes into each structural class), or for an Object Type that is itself an auxiliary class.
 
@@ -2113,7 +2113,7 @@ Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
 ## See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
-- [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
+- [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
 - [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation, including the initial password set on provisioned accounts
 - [Connection](connection.md): establish a session before using these cmdlets

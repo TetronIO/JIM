@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -36,6 +37,67 @@ public class ObjectMatchingServer
 
 
     #region public methods
+
+    /// <summary>
+    /// What <paramref name="rule"/> would compare for an object of <paramref name="objectType"/> holding
+    /// <paramref name="sampleValues"/>: the portal's Try it (#2052). Worked out by the resolver synchronisation uses,
+    /// so the answer in the editor cannot differ from the answer a run gives.
+    /// </summary>
+    /// <param name="rule">The rule as composed, with its Target Metaverse Attribute and source set.</param>
+    /// <param name="objectType">The Object Type the rule reads, with its attributes.</param>
+    /// <param name="sampleValues">A value per attribute, by attribute name, as typed; each is read as its attribute's
+    /// type, exactly as an imported value would be. An empty value is an attribute the object has no value for.</param>
+    public MatchValueResolution ResolveSampleMatchValues(
+        ObjectMatchingRule rule,
+        ConnectedSystemObjectType objectType,
+        IReadOnlyDictionary<string, string?> sampleValues)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(objectType);
+        ArgumentNullException.ThrowIfNull(sampleValues);
+
+        // An empty sample is an attribute the object has no value for; a sample naming no attribute of the type is
+        // left out, because the validator already says so and the resolver would read nothing for it either way.
+        var inputs = sampleValues
+            .Where(sample => !string.IsNullOrEmpty(sample.Value))
+            .Select(sample => (Sample: sample.Value!, Attribute: objectType.Attributes.FirstOrDefault(
+                attribute => string.Equals(attribute.Name, sample.Key, StringComparison.OrdinalIgnoreCase))))
+            .Where(input => input.Attribute != null);
+
+        var attributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        foreach (var (sample, attribute) in inputs)
+        {
+            if (!ExpressionResultConverter.TryConvert(sample, attribute!.Type, out var typed) || typed == null)
+                return MatchValueResolution.Failed(
+                    $"The sample value '{sample}' for cs[\"{attribute.Name}\"] is not a {attribute.Type} value, the type of that attribute." +
+                    (attribute.Type == AttributeDataType.DateTime ? " Enter a date in ISO 8601, such as 2026-03-15T10:30:00Z." : string.Empty),
+                    rule.TargetMetaverseAttribute?.Type ?? AttributeDataType.NotSet,
+                    rule.Sources.Count == 1 ? rule.Sources[0].Expression : null);
+
+            attributeValues.Add(ToAttributeValue(attribute, typed));
+        }
+
+        return _matchValueResolver.Resolve(rule, attributeValues, objectType);
+    }
+
+    /// <summary>A sample value held as an imported value of <paramref name="attribute"/> would be.</summary>
+    private static ConnectedSystemObjectAttributeValue ToAttributeValue(ConnectedSystemObjectTypeAttribute attribute, object value)
+    {
+        var attributeValue = new ConnectedSystemObjectAttributeValue { Attribute = attribute, AttributeId = attribute.Id };
+        switch (value)
+        {
+            case string text: attributeValue.StringValue = text; break;
+            case int number: attributeValue.IntValue = number; break;
+            case long longNumber: attributeValue.LongValue = longNumber; break;
+            case decimal decimalNumber: attributeValue.DecimalValue = decimalNumber; break;
+            case Guid guid: attributeValue.GuidValue = guid; break;
+            case DateTime dateTime: attributeValue.DateTimeValue = dateTime; break;
+            case bool flag: attributeValue.BoolValue = flag; break;
+            case byte[] bytes: attributeValue.ByteValue = bytes; break;
+        }
+
+        return attributeValue;
+    }
 
     /// <summary>
     /// Attempts to find a Metaverse Object that matches a Connected System Object using the provided matching rules.
@@ -147,7 +209,7 @@ public class ObjectMatchingServer
             : ids.Count;
 
         var listed = await repository.GetMetaverseObjectsByIdsNoTrackingAsync(ids.Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded));
-        var description = DescribeRule(rule);
+        var description = rule.DescribeComparison();
         return listed
             .OrderBy(mvo => mvo.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(mvo => mvo.Id)
@@ -174,38 +236,46 @@ public class ObjectMatchingServer
     /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
     public static string DescribeAmbiguity(MultipleMatchesException ambiguity, bool previewing = false)
     {
-        const int maxValuesShown = 10;
-        var total = ambiguity.Candidates.Count > 0 ? ambiguity.Candidates[0].CandidateTotal : ambiguity.Matches.Count;
-        var on = string.Empty;
-        if (ambiguity.Rule != null)
-        {
-            var values = ambiguity.MatchValues
-                .Take(maxValuesShown)
-                .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
-                .ToList();
-            if (ambiguity.MatchValues.Count > maxValuesShown)
-                values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
-            on = $" on {DescribeRule(ambiguity.Rule)} ({string.Join(", ", values)})";
-        }
-
         var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
-        return $"This object matches {total} Metaverse Objects{on}, so {outcome}. " +
+        return $"This object matches {CountOf(ambiguity)} Metaverse Objects{DescribeMatchedOn(ambiguity)}, so {outcome}. " +
                "A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, " +
                "so that its values identify one.";
     }
 
     /// <summary>
-    /// What a rule compares, for example "Employee ID equals employeeNumber", or the expression in place of the
-    /// attribute name when the rule computes its value.
+    /// The error an ambiguous match before provisioning records (#2052): how many existing Connected System Objects the
+    /// Metaverse Object matched in the target, on what, and why that stops it. The candidates travel separately.
     /// </summary>
-    internal static string DescribeRule(ObjectMatchingRule rule)
+    /// <param name="ambiguity">The ambiguous match.</param>
+    /// <param name="connectedSystemName">The target Connected System's name.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static string DescribeProvisioningAmbiguity(MultipleMatchesException ambiguity, string connectedSystemName, bool previewing = false)
     {
-        var source = rule.Sources.OrderBy(s => s.Order).FirstOrDefault();
-        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
-            ? source?.ConnectedSystemAttribute?.Name
-            : source.Expression;
-        var target = rule.TargetMetaverseAttribute?.Name ?? rule.TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
-        return $"{target} equals {sourceText}";
+        var outcome = previewing
+            ? "a synchronisation would neither join it to one nor provision it"
+            : "it was neither joined to one nor provisioned";
+        return $"This Metaverse Object matches {CountOf(ambiguity)} Connected System Objects in '{connectedSystemName}'" +
+               $"{DescribeMatchedOn(ambiguity)}, so {outcome}. A Metaverse Object can join only one Connected System Object in " +
+               "each Connected System: correct the data, or the Object Matching Rule, so that its values identify one.";
+    }
+
+    private static int CountOf(MultipleMatchesException ambiguity) =>
+        ambiguity.Candidates.Count > 0 ? ambiguity.Candidates[0].CandidateTotal : ambiguity.Matches.Count;
+
+    /// <summary>" on Employee ID equals employeeNumber ("E1001")", or nothing when the rule is not known.</summary>
+    private static string DescribeMatchedOn(MultipleMatchesException ambiguity)
+    {
+        if (ambiguity.Rule == null)
+            return string.Empty;
+
+        const int maxValuesShown = 10;
+        var values = ambiguity.MatchValues
+            .Take(maxValuesShown)
+            .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
+            .ToList();
+        if (ambiguity.MatchValues.Count > maxValuesShown)
+            values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
+        return $" on {ambiguity.Rule.DescribeComparison()} ({string.Join(", ", values)})";
     }
 
     /// <summary>
@@ -241,20 +311,44 @@ public class ObjectMatchingServer
     }
 
     /// <summary>
-    /// Attempts to find an existing Connected System Object in a target system that matches a Metaverse Object.
-    /// This is used during export evaluation to find existing CSOs before provisioning.
-    /// The caller is responsible for resolving which rules apply based on the matching mode.
+    /// Attempts to find an existing Connected System Object in a target system that matches a Metaverse Object about
+    /// to be provisioned there, so that it is joined rather than duplicated. The caller is responsible for resolving
+    /// which rules apply based on the matching mode.
     /// </summary>
-    /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
-    /// <param name="connectedSystem">The target Connected System (needed to scope the CSO search).</param>
-    /// <param name="connectedSystemObjectType">The CSO type to search within.</param>
-    /// <param name="matchingRules">The matching rules to evaluate.</param>
-    /// <returns>The matching CSO, or null if no match found.</returns>
-    public async Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+    /// <param name="metaverseObject">The Metaverse Object to find a matching Connected System Object for.</param>
+    /// <param name="connectedSystem">The target Connected System.</param>
+    /// <param name="connectedSystemObjectType">The Connected System Object Type to search within.</param>
+    /// <param name="matchingRules">The matching rules to evaluate, tried in <see cref="ObjectMatchingRule.Order"/>.</param>
+    /// <param name="prefetched">The page's prefetched candidates
+    /// (<see cref="ExportEvaluationServer.PrefetchExportMatchCandidatesForPageAsync"/>), when the prefetch covered this
+    /// (Metaverse Object, export Synchronisation Rule) pair (<see cref="ExportMatchCandidates.IsCovered"/>). An
+    /// uncovered pair carries no information, so the caller passes null and the candidates are looked up instead.</param>
+    /// <returns>The match, or null if no rule found one.</returns>
+    /// <exception cref="MultipleMatchesException">A rule's values find more than one Connected System Object.</exception>
+    /// <exception cref="ObjectMatchingRuleFailedException">A rule cannot be worked out for this Metaverse Object.</exception>
+    public Task<ExportMatch?> FindMatchingConnectedSystemObjectAsync(
         MetaverseObject metaverseObject,
         ConnectedSystem connectedSystem,
         ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules)
+        List<ObjectMatchingRule> matchingRules,
+        ExportMatchCandidates? prefetched = null,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null)
+        => FindMatchingConnectedSystemObjectAsync(
+            Application.SyncRepo, metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules, prefetched, expressionIndexes);
+
+    /// <summary>
+    /// As <see cref="FindMatchingConnectedSystemObjectAsync(MetaverseObject, ConnectedSystem, ConnectedSystemObjectType, List{ObjectMatchingRule}, ExportMatchCandidates?)"/>,
+    /// against the given repository: Sync Preview passes its read-only guard, so a preview evaluates rules exactly as a
+    /// synchronisation would without being able to write.
+    /// </summary>
+    internal async Task<ExportMatch?> FindMatchingConnectedSystemObjectAsync(
+        ISyncRepository repository,
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules,
+        ExportMatchCandidates? prefetched = null,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null)
     {
         if (matchingRules.Count == 0)
         {
@@ -262,125 +356,255 @@ public class ObjectMatchingServer
             return null;
         }
 
-        // Evaluate rules in order until we find a match
+        // As on import (#2052): only a rule with nothing to look up, or one that finds nothing, lets the next rule be
+        // tried. A rule that cannot be worked out, or whose values find more than one Connected System Object, stops
+        // the Metaverse Object, because provisioning it anyway would create the duplicate matching exists to prevent,
+        // and joining whichever object came first would hand the identity an account by accident.
         foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
         {
-            try
-            {
-                var cso = await Application.SyncRepo.FindConnectedSystemObjectUsingMatchingRuleAsync(
-                    metaverseObject,
-                    connectedSystem,
-                    connectedSystemObjectType,
-                    matchingRule);
+            var resolved = ExportMatchingValue.Resolve(metaverseObject, matchingRule);
+            if (resolved.Outcome == ExportMatchingOutcome.NoMetaverseValue)
+                continue;
+            if (resolved.Outcome != ExportMatchingOutcome.Resolved)
+                throw new ObjectMatchingRuleFailedException(matchingRule, DescribeExportFailure(matchingRule, resolved, connectedSystemObjectType), provisioning: true);
 
-                if (cso != null)
+            // Which of the looked-up values found each object: every value is looked up, so two values finding two
+            // objects is as ambiguous as one value finding both.
+            var valuesById = new Dictionary<Guid, HashSet<object>>();
+            var ids = new List<Guid>();
+            void Found(object value, Guid id)
+            {
+                if (!valuesById.TryGetValue(id, out var values))
                 {
-                    Log.Debug("FindMatchingConnectedSystemObjectAsync: Found CSO {CsoId} using rule {RuleId}", cso.Id, matchingRule.Id);
-                    return cso;
+                    values = [];
+                    valuesById[id] = values;
+                    ids.Add(id);
+                }
+
+                values.Add(value);
+            }
+
+            // The values that found an object, in the order the Metaverse Object holds them.
+            string MatchedOn(Guid id) => FormatValues(resolved.Values.Where(valuesById[id].Contains));
+
+            // A rule computing its value with an expression is answered by an index of what the expression computes for
+            // each unjoined object; an attribute rule by the page's prefetch where it covers this pair, else a query.
+            ExpressionMatchValueIndex? index = null;
+            if (resolved.Expression != null)
+            {
+                index = await GetExpressionMatchIndexAsync(repository, matchingRule, connectedSystem, connectedSystemObjectType, expressionIndexes);
+                foreach (var value in resolved.Values)
+                {
+                    foreach (var id in index.GetCandidates(value))
+                        Found(value, id);
                 }
             }
-            catch (Exception ex)
+            else if (prefetched != null)
             {
-                Log.Warning(ex, "FindMatchingConnectedSystemObjectAsync: Error evaluating matching rule {RuleId}", matchingRule.Id);
-                // Continue to next rule
+                foreach (var value in resolved.Values)
+                {
+                    foreach (var id in prefetched.GetCandidates(matchingRule.Id, value))
+                        Found(value, id);
+                }
             }
+            else
+            {
+                var found = await repository.GetExportMatchCandidateIdsAsync(
+                    connectedSystem.Id, connectedSystemObjectType.Id, resolved.ConnectedSystemAttributeName!, resolved.DataType,
+                    resolved.CaseSensitive, resolved.Values);
+                foreach (var (value, id) in found)
+                    Found(value, id);
+            }
+
+            // Load the candidates while they are still unjoined. One that has since been claimed (by another Metaverse
+            // Object on this page) or is no longer Normal is passed over, and taken out of the prefetch so no later
+            // lookup on the page is offered it again. Loading stops once there are more than can be listed.
+            var eligible = new List<ConnectedSystemObject>();
+            var loaded = 0;
+            foreach (var id in ids)
+            {
+                if (eligible.Count > ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded)
+                    break;
+
+                loaded++;
+                var cso = await repository.GetConnectedSystemObjectForExportMatchAsync(id);
+                if (cso != null)
+                {
+                    eligible.Add(cso);
+                }
+                else
+                {
+                    prefetched?.Remove(id);
+                    index?.Remove(id);
+                }
+            }
+
+            if (eligible.Count == 0)
+            {
+                // An index that could not check every object cannot say that nothing matched: one it could not check may
+                // be this Metaverse Object's own account, and provisioning would duplicate it.
+                if (index is { IsComplete: false, FirstUncheckable: var (uncheckableId, reason) })
+                {
+                    var described = index.UncheckableCount == 1 ? "1 existing Connected System Object" : $"{index.UncheckableCount} existing Connected System Objects";
+                    throw new ObjectMatchingRuleFailedException(matchingRule, MatchValueResolution.Failed(
+                        $"The expression could not be worked out for {described} in '{connectedSystem.Name}', so it cannot be ruled out " +
+                        $"that one of them is this object's. For example, Connected System Object {uncheckableId}: {reason}",
+                        resolved.DataType, resolved.Expression), provisioning: true);
+                }
+
+                continue;
+            }
+
+            if (eligible.Count > 1)
+            {
+                // Those not loaded were eligible when looked up, so they count towards the total.
+                var total = eligible.Count + ids.Count - loaded;
+                throw new MultipleMatchesException(
+                    "Multiple Connected System Objects were found to match the Metaverse Object.", [.. eligible.Select(cso => cso.Id)])
+                {
+                    Rule = matchingRule,
+                    MatchValues = resolved.Values,
+                    Candidates = DescribeCandidates(eligible, connectedSystem, connectedSystemObjectType, matchingRule, MatchedOn, total)
+                };
+            }
+
+            var match = eligible[0];
+            Log.Debug("FindMatchingConnectedSystemObjectAsync: Found CSO {CsoId} using rule {RuleId}", match.Id, matchingRule.Id);
+            return new ExportMatch(match, matchingRule, MatchedOn(match.Id));
         }
 
         return null;
     }
 
     /// <summary>
-    /// Batch equivalent of <see cref="FindMatchingConnectedSystemObjectAsync"/>: finds a matching CSO for
-    /// the given Metaverse Object entirely from a page's prefetched <paramref name="candidates"/>
-    /// (populated by <see cref="ExportEvaluationServer.PrefetchExportMatchCandidatesForPageAsync"/>),
-    /// hydrating only the specific candidate rows a rule's resolved value points at rather than issuing
-    /// the per-object database query. Callers must only use this for a (Metaverse Object, export
-    /// Synchronisation Rule) pair the prefetch covered (<see cref="ExportMatchCandidates.IsCovered"/>);
-    /// an uncovered pair carries no information here and must fall back to
-    /// <see cref="FindMatchingConnectedSystemObjectAsync"/>.
+    /// The index of what an expression-sourced rule computes for each unjoined object of the type (#2052): the run's,
+    /// built on first use and kept in <paramref name="runIndexes"/>, or, with no run to keep it for (Sync Preview), one
+    /// built for this lookup alone.
     /// </summary>
-    /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
-    /// <param name="connectedSystem">The target Connected System, used only for the multiple-candidates
-    /// log message (matching <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s wording).</param>
-    /// <param name="matchingRules">The matching rules to evaluate, tried in <see cref="ObjectMatchingRule.Order"/>.</param>
-    /// <param name="candidates">The page's prefetched export-matching candidates.</param>
-    /// <returns>The matching CSO, or null when no rule resolves a usable value, or none of the
-    /// prefetched candidates for a resolved value are still eligible.</returns>
-    public async Task<ConnectedSystemObject?> FindPrefetchedMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
+    private async Task<ExpressionMatchValueIndex> GetExpressionMatchIndexAsync(
+        ISyncRepository repository,
+        ObjectMatchingRule rule,
         ConnectedSystem connectedSystem,
-        List<ObjectMatchingRule> matchingRules,
-        ExportMatchCandidates candidates)
+        ConnectedSystemObjectType objectType,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? runIndexes)
     {
-        foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
+        var key = (rule.Id, objectType.Id);
+        if (runIndexes != null && runIndexes.TryGetValue(key, out var existing))
+            return existing;
+
+        var index = await BuildExpressionMatchIndexAsync(repository, rule, connectedSystem, objectType);
+        if (runIndexes != null)
+            runIndexes[key] = index;
+        return index;
+    }
+
+    /// <summary>
+    /// Works the rule's expression out for every unjoined, Normal object of the type, reading only the attributes it
+    /// reads, through the same resolver the import join uses, so the two directions agree on what a rule computes.
+    /// </summary>
+    private async Task<ExpressionMatchValueIndex> BuildExpressionMatchIndexAsync(
+        ISyncRepository repository,
+        ObjectMatchingRule rule,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType objectType)
+    {
+        using var span = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("BuildExpressionMatchIndex");
+        var expression = rule.Sources[0].Expression;
+        var attributeIds = ExpressionInputResolver.ResolveCached(expression)
+            .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+            .Select(input => objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase)))
+            .Where(attribute => attribute != null)
+            .Select(attribute => attribute!.Id)
+            .Distinct()
+            .ToList();
+
+        var index = new ExpressionMatchValueIndex(rule.CaseSensitive);
+        var objectCount = 0;
+        await foreach (var (id, values) in repository.StreamUnjoinedConnectedSystemObjectValues(connectedSystem.Id, objectType.Id, attributeIds))
         {
-            var resolved = ExportMatchingValue.Resolve(metaverseObject, matchingRule);
-
-            switch (resolved.Outcome)
+            objectCount++;
+            var resolution = _matchValueResolver.Resolve(rule, values, objectType);
+            switch (resolution.Kind)
             {
-                // The per-object query throws for these two (caught by FindMatchingConnectedSystemObjectAsync's
-                // caller and logged as a generic "Error evaluating matching rule" warning); logged directly
-                // here instead, since Resolve() reports them without needing to throw.
-                case ExportMatchingOutcome.NoSources:
-                    Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Object Matching Rule {RuleId} has no sources; export matching cannot evaluate it.",
-                        matchingRule.Id);
-                    continue;
-
-                case ExportMatchingOutcome.MultipleSources:
-                    Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Object Matching Rule {RuleId} has more than one source; advanced (multi-source) matching is not yet supported.",
-                        matchingRule.Id);
-                    continue;
-
-                case ExportMatchingOutcome.NoConnectedSystemAttribute:
-                    Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Rule {RuleId} has no Connected System attribute on its source; export matching cannot query the connector space.",
-                        matchingRule.Id);
-                    continue;
-
-                case ExportMatchingOutcome.NoTargetMetaverseAttribute:
-                    Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
-                        matchingRule.Id);
-                    continue;
-
-                case ExportMatchingOutcome.NoMetaverseValue:
-                    Log.Debug("FindPrefetchedMatchingConnectedSystemObjectAsync: MVO {MvoId} does not have a usable value for attribute {AttrId}",
-                        metaverseObject.Id, matchingRule.TargetMetaverseAttribute!.Id);
-                    continue;
-
-                case ExportMatchingOutcome.UnsupportedAttributeType:
-                    Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
-                        matchingRule.TargetMetaverseAttribute!.Type, matchingRule.TargetMetaverseAttribute!.Name, matchingRule.Id);
-                    continue;
-            }
-
-            // Resolved: take a copy of the candidate list before hydrating, since ExportMatchCandidates.Remove
-            // mutates the backing list (a claim made while trying an earlier candidate for this same rule and
-            // value, or by another Metaverse Object on the page) and iterating it directly here would skip an
-            // element whenever that happens mid-loop.
-            var candidateIds = candidates.GetCandidates(matchingRule.Id, resolved.Value!).ToList();
-
-            if (candidateIds.Count > 1)
-            {
-                Log.Warning("FindPrefetchedMatchingConnectedSystemObjectAsync: Multiple CSOs matched rule {RuleId} in Connected System {ConnectedSystemId}. Returning first by ID. This indicates duplicate CSOs that should be investigated.",
-                    matchingRule.Id, connectedSystem.Id);
-            }
-
-            foreach (var candidateId in candidateIds)
-            {
-                var hydrated = await Application.SyncRepo.GetConnectedSystemObjectForExportMatchAsync(candidateId);
-                if (hydrated != null)
-                {
-                    Log.Debug("FindPrefetchedMatchingConnectedSystemObjectAsync: Found CSO {CsoId} using rule {RuleId}", hydrated.Id, matchingRule.Id);
-                    return hydrated;
-                }
-
-                // No longer eligible (claimed by another Metaverse Object on this page since the prefetch,
-                // or no longer Normal-status): remove so no later lookup on this page is offered it again.
-                candidates.Remove(candidateId);
+                case MatchValueResolutionKind.Values:
+                    foreach (var value in resolution.Values)
+                        index.Add(value, id);
+                    break;
+                case MatchValueResolutionKind.Failed:
+                    if (index.UncheckableCount < ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded)
+                        Log.Warning("BuildExpressionMatchIndexAsync: Object Matching Rule {RuleId} could not be worked out for CSO {CsoId}: {Reason}",
+                            rule.Id, id, resolution.FailureMessage);
+                    index.MarkUncheckable(id, resolution.FailureMessage ?? "The expression could not be worked out.");
+                    break;
             }
         }
 
-        return null;
+        span.SetTag("objectCount", objectCount);
+        span.SetTag("uncheckableCount", index.UncheckableCount);
+        span.SetSuccess();
+        Log.Information("BuildExpressionMatchIndexAsync: Object Matching Rule {RuleId} worked out for {ObjectCount} unjoined object(s) of type {TypeId} in Connected System {ConnectedSystemId}; {UncheckableCount} could not be worked out",
+            rule.Id, objectCount, objectType.Id, connectedSystem.Id, index.UncheckableCount);
+        return index;
     }
+
+    /// <summary>
+    /// Why an export matching rule cannot be worked out for any Metaverse Object, in the words the import side uses
+    /// for the same fault, since the rule is the same rule.
+    /// </summary>
+    private MatchValueResolution DescribeExportFailure(ObjectMatchingRule rule, ExportMatchingValue resolved, ConnectedSystemObjectType objectType)
+    {
+        var targetType = rule.TargetMetaverseAttribute?.Type ?? AttributeDataType.NotSet;
+
+        // The rule's shape is wrong whatever the object holds, so resolving it against no values reports the fault.
+        var described = _matchValueResolver.Resolve(rule, [], objectType);
+        if (described.Kind == MatchValueResolutionKind.Failed)
+            return described;
+
+        return MatchValueResolution.Failed(resolved.Outcome switch
+        {
+            ExportMatchingOutcome.NoConnectedSystemAttribute => "The rule's Connected System attribute is not set.",
+            _ => $"The rule cannot be compared ({resolved.Outcome})."
+        }, targetType, null);
+    }
+
+    /// <summary>
+    /// The candidates an ambiguous export match lists on its Activity item (#2052), so the administrator can open each
+    /// one rather than read a count: up to <see cref="ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/>,
+    /// ordered by display name, each with the values it was found by.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItemMatchCandidate> DescribeCandidates(
+        IEnumerable<ConnectedSystemObject> eligible,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType objectType,
+        ObjectMatchingRule rule,
+        Func<Guid, string> matchedOn,
+        int total)
+    {
+        var description = rule.DescribeComparison();
+        return eligible
+            .Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded)
+            .Select(cso => (Cso: cso, Name: cso.NameOrId ?? cso.Id.ToString()))
+            .OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.Cso.Id)
+            .Select((candidate, ordinal) => new ActivityRunProfileExecutionItemMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.ConnectedSystemObject,
+                CandidateId = candidate.Cso.Id,
+                DisplayNameSnapshot = candidate.Name,
+                TypeNameSnapshot = candidate.Cso.Type?.Name ?? objectType.Name,
+                ConnectedSystemId = connectedSystem.Id,
+                ConnectedSystemNameSnapshot = connectedSystem.Name,
+                MatchedValue = matchedOn(candidate.Cso.Id),
+                ObjectMatchingRuleId = rule.Id == 0 ? null : rule.Id,
+                ObjectMatchingRuleDescriptionSnapshot = description,
+                Ordinal = ordinal,
+                CandidateTotal = total
+            })
+            .ToList();
+    }
+
+    private static string FormatValues(IEnumerable<object> values) =>
+        string.Join(", ", values.Select(value => Convert.ToString(value, CultureInfo.InvariantCulture)));
 
     #endregion
 }

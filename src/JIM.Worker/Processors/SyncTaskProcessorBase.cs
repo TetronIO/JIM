@@ -1305,7 +1305,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityDescription: mvoDescription,
                             detailCount: rootDetailCount,
                             syncRuleId: changeResult.SyncRuleId,
-                            syncRuleName: changeResult.SyncRuleName);
+                            syncRuleName: changeResult.SyncRuleName,
+                            joinMatch: changeResult.JoinMatch);
 
                         // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned
                         // child per resolved attribute from a re-elected survivor's own
@@ -2036,6 +2037,10 @@ public abstract class SyncTaskProcessorBase
         string? cancelledMvoDeletionDetailMessage = null;
         string? cancelledMvoDeletionPolicySnapshotJson = null;
 
+        // The match a join was made on (#2052), threaded the same way so the Joined root outcome records which Object
+        // Matching Rule found the Metaverse Object and on what value.
+        ImportMatch? joinMatch = null;
+
         // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
@@ -2073,7 +2078,7 @@ public abstract class SyncTaskProcessorBase
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
             {
-                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson) =
+                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch) =
                     await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
             }
 
@@ -2246,7 +2251,8 @@ public abstract class SyncTaskProcessorBase
                         targetEntityId: mvoId,
                         targetEntityDescription: mvoDescription,
                         syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
-                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null);
+                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
+                        joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
 
                     // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
                     // child per resolved attribute. Not gated to Detailed mode: a
@@ -2362,7 +2368,7 @@ public abstract class SyncTaskProcessorBase
             if (wasJoined)
             {
                 return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved,
-                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch);
             }
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
@@ -3305,6 +3311,13 @@ public abstract class SyncTaskProcessorBase
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
+            // Create error RPEIs where export matching could not settle on an existing Connected System Object before
+            // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
+            // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
+            // the object's other export Rules are unaffected.
+            foreach (var matchError in result.ProvisioningMatchErrors)
+                _activity.RunProfileExecutionItems.Add(BuildProvisioningMatchErrorRpei(mvo, matchError));
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
@@ -3766,6 +3779,23 @@ public abstract class SyncTaskProcessorBase
             "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
             "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
             "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
+    /// <summary>
+    /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
+    /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
+    /// ambiguous match found.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildProvisioningMatchErrorRpei(MetaverseObject mvo, ProvisioningMatchError error)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = error.ErrorType;
+        rpei.ErrorMessage = error.Message;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.MatchCandidates = [.. error.Candidates];
         return rpei;
     }
 
@@ -4657,7 +4687,7 @@ public abstract class SyncTaskProcessorBase
         var skippedCount = skippedEvaluations.Count;
 
         // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
-        // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
+        // cross-page reference pass, drift, deprovisioning, preview all look their candidates up themselves), so the
         // cache is cleared however the loop below ends, including on an unhandled exception.
         try
         {
@@ -6187,11 +6217,12 @@ public abstract class SyncTaskProcessorBase
     /// <returns>
     /// Whether a join was established, plus (#1620) the MvoDeletionCancelled facts from
     /// <see cref="EstablishJoinAsync"/> when the join cancelled a previously scheduled deletion; both null
-    /// when no join was found or no deletion was cancelled.
+    /// when no join was found or no deletion was cancelled. Also the match the join was made on (#2052), so the
+    /// Joined outcome can record the rule and value; null when no join was found.
     /// </returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
     /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
-    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
@@ -6238,7 +6269,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         // No join could be established.
-        return (false, null, null);
+        return (false, null, null, null);
     }
 
     /// <summary>
@@ -6261,7 +6292,7 @@ public abstract class SyncTaskProcessorBase
     /// distinct CLR instance of the same row. On real PostgreSQL, JIM's single tracking DbContext already
     /// resolves both loads to one instance via EF's own identity map, so this is hardening against a future
     /// change to how Metaverse Objects are loaded, not a fix for an observed production defect (see
-    /// <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening). Resolving here means every downstream use of the returned Metaverse Object (join
     /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
     /// tracking state on, regardless of how it was loaded.
@@ -6302,7 +6333,7 @@ public abstract class SyncTaskProcessorBase
     /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
     /// to whichever site builds the root.
     /// </returns>
-    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> EstablishJoinAsync(
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
@@ -6391,7 +6422,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, match);
     }
 
     /// <summary>
@@ -6674,6 +6705,18 @@ public abstract class SyncTaskProcessorBase
                     $"The base Expression for the generated value targeting {target} returned more than one value, so {outcome}; " +
                     "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
                     $"text value, not an array: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
+                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
+                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued:
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
+                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
 
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
@@ -6974,10 +7017,11 @@ public abstract class SyncTaskProcessorBase
                         // Queue for export evaluation so target systems receive Pending Exports for the recalled
                         // (and any re-elected) attribute values; without this, downstream Connected Systems keep
                         // the departed source's stale values forever. Same construction as the obsoletion path
-                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
-                        // its first matching changed value, so the re-elected survivor's value must precede the
-                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
-                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        // and the normal Attribute Flow path: additions FIRST, with every removal in
+                        // removedAttributes. Where the source or target is single-valued, export evaluation exports
+                        // the first changed value that was not removed (#2182), so the re-elected survivor's value
+                        // is exported rather than the leaver's, and a genuine clear, with no such value,
+                        // null-clears the target.
                         var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
                         var removedAttributes = recalledAttributeValues.ToHashSet();
                         MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);

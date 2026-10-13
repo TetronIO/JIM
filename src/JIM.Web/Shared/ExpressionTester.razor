@@ -37,7 +37,7 @@
         </MudGrid>
     }
 
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mt-3"
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3"
                OnClick="RunTest">Run test</MudButton>
 
     @if (_result != null)
@@ -46,7 +46,7 @@
         {
             <MudPaper Outlined="true" Class="pa-3 mt-3">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Output</MudText>
-                @if (_result.Result == null)
+                @if (_outputLines.Count == 0)
                 {
                     <MudText Typo="Typo.body1"><EmptyValue /></MudText>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -56,7 +56,11 @@
                 }
                 else
                 {
-                    <MudText Typo="Typo.body1" Class="jim-expression-output">@_result.Result.ToString()</MudText>
+                    @* One value per line, each as JIM writes it to a Text attribute *@
+                    @foreach (var line in _outputLines)
+                    {
+                        <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
+                    }
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @_result.ResultType</MudText>
                 }
             </MudPaper>
@@ -94,6 +98,7 @@
     private IReadOnlyList<ExpressionInput> _inputs = Array.Empty<ExpressionInput>();
     private readonly Dictionary<string, string?> _sampleValues = new();
     private ExpressionTestResult? _result;
+    private IReadOnlyList<string> _outputLines = Array.Empty<string>();
     private int? _errorPosition;
     private string? _resolvedFrom;
 
@@ -157,5 +162,9 @@
         }
 
         _result = ExpressionEvaluator.Test(Expression, new ExpressionContext(metaverseAttributes, connectedSystemAttributes));
+
+        // Several values show one per line rather than as their list's type name (#2179), and every value shows in
+        // JIM's one text form, so a date reads as it would be written to a Text attribute (#2153, N1).
+        _outputLines = _result.IsValid ? ExpressionText.ToDisplayLines(_result.Result) : Array.Empty<string>();
     }
 }

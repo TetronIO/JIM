@@ -258,6 +258,13 @@ public interface IActivityRepository
     public Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId);
 
     /// <summary>
+    /// A Run Profile Execution Item's Joined outcome, with none of its children, so a caller can say which Object
+    /// Matching Rule made the join and on what value (#2052) without loading the item's tree. Null when the item
+    /// recorded no Joined outcome.
+    /// </summary>
+    public Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
     /// upward walk can resolve a whole level of a cascade in one round trip.
     /// </summary>

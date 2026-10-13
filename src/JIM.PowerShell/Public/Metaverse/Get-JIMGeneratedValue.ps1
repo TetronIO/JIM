@@ -4,7 +4,7 @@
 function Get-JIMGeneratedValue {
     <#
     .SYNOPSIS
-        Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242).
+        Lists the generated values a Metaverse Object holds.
 
     .DESCRIPTION
         Returns the committed Unique Value Generation assignments a Metaverse Object holds, one per
@@ -12,25 +12,11 @@ function Get-JIMGeneratedValue {
         mapping responsible, and its state. Empty when the object holds no generated values.
 
     .PARAMETER MetaverseObjectId
-        The unique identifier (GUID) of the Metaverse Object. Also accepts pipeline input via the Id
-        property, so a Metaverse Object from Get-JIMMetaverseObject or Search-JIMMetaverseObject can be
-        piped straight in. Alias: Id.
+        The ID of the Metaverse Object. A Metaverse Object piped from Get-JIMMetaverseObject or
+        Search-JIMMetaverseObject binds here through its Id.
 
     .OUTPUTS
-        One PSCustomObject per generated value the object holds:
-
-        | Property           | Description                                                                    |
-        |---------------------|--------------------------------------------------------------------------------|
-        | AssignmentId        | The assignment's own identifier                                               |
-        | MetaverseAttributeId | The Metaverse Attribute this value was generated for                         |
-        | AttributeName        | Its name                                                                     |
-        | Value                | The committed value                                                          |
-        | TokenKind            | OnlyIfTaken, Sequence or Random                                              |
-        | SyncRuleId           | The Synchronisation Rule whose generated mapping produced this value         |
-        | SyncRuleName         | Its name                                                                      |
-        | SyncRuleMappingId    | The mapping responsible                                                       |
-        | State                | Proposed, Committed, Remediated or NeedsDecision                             |
-        | AssignedDate         | When the assignment was created                                              |
+        One object per generated value the Metaverse Object holds; nothing when it holds none.
 
     .EXAMPLE
         Get-JIMGeneratedValue -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f
@@ -49,7 +35,7 @@ function Get-JIMGeneratedValue {
         Get-JIMSyncRuleMapping
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueAssignmentHeaderDto')]
     param(
         # Aliased to Id so a Metaverse Object can be piped straight in (Get-JIMMetaverseObject exposes Id,
         # not MetaverseObjectId). This cmdlet has no other -Id parameter, so the alias carries no ambiguity;

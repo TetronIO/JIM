@@ -14,20 +14,20 @@ function Remove-JIMApiKey {
         The unique identifier (GUID) of the API Key to delete.
 
     .PARAMETER InputObject
-        API Key object to delete (from pipeline).
+        The API Key to remove, as Get-JIMApiKey returns it.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the API Key's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .PARAMETER PassThru
-        If specified, returns the deleted API Key object.
+        Returns the API Key as it was before it was removed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the deleted API Key object.
+        With -PassThru, the API Key as it was before it was removed; otherwise nothing.
 
     .EXAMPLE
         Remove-JIMApiKey -Id $keyId
@@ -50,7 +50,7 @@ function Remove-JIMApiKey {
         Set-JIMApiKey
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ApiKeyDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,
@@ -87,7 +87,7 @@ function Remove-JIMApiKey {
 
         $confirmMessage = "Delete API Key '$($existing.name)' ($keyId)?"
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete API Key")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action "Delete API Key" -Force:$Force) {
             Write-Verbose "Deleting API Key: $keyId"
 
             try {

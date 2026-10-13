@@ -4,7 +4,7 @@
 function Get-JIMConfigurationChangeHistory {
     <#
     .SYNOPSIS
-        Gets the configuration change history for a Synchronisation Rule, Connected System, Schedule, Service
+        Gets the Configuration Change History for a Synchronisation Rule, Connected System, Schedule, Service
         Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined
         Search, Connector Definition, Example Data Template, or Example Data Set in JIM.
 
@@ -22,51 +22,50 @@ function Get-JIMConfigurationChangeHistory {
         is reported only as "changed", never by value.
 
     .PARAMETER Type
-        The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', 'Schedule',
-        'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey', 'Role',
-        'PredefinedSearch', 'ConnectorDefinition', 'ExampleDataTemplate', or 'ExampleDataSet'.
+        The kind of configuration object.
 
     .PARAMETER Id
-        The unique identifier of the configuration object: an integer for a Synchronisation Rule, Connected
-        System, Metaverse Object Type, Metaverse Attribute, Role, Predefined Search, Connector Definition,
-        Example Data Template, or Example Data Set, a GUID for a Schedule, Trusted Certificate, or API Key, or
-        the dot-notation setting key for a Service Setting (e.g. "History.RetentionPeriod"). Accepts the 'id'
-        property from the pipeline, so a piped object binds automatically.
+        The ID of the configuration object: an integer for most kinds; a GUID for a Schedule, Trusted Certificate or
+        API Key; or the setting's key for a Service Setting, such as History.RetentionPeriod.
 
     .PARAMETER All
-        Automatically paginate through all change-history entries and return every row. Cannot be used with -Page.
-        Fetches at most 1000 pages before stopping with a warning; use -Force to fetch beyond the cap.
+        Returns every change. Stops after 1,000 pages with a warning unless -Force is given.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of how large the change
-        history is. Only valid with -All.
+        Fetches beyond the -All page ceiling.
 
     .PARAMETER Page
-        Page number for the change-history list. Defaults to 1. Cannot be used with -All.
+        The page of changes to return.
 
     .PARAMETER PageSize
-        Number of items per page for the change-history list. Defaults to 50. Maximum is 100.
+        How many changes to return per page.
 
     .PARAMETER Version
-        Retrieve a single change by its per-object version number, returning the snapshot and the diff against
-        the previous version.
+        Returns the change that produced this version, with the object's redacted snapshot and the diff against the
+        previous version.
 
     .PARAMETER CompareFrom
-        The earlier version to compare from (used with -CompareTo).
+        The earlier of the two versions to compare.
 
     .PARAMETER CompareTo
-        The later version to compare to (used with -CompareFrom).
+        The later of the two versions to compare.
 
     .PARAMETER AsDiff
-        For -Version or -CompareFrom/-CompareTo, render the change as a git-style coloured unified diff instead
-        of returning the structured object.
+        Renders the change as a coloured, git-style diff instead of returning the structured object.
 
     .PARAMETER Raw
-        For -Version or -CompareFrom/-CompareTo, return the underlying structured change object. This is the
-        default behaviour; the switch is provided for explicitness.
+        Returns the structured object, which is the default; the switch only makes that explicit.
 
     .OUTPUTS
-        PSCustomObject change-history record(s) or change detail, or, with -AsDiff, the rendered diff as strings.
+        The list returns one record per change, newest first. -Version returns that change in full, and -CompareFrom
+        with -CompareTo the diff between two versions; with -AsDiff, either is rendered as lines of text instead. A
+        secret is never returned: a changed secret is reported only as changed.
+
+        JIM.ConfigurationChangeDetail: With -Version
+
+        JIM.ConfigurationDiff: With -CompareFrom and -CompareTo
+
+        System.String: With -AsDiff
 
     .EXAMPLE
         Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 5
@@ -160,7 +159,12 @@ function Get-JIMConfigurationChangeHistory {
         Get-JIMActivity
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConfigurationChangeHistoryItem', ParameterSetName = 'Page')]
+    [OutputType('JIM.ConfigurationChangeHistoryItem', ParameterSetName = 'All')]
+    [OutputType('JIM.ConfigurationChangeDetail', ParameterSetName = 'Version')]
+    [OutputType('JIM.ConfigurationDiff', ParameterSetName = 'Compare')]
+    [OutputType([string], ParameterSetName = 'Version')]
+    [OutputType([string], ParameterSetName = 'Compare')]
     param(
         [Parameter(Mandatory)]
         [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey', 'Role', 'PredefinedSearch', 'ConnectorDefinition', 'ExampleDataTemplate', 'ExampleDataSet')]
@@ -280,7 +284,7 @@ function Get-JIMConfigurationChangeHistory {
                 # cap and the warnings (issue #487); a single page is fetched directly.
                 $pageRequest = {
                     param($p)
-                    Write-Verbose "Getting $Type $Id configuration change history (Page: $p, PageSize: $PageSize)"
+                    Write-Verbose "Getting $Type $Id Configuration Change History (Page: $p, PageSize: $PageSize)"
                     Invoke-JIMApi -Endpoint "${base}?page=$p&pageSize=$PageSize"
                 }
 

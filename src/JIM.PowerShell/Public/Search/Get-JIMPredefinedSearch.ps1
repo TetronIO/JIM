@@ -16,17 +16,19 @@ function Get-JIMPredefinedSearch {
         and the unfiltered list view return lightweight headers.
 
     .PARAMETER Id
-        Return only the search with this ID. Resolves to a single full search via the server.
+        Returns the search with this ID, in full.
 
     .PARAMETER Uri
-        Return only the search with this URI (the stable, human-readable slug such as
-        "people" or "security-groups"). Supports wildcards. A literal URI resolves to a
-        single full search via the server; a wildcard pattern is filtered client-side
-        against the list of headers.
+        Returns the search with this URI, the stable slug such as people or security-groups. A literal URI returns
+        the search in full; a wildcard pattern returns the header of each search it matches.
 
     .OUTPUTS
-        PSCustomObject. For -Id and literal -Uri lookups, the full Predefined Search
-        including its attributes and criteria. Otherwise, Predefined Search headers.
+        The list and a wildcard -Uri return a header per search; -Id and a literal -Uri return the search in full,
+        with its attributes and criteria groups.
+
+        JIM.PredefinedSearchHeader: By default, or with a wildcard -Uri
+
+        JIM.PredefinedSearchDetailDto: With -Id, or a literal -Uri
 
     .EXAMPLE
         Get-JIMPredefinedSearch
@@ -53,7 +55,9 @@ function Get-JIMPredefinedSearch {
         Search-JIMMetaverseObject
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.PredefinedSearchDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.PredefinedSearchDetailDto', 'JIM.PredefinedSearchHeader', ParameterSetName = 'ByUri')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

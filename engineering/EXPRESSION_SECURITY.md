@@ -20,7 +20,7 @@ measures were considered and explicitly rejected (see "Rejected measures" below)
 ## Purpose and threat model
 
 Expressions in JIM are **Administrator-authored configuration**, not end-user input. They are written by an
-Administrator into a Synchronisation Rule's Attribute Flow (or, in principle, an Object Matching Rule or Example
+Administrator into a Synchronisation Rule's Attribute Flow or an Object Matching Rule (or, in principle, an Example
 Data Template attribute; see the inventory below for which of these are actually reachable today) and evaluated
 later, unattended, by the sync engine, export pipeline, or drift detection.
 
@@ -49,23 +49,22 @@ allowlist. See "Rejected measures" for why an allowlist approach was ruled out.
 
 ## Input path inventory
 
-Three JIM model fields carry a DynamicExpresso expression string. Only one has a live authoring surface today;
-the other two are model-level and evaluation-ready but not yet wired to any UI, REST, or PowerShell surface
-(this was verified by tracing every controller, Razor page, and PowerShell cmdlet touching each model, not
-assumed).
+Three JIM model fields carry a DynamicExpresso expression string. Two have a live authoring surface today; the
+third is model-level and evaluation-ready but not yet wired to any UI, REST, or PowerShell surface (this was
+verified by tracing every controller, Razor page, and PowerShell cmdlet touching each model, not assumed).
 
 | Source field | Authoring surface | Required role | Evaluation site(s) |
 |---|---|---|---|
 | `SyncRuleMappingSource.Expression`<br />(`src/JIM.Models/Logic/SyncRuleMappingSource.cs`) | **Live.** REST API: `POST`/`PUT` on `api/v{version}/synchronisation/sync-rules/{id}/mappings` (`SynchronisationController`, `CreateSyncRuleMappingSourceRequest.Expression` / `SyncRuleMappingSourceDto.Expression`); Blazor UI: `SyncRuleAttributeFlowTab.razor` under `/admin/sync-rules/{id}`; PowerShell: `New-JIMSyncRuleMapping -Expression <string>` (wraps the same API). Ad-hoc testing (not persisted): `POST api/v{version}/synchronisation/test-expression` (`TestExpressionRequest`), Blazor UI expression tester, PowerShell `Test-JIMExpression`. | `Administrator` (`[Authorize(Roles = "Administrator")]` on `SynchronisationController`; `@attribute [Authorize(Roles = "Administrator")]` on `SyncRuleDetail.razor`, the host page for the Attribute Flow tab) | Import: `SyncEngine.AttributeFlow.cs` (`ProcessExpressionMapping`), invoked from `JIM.Worker/Processors/SyncTaskProcessorBase.cs`. Export: `ExportEvaluationServer.cs` (`CreateAttributeValueChanges` and `GetExpectedValue`, the latter shared with drift detection). Drift: `DriftDetectionService.cs` (`GetExpectedValue` / `IsContributorForExpressionAttributes`). Ad-hoc test: `SynchronisationController.TestExpression`. |
-| `ObjectMatchingRuleSource.Expression`<br />(`src/JIM.Models/Logic/ObjectMatchingRuleSource.cs`) | **Not currently reachable.** The model supports it and `IsValid()` accepts it, but `CreateObjectMatchingRuleSourceRequest` (the REST create/update DTO) has no `Expression` property, and the Blazor matching-rule dialog (`SyncRuleMatchingTab.razor`) shows "Sorry, expressions are not yet supported." for this source type. No PowerShell cmdlet sets it either. | N/A today (would be `Administrator`, matching the rest of Object Matching Rule configuration, if wired up) | N/A today (dead code path: nothing populates `ObjectMatchingRuleSource.Expression`, so no evaluator ever sees one) |
+| `ObjectMatchingRuleSource.Expression`<br />(`src/JIM.Models/Logic/ObjectMatchingRuleSource.cs`) | **Live (#2052).** REST API: `POST`/`PUT` on `api/v{version}/synchronisation/connected-systems/{id}/matching-rules` and `api/v{version}/synchronisation/sync-rules/{id}/matching-rules` (`SynchronisationController`, `CreateObjectMatchingRuleSourceRequest.Expression` / `ObjectMatchingRuleSourceDto.Expression`), and the matching preview (`StartObjectMatchingPreviewRequest`); Blazor UI: `ObjectMatchingRuleEditor.razor`, hosted by `ConnectedSystemObjectMatchingTab.razor` and `SyncRuleMatchingTab.razor`, including its Try it (not persisted); PowerShell: `-SourceExpression` on `New-JIMMatchingRule`, `Set-JIMMatchingRule`, `New-JIMSyncRuleMatchingRule` and `Set-JIMSyncRuleMatchingRule`. Saving refuses an expression over the length bound, one that does not parse, one reading `mv[...]`, one reading no `cs[...]` attribute or one the Object Type lacks, and one calling a non-repeatable function (`ObjectMatchingRuleValidator`). | `Administrator`, as for the rest of Object Matching Rule configuration (`SynchronisationController`; the Connected System and Synchronisation Rule detail pages) | `MatchValueResolver` (the one match-value pipeline): import join (`ObjectMatchingServer.FindMatchingMetaverseObjectAsync`), export matching (`ExpressionMatchValueIndex`, built once per run over the unjoined Connected System Objects), Sync Preview, the Object Matching Configuration Change Preview, and Try it (`ObjectMatchingServer.ResolveSampleMatchValues`). The context carries `cs` only. |
 | `ExampleDataTemplateAttribute.Expression`<br />(`src/JIM.Models/ExampleData/ExampleDataTemplateAttribute.cs`) | **Not currently reachable.** `ExampleDataController` exposes only Example Data Set CRUD and template *execution* (`POST templates/{id}/execute`); there is no Create/Update endpoint for a Template or its Attributes. `ExampleDataTemplateDetail.razor` only displays an existing Expression (read-only chip); it has no editor. No PowerShell cmdlet sets it. JIM's built-in seeded templates (`SeedingServer`) do not use expression-based attributes today either. | N/A today | `ExampleDataServer.EvaluateAttributeExpression`, called from `ExampleDataServer` during generation, but unreachable in practice because nothing populates the field |
 
-**Implication:** the live, exercised attack surface today is exactly one field
-(`SyncRuleMappingSource.Expression`), gated by the `Administrator` role at both the API and UI layer, consistent
-with every other Synchronisation Rule configuration action in JIM. The other two fields are forward-looking
-model capability; if either gains an authoring surface in future, it inherits this review's guardrails
-automatically (they live in the shared `DynamicExpressoEvaluator`), and this table should be updated at that
-point.
+**Implication:** the live, exercised attack surface today is two fields (`SyncRuleMappingSource.Expression` and
+`ObjectMatchingRuleSource.Expression`), each gated by the `Administrator` role at both the API and UI layer,
+consistent with every other synchronisation configuration action in JIM. Both evaluate through the shared
+`DynamicExpressoEvaluator`, so both carry this review's guardrails. The third field is forward-looking model
+capability; if it gains an authoring surface in future, it inherits the guardrails automatically, and this table
+should be updated at that point.
 
 ## What the evaluator exposes
 
@@ -104,7 +103,7 @@ On top of this, `RegisterBuiltInFunctions` (`DynamicExpressoEvaluator.cs`) regis
 pure, side-effect-free, in-process transforms: string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`,
 `Right`, `Substring`, `Replace`, `StartsWith`, `EndsWith`, `Length`, `IsNullOrEmpty`, `IsNullOrWhitespace`),
 containment (`Contains`, `CollectionContains`), collection (`Split`, `Join`), conditional (`Coalesce`, `IIF`,
-`Eq`), date (`Now`, `Today`, `FormatDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
+`Eq`), date (`Now`, `Today`, `FormatDate`, `ParseDate`, `ToFileTime`, `FromFileTime`), conversion (`ToString`, `ToInt`), a DN
 helper (`EscapeDN`), password generation (`RandomPassword`, `RandomPassphrase`, both backed by
 `RandomNumberGenerator`, not `System.Random`), and AD `userAccountControl` bitwise helpers (`EnableUser`,
 `DisableUser`, `SetBit`, `ClearBit`, `HasBit`). Every one of these is exercised end-to-end, with expressions
@@ -115,7 +114,23 @@ exists).
 The `mv` and `cs` parameters passed into every evaluation (`Evaluate`, `Test`, and the typed parse in
 `Validate`) are `AttributeAccessor` instances: a case-insensitive, get-only dictionary wrapper. They expose
 exactly one indexer (`this[string attributeName]`) and a `HasAttribute` / `AttributeNames` pair; there is no
-route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any other JIM type.
+route from an `AttributeAccessor` back into reflection, the containing `Dictionary`, or any other JIM type. The
+indexer hands out a copy of a Binary value (a `byte[]`), because an array is mutable through its own members
+(`SetValue`): an expression can change its copy, never the attribute value it came from
+(`FlowInboundAttributes_ExpressionChangesABinaryInput_StoredBytesAreUnchanged`, `SyncEngineExpressionResultTests.cs`).
+
+Every evaluation runs under JIM's expression culture (`ExpressionText.Culture`: the invariant culture with dates
+written as `yyyy-MM-dd HH:mm:ss.FFFFFFK`), set on the evaluating thread and restored in a `finally`, so the
+text an expression produces does not depend on the host's `LANG`. It changes what text is written, not what an
+expression can reach. Every failure an expression can cause, the parse-time rejections below included, is thrown
+from `Evaluate` as one `ExpressionEvaluationException` wrapping the original, which every consumer reports as an
+expression error; the security tests assert the guard's own exception is that inner cause. `Test` additionally
+turns any other exception an expression raises (such as the `OutOfMemoryException` from
+`"x".PadLeft(2000000000)`, which exceeds the maximum string length without allocating) into a failure result, so
+the ad-hoc testing surfaces never throw
+(`Test_ExpressionRaisesAnExceptionOutsideTheExpressionErrors_ReportsAFailureRatherThanThrowing`,
+`DynamicExpressoEvaluatorDateAndTextTests.cs`). Error messages name the function and the expected form, never the
+value that failed (`ParseDate`, `ToFileTime`, `FromFileTime`), because they reach the worker's logs.
 
 ### What is blocked
 
@@ -181,16 +196,16 @@ narrow, non-exploitable, explicitly-flagged exception above.
 ## Guardrails added (non-subtractive)
 
 Both guardrails are sanity bounds against accidents, not capability restrictions; neither changes what any
-legitimate expression can do (proven by `DynamicExpressoEvaluatorFunctionalityRegressionTests.cs`, 46 tests
+legitimate expression can do (proven by `DynamicExpressoEvaluatorFunctionalityRegressionTests.cs`, 48 tests
 covering every built-in function and several composed real-world expressions, all passing with both guardrails
 active).
 
 1. **Expression length ceiling (`DynamicExpressoEvaluator.MaxExpressionLength = 10,000` characters).** `Evaluate`
-   throws `ArgumentException`; `Validate` and `Test` return a validation/test failure result (they have a result
+   throws `ExpressionEvaluationException`; `Validate` and `Test` return a validation/test failure result (they have a result
    type to carry the error, so they do not throw). 10,000 characters is roughly two orders of magnitude beyond
    any real expression in this codebase's own examples or documentation (the longest documented expression is a
    few hundred characters); it exists purely as a bound against an administrator accidentally pasting the wrong
-   clipboard contents into an expression field. Tests: `Evaluate_ExpressionExceedsMaxLength_ThrowsArgumentException`,
+   clipboard contents into an expression field. Tests: `Evaluate_ExpressionExceedsMaxLength_ThrowsExpressionEvaluationException`,
    `Evaluate_ExpressionAtMaxLength_EvaluatesSuccessfully` (boundary proof: exactly at the limit still works),
    `Validate_ExpressionExceedsMaxLength_ReturnsFailure`, `Validate_ExpressionAtMaxLength_ReturnsSuccess`,
    `Test_ExpressionExceedsMaxLength_ReturnsFailureWithoutEvaluating` (`DynamicExpressoEvaluatorTests.cs`).

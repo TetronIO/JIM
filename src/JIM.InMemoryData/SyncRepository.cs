@@ -71,6 +71,30 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
+    /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordMarkingWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> throws it, so a test can prove
+    /// that a delivery which cannot read whether an enable is held keeps the change rather than guessing (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordHoldProbeWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="CreateActivitiesAsync"/> throws it, so a test can prove that staging whose rows were written
+    /// but whose Activities were not still counts the passwords as queued.
+    /// </summary>
+    public Exception? FailActivityCreationWith { get; set; }
+
+    /// <summary>
+    /// Called with the ids <see cref="UpdatePendingExportsAsync"/> writes, so a test can see when an export's status is
+    /// written relative to the batch's other writes (#2173).
+    /// </summary>
+    public Action<IReadOnlyCollection<Guid>>? OnPendingExportsUpdated { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1405,72 +1429,14 @@ public class SyncRepository : ISyncRepository
     public virtual Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId) =>
         Task.FromResult(_mvos.GetValueOrDefault(metaverseObjectId));
 
-    public virtual Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule rule)
-    {
-        if (rule.Sources.Count == 0)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var source = rule.Sources[0];
-
-        // The connector-space side of the comparison always comes from the source's Connected System attribute.
-        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
-        if (csAttrId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        // The MVO side: the standard rule shape (source = Connected System attribute, target = Metaverse
-        // attribute) serves both import and export matching, so read the rule's Target Metaverse Attribute
-        // directly (mirrors the Postgres implementation).
-        var mvoAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
-        if (mvoAttrId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var mvoAttr = metaverseObject.AttributeValues?
-            .FirstOrDefault(av => av.AttributeId == mvoAttrId);
-        if (mvoAttr == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString() ??
-                     (mvoAttr.DecimalValue is { } mvoDecimal ? DecimalAttributeValue.ToCanonicalString(mvoDecimal) : null);
-        if (string.IsNullOrEmpty(mvoVal))
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-        bool ValueMatches(ConnectedSystemObject cso)
-        {
-            var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
-            if (csoAttr == null)
-                return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString() ??
-                         (csoAttr.DecimalValue is { } csoDecimal ? DecimalAttributeValue.ToCanonicalString(csoDecimal) : null);
-            return string.Equals(mvoVal, csoVal, comparison);
-        }
-
-        // Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO already joined
-        // to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not represent a
-        // live, unclaimed object in the target system.
-        var match = _csos.Values
-            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
-                          cso.TypeId == connectedSystemObjectType.Id &&
-                          cso.MetaverseObjectId == null &&
-                          cso.Status == ConnectedSystemObjectStatus.Normal)
-            .OrderBy(cso => cso.Id)
-            .FirstOrDefault(ValueMatches);
-
-        return Task.FromResult(match);
-    }
-
     /// <summary>
-    /// In-memory mirror of the PostgreSQL batch candidate query for a single Object Matching Rule:
-    /// finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
-    /// the given values. Eligibility mirrors <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>
-    /// exactly; unlike that method, the attribute is identified by name (matching the batch query's
-    /// name-based join), so seeded attribute values must carry their <c>Attribute</c> navigation.
+    /// In-memory mirror of the PostgreSQL export matching candidate query for a single Object Matching
+    /// Rule: finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
+    /// the given values. Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO
+    /// already joined to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not
+    /// represent a live, unclaimed object in the target system. The attribute is identified by name
+    /// (matching the query's name-based join), so seeded attribute values must carry their
+    /// <c>Attribute</c> navigation.
     /// </summary>
     public virtual Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -1539,6 +1505,30 @@ public class SyncRepository : ISyncRepository
     /// still eligible (unjoined and Normal-status), or null otherwise. Same object reference the
     /// dictionary holds, matching the tracked (not no-tracking) semantics of the PostgreSQL method.
     /// </summary>
+    /// <summary>
+    /// In-memory mirror of the PostgreSQL stream an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052): every unjoined, Normal-status CSO of the type, ordered by id, with its values for the given attributes.
+    /// </summary>
+    public virtual async IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+    {
+        var unjoined = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal)
+            .OrderBy(cso => cso.Id)
+            .ToList();
+
+        foreach (var cso in unjoined)
+        {
+            await Task.Yield();
+            yield return (cso.Id, cso.AttributeValues
+                .Where(av => attributeIds.Contains(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0))
+                .ToList());
+        }
+    }
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
     {
         if (_csos.TryGetValue(connectedSystemObjectId, out var cso) &&
@@ -1557,7 +1547,8 @@ public class SyncRepository : ISyncRepository
     /// single-threaded, so no locking is required here; this method exists purely to give tests a
     /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
     /// </summary>
-    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue)
     {
         if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
             return Task.FromResult(false);
@@ -1568,6 +1559,8 @@ public class SyncRepository : ISyncRepository
         cso.JoinMethod = ConnectedSystemObjectJoinMethod.ExportMatching;
         cso.JoinSyncRuleId = joinSyncRuleId;
         cso.JoinSyncRuleName = joinSyncRuleName;
+        cso.JoinObjectMatchingRuleId = joinObjectMatchingRuleId;
+        cso.JoinMatchValue = joinMatchValue;
         cso.Status = ConnectedSystemObjectStatus.Normal;
         BumpRowVersion(cso);
         return Task.FromResult(true);
@@ -1971,8 +1964,14 @@ public class SyncRepository : ISyncRepository
     // event that makes state visible to fresh per-batch contexts in the parallel export path.
     public virtual Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
+        var written = new List<Guid>();
         foreach (var pe in pendingExports)
+        {
             _pendingExports[pe.Id] = pe;
+            written.Add(pe.Id);
+        }
+
+        OnPendingExportsUpdated?.Invoke(written);
         return Task.CompletedTask;
     }
 
@@ -2408,6 +2407,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
     }
 
+    public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+    {
+        return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
+    }
+
     public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
     {
         (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
@@ -2450,6 +2454,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
+        if (FailInitialPasswordHoldProbeWith != null)
+            throw FailInitialPasswordHoldProbeWith;
+
         var asked = connectedSystemObjectIds.ToHashSet();
         var held = GetPendingExportsForSystem(connectedSystemId)
             .Where(pe => pe.ConnectedSystemObjectId.HasValue
@@ -2458,6 +2465,21 @@ public class SyncRepository : ISyncRepository
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .ToHashSet();
         return Task.FromResult(held);
+    }
+
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
+    {
+        // The stored row, not a claimed copy: that is the point of reading afresh.
+        var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
+        var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
+        // Read from the stored instances, which the engine mutates in memory before it persists them: closer to "now"
+        // than PostgreSQL's persisted status, so a test interleaving a delivery with an export should assert on the
+        // mark rather than on this fact.
+        var executing = GetPendingExportsForSystem(connectedSystemId)
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
+        var stranded = executing?.LastAttemptedAt < exportsInFlightSince;
+        return new AccountEnablementFacts(holds, marked, executing != null && !stranded, stranded ? executing!.Id : null);
     }
 
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
@@ -3087,6 +3109,23 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    {
+        // Only rows still Executing are written, as the database's guarded UPDATE does. This store shares instances with
+        // the caller, so a result the caller set in memory and has not persisted reads here as already recorded; the
+        // guard's real semantics are proven against PostgreSQL.
+        var released = new HashSet<Guid>();
+        foreach (var state in states)
+        {
+            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing)
+                continue;
+
+            state.ApplyTo(pe);
+            released.Add(pe.Id);
+        }
+        return Task.FromResult<IReadOnlySet<Guid>>(released);
+    }
+
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
     {
         var recovered = 0;
@@ -3411,6 +3450,27 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(outcomes);
     }
 
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (FailInitialPasswordMarkingWith != null)
+            throw FailInitialPasswordMarkingWith;
+
+        // Mirrors the PostgreSQL status mark (#2064): Provisioned rows for these accounts, whatever their status, not
+        // already marked.
+        var accounts = connectedSystemObjectIds.ToHashSet();
+        var marking = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && !c.EnabledStateSetByAttributeFlow)
+            .ToList();
+
+        foreach (var change in marking)
+            change.EnabledStateSetByAttributeFlow = true;
+
+        return Task.FromResult(marking.Count);
+    }
+
     /// <summary>
     /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
     /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
@@ -3424,6 +3484,9 @@ public class SyncRepository : ISyncRepository
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
     {
+        if (FailActivityCreationWith != null)
+            throw FailActivityCreationWith;
+
         foreach (var activity in activities)
             _activities[activity.Id] = activity;
 
@@ -3580,7 +3643,8 @@ public class SyncRepository : ISyncRepository
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
         EnableAccount = source.EnableAccount,
-        SyncRuleId = source.SyncRuleId
+        SyncRuleId = source.SyncRuleId,
+        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)

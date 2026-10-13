@@ -1,8 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Collections;
-using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -25,16 +23,6 @@ namespace JIM.Application.Servers;
 /// </remarks>
 public sealed class MatchValueResolver
 {
-    /// <summary>The data types an equality lookup can compare; the Metaverse attribute value indexes cover these.</summary>
-    private static readonly HashSet<AttributeDataType> MatchableTypes =
-    [
-        AttributeDataType.Text,
-        AttributeDataType.Number,
-        AttributeDataType.LongNumber,
-        AttributeDataType.Decimal,
-        AttributeDataType.Guid
-    ];
-
     private readonly IExpressionEvaluator _expressionEvaluator;
 
     public MatchValueResolver(IExpressionEvaluator expressionEvaluator)
@@ -65,10 +53,10 @@ public sealed class MatchValueResolver
         if (target == null)
             return MatchValueResolution.Failed("The rule has no Metaverse attribute to compare with.", AttributeDataType.NotSet, expression);
 
-        if (!MatchableTypes.Contains(target.Type))
+        if (!ObjectMatchingRule.IsMatchableType(target.Type))
             return MatchValueResolution.Failed(
                 $"The Metaverse attribute '{target.Name}' is {target.Type}, which Object Matching cannot compare. " +
-                "Match on a Text, Number, LongNumber, Decimal or Guid attribute.",
+                $"Match on a {ObjectMatchingRule.MatchableTypesDescription} attribute.",
                 target.Type, expression);
 
         if (source == null)
@@ -121,61 +109,37 @@ public sealed class MatchValueResolver
     {
         var context = new ExpressionContext(connectedSystemAttributes: BuildInputs(attributeValues, objectType));
 
-        // Only the evaluation is guarded, and only against the failure modes an expression can produce, matching
-        // Attribute Flow (SyncEngine.EvaluateExpressionSource). Anything else is a JIM fault and propagates.
+        // Only the evaluation is guarded, matching Attribute Flow (SyncEngine.EvaluateExpressionSource): every failure
+        // an expression can cause arrives as the one ExpressionEvaluationException (#2153, N5). Anything else is a JIM
+        // fault and propagates.
         object? result;
         try
         {
             result = _expressionEvaluator.Evaluate(expression, context);
         }
-        catch (DynamicExpressoException ex) { return EvaluationFailed(ex); }
-        catch (ArgumentException ex) { return EvaluationFailed(ex); }
-        catch (FormatException ex) { return EvaluationFailed(ex); }
-        catch (OverflowException ex) { return EvaluationFailed(ex); }
-        catch (InvalidOperationException ex) { return EvaluationFailed(ex); }
-        catch (ArithmeticException ex) { return EvaluationFailed(ex); }
-        catch (InvalidCastException ex) { return EvaluationFailed(ex); }
-        catch (KeyNotFoundException ex) { return EvaluationFailed(ex); }
-
-        IEnumerable<object?> results;
-        switch (result)
+        catch (ExpressionEvaluationException ex)
         {
-            case null:
-                return MatchValueResolution.NoValue(target.Type, expression);
-            case string text:
-                results = [text];
-                break;
-            case IEnumerable<string> texts:
-                results = texts;
-                break;
-            case IEnumerable:
-                // Converting a collection that is not text would match on its type name ("System.Int32[]").
-                return MatchValueResolution.Failed(
-                    $"The expression returned a {result.GetType().Name}; a matching expression returns a value, or a list of text values.",
-                    target.Type, expression);
-            default:
-                results = [result];
-                break;
+            return MatchValueResolution.Failed($"The expression could not be evaluated: {ex.Message}", target.Type, expression);
         }
 
+        // Every value of the result is a candidate (#2179): one value, or each element of a collection of any type,
+        // each converted to the Metaverse attribute's type. One that cannot be converted fails the resolution, since
+        // matching on part of what the rule computes would be an arbitrary choice.
         var values = new List<object>();
-        foreach (var item in results.Where(item => item != null && !(item is string text && string.IsNullOrWhiteSpace(text))))
+        foreach (var item in ExpressionResultValues.Elements(result).Where(item => item != null && !(item is string text && string.IsNullOrWhiteSpace(text))))
         {
             if (!ExpressionResultConverter.TryConvert(item, target.Type, out var value) || value == null)
                 return MatchValueResolution.Failed(
-                    $"The expression's result '{item}' cannot be converted to {target.Type}, the type of the Metaverse attribute '{target.Name}'.",
+                    $"The expression's result '{ExpressionText.Describe(item!)}' cannot be converted to {target.Type}, the type of the Metaverse attribute '{target.Name}'.",
                     target.Type, expression);
 
-            if (!values.Contains(value))
+            if (!values.Any(held => ExpressionResultValues.Key(held).Equals(ExpressionResultValues.Key(value))))
                 values.Add(value);
         }
 
         return values.Count == 0
             ? MatchValueResolution.NoValue(target.Type, expression)
             : MatchValueResolution.WithValues(values, target.Type, expression);
-
-        MatchValueResolution EvaluationFailed(Exception ex) =>
-            MatchValueResolution.Failed($"The expression could not be evaluated: {ex.Message}", target.Type, expression);
     }
 
     /// <summary>

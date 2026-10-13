@@ -35,6 +35,24 @@ Rules:
 
 **Before adding `[Alias('Id')]`, ask whether the aliased parameter is the cmdlet's own noun.** `Start-JIMRunProfile` aliasing `-RunProfileId` is safe; `Get-JIMRunProfile` aliasing `-ConnectedSystemId` is the hazardous shape. Seven `Get-` cmdlets currently carry the hazardous form. Adding another is allowed when piping genuinely requires it, but say so in a comment at the declaration, as `Get-JIMScheduleExecution` does.
 
+## The reference is generated from the cmdlet
+
+Each cmdlet's Syntax, Parameters and Output on its `docs/powershell/` page are generated from the module by `scripts/Update-PowerShellReference.ps1`, between `<!-- BEGIN GENERATED: <cmdlet> -->` and `<!-- END GENERATED: <cmdlet> -->` (ACC-5 in `engineering/DOCUMENTATION_STANDARD.md`; #1083). `build-and-test` fails when a block and the module disagree. So the cmdlet is the source:
+
+- **A parameter's description is its `.PARAMETER` help.** Write it for both `Get-Help` and the site: one or two plain sentences, no Markdown. Name cmdlets, parameters and `$true`/`$false`/`$null` plainly; the script puts them in code on the page, and writes "empty" where help or a DTO comment says null (VOI-1). Leave out what the attributes already say; the script adds pipeline input (naming the properties that bind it, so an `[Alias('Id')]` that lets a parent pipe in is stated as a property, never as a spelling to type), any other alias, `ValidateSet` values, `ValidateRange` limits and wildcard support itself, and the default comes from the `param` block.
+- **Declare what each parameter set returns** with `[OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]`, naming the response schema in the OpenAPI document (the DTO's class name); one without `ParameterSetName` covers every set. The script tables that schema's properties, with each one's type and the description from the DTO's XML comment, so they cannot be written from memory; document a DTO property there, not in the cmdlet's help. `[OutputType([PSCustomObject])]` says nothing and fails the check, as does declaring nothing at all: a cmdlet that returns nothing says `[OutputType([void])]`. A cmdlet that builds its own object declares a `JIM.` name of its own, listed with its reason in `docs/.conformance/powershell-reference.psd1` (`NonApiOutputTypes`), and lists its properties in `.OUTPUTS` as a paragraph whose first line is the type's name and whose others read `Name (type): description` (a line that does not runs on from the one above; `Connect-JIM` is the example), which the script tables; one that only gives the API's object a name of its own (`Get-JIMServiceHealth`) maps that name to the schema under `OutputTypeSchemas` in the same file, and the schema's properties are tabled for it.
+- **Add to the API's object; never rebuild it.** A cmdlet that returns the API's response with something more (`Get-JIMConnectedSystemObjectSyncPreview`'s flattened `Outcomes`) adds it with `Add-Member` and returns the response. Rebuilding a new object from a list of the response's properties drops whatever the API adds later, silently: the sync preview cmdlets lost `GeneratedValueProbes` that way. Declare a name of its own, map it to the schema under `OutputTypeSchemas`, and list only the added properties in `.OUTPUTS` in the format above; the script tables them after the schema's, and fails if one duplicates a schema property.
+- **Say when each type comes back where the parameter sets cannot.** The script labels each declared type by the parameters that set its parameter sets apart ("By default", "With -Id or -Follow"). Two types from one set (`Test-JIMConnection` returns its status, or with `-Quiet` a `bool`) fail the check until `.OUTPUTS` labels each, with the type's name, a colon and when it comes back: `System.Boolean: With -Quiet` on a line of its own, or as the first line of a property list (`JIM.ConnectionStatus: By default`).
+- **`.OUTPUTS` is the prose above the generated table:** what comes back and when (`With -PassThru, ...; otherwise nothing.`), and what any property means where its name does not say.
+
+After changing a cmdlet with a block, regenerate (`-OpenApiPath` takes a document `Generate-OpenApiDoc.ps1` wrote earlier; without it, the script generates one, which builds the solution):
+
+```bash
+pwsh ./scripts/Update-PowerShellReference.ps1 -OpenApiPath /tmp/openapi-v1.json
+```
+
+The sections below still apply to every section that has no block yet; `-Check` lists them.
+
 ## Documenting output
 
 **Check every property name against the DTO before writing it.** An audit found eight of twenty pages in `docs/powershell/` naming properties that do not exist. The Output tables in particular had been written from memory.
@@ -45,7 +63,7 @@ Rules:
 |---|---|---|
 | `Get-JIMMetaverseObject` | `MetaverseObjectHeaderDto` (`Attributes`, a dictionary) | `MetaverseObjectDto` (`AttributeValues`, a list) |
 | `Get-JIMConnectedSystem` | `ConnectedSystemHeader` (`ConnectorId`) | `ConnectedSystemDto` (nested `Connector.Id`) |
-| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseObjectTypeName`) | the entity (`MetaverseObjectType.Name`) |
+| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseAttributeCount`) | `PredefinedSearchDetailDto` (`Attributes`, `CriteriaGroups`) |
 | `Get-JIMExampleDataSet` | `ExampleDataSetHeader` (`ValueCount`) | the entity, with its values |
 
 State which shape an Output section describes, and never document a header's fields for the `-Id` form.
@@ -61,6 +79,10 @@ An example that deletes or clears data must not understate its scope in its titl
 - **Say what it deletes.** "Pipeline deletion" over a wildcard filter is wrong when the command force-deletes every match; `docs/powershell/schedules.md` gets this right with "Remove multiple schedules via pipeline".
 - **Name the multiplicity when a filter is a wildcard.** `-Name "Decommissioned*"` piped into a removal deletes everything matching, and Connected System deletion cascades to the whole connector space.
 - **Suggest a dry run.** For any forced bulk delete, tell the reader to run it without `-Force` first, or to inspect the `Get-` output, before committing.
+
+## `-Force` skips the prompt, never `-WhatIf`
+
+A cmdlet with both `SupportsShouldProcess` and a `-Force` switch decides whether to act with `Confirm-JIMAction -Cmdlet $PSCmdlet -Target <what> -Action <verb phrase> -Force:$Force`, never `if ($Force -or $PSCmdlet.ShouldProcess(...))`. The `-or` form never consults `ShouldProcess` once `-Force` is given, so `-WhatIf -Force` carries the action out instead of previewing it: 22 cmdlets did this, `Reset-JIMSystem` among them. `Confirm-JIMAction` lets `-Force` answer the prompt and leaves `-WhatIf` (or a session-wide `$WhatIfPreference`) in charge. The older idiom of setting `$ConfirmPreference = 'None'` under `-Force` and then calling `ShouldProcess` is also correct, and four Metaverse and Synchronisation Rule Mapping cmdlets use it. `Confirm-JIMAction.Tests.ps1` fails the build on any line that combines `$Force` with a `.ShouldProcess(` call.
 
 ## Every exported cmdlet is documented
 

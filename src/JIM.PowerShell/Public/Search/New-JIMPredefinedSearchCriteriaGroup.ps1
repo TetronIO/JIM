@@ -17,26 +17,27 @@ function New-JIMPredefinedSearchCriteriaGroup {
         (A OR B) AND C.
 
     .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+        The ID of the Predefined Search.
 
     .PARAMETER ParentGroupId
-        Optional. The ID of an existing group to nest this group within. If omitted, creates a top-level group.
+        The ID of an existing group to nest this one in. A top-level group when omitted.
 
     .PARAMETER Type
-        The logical operator for this group: 'All' (AND) or 'Any' (OR). Defaults to 'All'.
+        How the group combines what it holds: All (AND) or Any (OR).
 
     .PARAMETER Position
-        Optional position/order for this group. Defaults to 0.
+        The group's place among its siblings.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
-        Search's configuration change history.
+        Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the created group object.
+        Returns the created group.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created criteria group.
+        With -PassThru, the created group, with a PredefinedSearchId property added naming its search; otherwise
+        nothing.
 
     .EXAMPLE
         New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -Type All
@@ -55,7 +56,7 @@ function New-JIMPredefinedSearchCriteriaGroup {
         New-JIMPredefinedSearchCriterion
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchCriteriaGroupDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

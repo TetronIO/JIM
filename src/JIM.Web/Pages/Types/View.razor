@@ -37,7 +37,7 @@
     </LongLoadMessage>
     <Loaded>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span>
-    <PageInfo Title="Metaverse Object" DocsPage="configuration/metaverse.md#objects">
+    <PageInfo Title="Metaverse Object" DocsPage="configuration/metaverse-objects.md">
         A Metaverse Object is JIM's one view of an identity, built from the Connected Systems it is connected to. Each value can tell you where it came from.
     </PageInfo>
 </MudText>
@@ -120,7 +120,6 @@
                     {
                         <div class="d-flex justify-center mt-3">
                             <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -260,7 +259,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                            <MudButton Variant="Variant.Outlined" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">

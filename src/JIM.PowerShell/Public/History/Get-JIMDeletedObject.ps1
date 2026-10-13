@@ -14,42 +14,40 @@ function Get-JIMDeletedObject {
         By default, retrieves deleted MVOs. Use -ObjectType CSO to retrieve deleted CSOs.
 
     .PARAMETER ObjectType
-        The type of deleted objects to retrieve: 'MVO' (default) or 'CSO'.
+        Which deleted objects to return: Metaverse Objects or Connected System Objects.
 
     .PARAMETER ConnectedSystemId
-        Filter deleted CSOs by Connected System ID. Only valid when ObjectType is 'CSO'.
+        Only Connected System Objects deleted from this Connected System. Applies when returning Connected System
+        Objects.
 
     .PARAMETER MetaverseObjectTypeId
-        Filter deleted MVOs by Metaverse Object Type ID. Only valid when ObjectType is 'MVO'.
+        Only Metaverse Objects of this type. Applies when returning Metaverse Objects.
 
     .PARAMETER Search
-        Search term for filtering results. For CSOs, searches by External ID.
-        For MVOs, searches by Display Name.
+        Only objects matching this text: by External ID for Connected System Objects, by display name for Metaverse
+        Objects.
 
     .PARAMETER FromDate
-        Filter for deletions on or after this date (UTC).
+        Only objects deleted on or after this date (UTC).
 
     .PARAMETER ToDate
-        Filter for deletions on or before this date (UTC).
+        Only objects deleted on or before this date (UTC).
 
     .PARAMETER Page
-        Page number for paginated results (default: 1).
+        The page of results to return.
 
     .PARAMETER PageSize
-        Number of items per page (default: 50, max: 1000).
+        How many objects to return per page.
 
     .OUTPUTS
-        PSCustomObject containing:
-        - items: Array of deleted object records
-        - totalCount: Total number of matching records
-        - page: Current page number
-        - pageSize: Items per page
+        One page of results, whose Items are the deleted objects. A deleted Metaverse Object carries Id,
+        DisplayName, ObjectTypeName, ObjectTypeId, ChangeTime, InitiatedByType and InitiatedByName; a deleted
+        Connected System Object carries Id, ExternalId, DisplayName, ObjectTypeName, ConnectedSystemId,
+        ConnectedSystemName, ChangeTime, InitiatedByType and InitiatedByName.
 
-        Each deleted CSO item contains: id, externalId, displayName, objectTypeName,
-        connectedSystemId, connectedSystemName, changeTime, initiatedByType, initiatedByName.
+        JIM.DeletedObjectsPagedResponseOfDeletedMvoResponse: By default, or with `-ObjectType MVO`
 
-        Each deleted MVO item contains: id, displayName, objectTypeName, objectTypeId,
-        changeTime, initiatedByType, initiatedByName.
+        JIM.DeletedObjectsPagedResponseOfDeletedCsoResponse: With `-ObjectType CSO`
 
     .EXAMPLE
         Get-JIMDeletedObject
@@ -82,7 +80,7 @@ function Get-JIMDeletedObject {
         Invoke-JIMHistoryCleanup
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.DeletedObjectsPagedResponseOfDeletedMvoResponse', 'JIM.DeletedObjectsPagedResponseOfDeletedCsoResponse')]
     param(
         [Parameter()]
         [ValidateSet('MVO', 'CSO')]

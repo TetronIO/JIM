@@ -1,3 +1,10 @@
+---
+title: Glossary
+description: "The meaning of each term JIM uses, from Activity to Synchronisation Rule, with a link to where each is explained in full."
+type: reference
+audience: implementer
+---
+
 # Glossary
 
 Key terms and concepts used throughout JIM.
@@ -75,7 +82,7 @@ Metaverse Object (MVO) { #metaverse-object }
 :   The canonical object the Metaverse holds for one real-world thing JIM manages: a person's identity, a group, a role. Each Metaverse Object is assembled from the Connected System Objects that contribute values to it. See [Identities and the Metaverse](../concepts/architecture.md#identities-and-the-metaverse) for the full picture.
 
 Null is a value { #null-is-a-value }
-:   A per-contributor Attribute Priority setting. When an in-scope contributor with this setting supplies no value, JIM positively asserts "no value" and clears the attribute downstream, rather than falling through to a lower-priority source. It distinguishes a deliberate, authoritative clear from a contributor that simply has no opinion.
+:   A per-contributor Attribute Priority setting. When an in-scope contributor with this setting supplies no value, JIM positively asserts "no value" and clears the attribute downstream, rather than falling through to a lower-priority source. It distinguishes a deliberate, authoritative clear from a contributor that has no opinion at all.
 
 Object Matching Rule { #object-matching-rule }
 :   A rule that decides whether an incoming Connected System Object corresponds to an existing Metaverse Object. Import matching joins a Connected System Object to a Metaverse Object; export matching joins a Metaverse Object being provisioned to an account that already exists in the target system, rather than creating a duplicate.
@@ -120,7 +127,7 @@ Sync Preview { #sync-preview }
 :   A dry run of what synchronising one Connected System Object, or exporting one Metaverse Object, would do with the configuration already saved: which objects would be projected, joined, updated, deleted or deprovisioned, and why. Nothing is staged, persisted or exported. See [Sync Preview](../configuration/sync-preview.md).
 
 Synchronisation Rule { #synchronisation-rule }
-:   A complete mapping configuration between a Connected System and the metaverse. Synchronisation Rules define object type mappings, Attribute Flows, Scoping Criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
+:   A complete mapping configuration between a Connected System and the Metaverse. Synchronisation Rules define object type mappings, Attribute Flows, Scoping Criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
 
 Temporal Scope Reconciliation { #temporal-scope-reconciliation }
 :   A scheduled reconciliation that re-evaluates the scoping criteria of Synchronisation Rules which depend on relative dates, so objects move in or out of scope as time passes even when their own attributes have not changed.

@@ -72,6 +72,14 @@ public class ExportEvaluationResult
     public List<ExportObjectTypeConflict> ObjectTypeConflicts { get; set; } = [];
 
     /// <summary>
+    /// Outbound Synchronisation Rules that could not provision the Metaverse Object because export matching could not
+    /// settle on an existing Connected System Object to join instead (#2052): a rule's values found more than one, or
+    /// a rule could not be worked out. Nothing was joined, provisioned or staged for those Rules; the worker surfaces
+    /// each as the Run Profile Execution Item error its <see cref="ProvisioningMatchError.ErrorType"/> names.
+    /// </summary>
+    public List<ProvisioningMatchError> ProvisioningMatchErrors { get; set; } = [];
+
+    /// <summary>
     /// Changes queued on target objects' Pending Exports that this evaluation withdrew, because the targets already
     /// hold the values the Metaverse now wants (#2001). Nothing new is staged for them; the worker and the recall
     /// executors (#2011) record each as a Pending Export Changes Withdrawn outcome on the object's execution item.

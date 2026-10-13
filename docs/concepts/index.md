@@ -34,7 +34,7 @@ When more than one Connected System feeds the same Metaverse Attribute, **Attrib
 
 ## 🔑 Passwords
 
-Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs alongside the Attribute Flows and never through them: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface. It also covers **Password Synchronisation**: one password change queued, encrypted and delivered to every Connected System configured to receive it.
+Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs alongside the Attribute Flows and never through them: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface. [Password Synchronisation](password-synchronisation.md) covers the other half: one password change queued, encrypted and delivered to every Connected System configured to receive it.
 
 ## 🧮 Expressions
 

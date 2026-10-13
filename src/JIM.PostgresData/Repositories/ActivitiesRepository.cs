@@ -2113,6 +2113,17 @@ public partial class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking()
+            .Where(o => o.ActivityRunProfileExecutionItemId == runProfileExecutionItemId
+                        && o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            .OrderBy(o => o.Ordinal)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations

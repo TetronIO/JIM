@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -209,6 +210,91 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
             s.SystemId, [s.CsoIds[0], s.CsoIds[1], s.CsoIds[2], s.CsoIds[3]]);
 
         Assert.That(found, Is.EquivalentTo(new[] { s.CsoIds[0] }));
+    }
+
+    /// <summary>
+    /// The delivery's one read at the attempt (#2064): whether the account holds a withheld enable, and whether its
+    /// queued change is marked as having its enabled state written by an export. Each is answered on its own, and a
+    /// change that no longer exists reads as unmarked.
+    /// </summary>
+    [Test]
+    public async Task GetAccountEnablementFactsAsync_ReadsTheHoldAndTheMarkAsTheyStandAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 2, metaverseObjectCount: 2);
+        var held = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        held.AttributeValueChanges.Add(HeldChange(s.AttributeId));
+        var marked = Password(s.MvoIds[1], s.SystemId, PendingPasswordChangeStatus.Delivering, PendingPasswordChangeOrigin.Provisioned);
+        marked.ConnectedSystemObjectId = s.CsoIds[1];
+        marked.EnabledStateSetByAttributeFlow = true;
+        var unmarked = Password(s.MvoIds[0], s.SystemId, PendingPasswordChangeStatus.Delivering, PendingPasswordChangeOrigin.Provisioned);
+        unmarked.ConnectedSystemObjectId = s.CsoIds[0];
+        await using (var write = NewContext())
+        {
+            var repository = new PostgresDataRepository(write).Sync;
+            await repository.CreatePendingExportsAsync([held]);
+            await repository.QueuePasswordChangesAsync([marked, unmarked]);
+        }
+
+        await using var read = NewContext();
+        var sync = new PostgresDataRepository(read).Sync;
+        var since = DateTime.UtcNow.AddHours(-1);
+        var heldAndUnmarked = await sync.GetAccountEnablementFactsAsync(s.SystemId, unmarked.Id, s.CsoIds[0], since);
+        var markedAndNotHeld = await sync.GetAccountEnablementFactsAsync(s.SystemId, marked.Id, s.CsoIds[1], since);
+        var changeGone = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[1], since);
+        var otherSystem = await sync.GetAccountEnablementFactsAsync(s.SystemId + 1000, unmarked.Id, s.CsoIds[0], since);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(heldAndUnmarked, Is.EqualTo(new AccountEnablementFacts(true, false, false, null)));
+            Assert.That(markedAndNotHeld, Is.EqualTo(new AccountEnablementFacts(false, true, false, null)));
+            Assert.That(changeGone, Is.EqualTo(new AccountEnablementFacts(false, false, false, null)));
+            Assert.That(otherSystem.HoldsWithheldEnable, Is.False, "a hold on another Connected System is not this account's");
+        }
+    }
+
+    /// <summary>
+    /// The export facts (#2173): whether an export to the account is being sent right now. Only a Pending Export in
+    /// Executing counts; one waiting to be sent, or sent and awaiting confirmation, has nothing in flight. One marked
+    /// Executing before the given time has been there longer than any batch takes: it is reported as stranded, by id,
+    /// rather than as in flight.
+    /// </summary>
+    [Test]
+    public async Task GetAccountEnablementFactsAsync_ReadsWhetherAnExportToTheAccountIsInFlightAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 4, metaverseObjectCount: 1);
+        var now = DateTime.UtcNow;
+        var executing = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        executing.Status = PendingExportStatus.Executing;
+        executing.LastAttemptedAt = now.AddMinutes(-5);
+        var waiting = NewPendingExport(s.SystemId, s.CsoIds[1], s.AttributeId);
+        var exported = NewPendingExport(s.SystemId, s.CsoIds[2], s.AttributeId);
+        exported.Status = PendingExportStatus.Exported;
+        exported.LastAttemptedAt = now.AddMinutes(-5);
+        var stranded = NewPendingExport(s.SystemId, s.CsoIds[3], s.AttributeId);
+        stranded.Status = PendingExportStatus.Executing;
+        stranded.LastAttemptedAt = now.AddHours(-3);
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([executing, waiting, exported, stranded]);
+
+        await using var read = NewContext();
+        var sync = new PostgresDataRepository(read).Sync;
+        var since = now.AddHours(-1);
+        var inFlight = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[0], since);
+        var notYetSent = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[1], since);
+        var alreadySent = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[2], since);
+        var strandedFacts = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[3], since);
+        var otherSystem = await sync.GetAccountEnablementFactsAsync(s.SystemId + 1000, Guid.NewGuid(), s.CsoIds[0], since);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inFlight.ExportInFlight, Is.True);
+            Assert.That(inFlight.StrandedExportId, Is.Null);
+            Assert.That(notYetSent.ExportInFlight, Is.False);
+            Assert.That(alreadySent.ExportInFlight, Is.False);
+            Assert.That(strandedFacts.ExportInFlight, Is.False, "Executing for longer than any batch takes");
+            Assert.That(strandedFacts.StrandedExportId, Is.EqualTo(stranded.Id));
+            Assert.That(otherSystem.ExportInFlight, Is.False, "an export on another Connected System is not this account's");
+        }
     }
 
     /// <summary>

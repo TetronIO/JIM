@@ -12,17 +12,17 @@ function Remove-JIMExampleDataTemplate {
         template has already generated are unaffected.
 
     .PARAMETER Id
-        The unique identifier of the Data Generation Template to remove.
+        The Data Generation Template to delete.
 
     .PARAMETER Name
-        The name of the Data Generation Template to remove.
+        The name of the Data Generation Template to delete.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Data Generation
-        Template's configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration
+        Change History.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -48,6 +48,7 @@ function Remove-JIMExampleDataTemplate {
         Set-JIMExampleDataTemplate
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -93,7 +94,7 @@ function Remove-JIMExampleDataTemplate {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($templateName, "Remove Data Generation Template")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $templateName -Action "Remove Data Generation Template" -Force:$Force) {
             Write-Verbose "Removing Data Generation Template: $Id ($templateName)"
 
             try {

@@ -72,19 +72,28 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
 | [Connected Systems](connected-systems.md) | 35 | Manage Connected Systems, schemas, partitions and containers, auxiliary classes, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 31 | Define Attribute Flows, Scoping Criteria, Object Matching Rules, initial passwords and generated values |
-| [Metaverse](metaverse.md) | 24 | Query objects, set passwords, manage schema types and attributes, set Attribute Priority, and review pending deletions |
-| [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
+| [Synchronisation Rules](synchronisation-rules.md) | 8 | Create and change Synchronisation Rules and their Attribute Flows |
+| [Scoping Criteria](scoping-criteria.md) | 7 | Decide which objects a Synchronisation Rule processes, with groups of criteria |
+| [Object Matching Rules](object-matching-rules.md) | 9 | Switch a Connected System's matching mode, and manage its Object Matching Rules |
+| [Initial Password](initial-password.md) | 2 | Read and change the initial password a Synchronisation Rule sets on the Connected System Objects it provisions |
+| [Metaverse](metaverse.md) | 6 | Find and read Metaverse Objects, explain their values and connections, and review pending deletions |
+| [Metaverse Object Types](metaverse-object-types.md) | 4 | List, create, change and delete Object Types, and set their deletion rules |
+| [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |
+| [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and list, retry and cancel queued password changes |
+| [Generated Values](generated-values.md) | 7 | List the values JIM generated and retired, read and restart a Sequence's counter, and decide on values a target rejected |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
-| [Schedules](schedules.md) | 12 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
-| [Activities](activities.md) | 4 | Monitor operation history, statistics, and execution items |
+| [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
+| [Schedule Executions](schedule-executions.md) | 3 | Run a Schedule now, and watch or stop its runs |
+| [Activities](activities.md) | 3 | Monitor operation history, a run's statistics, and child Activities |
+| [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Previews](previews.md) | 6 | Preview a configuration change before saving it, and preview what synchronising one object would do |
+| [Previews](previews.md) | 4 | Preview a configuration change before saving it |
+| [Sync Preview](sync-preview.md) | 2 | Preview what synchronising one object would do |
 | [Example Data](example-data.md) | 10 | Generate sample data for testing and evaluation, create, update, and remove reusable Example Data Sets, and build Data Generation Templates including their per-attribute generation configuration |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 | [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |

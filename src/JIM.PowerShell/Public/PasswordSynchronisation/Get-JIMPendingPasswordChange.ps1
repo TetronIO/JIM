@@ -36,46 +36,44 @@ function Get-JIMPendingPasswordChange {
         representation on this or any other surface.
 
     .PARAMETER ConnectedSystemId
-        Restrict to one Connected System. Accepts a Connected System from the pipeline.
+        Only changes queued for this Connected System.
 
     .PARAMETER Status
-        Restrict to one state: Pending, Delivering, Parked, Expired or Cancelled.
+        Only changes in this state.
 
     .PARAMETER FailureReason
-        Restrict to changes whose last attempt failed this way. Only meaningful for changes that have been
-        attempted; one that has never been tried has no reason.
+        Only changes whose last attempt failed this way. A change that has never been attempted has no reason.
 
     .PARAMETER MetaverseObjectId
-        Restrict to one identity's queued changes.
+        Only this Metaverse Object's queued changes.
 
     .PARAMETER Search
-        Free-text search over the identity and Connected System names.
+        Free-text search over the Metaverse Object and Connected System names.
 
     .PARAMETER SortBy
-        The column to sort by: queued (the default), identity, system, status, attempts, nextAttempt or expires.
+        The column to sort by; queued when omitted.
 
     .PARAMETER SortDirection
-        asc (the default) or desc.
+        The sort direction; ascending when omitted.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of changes to return.
 
     .PARAMETER PageSize
-        Number of items per page (1-100). Defaults to 50.
+        How many changes to return per page.
 
     .PARAMETER All
-        Retrieves every page of results. Fetches at most 1000 pages before stopping with a warning; use -Force
-        to fetch beyond the cap.
+        Returns every page. Stops after 1,000 pages with a warning unless -Force is given.
 
     .PARAMETER Force
-        Overrides the -All page ceiling. Only valid with -All.
+        Fetches beyond the -All page ceiling.
 
     .PARAMETER Summary
-        Returns the queue's counts by state instead of its rows.
+        Returns the queue's counts by state instead of its changes.
 
     .OUTPUTS
-        PSCustomObject per queued password change, or a single summary object with -Summary. Each row carries
-        Origin (Explicit, Propagated or Provisioned) and SyncRuleId (populated only for Provisioned).
+        One object per queued change, one entry per Metaverse Object per Connected System, or with -Summary one
+        object of counts. No password is returned, in any form.
 
     .EXAMPLE
         Get-JIMPendingPasswordChange -Summary
@@ -122,7 +120,9 @@ function Get-JIMPendingPasswordChange {
         Set-JIMConnectedSystemPasswordSynchronisation
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PendingPasswordChangeResponse', ParameterSetName = 'List')]
+    [OutputType('JIM.PendingPasswordChangeResponse', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.PasswordQueueSummary', ParameterSetName = 'Summary')]
     param(
         [Parameter(ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
         [Parameter(ParameterSetName = 'ListAll', ValueFromPipelineByPropertyName)]

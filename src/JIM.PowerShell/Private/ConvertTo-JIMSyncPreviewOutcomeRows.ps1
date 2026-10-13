@@ -15,7 +15,10 @@ function ConvertTo-JIMSyncPreviewOutcomeRows {
         Each row carries Depth (0 for a root node, incrementing per level), the outcome's
         Target (the node's TargetEntityDescription, falling back to TargetEntityId when no
         description was captured) and SyncRule (SyncRuleName, falling back to SyncRuleId),
-        alongside OutcomeType, DetailCount, DetailMessage and StagedChangeType unchanged.
+        alongside OutcomeType, DetailCount, DetailMessage and StagedChangeType unchanged. A
+        Joined row made by matching also carries ObjectMatchingRule (what the rule compares,
+        falling back to its id) and MatchedValue (the value the join would match on); both
+        are empty on every other row.
 
     .PARAMETER Nodes
         The outcome nodes to flatten (a preview's OutcomeTree, or a node's Children).
@@ -24,8 +27,9 @@ function ConvertTo-JIMSyncPreviewOutcomeRows {
         Internal. The depth of the nodes passed in Nodes; callers should omit this.
 
     .OUTPUTS
-        PSCustomObject with Depth, OutcomeType, Target, SyncRule, DetailCount, DetailMessage
-        and StagedChangeType, one per node, in tree display order.
+        PSCustomObject with Depth, OutcomeType, Target, SyncRule, DetailCount, DetailMessage,
+        StagedChangeType, ObjectMatchingRule and MatchedValue, one per node, in tree display
+        order.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
@@ -44,13 +48,15 @@ function ConvertTo-JIMSyncPreviewOutcomeRows {
         }
 
         [PSCustomObject]@{
-            Depth            = $Depth
-            OutcomeType      = $node.OutcomeType
-            Target           = $node.TargetEntityDescription ?? $node.TargetEntityId
-            SyncRule         = $node.SyncRuleName ?? $node.SyncRuleId
-            DetailCount      = $node.DetailCount
-            DetailMessage    = $node.DetailMessage
-            StagedChangeType = $node.StagedChangeType
+            Depth              = $Depth
+            OutcomeType        = $node.OutcomeType
+            Target             = $node.TargetEntityDescription ?? $node.TargetEntityId
+            SyncRule           = $node.SyncRuleName ?? $node.SyncRuleId
+            DetailCount        = $node.DetailCount
+            DetailMessage      = $node.DetailMessage
+            StagedChangeType   = $node.StagedChangeType
+            ObjectMatchingRule = $node.ObjectMatchingRuleDescriptionSnapshot ?? $node.ObjectMatchingRuleId
+            MatchedValue       = $node.MatchedValue
         }
 
         if ($node.Children -and @($node.Children).Count -gt 0) {

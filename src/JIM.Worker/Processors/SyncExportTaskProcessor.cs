@@ -282,8 +282,10 @@ public class SyncExportTaskProcessor
 
             exportSpan.SetSuccess();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_cancellationTokenSource.IsCancellationRequested)
         {
+            // Only a cancellation someone asked for ends the run as cancelled; one nobody asked for, such as a timeout
+            // surfacing as an OperationCanceledException, fails it below (#2083).
             Log.Information("PerformExportAsync: Export cancelled for {SystemName}", _connectedSystem.Name);
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Export cancelled");
         }
@@ -547,6 +549,13 @@ public class SyncExportTaskProcessor
         // #1936: auto-confirmed exports whose values could not be recorded were left unconfirmed to be sent again.
         if (result.UnrecordedExportCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForUnrecorded(result.UnrecordedExportCount));
+
+        // Contained so the exports stay successful, but never left to the service log alone (#1121, #2064).
+        if (result.InitialPasswordStagingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordsNotStaged(result.InitialPasswordStagingFailedCount));
+
+        if (result.InitialPasswordMarkingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
 
         // Set completion message based on mode and results
         string completionMessage;

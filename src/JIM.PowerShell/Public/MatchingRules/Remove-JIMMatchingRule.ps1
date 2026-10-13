@@ -4,20 +4,19 @@
 function Remove-JIMMatchingRule {
     <#
     .SYNOPSIS
-        Removes an Object Matching Rule from JIM.
+        Deletes an Object Matching Rule from a Connected System Object Type (simple mode).
 
     .DESCRIPTION
-        Deletes an Object Matching Rule from a Connected System.
-        This operation cannot be undone.
+        Deletes an Object Matching Rule from a Connected System Object Type.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER Id
-        The unique identifier of the Matching Rule to delete.
+        The ID of the rule to delete.
 
     .PARAMETER Force
-        Skips the confirmation prompt.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -43,6 +42,7 @@ function Remove-JIMMatchingRule {
         Set-JIMMatchingRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
@@ -60,7 +60,7 @@ function Remove-JIMMatchingRule {
             return
         }
 
-        $shouldProcess = $Force -or $PSCmdlet.ShouldProcess("Matching Rule $Id", "Remove")
+        $shouldProcess = Confirm-JIMAction -Cmdlet $PSCmdlet -Target "Matching Rule $Id" -Action "Remove" -Force:$Force
 
         if ($shouldProcess) {
             Write-Verbose "Removing Matching Rule ID: $Id from Connected System ID: $ConnectedSystemId"

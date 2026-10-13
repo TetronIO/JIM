@@ -1552,7 +1552,8 @@ public class Worker : BackgroundService
 
             // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the Activity, not as
             // RPEIs, and still complete it with a warning.
-            switch (ActivityOutcomeEvaluator.Evaluate(counts, hasWarningMessage: !string.IsNullOrEmpty(activity.WarningMessage)))
+            switch (ActivityOutcomeEvaluator.Evaluate(counts, hasWarningMessage: !string.IsNullOrEmpty(activity.WarningMessage),
+                        activity.ConnectedSystemRunType, activity.ObjectsProcessed))
             {
                 case ActivityStatus.FailedWithError:
                     await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");

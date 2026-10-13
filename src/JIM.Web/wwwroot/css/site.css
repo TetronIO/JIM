@@ -2640,6 +2640,19 @@ html[lang] .jim-schema-change-table td {
     box-shadow: none !important;
 }
 
+/* Who started an Activity (<ActivityInitiator />): the icon stays beside the name, centred on its first line, however
+   narrow the column; a long name wraps beside the icon rather than under it. */
+.jim-activity-initiator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    vertical-align: middle;
+}
+
+.jim-activity-initiator > .mud-icon-root {
+    flex-shrink: 0;
+}
+
 /* Activity detail slide-out panel (Operations History) */
 .jim-activity-panel {
     position: fixed;
@@ -3107,6 +3120,27 @@ html[lang] .jim-expression-editor-disabled .jim-expression-editor-highlight span
 
 html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input {
     cursor: default;
+}
+
+/* What an expression produced (<ExpressionTester />, the Object Matching Rule editor's Try it): in the editor's
+   typeface, with whitespace kept, so a value carrying a stray space reads differently from one that does not. That
+   difference is often the whole answer to "why did this not match". */
+.jim-expression-output {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The "equals" between an Object Matching Rule's source and its Metaverse attribute, on the inputs' row rather than
+   centred on its grid cell: an expression's cell grows with its helper text and the Insert attribute menu, and
+   centring on the cell would leave the word hanging below both fields. Its line box is made the input's box (the
+   select's 8px control margin, then the 38px outlined input), so the text centres on the input by construction
+   rather than by a font-dependent nudge. Qualified with .mud-typography because MudBlazor's own margin reset loads
+   after this sheet and would win a tie. */
+.jim-matching-rule-equals.mud-typography {
+    margin-top: 8px;
+    line-height: 38px;
+    align-self: flex-start;
 }
 
 /* Attribute table styles (<AttributeTable />: Connected System Object, Pending Export, Metaverse Object) */
@@ -6402,6 +6436,41 @@ td.jim-connection-detail-cell {
 .jim-unresolved-references-warning .jim-unresolved-references-head {
     border-top: 3px solid var(--mud-palette-warning);
     background: color-mix(in srgb, var(--mud-palette-warning) 7%, transparent);
+}
+
+/* The Attribute Values Not Imported section (#2066), on a Run Profile Execution Item's page: the values an import
+   could not read. Always the item's error, so it takes the Unresolved References section's red head. The value
+   received is tinted red so it reads as the thing that was refused, and the next step sits in a quiet panel beneath
+   the table, as the item page's mocks drew it. */
+.jim-attribute-values-not-imported.mud-paper {
+    overflow: hidden;
+}
+
+.jim-attribute-values-not-imported-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    border-top: 3px solid var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
+}
+
+.jim-attribute-value-unreadable {
+    background: color-mix(in srgb, var(--mud-palette-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mud-palette-error) 30%, transparent);
+    border-radius: 3px;
+    padding: 1px 6px;
+}
+
+.jim-attribute-values-next-step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
 }
 
 /* The next steps (#959), grouped by where each is taken: one grid of three columns (how many references, the step,

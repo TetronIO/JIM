@@ -40,7 +40,7 @@ function Reset-JIMSystem {
         prompts for confirmation; pass -Force to suppress.
 
     .PARAMETER Force
-        Suppresses the confirmation prompt.
+        Skips the confirmation prompt.
 
     .PARAMETER IncludeAdministrators
         Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true
@@ -54,7 +54,7 @@ function Reset-JIMSystem {
         infrastructure API key). Ignored unless -IncludeAdministrators is also set.
 
     .OUTPUTS
-        A PSCustomObject containing the counts of removed entities.
+        One object counting what the reset removed, and how many administrators it kept or removed.
 
     .EXAMPLE
         Reset-JIMSystem
@@ -82,7 +82,7 @@ function Reset-JIMSystem {
         Clear-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SystemResetResult')]
     param(
         [switch]$Force,
         [switch]$IncludeAdministrators,
@@ -103,7 +103,7 @@ function Reset-JIMSystem {
             "Factory reset: wipe ALL data and configuration (administrators preserved)"
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($target, $scope)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action $scope -Force:$Force) {
             Write-Verbose "Initiating factory reset against $target (IncludeAdministrators=$IncludeAdministrators)"
 
             $body = @{

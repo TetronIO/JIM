@@ -303,6 +303,22 @@ public class ScimResourceWriterTests
     }
 
     [Test]
+    public void ApplyChanges_RemovingAMultiValuedAttributeNamingNoValue_TakesEveryValue()
+    {
+        // A removal naming no value is how a clear reaches the provider (#2182), and RFC 7644 section 3.5.2.2 reads a
+        // path-only remove of a multi-valued attribute as removing all of it. Matched against no value, nothing went.
+        var resource = Resource("""{ "id": "engineers", "displayName": "Engineers", "members": [ { "value": "alice" }, { "value": "bob" } ] }""");
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("members", ScimPatchOperations.Remove, null)], GroupSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resource.ContainsKey("members"), Is.False);
+            Assert.That(resource["displayName"]!.GetValue<string>(), Is.EqualTo("Engineers"));
+        }
+    }
+
+    [Test]
     public void ApplyChanges_RemovingACanonicalSlot_TakesTheEntryWithItRatherThanLeavingAnEmptyOne()
     {
         // An entry holding nothing but the type that identified it describes nothing, and a provider is

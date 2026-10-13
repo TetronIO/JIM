@@ -9,7 +9,7 @@
 @{
     # Pages the checks skip, as globs relative to docs/. Contributor pages leave the public site in
     # Phase 5 of the plan, and the changelog page is a one-line include of CHANGELOG.md.
-    Exclude                 = @('CLAUDE.md', 'developer/**', 'reference/changelog.md')
+    Exclude                 = @('CLAUDE.md', 'reference/changelog.md')
 
     # Block: every finding fails. Ratchet: findings beyond the baseline fail, and the baseline only
     # shrinks. Warn: reported, never fails. Promote a Warn rule to Ratchet or Block once it has run
@@ -93,6 +93,7 @@
         'concepts/synchronisation-pipeline.md'
         'getting-started/prerequisites.md'
         'administration/deployment.md'
+        'administration/tls-and-reverse-proxy.md'
         'getting-started/first-synchronisation.md'
         'configuration/connected-systems.md'
         'configuration/synchronisation-rules.md'
@@ -110,7 +111,7 @@
     # Pages and folders migrated to the standard: no baseline, and Ratchet rules fail outright.
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
-    ConformantFolders       = @()
+    ConformantFolders       = @('getting-started', 'api', 'reference', 'administration', 'configuration', 'concepts', 'connectors')
     ConformantPages         = @(
         'index.md'
         'concepts/index.md'
@@ -124,6 +125,12 @@
         'administration/troubleshooting.md'
         'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
+        'configuration/activities.md'
+        'administration/deployment.md'
+        'administration/tls-and-reverse-proxy.md'
+        'configuration/connected-systems.md'
+        'configuration/synchronisation-rules.md'
+        'connectors/jim-ldap-connector.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.

@@ -11,6 +11,7 @@ using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
@@ -962,7 +963,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             if (_cancellationToken.IsCancellationRequested)
             {
                 _logger.Information("ConvertLdapResults: Cancellation requested. Stopping.");
-                return importObjects;
+                break;
             }
 
             // Discard entries an excluded Container carves out. A Subtree search returns everything beneath its
@@ -1015,6 +1016,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
                 if (schemaAttribute == null)
                 {
+                    // The configuration error is what the object reports. Unreadable values found on its earlier
+                    // attributes would otherwise stand in for it, since JIM words an object's message from those.
+                    importObject.AttributeValueErrors = null;
                     importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
                     importObject.ErrorMessage = $"Search result attribute '{attributeName}' not found in schema!";
                     break;
@@ -1026,7 +1030,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                     Type = schemaAttribute.Type
                 };
 
-                // assign the right type of value(s)
+                // assign the right type of value(s), keeping any value that is not imported to report below: one that
+                // cannot be read as the attribute's type (#2128), or one of several JIM cannot hold (#2153)
+                IReadOnlyList<LdapUnreadableValue> unreadableValues = [];
                 switch (importObjectAttribute.Type)
                 {
                     case AttributeDataType.Text:
@@ -1036,44 +1042,44 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                         break;
 
                     case AttributeDataType.Number:
-                        var numberValues = LdapConnectorUtilities.GetAttributeIntValues(attribute, attributeName, searchResult.DistinguishedName);
-                        if (numberValues is { Count: > 0 })
-                            importObjectAttribute.IntValues.AddRange(numberValues);
+                        var numbers = LdapImportValueReader.ReadNumbers(attribute, attributeName, searchResult.DistinguishedName);
+                        importObjectAttribute.IntValues.AddRange(numbers.Values);
+                        unreadableValues = numbers.Unreadable;
                         break;
 
                     case AttributeDataType.LongNumber:
-                        var longNumberValues = LdapConnectorUtilities.GetAttributeLongValues(attribute, attributeName, searchResult.DistinguishedName);
-                        if (longNumberValues is { Count: > 0 })
-                        {
-                            // Filter out protected attribute default values.
-                            // AD has "protected" attributes that cannot be cleared — they store a sentinel
-                            // value instead of null (e.g., accountExpires uses 9223372036854775807 for "never expires").
-                            // On export, JIM substitutes null → sentinel. On import, we reverse that:
-                            // sentinel → null (by not importing the value), so JIM consistently sees null
-                            // for "no value" and drift detection doesn't produce false positives.
-                            var protectedDefault = LdapConnectorExport.GetProtectedAttributeDefault(attributeName);
-                            if (protectedDefault != null && long.TryParse(protectedDefault, out var defaultLongValue))
-                            {
-                                longNumberValues = longNumberValues.Where(v => v != defaultLongValue).ToList();
-                            }
+                        var longNumbers = LdapImportValueReader.ReadLongNumbers(attribute, attributeName, searchResult.DistinguishedName);
+                        unreadableValues = longNumbers.Unreadable;
 
-                            if (longNumberValues.Count > 0)
-                                importObjectAttribute.LongValues.AddRange(longNumberValues);
-                        }
+                        // Filter out protected attribute default values. AD has "protected" attributes that cannot be
+                        // cleared; they store a sentinel value instead (accountExpires uses 9223372036854775807 for
+                        // "never expires"). On export, JIM writes the sentinel for no value; on import, the sentinel
+                        // is not imported, so JIM consistently sees no value and drift detection doesn't produce
+                        // false positives. Only a value that was read can be the sentinel: an unreadable one is
+                        // reported below, never taken for "never expires".
+                        var protectedDefault = LdapConnectorExport.GetProtectedAttributeDefault(attributeName);
+                        if (protectedDefault != null && long.TryParse(protectedDefault, NumberStyles.Integer, CultureInfo.InvariantCulture, out var defaultLongValue))
+                            longNumbers.Values.RemoveAll(v => v == defaultLongValue);
+
+                        importObjectAttribute.LongValues.AddRange(longNumbers.Values);
                         break;
 
                     case AttributeDataType.Boolean:
-                        importObjectAttribute.BoolValue = LdapConnectorUtilities.GetEntryAttributeBooleanValue(searchResult, attributeName);
+                        var booleans = LdapImportValueReader.ReadBoolean(attribute);
+                        importObjectAttribute.BoolValue = booleans.Values.Count == 1 ? booleans.Values[0] : null;
+                        unreadableValues = booleans.Unreadable;
                         break;
 
                     case AttributeDataType.DateTime:
-                        importObjectAttribute.DateTimeValue = LdapConnectorUtilities.GetEntryAttributeDateTimeValue(searchResult, attributeName);
+                        var dateTimes = LdapImportValueReader.ReadDateTime(attribute);
+                        importObjectAttribute.DateTimeValue = dateTimes.Values.Count == 1 ? dateTimes.Values[0] : null;
+                        unreadableValues = dateTimes.Unreadable;
                         break;
 
                     case AttributeDataType.Guid:
-                        var guidValues = LdapConnectorUtilities.GetAttributeGuidValues(attribute, attributeName, searchResult.DistinguishedName);
-                        if (guidValues is { Count: > 0 })
-                            importObjectAttribute.GuidValues.AddRange(guidValues);
+                        var guids = LdapImportValueReader.ReadGuids(attribute, attributeName, searchResult.DistinguishedName);
+                        importObjectAttribute.GuidValues.AddRange(guids.Values);
+                        unreadableValues = guids.Unreadable;
                         break;
 
                     case AttributeDataType.Binary:
@@ -1103,6 +1109,18 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                         throw new ArgumentOutOfRangeException();
                 }
 
+                if (unreadableValues.Count > 0)
+                {
+                    // Report every value that is not imported, and leave the attribute off: what was read of a
+                    // multi-valued attribute is only part of what the directory holds, and JIM leaves an attribute
+                    // with a value it could not import as it already held it rather than reading it as the whole set
+                    // (#2066). Several values of a Boolean or a date and time arrive here too, every one of them
+                    // reported, because JIM holds one value for those types (#2153). The object is still returned, so
+                    // every other attribute imports.
+                    ReportUnreadableValues(importObject, searchResult.DistinguishedName, schemaAttribute, unreadableValues);
+                    continue;
+                }
+
                 importObject.Attributes.Add(importObjectAttribute);
             }
 
@@ -1125,7 +1143,51 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             importObjects.Add(importObject);
         }
 
+        LogUnreadableValueSummary(importObjects);
         return importObjects;
+    }
+
+    /// <summary>
+    /// Records the values of one attribute that are not imported on the object (one that could not be read as its type,
+    /// #2128, or one of several JIM cannot hold, #2153), which keeps JIM from changing the attribute, and gives the
+    /// entry's distinguished name as where the object was read from: an administrator can go straight to it, where its
+    /// External ID (an objectGUID or entryUUID) means nothing to them.
+    /// </summary>
+    private void ReportUnreadableValues(ConnectedSystemImportObject importObject, string distinguishedName, ConnectedSystemObjectTypeAttribute schemaAttribute, IReadOnlyList<LdapUnreadableValue> unreadableValues)
+    {
+        importObject.SourceLocation ??= distinguishedName;
+
+        // The schema's name rather than the one on the entry, which the directory client lower-cases: it is the name
+        // the administrator knows the attribute by.
+        foreach (var unreadable in unreadableValues)
+            importObject.AddAttributeValueError(schemaAttribute.Name, unreadable.Value, unreadable.Reason ?? UnreadableValueReasons.For(schemaAttribute.Type, unreadable.Value));
+
+        // Per object at Debug only: a schema mapping gap makes this true of every object in the directory, so the
+        // Warning is the one summary per batch below. Never the values themselves, which can be personal data; the
+        // execution item records them.
+        _logger.Debug("ConvertLdapResults: {Count} value(s) of {AttributeType} attribute '{AttributeName}' on '{Dn}' were not imported; JIM leaves the attribute as it already held it",
+            unreadableValues.Count, schemaAttribute.Type, LogSanitiser.Sanitise(schemaAttribute.Name), LogSanitiser.Sanitise(distinguishedName));
+    }
+
+    /// <summary>
+    /// Logs one Warning for a batch of converted entries that carried values JIM could not import, counting them per
+    /// attribute, so a gap that touches every object is one line per batch rather than one per object.
+    /// </summary>
+    private void LogUnreadableValueSummary(List<ConnectedSystemImportObject> importObjects)
+    {
+        var flaggedObjects = importObjects.Where(importObject => importObject.AttributeValueErrors is { Count: > 0 }).ToList();
+        if (flaggedObjects.Count == 0)
+            return;
+
+        var countsByAttribute = flaggedObjects
+            .SelectMany(importObject => importObject.AttributeValueErrors!)
+            .GroupBy(error => error.AttributeName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => $"{group.Key}: {group.Count()}");
+
+        _logger.Warning("ConvertLdapResults: {ObjectCount} of {TotalCount} object(s) carried values JIM could not import (unreadable as their attribute's type, " +
+            "or more than one for a Boolean or DateTime attribute), each reported on its execution item and its attribute left as JIM already held it. " +
+            "Values per attribute: {UnreadableValueCounts}",
+            flaggedObjects.Count, importObjects.Count, LogSanitiser.Sanitise(string.Join(", ", countsByAttribute)));
     }
     #endregion
 }

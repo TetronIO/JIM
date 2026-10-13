@@ -10,10 +10,13 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
+using JIM.Models.Security;
 using JIM.Models.Utility;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -51,10 +54,12 @@ public class SchedulesControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SchedulesController(_mockLogger.Object, _application);
 
-        // Set up a default HTTP context with a user
+        // Set up a default HTTP context with a signed-in user, carrying the Metaverse Object id claim the
+        // authentication pipeline attaches to every authorised caller.
         var claims = new List<Claim>
         {
             new("sub", Guid.NewGuid().ToString()),
+            new(Constants.BuiltInClaims.MetaverseObjectId, Guid.NewGuid().ToString()),
             new("name", "Test User")
         };
         var identity = new ClaimsIdentity(claims, "Test");
@@ -410,6 +415,76 @@ public class SchedulesControllerTests
 
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.Name, Is.EqualTo("New Schedule"));
+    }
+
+    [Test]
+    public async Task CreateAsync_CalledWithAnApiKey_RecordsTheKeyAsTheCreatorAsync()
+    {
+        // The claims the API key handler really issues: nothing else marks a request as made with a key. Every call
+        // with a key used to be recorded as a person, whose link then led to a Metaverse Object that does not exist.
+        var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "Integration key", KeyPrefix = "jim_ak_test" };
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey), "ApiKey"))
+            }
+        };
+        var created = await CreateCapturingScheduleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created.CreatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
+            Assert.That(created.CreatedById, Is.EqualTo(apiKey.Id));
+            Assert.That(created.CreatedByName, Is.EqualTo("Integration key"));
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CalledBySignedInUser_RecordsTheirMetaverseObjectAsync()
+    {
+        // The identity provider's subject is not a Metaverse Object id; the one authorisation was granted to is.
+        var metaverseObjectId = Guid.NewGuid();
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
+                {
+                    new("sub", Guid.NewGuid().ToString()),
+                    new(Constants.BuiltInClaims.MetaverseObjectId, metaverseObjectId.ToString()),
+                    new("name", "Jay Example")
+                }, "Test"))
+            }
+        };
+        var created = await CreateCapturingScheduleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created.CreatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(created.CreatedById, Is.EqualTo(metaverseObjectId));
+            Assert.That(created.CreatedByName, Is.EqualTo("Jay Example"));
+        }
+    }
+
+    private async Task<Schedule> CreateCapturingScheduleAsync()
+    {
+        Schedule? created = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => created = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => new Schedule { Id = id, Name = "New Schedule", Steps = new List<ScheduleStep>() });
+
+        await _controller.CreateAsync(new CreateScheduleRequest
+        {
+            Name = "New Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            Steps = new List<ScheduleStepRequest>()
+        });
+
+        Assert.That(created, Is.Not.Null);
+        return created!;
     }
 
     [Test]

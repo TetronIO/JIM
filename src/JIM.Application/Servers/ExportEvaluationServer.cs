@@ -1,13 +1,16 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -217,9 +220,11 @@ public class ExportEvaluationServer
                 candidates.MarkCovered(mvo.Id, exportRule.Id);
                 coveredPairCount++;
 
+                // A rule computing its value with an expression has no attribute to query; it is answered from the run's
+                // expression index instead (#2052).
                 var resolvedForRule = _syncEngine.SelectExportMatchingRules(exportRule)
                     .Select(matchingRule => (MatchingRule: matchingRule, Resolved: ExportMatchingValue.Resolve(mvo, matchingRule)))
-                    .Where(x => x.Resolved.Outcome == ExportMatchingOutcome.Resolved);
+                    .Where(x => x.Resolved.Outcome == ExportMatchingOutcome.Resolved && x.Resolved.Expression == null);
 
                 foreach (var (matchingRule, resolved) in resolvedForRule)
                 {
@@ -232,7 +237,8 @@ public class ExportEvaluationServer
                         groups[key] = values;
                     }
 
-                    values.Add(resolved.Value!);
+                    // Every value the Metaverse Object holds is looked up (#2052).
+                    values.UnionWith(resolved.Values);
                 }
             }
         }
@@ -543,7 +549,7 @@ public class ExportEvaluationServer
                 var (pendingExport, mergedExistingPendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
                     mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors,
-                    result.ObjectTypeConflicts, result.Withdrawals);
+                    result.ObjectTypeConflicts, result.Withdrawals, result.ProvisioningMatchErrors);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -1620,9 +1626,10 @@ public class ExportEvaluationServer
                     resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
                     removalValue = resolvedValueForSystem;
 
-                // The removal-change verdict comes from the pure engine (#288 extraction): a value-carrying
-                // Remove for a multi-valued source, a null-clearing Update for a single-valued one, or null
-                // when a multi-valued removal has no resolvable value and cannot be staged.
+                // The removal-change verdict comes from the pure engine (#288 extraction), and follows the target
+                // attribute's plurality (#2182): a value-carrying Remove where source and target are both
+                // multi-valued (or null when that value cannot be resolved, so nothing can be staged), and a
+                // null-clearing Update everywhere else.
                 var change = _syncEngine.DecideRecallRemovalChange(flow, removalValue);
                 if (change == null)
                 {
@@ -2393,7 +2400,8 @@ public class ExportEvaluationServer
         bool recallSemantics = false,
         List<AttributeFlowError>? flowErrors = null,
         List<ExportObjectTypeConflict>? objectTypeConflicts = null,
-        List<PendingExportChangesWithdrawal>? withdrawals = null)
+        List<PendingExportChangesWithdrawal>? withdrawals = null,
+        List<ProvisioningMatchError>? provisioningMatchErrors = null)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -2469,12 +2477,25 @@ public class ExportEvaluationServer
                 // This prevents creating duplicates when the object already exists in the target. Matching is
                 // data access, so it stays orchestrator-side; a matched and claimed CSO turns the verdict's
                 // Create into an Update.
-                ConnectedSystemObject? matchedCso = null;
+                ExportMatch? match;
                 using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("ExportMatching"))
                 {
-                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule, cache);
+                    try
+                    {
+                        match = await AttemptExportMatchingAsync(mvo, exportRule, cache);
+                    }
+                    catch (Exception ex) when (ex is MultipleMatchesException or ObjectMatchingRuleFailedException && provisioningMatchErrors != null)
+                    {
+                        // Neither joined nor provisioned (#2052): reported for the administrator to resolve, as an
+                        // Object Type conflict is, and the Metaverse Object's other export rules carry on.
+                        provisioningMatchErrors!.Add(DescribeProvisioningMatchError(mvo, exportRule, ex));
+                        Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching stopped MVO {MvoId} for rule {RuleName}: {Reason}",
+                            mvo.Id, exportRule.Name, ex.Message);
+                        return (null, null, null, 0);
+                    }
                 }
 
+                var matchedCso = match?.ConnectedSystemObject;
                 if (matchedCso != null)
                 {
                     // Claim the CSO atomically: the eligibility check above is a point-in-time read,
@@ -2484,12 +2505,15 @@ public class ExportEvaluationServer
                     // provisioning below by clearing matchedCso.
                     var dateJoined = DateTime.UtcNow;
                     var matchedCsoId = matchedCso.Id;
-                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined, exportRule.Id, exportRule.Name);
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined, exportRule.Id, exportRule.Name,
+                        match!.Rule.Id > 0 ? match.Rule.Id : null, match.MatchedValue);
 
                     // Whether the claim won or lost, this Connected System Object must not be offered to
                     // any other Metaverse Object evaluated later on this page: a win means it is now
                     // joined, a loss means another Metaverse Object has already claimed it.
                     cache.ExportMatchCandidates?.Remove(matchedCsoId);
+                    foreach (var expressionIndex in cache.ExpressionMatchIndexes.Values)
+                        expressionIndex.Remove(matchedCsoId);
 
                     if (!claimed)
                     {
@@ -2504,7 +2528,7 @@ public class ExportEvaluationServer
                         // stale values back over the claimed row.
                         matchedCso.MetaverseObjectId = mvo.Id;
                         matchedCso.Status = ConnectedSystemObjectStatus.Normal;
-                        matchedCso.RecordJoin(ConnectedSystemObjectJoinMethod.ExportMatching, exportRule, dateJoined);
+                        matchedCso.RecordJoin(ConnectedSystemObjectJoinMethod.ExportMatching, exportRule, dateJoined, match.Rule, match.MatchedValue);
 
                         Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId}: joined instead of provisioning",
                             matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
@@ -3285,13 +3309,12 @@ public class ExportEvaluationServer
     /// </summary>
     /// <remarks>
     /// The merge key alone is not enough to catch this. It keys multi-valued attributes by value, which is right for
-    /// genuine per-value adds and removals, but a change's type follows the Metaverse attribute's plurality while the
-    /// key follows the Connected System attribute's: a single-valued Metaverse attribute flowing to a multi-valued
-    /// Connected System attribute (a Metaverse "Job Title" flowing to LDAP's multi-valued <c>title</c>) therefore
-    /// produces an Update whose key still carries a value. A stale per-value Remove for the same attribute then
-    /// survives the merge, and the connector emits the replace followed by a delete of a value the replace has already
-    /// removed. LDAP rejects that modify atomically ("modify/delete: title: no such value"), so the export never
-    /// applies and retries until it exhausts its attempts.
+    /// genuine per-value adds and removals, but a single-valued Metaverse attribute flowing to a multi-valued Connected
+    /// System attribute (a Metaverse "Job Title" flowing to LDAP's multi-valued <c>title</c>) is staged as an Update
+    /// (#2182), which replaces the whole set while its key still carries a value. A stale per-value Remove for the same
+    /// attribute would then survive the merge, and the connector would emit the replace followed by a delete of a value
+    /// the replace has already removed. LDAP rejects that modify atomically ("modify/delete: title: no such value"), so
+    /// the export would never apply and would retry until it exhausted its attempts.
     /// </remarks>
     internal static HashSet<int> GetWholeAttributeReplacementAttributeIds(IEnumerable<PendingExportAttributeValueChange> changes)
         => SyncEngine.GetWholeAttributeReplacementAttributeIds(changes);
@@ -3478,12 +3501,33 @@ public class ExportEvaluationServer
         var effectiveExistingCso = existingCso;
         if (decision.Outcome == OutboundStagingOutcome.ProvisionNewCso)
         {
-            var matched = await previewServer.AttemptExportMatchingAsync(mvo, exportRule);
+            ExportMatch? matched;
+            try
+            {
+                // The preview's cache carries no prefetch, but keeps any expression index for the rest of the preview,
+                // so a preview over many objects works a rule's expression out over the target once, not per object.
+                matched = await previewServer.AttemptExportMatchingAsync(mvo, exportRule, cache);
+            }
+            catch (Exception ex) when (ex is MultipleMatchesException or ObjectMatchingRuleFailedException)
+            {
+                // The run would neither join nor provision (#2052), and would stage nothing for this rule.
+                return new OutboundPreviewEntry
+                {
+                    Kind = OutboundPreviewEntryKind.Staging,
+                    MetaverseObjectId = mvo.Id,
+                    SyncRuleId = exportRule.Id,
+                    SyncRuleName = exportRule.Name,
+                    ConnectedSystemId = exportRule.ConnectedSystemId,
+                    StagingOutcome = decision.Outcome,
+                    ProvisioningMatchError = DescribeProvisioningMatchError(mvo, exportRule, ex, previewing: true)
+                };
+            }
+
             if (matched != null)
             {
-                wouldJoinCsoId = matched.Id;
+                wouldJoinCsoId = matched.ConnectedSystemObject.Id;
                 effectiveChangeType = PendingExportChangeType.Update;
-                effectiveExistingCso = matched;
+                effectiveExistingCso = matched.ConnectedSystemObject;
             }
         }
 
@@ -3732,41 +3776,52 @@ public class ExportEvaluationServer
     /// <param name="cache">The run's export evaluation cache. When its
     /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/> covers this (Metaverse Object, export
     /// Synchronisation Rule) pair (<see cref="ExportMatchCandidates.IsCovered"/>), the lookup is answered
-    /// entirely from the page's prefetched candidates instead of a per-object database query. Null (the
-    /// Sync Preview caller's default) always uses the per-object path.</param>
-    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule, ExportEvaluationCache? cache = null)
+    /// from the page's prefetched candidates instead of a query of its own, and an expression rule from the cache's
+    /// run-scoped index. Null builds an expression index for this lookup alone.</param>
+    /// <exception cref="MultipleMatchesException">A rule's values find more than one Connected System Object.</exception>
+    /// <exception cref="ObjectMatchingRuleFailedException">A rule cannot be worked out for this Metaverse Object.</exception>
+    private async Task<ExportMatch?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule, ExportEvaluationCache? cache = null)
     {
         // Which rules to try, and in what order, is the pure engine's verdict (#288 extraction); an empty
         // answer (no rules configured, or the mode unreadable because a navigation is not loaded) means
-        // matching is not attempted and provisioning proceeds. The per-rule candidate query below stays here,
-        // where the data access is.
+        // matching is not attempted and provisioning proceeds.
         var matchingRules = _syncEngine.SelectExportMatchingRules(exportRule);
         if (matchingRules.Count == 0)
             return null;
 
-        try
-        {
-            if (cache?.ExportMatchCandidates is { } candidates && candidates.IsCovered(mvo.Id, exportRule.Id))
-            {
-                return await Application.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
-                    mvo,
-                    exportRule.ConnectedSystem,
-                    matchingRules.ToList(),
-                    candidates);
-            }
+        // Nothing is caught here (#2052): an ambiguous match or a rule that cannot be worked out stops this
+        // Metaverse Object for this rule, and the caller reports it. Provisioning on any error, as this once did,
+        // created the very duplicate matching exists to prevent, with nothing to say why.
+        var prefetched = cache?.ExportMatchCandidates is { } candidates && candidates.IsCovered(mvo.Id, exportRule.Id)
+            ? candidates
+            : null;
+        return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            SyncRepo, mvo, exportRule.ConnectedSystem, exportRule.ConnectedSystemObjectType, matchingRules.ToList(), prefetched,
+            cache?.ExpressionMatchIndexes);
+    }
 
-            return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
-                mvo,
-                exportRule.ConnectedSystem,
-                exportRule.ConnectedSystemObjectType,
-                matchingRules.ToList());
-        }
-        catch (Exception ex)
+    /// <summary>
+    /// The error an export rule records when export matching stops a Metaverse Object before provisioning (#2052).
+    /// </summary>
+    private static ProvisioningMatchError DescribeProvisioningMatchError(MetaverseObject mvo, SyncRule exportRule, Exception matchingFailure,
+        bool previewing = false)
+    {
+        var ambiguity = matchingFailure as MultipleMatchesException;
+        var systemName = exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(CultureInfo.InvariantCulture);
+        return new ProvisioningMatchError
         {
-            Log.Warning(ex, "AttemptExportMatchingAsync: Error during export matching for MVO {MvoId} to system {SystemId}",
-                mvo.Id, exportRule.ConnectedSystemId);
-            return null;
-        }
+            MetaverseObjectId = mvo.Id,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name,
+            ConnectedSystemId = exportRule.ConnectedSystemId,
+            ErrorType = ambiguity == null
+                ? ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed
+                : ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch,
+            Message = ambiguity == null
+                ? $"Before provisioning to '{systemName}': {matchingFailure.Message}"
+                : ObjectMatchingServer.DescribeProvisioningAmbiguity(ambiguity, systemName, previewing),
+            Candidates = ambiguity?.Candidates ?? []
+        };
     }
 
     /// <summary>

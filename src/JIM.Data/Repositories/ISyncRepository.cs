@@ -450,21 +450,10 @@ public interface ISyncRepository
     Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Finds a CSO that matches an MVO using the specified matching rule.
-    /// Used by object matching during export (MVO→CSO lookup).
-    /// </summary>
-    Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule objectMatchingRule);
-
-    /// <summary>
-    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
-    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
-    /// type whose named attribute equals one of the given values, in one query per rule per page
-    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
-    /// parameter and eligibility documentation.
+    /// Export matching's lookup (MVO→CSO, #2052): for a single Object Matching Rule, finds every unjoined,
+    /// Normal-status Connected System Object of the given type whose named attribute equals one of the
+    /// given values, for one Metaverse Object or a whole page of them. See <c>IConnectedSystemRepository</c>
+    /// for full parameter and eligibility documentation.
     /// </summary>
     Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -473,6 +462,14 @@ public interface ISyncRepository
         AttributeDataType dataType,
         bool caseSensitive,
         IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Streams every unjoined, Normal-status Connected System Object of the given type with its values for the given
+    /// attributes, ordered by object: what an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052). See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
@@ -733,6 +730,18 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// Records that an export has written the enabled state of these accounts (#2064), on each account's
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, whatever its status (a Cancelled row comes back on a
+    /// Retry): sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
+    /// leaves the enabled state to the Attribute Flow rather than applying the provisioning Synchronisation Rule's
+    /// Enable Account. Asked after an Update, or a Delete performed as a disable, whose Connector reported writing
+    /// the enabled state: a leaver disabled, or an account disabled on deprovisioning, while its first password is
+    /// still owed is then never re-enabled by a late delivery. A narrow status mark on one column, so exempt from the
+    /// bulk column list rule. Returns how many rows it marked.
+    /// </summary>
+    Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Creates Activities in one batch, for callers recording several at once (#1697: one parent Activity per
@@ -1211,6 +1220,13 @@ public interface ISyncRepository
     Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
 
     /// <summary>
+    /// A Connected System's <see cref="ConnectedSystem.ObjectMatchingRuleMode"/>, read on its own, or null when the system
+    /// does not exist. Sync Preview (#2176) takes the join decision the run takes from it: in simple mode the Connected
+    /// System Object Type's own Object Matching Rules apply, in advanced mode only each import Synchronisation Rule's.
+    /// </summary>
+    Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId);
+
+    /// <summary>
     /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
     /// they provision.
     /// <para>
@@ -1251,6 +1267,24 @@ public interface ISyncRepository
     /// carries the flag.
     /// </summary>
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// What a password delivery's enabled-state decision needs to know at the attempt (#2064, #2173), in one round
+    /// trip: whether the account holds an enable withheld until a password exists (as
+    /// <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> answers it), whether the queued change is
+    /// marked as having its account's enabled state written by an export, and whether an export to the account is in
+    /// flight. Read afresh rather than taken from the claimed row, because an export can mark the row, or withdraw the
+    /// hold, while the lane works through the accounts ahead of it.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the account belongs to.</param>
+    /// <param name="pendingPasswordChangeId">The queued change being delivered.</param>
+    /// <param name="connectedSystemObjectId">The account.</param>
+    /// <param name="exportsInFlightSince">
+    /// The earliest time an export still Executing counts as in flight. One marked Executing before it has been there
+    /// longer than any batch takes, so it is reported as stranded rather than in flight.
+    /// </param>
+    Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince);
 
     /// <summary>
     /// Every change on a Connected System held until an Initial Password is delivered
@@ -1384,10 +1418,12 @@ public interface ISyncRepository
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
     /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
-    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
-    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
+    /// record (the export Synchronisation Rule whose matching found it, #348, and the Object Matching Rule and values
+    /// it matched on, #2052) are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue);
 
     #endregion
 
@@ -1590,6 +1626,17 @@ public interface ISyncRepository
     /// Uses raw SQL in production for efficiency.
     /// </summary>
     Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Writes each retry state onto its Pending Export, but only while that row is still Executing, and returns the ids
+    /// it wrote (#2083). The inverse of <see cref="MarkPendingExportsAsExecutingAsync"/>, used when a batch is cancelled
+    /// or fails: an export the run never got to goes back as it was before the batch was sent, and one that failed gets
+    /// one failed attempt. A row whose result was already recorded has left Executing, so it is never overwritten, and a
+    /// Create whose success was recorded is never put back to be sent again. Only the Pending Export's own retry columns
+    /// are written; its attribute changes are left as they are.
+    /// </summary>
+    /// <returns>The ids of the Pending Exports written.</returns>
+    Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states);
 
     /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in

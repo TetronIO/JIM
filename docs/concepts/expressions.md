@@ -1,3 +1,10 @@
+---
+title: Expressions
+description: The expression language Synchronisation Rules use to build and transform values, with its functions, null handling and common recipes.
+type: concept
+audience: administrator
+---
+
 # Expressions
 
 When a Synchronisation Rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
@@ -6,14 +13,16 @@ An expression is a short, readable formula that JIM evaluates during synchronisa
 
 ## Where Expressions Fit
 
-Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a straightforward direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
+Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
 
 Within a Synchronisation Rule, expressions are used in:
 
-- **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a Connected System.
-- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
+- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System. An export expression produces one value; written to a Multi-Valued attribute, it replaces every value the attribute holds (see [Multi-valued attributes](../configuration/attribute-mappings.md#multi-valued-attributes)).
+- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the Metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
+
+Expressions also decide what an **Object Matching Rule** compares, where an identifier differs in format between systems: see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression).
 
 To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
@@ -52,7 +61,7 @@ cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
 
-Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) for the evaluation order, loops, and which synchronisation evaluates the flow.
+Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/derived-attributes.md) for the evaluation order, loops, and which synchronisation evaluates the flow. An Object Matching Rule's expression reads `cs` only, because the Metaverse Object is what the rule is looking for.
 
 In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
 
@@ -164,7 +173,7 @@ Eq(Lower(mv["Status"]), "active")
 |----------|-------------|---------|
 | `IIF(condition, trueValue, falseValue)` | Return one value if a condition is true, another if false | `IIF(Eq(mv["Status"], "Active"), 512, 514)` |
 | `Coalesce(value1, value2)` | Use the first value if it exists, otherwise use the second | `Coalesce(mv["Preferred Name"], mv["First Name"])` |
-| `Eq(value1, value2)` | Check if two values are equal (required for text comparisons) | `Eq(mv["Department"], "IT")` |
+| `Eq(value1, value2)` | Check if two values are equal (required for text comparisons); a date compares by [instant](#dates-and-numbers-as-text) | `Eq(mv["Department"], "IT")` |
 
 ### Conversion Functions
 
@@ -180,11 +189,30 @@ Eq(Lower(mv["Status"]), "active")
 |----------|-------------|---------|
 | `Now()` | Current date and time (UTC) | `Now()` |
 | `Today()` | Current date at midnight (UTC) | `Today()` |
-| `FormatDate(date, format)` | Format a date as text (e.g., "2026-03-15") | `FormatDate(mv["HireDate"], "yyyy-MM-dd")` |
-| `ToFileTime(date)` | Convert a date to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
+| `FormatDate(value, format)` | Write a date, or ISO 8601 text, in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings); nothing for other text or no value | `FormatDate(mv["Hire Date"], "yyyy-MM-dd")` |
+| `ParseDate(text, format)` | Read text in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) as a date, in UTC unless the format has an offset (`zzz` or `K`); nothing for empty text, an error for text that does not match | `ParseDate(cs["hireDate"], "dd/MM/yyyy")` |
+| `ToFileTime(date)` | Convert a date, or ISO 8601 text, to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
 | `FromFileTime(filetime)` | Convert an Active Directory FILETIME back to a date | `FromFileTime(cs["accountExpires"])` |
 
-`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+
+### Dates and Numbers as Text
+
+**Writing.** Whatever the server's language, `ToString()`, a date flowing to a Text attribute, and the tester write a date as `2026-03-15 10:30:00Z`: UTC, with a fraction of a second only when there is one. Joining a date to text with `+` uses the same pattern in the zone the date carries. Numbers use `.` as the decimal point. For any other form, use `FormatDate()`:
+
+```csharp
+"Changed " + ToString(mv["Last Changed"])       // Changed 2026-03-15 10:30:00Z
+FormatDate(mv["Last Changed"], "dd MMM yyyy")   // 15 Mar 2026
+```
+
+**Reading.** Text, including text flowing to a DateTime attribute, is read as a date only in ISO 8601: `yyyy-MM-dd`, then optionally `T` or a space and a time (`HH:mm`, optional seconds and fraction), then `Z`, an offset such as `+01:00`, or nothing, which means UTC. Every other form is refused, including `03/04/2024`, which is 3 April in one country and 4 March in another; read those with `ParseDate()`:
+
+```csharp
+ParseDate(cs["startDate"], "dd/MM/yyyy")      // 15/03/2026 is 15 March 2026, 00:00 UTC
+ParseDate(cs["changed"], "yyyyMMddHHmmssK")   // 20260315103000Z is 15 March 2026, 10:30 UTC
+```
+
+A `ParseDate()` mismatch is an error, not "no value", so an unexpected form never clears the attribute. A Binary value has no text form: text functions such as `Upper()` refuse it with an error, while `IsNullOrEmpty()` and `IsNullOrWhitespace()` treat it as a value.
 
 ### Distinguished Name (DN) Functions
 
@@ -282,11 +310,11 @@ Steer around it by validating or supplying fallbacks **before** composing the va
 
 `EscapeDN()` protects against special characters such as commas in a value; it does **not** protect against a value being absent. A missing required component still yields a malformed DN, so guard for presence as well as escaping for safety.
 
-Where a component simply has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
+Where a component has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
 
 ### 4. Whitespace-only results become no value (by default)
 
-A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/synchronisation-rules.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
+A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/attribute-mappings.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
 
 ### 5. Missing Input Behaviour: have JIM refuse rather than guess
 
@@ -303,7 +331,7 @@ It is set per expression source on an Attribute Flow, in the portal beside the e
 
 Both failure behaviours report against the object on every run until the missing value is supplied or the configuration changes, so the errors are a work queue rather than a one-off notification. Neither behaviour writes anything: "Fail this mapping" leaves the target attribute exactly as it was, and "Fail the object" leaves the whole object untouched.
 
-On an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), its `mv["..."]` inputs count exactly as its `cs["..."]` inputs do, so "Contribute no value" waits for an Account Name that has not arrived yet rather than building `@corp.local`.
+On an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), its `mv["..."]` inputs count exactly as its `cs["..."]` inputs do, so "Contribute no value" waits for an Account Name that has not arrived yet rather than building `@corp.local`.
 
 The default is **Evaluate anyway** on every existing and newly created mapping, so nothing changes until you choose otherwise. Guarding the expression and setting a behaviour are complementary rather than alternatives: guard where the absence is expected and you know the right answer, and set a behaviour where it is not.
 
@@ -325,7 +353,9 @@ Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or 
 | Whitespace only, **Treat whitespace as no value** on (default) | No value | ❌ Clears any existing value |
 | Whitespace only, **Treat whitespace as no value** off | Literal whitespace | ✅ Stored (flagged `(whitespace)` in the portal) |
 | Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ✅ Stored as-is, bypassing the null/clear path |
-| A non-empty value | That value | ✅ Stored |
+| A non-empty value | That value, in the attribute's type | ✅ Stored |
+| A value the attribute cannot hold (for example text, for a Number attribute) | Nothing | ⚠️ Kept as it was; the object is reported with an expression error |
+| More than one value, for a single-valued attribute | Nothing | ⚠️ Kept as it was; the object is reported with a `Multi-Valued to Single-Valued` error |
 
 The "Effect on target" column describes an attribute with a single contributing Synchronisation Rule. Where several rules contribute, a "no value" outcome feeds [Attribute Priority](attribute-priority.md) resolution instead of clearing outright (see point 1).
 
@@ -354,9 +384,9 @@ IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 This reads as: "If the Employee Status is Active, set the value to 512 (enabled), otherwise set it to 514 (disabled)."
 
 !!! note "Creating accounts enabled on Active Directory"
-    Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
+    Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/initial-password.md) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts).
 
-    One exception: with the Initial Password's **Enable the Connected System Object once the password is set** on, as it is by default, the password's delivery enables every account the rule provisions, including one this expression creates disabled (`514`), such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export restore the expression's `514`; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](../configuration/synchronisation-rules.md#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch that setting off, or scope provisioning to active people; see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled).
+    An account this expression creates disabled (`514`), such as a pre-hire's, stays disabled when its password is delivered, whatever the Initial Password's **Enable the Connected System Object once the password is set** says: the expression decides the enabled state. See [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector-passwords.md#accounts-your-attribute-flow-creates-disabled).
 
 **Check if an account is currently disabled:**
 
@@ -467,6 +497,8 @@ This creates three separate values: `SOFT101`, `SOFT201`, and `SEC101`.
 - Whitespace is trimmed from each value
 - Returns nothing for missing or empty input
 - The delimiter can be any text (e.g., `","`, `"|"`, `";"`)
+- Each value is stored in the target attribute's type (`"1|2"` into a Number attribute stores 1 and 2); if any value cannot be, nothing flows and the object is reported
+- Into a single-valued attribute, a list of more than one value flows nothing and the object is reported
 
 ### Combining a List into a Single Value
 
@@ -490,7 +522,7 @@ If the attribute has the values Admin, Users, and Developers, this produces: `Ad
 
 The Attribute Flow dialog tests an expression as you write it, so you find out what it produces before you save it rather than from the next synchronisation.
 
-Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to.
+Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to, a list as one value per line.
 
 **Leave a box empty to see what happens when the object has no value for that attribute.** An empty box is passed to the expression as no value, not as an empty string, so this is how you check an expression against the hazard the previous section describes:
 

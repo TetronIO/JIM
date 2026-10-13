@@ -38,4 +38,23 @@ public static class ApiJsonConfiguration
         // .NET 10+; the default is permissive for backwards compatibility.)
         options.AllowDuplicateProperties = false;
     }
+
+    /// <summary>
+    /// Applies the same policy to the HTTP JSON options. MVC controllers serialise with their own options (see
+    /// <see cref="Configure"/>); these are the ones the OpenAPI document generator describes the API's types from,
+    /// so without the policy here the document declared every enum an integer while the API sends and accepts
+    /// only names. JIM has no minimal API endpoints, so in practice these options serve the generator alone.
+    /// </summary>
+    /// <param name="options">The HTTP JSON options to configure.</param>
+    public static void ConfigureHttp(Microsoft.AspNetCore.Http.Json.JsonOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        Configure(options.SerializerOptions);
+
+        // The default MaxDepth of 64 is insufficient for JIM's deep DTO graph; the schema exporter and its internal
+        // ResolveReferences expansion need headroom for recursive types.
+        // See: https://github.com/dotnet/aspnetcore/issues/63857
+        options.SerializerOptions.MaxDepth = 256;
+    }
 }

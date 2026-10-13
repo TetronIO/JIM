@@ -712,6 +712,15 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// A Run Profile Execution Item's Joined outcome, which says which Object Matching Rule made the join and on what
+    /// value (#2052); null when the item recorded no Joined outcome.
+    /// </summary>
+    public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
+    {
+        return await Application.Repository.Activity.GetJoinedOutcomeAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
     /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded,
     /// each with whether it still exists and, for a Metaverse Object, what is joined to it now. Three reads at most,
     /// whatever the number of candidates.

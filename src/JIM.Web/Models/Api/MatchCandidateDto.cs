@@ -45,7 +45,7 @@ public class MatchCandidateDto
     public int CandidateTotal { get; set; }
 
     /// <summary>Creates the DTO from a recorded candidate.</summary>
-    public static MatchCandidateDto FromModel(ActivityRunProfileExecutionItemMatchCandidate candidate)
+    public static MatchCandidateDto FromModel(MatchCandidateSnapshot candidate)
     {
         var dto = new MatchCandidateDto();
         dto.CopyFrom(candidate);
@@ -53,7 +53,7 @@ public class MatchCandidateDto
     }
 
     /// <summary>Copies the recorded candidate's fields.</summary>
-    protected void CopyFrom(ActivityRunProfileExecutionItemMatchCandidate candidate)
+    protected void CopyFrom(MatchCandidateSnapshot candidate)
     {
         CandidateKind = candidate.CandidateKind;
         CandidateId = candidate.CandidateId;

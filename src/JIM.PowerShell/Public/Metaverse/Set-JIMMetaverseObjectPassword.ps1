@@ -68,15 +68,16 @@ function Set-JIMMetaverseObjectPassword {
         the only chance to capture it.
 
     .PARAMETER ExpiryBehaviour
-        What happens to the password once each target has it.
-        Valid values: RequireChangeAtNextSignIn, ExpiresAccordingToTargetPolicy, NeverExpires.
-        Defaults to RequireChangeAtNextSignIn with -ConnectedSystemId (somebody else chose this password) and to
-        ExpiresAccordingToTargetPolicy without it (the person chose it, and should not be made to choose another).
+        What happens to the password once each target has it. Defaults to RequireChangeAtNextSignIn with
+        -ConnectedSystemId (somebody else chose this password) and to ExpiresAccordingToTargetPolicy without it (the
+        person chose it, and should not be made to choose another).
 
     .PARAMETER EnableAccount
-        Enables the named accounts as part of setting the password. Omit it to leave their enabled state
-        untouched. Only available with -ConnectedSystemId: a password propagated to every configured system never
-        enables an account, because it reaches accounts an administrator may have disabled on purpose.
+        Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
+        except for a new Active Directory account JIM created disabled only until it had a password, which the
+        password enables as its Attribute Flow asks. Only available with -ConnectedSystemId: a password propagated to
+        every configured system enables no other account, because it reaches accounts an administrator may have
+        disabled on purpose.
 
     .PARAMETER Wait
         How many seconds, from 0 to 30, to wait for the systems to answer before returning. Defaults to 10 with
@@ -89,32 +90,12 @@ function Set-JIMMetaverseObjectPassword {
         Skips the confirmation prompt.
 
     .OUTPUTS
-        One PSCustomObject describing the change:
+        One object describing the change: the Activity that records it, and where delivery to each Connected System
+        stands. No property carries the password you supplied.
 
-        | Property           | Description                                                                          |
-        |--------------------|--------------------------------------------------------------------------------------|
-        | ActivityId         | The Activity recording the change; its children hold each system's outcome           |
-        | Origin             | Explicit (accounts named) or Propagated (every configured system)                    |
-        | Settled            | Whether every target had reached an outcome you need not wait on when this returned  |
-        | QueuedForNoSystems | True when a propagated change found no configured system; nothing was queued         |
-        | Targets            | One entry per Connected System, described below                                      |
-        | GeneratedPassword  | The password JIM produced, as a SecureString; present only with -Generate            |
-
-        Each entry under Targets:
-
-        | Property                | Description                                                                     |
-        |-------------------------|---------------------------------------------------------------------------------|
-        | ConnectedSystemId       | The Connected System                                                            |
-        | ConnectedSystemName     | Its name                                                                        |
-        | ConnectedSystemObjectId | The account, or null where the person has no account in this system yet         |
-        | Enabled                 | Whether the system is taking propagated passwords; false means Held             |
-        | State                   | Queued, Delivering, Set, Retrying, Parked, Held, Expired or Cancelled           |
-        | NextAttemptAt           | When the next attempt falls due, for a Retrying target                          |
-        | Message                 | The system's own words on its most recent outcome                               |
-        | AttemptCount            | How many delivery attempts this system has had                                  |
-        | FailureReason           | Why the last attempt failed; empty before an attempt or once set                |
-
-        No property carries the password you supplied.
+        JIM.SetMetaverseObjectPasswordResult
+        GeneratedPassword (securestring): The password JIM generated, present only with -Generate. This is the only
+            chance to read it.
 
     .EXAMPLE
         $password = Read-Host -AsSecureString "New password"
@@ -164,7 +145,7 @@ function Set-JIMMetaverseObjectPassword {
         supplied password (decision D5): the event case, which needs no account selection.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'PropagateSuppliedPassword')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SetMetaverseObjectPasswordResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id,
@@ -295,7 +276,7 @@ function Set-JIMMetaverseObjectPassword {
             $action = "Set the password on every Connected System configured for Password Synchronisation"
         }
 
-        if (-not ($Force -or $PSCmdlet.ShouldProcess($target, $action))) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action $action -Force:$Force)) {
             return
         }
 

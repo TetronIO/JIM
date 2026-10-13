@@ -30,7 +30,7 @@ function Add-JIMExampleDataTemplateAttribute {
         The id of the Connected System attribute values are generated for, when targeting a Connected System.
 
     .PARAMETER Pattern
-        A variable-replacement pattern for constructing string values, e.g. "{0}.{1}@contoso.com".
+        A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com".
 
     .PARAMETER Expression
         An expression that constructs the value from other already-generated attributes via mv["Attribute Name"].
@@ -87,14 +87,14 @@ function Add-JIMExampleDataTemplateAttribute {
         @{ MetaverseAttribute = <name or id>; ComparisonType = <Equals|NotEquals|LessThan|GreaterThan|GreaterThanOrEqual|LessThanOrEqual|Like>; StringValue = <value> }.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Data Generation
-        Template's configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Data Generation Template object.
+        Returns the updated Data Generation Template.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Data Generation Template object.
+        With -PassThru, the updated Data Generation Template; otherwise nothing.
 
     .EXAMPLE
         Add-JIMExampleDataTemplateAttribute -TemplateName "Demo Users" -ObjectType "User" -MetaverseAttribute "Display Name" -Pattern "{0} {1}" -ExampleDataSet "Firstnames Female", "Lastnames"
@@ -118,7 +118,7 @@ function Add-JIMExampleDataTemplateAttribute {
         Remove-JIMExampleDataTemplate
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$TemplateId,

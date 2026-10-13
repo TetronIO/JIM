@@ -65,7 +65,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 29,
 
         // Active Directory refused to enable an account that has no password (#2039).
-        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 30
+        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 30,
+
+        // Before provisioning, matching found several existing accounts (#2052).
+        [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31
     };
 
     [Test]

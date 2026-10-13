@@ -594,6 +594,27 @@ Describe 'Invoke-JIMExampleDataTemplate' {
                 }
             }
         }
+
+        It 'Reports the Activity''s final status with -PassThru once it has waited, not Queued' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{
+                            activityId = '11111111-1111-1111-1111-111111111111'
+                            taskId = '22222222-2222-2222-2222-222222222222'
+                            message = 'Queued'
+                        }
+                    }
+                    [PSCustomObject]@{ status = 'CompleteWithWarning'; objectsProcessed = 10; objectsToProcess = 10; message = '' }
+                }
+
+                $result = Invoke-JIMExampleDataTemplate -Id 1 -Wait -Timeout 30 -PassThru -Confirm:$false
+
+                $result.Status | Should -Be 'CompleteWithWarning'
+                $result.ActivityId | Should -Be '11111111-1111-1111-1111-111111111111'
+            }
+        }
     }
 
     Context 'Help Documentation' {

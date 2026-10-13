@@ -537,6 +537,67 @@ public class PendingPasswordChangeTests
         }
     }
 
+    /// <summary>
+    /// A delivery that would enable an account while an export to it is still in flight waits for that export
+    /// (#2173): nothing is sent, so nothing is counted against the change, and what earlier attempts recorded stays.
+    /// </summary>
+    [Test]
+    public void Postpone_PutsTheChangeBackToPendingUntilThenWithNothingCounted()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(7);
+        change.AttemptCount = 2;
+        change.FailureReason = PasswordSetFailureReason.Transient;
+        change.TargetMessage = "The server is unavailable.";
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Postpone(now.AddSeconds(15));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.NextRetryAt, Is.EqualTo(now.AddSeconds(15)));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+            Assert.That(change.AttemptCount, Is.EqualTo(2), "a wait is not an attempt");
+            Assert.That(change.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(change.TargetMessage, Is.EqualTo("The server is unavailable."));
+            Assert.That(change.IsDue(now), Is.False);
+            Assert.That(change.IsDue(now.AddSeconds(15)), Is.True);
+        }
+    }
+
+    [Test]
+    public void Postpone_NeverPastTheExpiry()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddSeconds(5);
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Postpone(now.AddSeconds(15));
+
+        Assert.That(change.NextRetryAt, Is.EqualTo(change.ExpiresAt));
+    }
+
+    [Test]
+    public void Postpone_OnAnUnclaimedChange_ChangesNothing()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(7);
+        change.Status = PendingPasswordChangeStatus.Parked;
+
+        change.Postpone(now.AddSeconds(15));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(change.NextRetryAt, Is.Null);
+        }
+    }
+
     [Test]
     public void ReleaseClaim_OnAnUnclaimedChange_ChangesNothing()
     {
@@ -712,6 +773,31 @@ public class PendingPasswordChangeTests
             Assert.That(change.EnableAccount, Is.Null,
                 "A propagated password never carries an enable decision, and must not inherit the reset's.");
         }
+    }
+
+    /// <summary>
+    /// Whether an export wrote the account's enabled state (#2064) describes the account a Provisioned row was staged
+    /// for, so it follows the row the same way: a re-provisioned account's new row carries its own export's answer,
+    /// and an administrator's reset replacing a Provisioned row carries none.
+    /// </summary>
+    [Test]
+    public void Supersede_CarriesTheNewerRowsEnabledStateSetByAttributeFlow()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+
+        var reprovisioned = Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: 12);
+        reprovisioned.EnabledStateSetByAttributeFlow = true;
+        change.Supersede(reprovisioned);
+
+        Assert.That(change.EnabledStateSetByAttributeFlow, Is.True);
+
+        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1), PendingPasswordChangeOrigin.Explicit));
+
+        Assert.That(change.EnabledStateSetByAttributeFlow, Is.False,
+            "An administrator's reset carries no export's answer, and must not inherit the provisioned row's.");
     }
 
     [Test]

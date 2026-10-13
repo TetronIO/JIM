@@ -218,3 +218,36 @@ Describe 'Update-TourAssetFolder' {
         Test-Path -LiteralPath $stray | Should -BeFalse
     }
 }
+
+# A release publishes the refresh with no one looking first, so the site must build with it before anything is
+# committed. npm is replaced with a recorder here.
+Describe 'Invoke-TourSiteBuild' {
+    BeforeEach {
+        $script:npmCalls = [System.Collections.Generic.List[string]]::new()
+        $script:site = Join-Path $TestDrive "site-$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $script:site | Out-Null
+    }
+
+    It 'installs the locked dependencies, then builds, in the site' {
+        Mock npm { $script:npmCalls.Add("$((Get-Location).ProviderPath)|$($args -join ' ')"); $global:LASTEXITCODE = 0 }
+
+        Invoke-TourSiteBuild -SitePath $script:site
+
+        $script:npmCalls.Count | Should -Be 2
+        $script:npmCalls[0] | Should -BeLike "$($script:site)|ci*"
+        $script:npmCalls[1] | Should -BeLike "$($script:site)|run build"
+    }
+
+    It 'refuses a refresh the site does not build with' {
+        Mock npm { $global:LASTEXITCODE = if ($args[0] -eq 'run') { 1 } else { 0 } }
+
+        { Invoke-TourSiteBuild -SitePath $script:site } | Should -Throw '*does not build*'
+    }
+
+    It 'stops when the dependencies do not install' {
+        Mock npm { $script:npmCalls.Add($args -join ' '); $global:LASTEXITCODE = 1 }
+
+        { Invoke-TourSiteBuild -SitePath $script:site } | Should -Throw '*npm ci*'
+        $script:npmCalls.Count | Should -Be 1
+    }
+}

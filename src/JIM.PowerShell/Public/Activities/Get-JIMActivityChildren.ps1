@@ -19,24 +19,23 @@ function Get-JIMActivityChildren {
         paginated response shape.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the parent Activity.
+        The parent Activity.
 
     .PARAMETER All
-        Automatically paginate through all child Activities and return every one. Cannot be used with -Page.
-        Fetches at most 1000 pages before stopping with a warning; use -Force to fetch beyond the cap.
+        Returns every child Activity, fetching page after page. Stops with a warning after 1,000 pages unless -Force
+        is given.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of how many child
-        Activities there are. Only valid with -All.
+        With -All, fetches every page however many there are, up to the API's limit of 1,000,000 rows.
 
     .PARAMETER Page
-        Page number for the child Activity list. Defaults to 1. Cannot be used with -All.
+        The page of child Activities to return.
 
     .PARAMETER PageSize
-        Number of child Activities per page. Defaults to 50. Maximum is 100.
+        How many child Activities per page.
 
     .OUTPUTS
-        PSCustomObject representing each child Activity.
+        Each child Activity's header.
 
     .EXAMPLE
         Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -64,7 +63,7 @@ function Get-JIMActivityChildren {
         Get-JIMActivityStats
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ActivityHeader')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id,

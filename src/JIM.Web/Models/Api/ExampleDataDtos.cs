@@ -16,17 +16,17 @@ public class ExampleDataSetDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the Example Data Set, e.g. "Firstnames (Female)".
+    /// The name of the Example Data Set, for example "Firstnames (Female)".
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The .NET culture code the values are in, e.g. "en-GB".
+    /// The .NET culture code the values are in, for example "en-GB".
     /// </summary>
     public string Culture { get; set; } = null!;
 
     /// <summary>
-    /// Whether the Example Data Set ships with JIM (as opposed to being administrator-created).
+    /// Whether the Example Data Set ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 
@@ -105,12 +105,12 @@ public class ExampleDataTemplateDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the template, e.g. "Demo Users".
+    /// The name of the template, for example "Demo Users".
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// Whether the template ships with JIM (as opposed to being administrator-created).
+    /// Whether the Data Generation Template ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 

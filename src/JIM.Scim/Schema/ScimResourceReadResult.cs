@@ -21,8 +21,15 @@ public class ScimResourceReadResult
     public List<string> Warnings { get; init; } = [];
 
     /// <summary>
-    /// A problem serious enough that the resource must not be imported, for example a decimal outside
-    /// the range JIM can hold. Null when the resource read cleanly.
+    /// Every value the resource held that could not be converted to its attribute's type, for example a decimal
+    /// outside the range JIM can hold (#2066). The attribute is left out of <see cref="Attributes"/>, and the import
+    /// reports each value so JIM can leave the attribute as it already held it rather than read it as empty.
+    /// </summary>
+    public List<ConnectedSystemImportObjectAttributeValueError> UnreadableValues { get; init; } = [];
+
+    /// <summary>
+    /// A problem serious enough that the resource cannot be read at all, for example a resource that is not a JSON
+    /// object. Null when the resource could be read; an unreadable value is reported in <see cref="UnreadableValues"/>.
     /// </summary>
     public string? Error { get; init; }
 }

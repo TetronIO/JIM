@@ -12,11 +12,14 @@
     uses are removed. Then commits the result through GitHub's API onto the branch screenshots/<Version> and opens a
     pull request for it (TourPullRequest.ps1), or updates the one already open.
 
-    Nothing merges by itself: the pull request is for a person to look through the images, check each step's alt text
-    still describes its image, and merge once the release is published.
+    No one reviews it: the capture has already refused blank images and pairs in the wrong theme, -Build refuses
+    images the site will not build with, and the pull request merges itself once JIM's release is published. JIM's
+    release workflow merges it then; with -MergeWhenReleased this script merges it straight away if the release is
+    already out, which happens when the release was tagged while the screenshots were still being captured.
 
-    The token comes from the GH_TOKEN environment variable, never a parameter, so it cannot reach a log. It needs
-    Contents and Pull requests write access to the repository.
+    The tokens come from environment variables, never parameters, so they cannot reach a log: GH_TOKEN needs Contents
+    and Pull requests write access to the repository, and JIM_RELEASE_TOKEN (for -MergeWhenReleased) reads JIM's
+    releases.
 
 .PARAMETER ScreenshotPath
     The captured library for the version: Capture-Screenshots.ps1's <OutputPath>/<Version> folder.
@@ -30,8 +33,15 @@
 .PARAMETER RunUrl
     The workflow run whose artefact holds the whole library, linked from the pull request.
 
+.PARAMETER Build
+    Builds the site (npm ci, then npm run build) with the new images before anything is committed, and stops if it
+    fails. Needs Node.js.
+
+.PARAMETER MergeWhenReleased
+    Once the pull request is open, merges it if JIM's release for the version is already published.
+
 .PARAMETER DryRun
-    Updates the checkout and lists what would be committed, without touching GitHub.
+    Updates the checkout (and builds it, with -Build) and lists what would be committed, without touching GitHub.
 
 .EXAMPLE
     $env:GH_TOKEN = '...'
@@ -45,6 +55,8 @@ param(
     [string]$Repository = 'TetronIO/junctional.io',
     [string]$BaseBranch = 'main',
     [string]$RunUrl,
+    [switch]$Build,
+    [switch]$MergeWhenReleased,
     [switch]$DryRun
 )
 
@@ -62,11 +74,17 @@ if ($changes.Count -eq 0) {
     Write-Host 'The site already shows these screenshots; nothing to publish.'
     return
 }
+if ($Build) {
+    # The changes are listed first, so nothing the build writes can be committed with them.
+    Invoke-TourSiteBuild -SitePath $SitePath
+    Write-Host 'The site builds with these screenshots.'
+}
 if ($DryRun) {
     $changes | ForEach-Object { Write-Host ('  {0} {1}' -f ($(if ($_.Deleted) { 'removed' } else { 'written' }), $_.Path)) }
     return
 }
 if (-not $env:GH_TOKEN) { throw 'GH_TOKEN is not set; it needs Contents and Pull requests write access to ' + $Repository + '.' }
+if ($MergeWhenReleased -and -not $env:JIM_RELEASE_TOKEN) { throw 'JIM_RELEASE_TOKEN is not set; -MergeWhenReleased reads JIM''s releases with it.' }
 
 $branch = "screenshots/$Version"
 $removed = if ($result.RemovedFolders.Count -gt 0) {
@@ -84,11 +102,9 @@ The product tour's screenshots for JIM $Version, captured by JIM's release workf
 
 $library
 
-Before merging:
+This pull request merges itself once JIM $Version is published and its checks pass; close it to keep these images off the site. Before opening it, the release workflow refused blank images and dark and light pairs in the same theme, and built the site with the new images.
 
-- [ ] Look through the images (the Files tab shows each one).
-- [ ] Check each step's ``alt`` text still describes its image, in both dictionaries.
-- [ ] Merge once JIM $Version is published.
+Each step's ``alt`` text is not updated automatically. If an image now shows something its text does not describe, correct the text in both dictionaries.
 "@
 
 $commit = Publish-SiteChangeCommit -Repository $Repository -BaseBranch $BaseBranch -Branch $branch -SitePath $SitePath `
@@ -97,7 +113,13 @@ $url = Open-TourPullRequest -Repository $Repository -BaseBranch $BaseBranch -Bra
     -Title "Product tour screenshots for JIM $Version" -Body $body -Token $env:GH_TOKEN
 
 Write-Host "Committed $commit to $branch; pull request: $url"
+$outcome = 'It merges when the release is published.'
+if ($MergeWhenReleased) {
+    $merged = Invoke-ScreenshotMergeIfReleased -Repository $Repository -Branch $branch -Version $Version `
+        -Token $env:GH_TOKEN -ReleaseToken $env:JIM_RELEASE_TOKEN
+    if ($merged) { $outcome = 'The release was already published, so it is merged.' }
+}
 if ($env:GITHUB_STEP_SUMMARY) {
-    "### Product tour screenshots`n`n[$Repository pull request]($url) for $Version ($($result.Published.Count) images)." |
+    "### Product tour screenshots`n`n[$Repository pull request]($url) for $Version ($($result.Published.Count) images). $outcome" |
         Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }

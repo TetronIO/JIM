@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Logic;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Services;
@@ -29,7 +30,8 @@ public static class SyncOutcomeBuilder
         string? detailMessage = null,
         int? syncRuleId = null,
         string? syncRuleName = null,
-        PendingExportChangeType? stagedChangeType = null)
+        PendingExportChangeType? stagedChangeType = null,
+        ImportMatch? joinMatch = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -43,9 +45,25 @@ public static class SyncOutcomeBuilder
             StagedChangeType = stagedChangeType,
             Ordinal = rpei.SyncOutcomes.Count
         };
+        RecordJoinMatch(outcome, joinMatch);
 
         rpei.SyncOutcomes.Add(outcome);
         return outcome;
+    }
+
+    /// <summary>
+    /// Records on a Joined outcome which Object Matching Rule found the Metaverse Object and on what value (#2052),
+    /// snapshotting the rule's description because the rule may later change or be deleted. Does nothing when the
+    /// join was not made by matching.
+    /// </summary>
+    public static void RecordJoinMatch(ActivityRunProfileExecutionItemSyncOutcome outcome, ImportMatch? joinMatch)
+    {
+        if (joinMatch == null)
+            return;
+
+        outcome.ObjectMatchingRuleId = joinMatch.Rule.Id > 0 ? joinMatch.Rule.Id : null;
+        outcome.ObjectMatchingRuleDescriptionSnapshot = joinMatch.Rule.DescribeComparison();
+        outcome.MatchedValue = joinMatch.MatchedValue;
     }
 
     /// <summary>

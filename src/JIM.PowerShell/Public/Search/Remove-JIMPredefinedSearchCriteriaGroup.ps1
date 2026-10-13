@@ -11,17 +11,17 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
         from a Predefined Search.
 
     .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+        The ID of the Predefined Search.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group to remove.
+        The ID of the criteria group to remove, with everything in it.
 
     .PARAMETER ChangeReason
-        Optional reason for the removal, recorded on the audit Activity and shown in the owning Predefined
-        Search's configuration change history.
+        Why the group was removed, recorded on the audit Activity and shown in the Predefined Search's Configuration
+        Change History.
 
     .OUTPUTS
-        None
+        None.
 
     .EXAMPLE
         Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10
@@ -31,13 +31,14 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
     .EXAMPLE
         Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -ChangeReason "Consolidating filters (CHG0129)"
 
-        Removes the group and records the reason on its configuration change history.
+        Removes the group and records the reason on its Configuration Change History.
 
     .LINK
         Get-JIMPredefinedSearchCriteriaGroup
         New-JIMPredefinedSearchCriteriaGroup
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$PredefinedSearchId,

@@ -14,7 +14,7 @@ Every run of a Run Profile is an Activity. When a run goes wrong, open its Activ
 - **Complete with error** means at least one object hit an error JIM did not anticipate.
 - **Failed with error** means the run itself stopped, or every object in it failed.
 
-The Activity's execution items name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
+The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
 
 ## `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
@@ -32,7 +32,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Look at what staged them before letting them through: the Connected System's Pending Exports list shows each one and the changes it carries. If they are what you intended, run an Export Run Profile with no limit by hand, as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes. If they are not, correct whatever staged them (usually a Synchronisation Rule's scoping or an Attribute Flow), and synchronise again.
 
-**Check.** The Connected System's Pending Exports list is empty once the export has run.
+**Check.** The export run ends without the warning, and the Connected System's Pending Exports list shows none still **Pending**.
 
 ## `Task was abandoned due to worker crash or restart.`
 
@@ -46,9 +46,17 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person.
 
-**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/synchronisation-rules.md#matching-outcomes) describes.
+**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
+
+## **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
+
+**What it means.** Before provisioning, an export rule's Object Matching Rule found more than one existing Connected System Object in the target for one Metaverse Object, so JIM neither joined it to one nor provisioned another. The message names the Connected System, the rule and the values, and the execution item lists the accounts that matched. Nothing is staged for that export rule; the Metaverse Object's other export rules carry on.
+
+**How to fix.** Make the matched values identify one account: remove or correct the duplicate account in the target, correct the identity's data, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
+
+**Check.** After a corrected target, import it and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation. The Metaverse Object's execution item records the join, or the provisioning, for that export rule.
 
 ## **Could Not Join Due To Existing Join**: `Cannot join this Connected System Object to Metaverse Object (...) - it already has a connector from this Connected System.`
 
@@ -70,7 +78,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** An attribute refers to another object (a manager, a group member) that JIM does not hold for this Connected System, usually because it sits outside the containers JIM manages. The rest of the object is imported.
 
-**How to fix.** [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) explains how to see where each one points and what would resolve it.
+**How to fix.** [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) explains how to see where each one points and what would resolve it.
 
 **Check.** The Connected System's count of unresolved references falls after the next import.
 
@@ -78,9 +86,9 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** The Connected System refused an export, and the rest of the message is its own reason: the account JIM connects as lacks the rights, the change breaks the system's own rules, or a required value is missing. JIM records any refusal it cannot classify as an error it did not anticipate, so the run ends **Complete with error** even though the cause is usually the Connected System's configuration. The change is still waiting, as a Pending Export: JIM tries it again at each Export run after waiting 2, 4, 8 and then 16 minutes, and marks it Failed after the fifth refusal.
 
-**How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector.md#active-directory-will-not-enable-an-account-that-has-no-password).
+**How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector-troubleshooting.md#active-directory-will-not-enable-an-account-that-has-no-password).
 
-**Check.** The next Export run writes the change, and its Pending Export clears. A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
+**Check.** The next Export run writes the change: its Pending Export shows **Exported**, and clears once an import confirms it (at once, for the File and SQL Connectors). A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
 
 ## **Export Pending**: `We exported a change, but did not get confirmation of it`
 
@@ -89,6 +97,14 @@ The same message names creates or updates when those are what the limit holds ba
 **How to fix.** Compare what JIM exported with what the Connected System holds. Where the system changes the case, see [When a target changes the case of a value](../concepts/case-sensitivity.md#when-a-target-changes-the-case-of-a-value); where the import cannot see the attribute, select it on the Connected System's schema.
 
 **Check.** The next confirming import records no Export Pending items, and the Pending Export clears.
+
+## **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
+
+**What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
+
+**How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)).
+
+**Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 
 ## A run ends **Failed with error** before processing anything
 
