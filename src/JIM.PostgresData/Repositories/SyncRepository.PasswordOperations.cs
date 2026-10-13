@@ -1024,7 +1024,7 @@ public partial class SyncRepository
             return [];
 
         // Raw SQL per the worker hot-path rule: asked once per confirming-import page that holds a change awaiting an
-        // Initial Password (#2039). The unique (MetaverseObjectId, ConnectedSystemId) index serves the lookup, and a
+        // Initial Password (#2039), and once per export batch that holds an Update a password could follow (#2158). The unique (MetaverseObjectId, ConnectedSystemId) index serves the lookup, and a
         // read-side projection is exempt from the bulk column list rule.
         const string sql = """
             SELECT DISTINCT "MetaverseObjectId"

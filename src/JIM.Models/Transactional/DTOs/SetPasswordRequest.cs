@@ -61,12 +61,12 @@ public class SetPasswordRequest
     public required PasswordExpiryBehaviour ExpiryBehaviour { get; init; }
 
     /// <summary>
-    /// Whether to enable each account as its password is set, or null to leave it as it is, with two exceptions: a new
-    /// account JIM created disabled only until it had a password is enabled (#2039, #2064); and an account still owed its
-    /// first password, whose provisioning Synchronisation Rule's Initial Password the set now delivers in place of,
-    /// follows that rule's Enable Account (#2160). False is refused: setting a password never disables an account
+    /// Whether to enable each account as its password is set, or null to leave it as it is, with two exceptions: an
+    /// account whose enable JIM held back until it had a password is enabled (#2039, #2064, #2158); and an account still
+    /// owed its first password, whose provisioning Synchronisation Rule's Initial Password the set now delivers in place
+    /// of, follows that rule's Enable Account (#2160). False is refused: setting a password never disables an account
     /// (#2162). Honoured only when <see cref="Targets"/> names the accounts: a propagated password reaches accounts an
-    /// administrator may have disabled on purpose, so it enables none other than such a new account.
+    /// administrator may have disabled on purpose, so it enables none other than such a held account.
     /// </summary>
     public bool? EnableAccount { get; init; }
 

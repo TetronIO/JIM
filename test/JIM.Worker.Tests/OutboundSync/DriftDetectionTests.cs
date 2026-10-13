@@ -400,6 +400,45 @@ public class DriftDetectionTests
     }
 
     /// <summary>
+    /// A distinguished name the directory reports in the case it stored names the entry JIM asked for (#2195), so
+    /// Enforce State must not see a case-only difference on an identifier as drift. Without this, every import stages
+    /// a corrective export of the same DN, which the LDAP Connector then skips as unchanged. An ordinary attribute, and
+    /// an identifier declared case-exact, still drift on case (#2051).
+    /// </summary>
+    [TestCase(true, false, false)]
+    [TestCase(true, true, true)]
+    [TestCase(false, false, true)]
+    public void EvaluateDrift_ValueDifferingOnlyInCase_IsDriftUnlessTheAttributeIsAnIdentifierThatIgnoresCase(
+        bool secondaryExternalId, bool caseExact, bool expectDrift)
+    {
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "CN=Joe Bloggs,DC=panoply,DC=local"
+        });
+
+        DisplayNameCsoAttr.IsSecondaryExternalId = secondaryExternalId;
+        DisplayNameCsoAttr.CaseExact = caseExact;
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "CN=Joe Bloggs,DC=PANOPLY,DC=LOCAL"
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [CreateExportRule(enforceState: true)], null);
+
+        Assert.That(result.HasDrift, Is.EqualTo(expectDrift));
+    }
+
+    /// <summary>
     /// The Enforce State half of #492's delta convergence: a corrective export whose drifted attribute is a
     /// merged auxiliary class's contribution must add the class in the same export, exactly as ordinary export
     /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 019's
@@ -1011,6 +1050,24 @@ public class DriftDetectionTests
         var result = EvaluateDivergedDisplayName(exportRule);
 
         Assert.That(result.HasDrift, Is.False);
+    }
+
+    [Test]
+    public void EvaluateDrift_ExportExpressionNamesAttributeInDifferentCase_ContributorIsStillRecognised()
+    {
+        // Attribute names in expressions ignore case (#2051): mv["display name"] names Display Name, whose import flow
+        // reads DisplayName from this system, so the system's own value is legitimate rather than drift to correct.
+        CreateImportRule(); // DisplayName -> Display Name
+        var exportRule = CreateExportRule();
+        var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
+        exportSource.MetaverseAttribute = null;
+        exportSource.MetaverseAttributeId = null;
+        exportSource.Expression = $"mv[\"{Constants.BuiltInAttributes.DisplayName.ToLowerInvariant()}\"]";
+
+        var result = EvaluateDivergedDisplayName(exportRule);
+
+        Assert.That(result.HasDrift, Is.False,
+            "the contributor check must match the expression's attribute name ignoring case, as the expression itself does");
     }
 
     #endregion

@@ -14,9 +14,10 @@ namespace JIM.Application.Services;
 /// <item>An administrator who named the account decides what that set does: to enable or disable it where they chose,
 /// and whether the password never expires, which every explicit set chooses through its expiry behaviour. Enforce State
 /// puts back a flow's value where it disagrees.</item>
-/// <item>The enabled state only: an account JIM created disabled only because Active Directory refuses an enabled
-/// account with no password (#2039), while the Attribute Flow still asks for it enabled, is enabled. The password is
-/// what it was waiting for.</item>
+/// <item>The enabled state only: an account whose enable JIM held back only because Active Directory refuses an
+/// enabled account with no password, while the Attribute Flow still asks for it enabled, is enabled. The password is
+/// what it was waiting for. The hold is placed on the Create that provisions the account (#2039), or on an Update that
+/// enables it while a password is still owed (#2158).</item>
 /// <item>The account's first password, where an export wrote the account's flags, leaves both to the Attribute Flow
 /// behind that export. These are the cases the ladder exists for: an account the flow deliberately creates disabled (a
 /// pre-hire, or a person archived at creation) used to be enabled with a password JIM knows; and a flow asserting
@@ -151,20 +152,21 @@ public static class AccountFlagsPolicy
         };
 
     /// <summary>
-    /// Whether the delivery has to wait while an export to the account is in flight (#2173). An export records that it
-    /// wrote the account's flags only once its batch has come back from the Connector, so one still being sent may be
-    /// writing the very flags this decision would write. Two of JIM's own writes wait for it:
+    /// Whether the delivery has to wait while an export to the account is in flight. An export records what it did to
+    /// the account's flags only once its batch has come back from the Connector, and one still being sent may be doing
+    /// any of three things this delivery must see first:
     /// <list type="bullet">
-    /// <item>enabling the account, whether it follows the Synchronisation Rule or completes a withheld enable, because the
-    /// export may be disabling it (a leaver, say);</item>
-    /// <item>setting or clearing "Password never expires" from the Synchronisation Rule (#2159), because the export may be
-    /// the Attribute Flow that owns the flag.</item>
+    /// <item>disabling the account (a leaver, say) that this decision would enable (#2173);</item>
+    /// <item>writing the flags as the Attribute Flow that owns them, which this decision would otherwise set from the
+    /// Synchronisation Rule (#2159);</item>
+    /// <item>enabling an account that has no password, which Active Directory refuses, so the Connector holds the enable
+    /// back for this very delivery to complete (#2158).</item>
     /// </list>
-    /// An administrator's choice does not wait, and a decision that writes nothing cannot undo what the export writes.
+    /// So every decision JIM takes waits for it, whether it writes a flag or not. An administrator's choice of the
+    /// enabled state does not: it is applied whatever the export writes.
     /// </summary>
     public static bool WaitsForAnExportInFlight(AccountFlagsDecision decision) =>
-        (decision.EnableAccount == true && decision.EnablementBasis != AccountFlagBasis.AdministratorChoice)
-        || decision.PasswordNeverExpiresBasis == AccountFlagBasis.SyncRuleSetting;
+        decision.EnablementBasis != AccountFlagBasis.AdministratorChoice;
 
     /// <summary>
     /// Whether <see cref="Decide"/>'s answer can depend on a withheld enable, so the delivery needs to probe for one.

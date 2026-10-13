@@ -45,6 +45,9 @@ function Test-JIMExpression {
     .PARAMETER MetaverseObjectId
         The ID of a Metaverse Object whose values to test with, for an export Attribute Flow. A value in MvAttributes replaces the object's value for that attribute.
 
+    .PARAMETER AsOf
+        The instant to test as of: what Now() and Today() read. A time without a time zone is read as UTC.
+
     .OUTPUTS
         The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester
         shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what
@@ -84,6 +87,11 @@ function Test-JIMExpression {
         input's absence would do through IfInputHasNoValue.
 
     .EXAMPLE
+        Test-JIMExpression -Expression 'IIF((DateTime)cs["leaveDate"] < Today(), "Leaver", "Active")' -SyncRuleId 12 -MappingId 42 -CsAttributes @{ "leaveDate" = "2026-12-31" } -AsOf '2027-01-15'
+
+        Tests what Attribute Flow 42 would give an object on 15 January 2027, when its leave date has passed.
+
+    .EXAMPLE
         Test-JIMExpression -Expression 'RandomPassword(16, true)'
 
         Tests random password generation (result will vary on each run).
@@ -119,7 +127,10 @@ function Test-JIMExpression {
         [guid]$ConnectedSystemObjectId,
 
         [Parameter(ParameterSetName = 'AttributeFlow')]
-        [guid]$MetaverseObjectId
+        [guid]$MetaverseObjectId,
+
+        [Parameter()]
+        [datetime]$AsOf
     )
 
     process {
@@ -153,6 +164,11 @@ function Test-JIMExpression {
             if ($PSBoundParameters.ContainsKey('MetaverseObjectId')) {
                 $body.metaverseObjectId = $MetaverseObjectId
             }
+        }
+
+        if ($PSBoundParameters.ContainsKey('AsOf')) {
+            # ISO 8601 with no offset unless one was given, so the API reads a bare date or time as UTC.
+            $body.asOf = if ($AsOf.Kind -eq [DateTimeKind]::Unspecified) { $AsOf.ToString('yyyy-MM-ddTHH:mm:ss') } else { $AsOf.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
         }
 
         Write-Verbose "Testing expression: $Expression"

@@ -44,6 +44,14 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     // This ensures expression compilation is only done once per expression string across all sync operations
     private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
 
+    /// <summary>
+    /// The evaluating context's <see cref="ExpressionContext.NowUtc"/>, for <c>Now()</c> and <c>Today()</c>. Compiled
+    /// Expressions are shared and their functions cannot see the context, so <see cref="Evaluate"/> holds it here for
+    /// the duration of the call, on the thread running it, and restores what was there before.
+    /// </summary>
+    [ThreadStatic]
+    private static DateTime? _contextNowUtc;
+
     // Static cache metrics for diagnostics (shared across instances)
     private static long _cacheHits;
     private static long _cacheMisses;
@@ -113,6 +121,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         var hostCulture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = ExpressionText.Culture;
+        var hostClock = _contextNowUtc;
+        _contextNowUtc = context.NowUtc;
         var sw = Stopwatch.StartNew();
         try
         {
@@ -140,6 +150,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         finally
         {
             CultureInfo.CurrentCulture = hostCulture;
+            _contextNowUtc = hostClock;
             sw.Stop();
             if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
             {
@@ -232,6 +243,9 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         }
     }
 
+    /// <summary>The instant <c>Now()</c> reads: the evaluating context's, or the real time.</summary>
+    private static DateTime CurrentUtc() => _contextNowUtc ?? DateTime.UtcNow;
+
     private Lambda GetOrCompileExpression(string expression)
     {
         // Check for cache hit first
@@ -293,12 +307,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) =>
         {
             var prefixText = AsString(prefix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText) ?? false);
+            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText, StringComparison.Ordinal) ?? false);
         }));
         target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) =>
         {
             var suffixText = AsString(suffix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText) ?? false);
+            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText, StringComparison.Ordinal) ?? false);
         }));
         target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) =>
         {
@@ -340,8 +354,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         // Date functions. Now and Today (like RandomPassword and RandomPassphrase below) return a different value on
         // each evaluation; NonRepeatableFunctionDetector lists them, so keep it in step when adding another.
-        target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
-        target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
+        target.SetFunction("Now", (Func<DateTime>)(() => CurrentUtc()));
+        target.SetFunction("Today", (Func<DateTime>)(() => CurrentUtc().Date));
         // FormatDate and ParseDate are counterparts: one writes a date as text in a given format, the other reads text
         // in a given format as a date. Every other reading of text as a date uses the ISO 8601 rule (ExpressionDates).
         target.SetFunction("FormatDate", (Func<object?, string, object?>)((o, format) => ExpressionValueSets.Map(o, v => FormatDate(v, format))));

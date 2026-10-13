@@ -1030,9 +1030,12 @@ try {
             @(
                 @{
                     # DN uses Department to place users in department OUs under OU=Users,OU=Corp
-                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
+                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL
+                    # The domain components are deliberately upper case against the lab's lower-case domain: the
+                    # directory reports a DN in the case it stored, and JIM must still confirm the export, not stage
+                    # it again, and not see the stored case as drift (#2195). The real AD lab's domain is upper case.
                     LdapAttr = "distinguishedName"
-                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL"'
                 }
                 @{
                     # userAccountControl: Conditional expression based on Status

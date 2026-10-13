@@ -4,13 +4,14 @@
 using System.Collections;
 using System.Text.Json;
 using JIM.Models.Expressions;
+using JIM.Models.Logic;
 using JIM.Web.Models.Api;
 
 namespace JIM.Web.Extensions.Api;
 
 /// <summary>
-/// Reads the REST API's sample attribute values (<see cref="TestExpressionRequest"/>) as Attribute Flow tester inputs
-/// (#2055): null is no value, an array is several values, and anything else is one value.
+/// Reads the REST API's sample attribute values (<see cref="TestExpressionRequest"/>, <see cref="TestScopeRequest"/>) as
+/// configuration tester inputs (#2055): null is no value, an array is several values, and anything else is one value.
 /// </summary>
 public static class TestExpressionSampleValues
 {
@@ -42,6 +43,14 @@ public static class TestExpressionSampleValues
 
         return expressionAttributes;
     }
+
+    /// <summary>
+    /// The samples in <paramref name="attributes"/> as configuration tester inputs, one per attribute.
+    /// </summary>
+    public static IEnumerable<AttributeSample> ToAttributeSamples(Dictionary<string, object?>? attributes) =>
+        attributes == null
+            ? []
+            : attributes.Select(attribute => new AttributeSample(attribute.Key, Values(attribute.Value)));
 
     private static List<object> Values(object? sample) => sample switch
     {

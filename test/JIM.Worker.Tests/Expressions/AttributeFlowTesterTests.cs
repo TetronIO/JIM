@@ -75,6 +75,36 @@ public class AttributeFlowTesterTests
 
     private static AttributeFlowTestInput Cs(string name, params object[] values) => new(ExpressionInputSource.ConnectedSystem, name, values);
 
+    #region Run as of
+
+    [Test]
+    public void Test_AsOf_NowAndTodayReadThatInstant()
+    {
+        var (rule, mapping, source) = Flow("FormatDate(Today(), \"yyyy-MM-dd\") + \" \" + FormatDate(Now(), \"HH:mm\")");
+
+        var result = AttributeFlowTester.Test(rule, mapping, source, [], _evaluator,
+            asOfUtc: new DateTime(2027, 2, 14, 9, 30, 0, DateTimeKind.Utc));
+
+        Assert.That(result.Evaluation!.Values, Is.EqualTo(new object[] { "2027-02-14 09:30" }));
+    }
+
+    [Test]
+    public void Test_AsOf_AppliesToTheIfInputHasNoValueOutcomesToo()
+    {
+        var (rule, mapping, source) = Flow("cs[\"givenName\"] + \" \" + FormatDate(Today(), \"yyyy\")");
+
+        var result = AttributeFlowTester.Test(rule, mapping, source, [Cs("givenName", "Priya")], _evaluator,
+            asOfUtc: new DateTime(2031, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Evaluation!.Values, Is.EqualTo(new object[] { "Priya 2031" }));
+            Assert.That(result.IfInputHasNoValue.Single().Evaluation.Values, Is.EqualTo(new object[] { " 2031" }));
+        }
+    }
+
+    #endregion
+
     #region DescribeInputs
 
     [Test]

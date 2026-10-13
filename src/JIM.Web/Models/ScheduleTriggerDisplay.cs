@@ -153,7 +153,7 @@ public static class ScheduleTriggerDisplay
 
         if (dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
         {
-            if (hour.StartsWith("*/"))
+            if (hour.StartsWith("*/", StringComparison.Ordinal))
                 return $"Every {hour[2..]} hours";
             return $"Daily at {FormatCronTime(hour, minute)}";
         }
@@ -167,13 +167,13 @@ public static class ScheduleTriggerDisplay
             return dayOfWeek != "*" ? $"{dayDesc}, {hourlyDesc.ToLowerInvariant()}" : hourlyDesc;
         }
 
-        if (minute.StartsWith("*/") && hour == "*")
+        if (minute.StartsWith("*/", StringComparison.Ordinal) && hour == "*")
         {
             var interval = minute[2..];
             return dayOfWeek != "*" ? $"{dayDesc}, every {interval} min" : $"Every {interval} minutes";
         }
 
-        if (hour.StartsWith("*/") && minute == "0")
+        if (hour.StartsWith("*/", StringComparison.Ordinal) && minute == "0")
         {
             var interval = hour[2..];
             return dayOfWeek != "*" ? $"{dayDesc}, every {interval} hrs" : $"Every {interval} hours";

@@ -776,9 +776,11 @@ public class ExportExecutionServer
 
                         try
                         {
-                            // Which of the batch's Creates an Initial Password will follow, decided once for the batch
-                            // and read again when the passwords are staged below (#2039).
-                            var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(immediateExports, SyncRepo, connectedSystem.Name);
+                            // Which of the batch's exports a password will follow, decided once for the batch: Creates from
+                            // the rule, read again when the passwords are staged below (#2039), and Updates from what is
+                            // still owed to the account (#2158).
+                            var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(immediateExports, SyncRepo, connectedSystem,
+                                connector is IConnectorPasswordManagement);
 
                             // Execute batch via connector
                             List<ConnectedSystemExportResult> exportResults;
@@ -1389,8 +1391,9 @@ public class ExportExecutionServer
 
             try
             {
-                // A deferred Create is followed by an Initial Password exactly as one sent on the first pass is (#2039).
-                var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, SyncRepo, connectedSystem.Name);
+                // A deferred export is followed by a password exactly as one sent on the first pass is (#2039, #2158).
+                var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, SyncRepo, connectedSystem,
+                    connector is IConnectorPasswordManagement);
 
                 List<ConnectedSystemExportResult> exportResults;
                 using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
@@ -1553,8 +1556,9 @@ public class ExportExecutionServer
                     statesBeforeExecuting = await MarkBatchAsExecutingAsync(batch, batchRepo);
 
                     // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
-                    // set on the primary's copies would never reach this batch's connector (#2039).
-                    var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, batchRepo, connectedSystem.Name);
+                    // set on the primary's copies would never reach this batch's connector (#2039, #2158).
+                    var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
+                        batchConnector is IConnectorPasswordManagement);
 
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
@@ -2114,7 +2118,7 @@ public class ExportExecutionServer
     /// </param>
     /// <param name="initialPasswordRuleIds">
     /// The batch's provisioning Synchronisation Rules that ask for an Initial Password, as
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> read them before the batch was sent (#2039), so the
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/> read them before the batch was sent (#2039), so the
     /// passwords staged here are the ones the Connector was told would follow. Null when that lookup failed.
     /// </param>
     /// <param name="cancellationToken">
@@ -2482,25 +2486,38 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Works out, once for the batch about to be sent, which of its Creates an Initial Password will follow, and says
-    /// so on each of them (<see cref="PendingExport.InitialPasswordFollows"/>), so a Connector whose target refuses an
-    /// enabled account with no password can create it disabled instead (#2039). Returns the batch's provisioning
-    /// Synchronisation Rules that ask for an Initial Password, for <see cref="StageInitialPasswordsForBatchAsync"/> to
-    /// stage the passwords from the same answer: the lookup moved ahead of the Connector call rather than being repeated.
+    /// Works out, once for the batch about to be sent, which of its exports a password will follow, and says so on each
+    /// of them (<see cref="PendingExport.InitialPasswordFollows"/>), so a Connector whose target refuses to enable an
+    /// account that has no password can hold the enable back for the delivery to complete. Returns the batch's
+    /// provisioning Synchronisation Rules that ask for an Initial Password, for <see cref="StageInitialPasswordsForBatchAsync"/>
+    /// to stage the passwords from the same answer: the lookup moved ahead of the Connector call rather than being repeated.
+    /// <list type="bullet">
+    /// <item>A Create is flagged when its provisioning Synchronisation Rule asks for an Initial Password (#2039): the
+    /// account is created disabled and enabled once the password is set.</item>
+    /// <item>An Update is flagged when its account's person is still owed a password on this Connected System (#2158),
+    /// whatever its origin: queued, retrying or parked, the confirming import's own hold test
+    /// (<see cref="ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync"/>), so the flag and the hold never disagree.
+    /// A Connector then holds an enable its target refuses for want of a password, and the delivery completes it.</item>
+    /// <item>Every other export is not flagged.</item>
+    /// </list>
     /// <para>
     /// Every export in the batch is decided, the ones no password follows included, so the flag always reflects this
-    /// batch's answer. A batch with no Create from a provisioning rule reads nothing.
+    /// batch's answer. Each lookup is made at most once per batch, and only when it can matter: the rule lookup when the
+    /// batch holds a Create from a provisioning rule, and the owed lookup when it holds an Update to an account joined to a
+    /// Metaverse Object and the Connector can set passwords (one that cannot has no password queued to complete anything).
     /// </para>
     /// <para>
-    /// A failed lookup is contained, as it was when staging made it: no Create is flagged, so each is sent as its
-    /// Attribute Flows say, and null is returned so staging reports every account it creates as owed a password
-    /// nobody recorded. Failing the batch instead would stop an export over a question about passwords.
+    /// A failed lookup is contained, as it was when staging made it. A failed rule lookup flags no Create, so each is sent
+    /// as its Attribute Flows say, and null is returned so staging reports every account it creates as owed a password
+    /// nobody recorded. A failed owed lookup flags no Update, so a refused enable is reported on the export as it would be
+    /// without the flag. Failing the batch instead would stop an export over a question about passwords.
     /// </para>
     /// </summary>
-    private static async Task<IReadOnlySet<int>?> FlagCreatesFollowedByAnInitialPasswordAsync(
+    private static async Task<IReadOnlySet<int>?> FlagExportsFollowedByAPasswordAsync(
         List<PendingExport> batch,
         ISyncRepository repository,
-        string connectedSystemName)
+        ConnectedSystem connectedSystem,
+        bool connectorSetsPasswords)
     {
         var provisioningRuleIds = batch
             .Where(IsProvisioningCreate)
@@ -2510,14 +2527,33 @@ public class ExportExecutionServer
 
         var rulesAskingForAPassword = provisioningRuleIds.Count == 0
             ? new HashSet<int>()
-            : await TryReadRulesAskingForAPasswordAsync(provisioningRuleIds, repository, connectedSystemName);
+            : await TryReadRulesAskingForAPasswordAsync(provisioningRuleIds, repository, connectedSystem.Name);
+
+        var updatedPeople = connectorSetsPasswords
+            ? batch
+                .Where(pe => pe.ChangeType == PendingExportChangeType.Update)
+                .Select(pe => pe.ConnectedSystemObject?.MetaverseObjectId)
+                .OfType<Guid>()
+                .Distinct()
+                .ToList()
+            : [];
+
+        var peopleOwedAPassword = updatedPeople.Count == 0
+            ? new HashSet<Guid>()
+            : await TryReadPeopleOwedAPasswordAsync(updatedPeople, repository, connectedSystem);
 
         foreach (var pendingExport in batch)
         {
-            pendingExport.InitialPasswordFollows = rulesAskingForAPassword != null
-                && pendingExport.ChangeType == PendingExportChangeType.Create
-                && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
-                && rulesAskingForAPassword.Contains(provisioningRuleId);
+            pendingExport.InitialPasswordFollows = pendingExport.ChangeType switch
+            {
+                PendingExportChangeType.Create => rulesAskingForAPassword != null
+                    && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
+                    && rulesAskingForAPassword.Contains(provisioningRuleId),
+                PendingExportChangeType.Update => peopleOwedAPassword != null
+                    && pendingExport.ConnectedSystemObject?.MetaverseObjectId is { } metaverseObjectId
+                    && peopleOwedAPassword.Contains(metaverseObjectId),
+                _ => false
+            };
         }
 
         return rulesAskingForAPassword;
@@ -2525,7 +2561,7 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Which of the given Synchronisation Rules ask for an Initial Password, or null when that could not be read; see
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> for why a failure is contained.
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/> for why a failure is contained.
     /// </summary>
     private static async Task<HashSet<int>?> TryReadRulesAskingForAPasswordAsync(
         List<int> provisioningRuleIds,
@@ -2538,9 +2574,32 @@ public class ExportExecutionServer
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Warning(ex, "FlagCreatesFollowedByAnInitialPasswordAsync: Could not read which Synchronisation Rules ask for an Initial Password " +
+            Log.Warning(ex, "FlagExportsFollowedByAPasswordAsync: Could not read which Synchronisation Rules ask for an Initial Password " +
                 "before sending a batch to {ConnectedSystem}. Its Creates are sent as their Attribute Flows say, and any account they create " +
                 "is reported as owed a password nobody recorded", LogSanitiser.Sanitise(connectedSystemName));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Which of the given Metaverse Objects are still owed a password on the Connected System, or null when that could
+    /// not be read; see <see cref="FlagExportsFollowedByAPasswordAsync"/> for why a failure is contained.
+    /// </summary>
+    private static async Task<HashSet<Guid>?> TryReadPeopleOwedAPasswordAsync(
+        List<Guid> metaverseObjectIds,
+        ISyncRepository repository,
+        ConnectedSystem connectedSystem)
+    {
+        try
+        {
+            return await repository.GetMetaverseObjectIdsOwedPasswordAsync(connectedSystem.Id, metaverseObjectIds);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "FlagExportsFollowedByAPasswordAsync: Could not read which accounts are still owed a password before sending a batch " +
+                "to {ConnectedSystem}. Its Updates are sent as their Attribute Flows say, so one enabling an account the target will not enable " +
+                "without a password is reported on its export rather than held until the password is delivered",
+                LogSanitiser.Sanitise(connectedSystem.Name));
             return null;
         }
     }
@@ -2560,10 +2619,11 @@ public class ExportExecutionServer
     /// password arrives. Every written change is decided, the unreported ones cleared: the mark describes this write,
     /// and a change marked on an earlier attempt and sent again must not keep a hold this write did not ask for.
     /// <para>
-    /// A Connector may only report this for an export JIM said an Initial Password follows
-    /// (<see cref="PendingExport.InitialPasswordFollows"/>). A report on any other export breaks that contract: it is
-    /// logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any mismatch is
-    /// reported, instead of being held for a password nobody will deliver.
+    /// A Connector may only report this for an export JIM said a password follows
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>): a Create whose provisioning rule asks for an Initial
+    /// Password, or an Update to an account still owed a password (#2158). A report on any other export breaks that
+    /// contract: it is logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any
+    /// mismatch is reported, instead of being held for a password nobody will deliver.
     /// </para>
     /// </summary>
     private static void MarkChangesAwaitingInitialPassword(
@@ -2576,7 +2636,7 @@ public class ExportExecutionServer
         if (reported.Count > 0 && !export.InitialPasswordFollows)
         {
             Log.Error("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
-                "on Pending Export {ExportId}, but JIM did not say an Initial Password follows it. The changes are not marked, and are reconciled " +
+                "on Pending Export {ExportId}, but JIM did not say a password follows it. The changes are not marked, and are reconciled " +
                 "as ordinary changes; this is a defect in the Connector",
                 LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", reported)), export.Id);
         }
@@ -2616,7 +2676,7 @@ public class ExportExecutionServer
     /// </para>
     /// <para>
     /// Which rules ask for a password is read for the batch just before it is sent (see
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/>), rather than stamped onto the export when it was
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/>), rather than stamped onto the export when it was
     /// staged, so that switching the feature on reaches work already queued, and so that a deployment not using it
     /// writes no rows at all. Staging reuses that one lookup, so the accounts given a password are exactly the ones the
     /// Connector was told one would follow (#2039). A live user-set or propagated password change that will reach the

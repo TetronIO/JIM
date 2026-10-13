@@ -4,6 +4,7 @@
 @using JIM.Models.Expressions
 @using JIM.Models.Interfaces
 @using JIM.Models.Logic
+@using JIM.Web.Models
 @inject IExpressionEvaluator ExpressionEvaluator
 @inject IJimApplicationFactory JimFactory
 
@@ -25,33 +26,8 @@
 
 @if (_fromObject)
 {
-    <div class="mt-3">
-        <SearchField Value="@_objectSearch" ValueChanged="SearchObjectsAsync" Label="@ObjectSearchLabel"
-                     Placeholder="Search by name" />
-        @if (_objectResults.Count > 0)
-        {
-            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
-                @foreach (var found in _objectResults)
-                {
-                    var choice = found;
-                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="pa-0" OnClick="@(() => LoadObjectAsync(choice))"
-                               aria-label="@($"Load values from {choice.Name}")">
-                        <ObjectChip Kind="ObjectKind" TypeName="@choice.TypeName" Name="@choice.Name" Class="ma-0" />
-                    </MudButton>
-                }
-            </MudStack>
-        }
-        else if (!string.IsNullOrWhiteSpace(_objectSearch) && _searched)
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No objects match.</MudText>
-        }
-        @if (_loadedObjectName != null)
-        {
-            <MudText Typo="Typo.body2" Class="mt-2">
-                Values loaded from <strong>@_loadedObjectName</strong>. Change any of them to try a variation.
-            </MudText>
-        }
-    </div>
+    <TestObjectPicker Kind="ObjectKind" ConnectedSystemId="SyncRule.ConnectedSystemId" ConnectedSystemObjectType="SyncRule.ConnectedSystemObjectType"
+                      MetaverseObjectTypeId="SyncRule.MetaverseObjectType?.Id" Label="@ObjectSearchLabel" OnPicked="LoadObjectAsync" Class="mt-3" />
 }
 
 @if (_inputs.Count == 0)
@@ -71,7 +47,7 @@ else
             {
                 var descriptor = input;
                 var accessor = descriptor.Accessor;
-                var absent = _noValue.Contains(accessor);
+                var state = StateOf(accessor);
                 <tr @key="accessor">
                     <td>
                         <AttributeChip Kind="@(descriptor.Source == ExpressionInputSource.Metaverse ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
@@ -79,47 +55,19 @@ else
                     </td>
                     <td class="mud-text-secondary">@DescribeType(descriptor)</td>
                     <td style="min-width: 16rem">
-                        @if (!descriptor.InSchema)
+                        @if (descriptor is { Type: { } type, Plurality: { } plurality })
                         {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@NotHeldExplanation(descriptor)</MudText>
-                        }
-                        else if (descriptor.Plurality == AttributePlurality.MultiValued)
-                        {
-                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" AlignItems="AlignItems.Center">
-                                @foreach (var value in ValuesOf(accessor).ToList())
-                                {
-                                    var held = value;
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
-                                             OnClose="@(() => RemoveValue(accessor, held))">@held</MudChip>
-                                }
-                            </MudStack>
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
-                                              Placeholder="@Placeholder(descriptor.Type)" Value="@_pendingValues.GetValueOrDefault(accessor)"
-                                              ValueChanged="@(v => _pendingValues[accessor] = v)"
-                                              OnKeyDown="@(e => AddOnEnter(e, accessor))" />
-                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => AddPendingValue(accessor))">Add value</MudButton>
-                            </MudStack>
-                        }
-                        else if (descriptor.Type == AttributeDataType.Boolean)
-                        {
-                            <MudSelect T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
-                                       Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))">
-                                <MudSelectItem T="string" Value="@("True")">True</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("False")">False</MudSelectItem>
-                            </MudSelect>
+                            <TestInputValueEditor Label="@accessor" Type="type" Plurality="plurality" State="state" OnChanged="ClearResult" />
                         }
                         else
                         {
-                            <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
-                                          Placeholder="@Placeholder(descriptor.Type)"
-                                          Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))" />
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@NotHeldExplanation(descriptor)</MudText>
                         }
                     </td>
                     <td>
                         @if (descriptor.InSchema)
                         {
-                            <MudCheckBox T="bool" Value="absent" ValueChanged="@(v => SetNoValue(accessor, v))" Dense="true"
+                            <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValue(state, v))" Dense="true"
                                          aria-label="@($"{accessor} has no value")" />
                         }
                     </td>
@@ -128,6 +76,8 @@ else
         </tbody>
     </MudSimpleTable>
 }
+
+<RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
 
 <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
 
@@ -283,8 +233,6 @@ else
     [Parameter, EditorRequired]
     public SyncRuleMappingSource Source { get; set; } = null!;
 
-    private sealed record FoundObject(Guid Id, string? Name, string? TypeName);
-
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
         new(false, "Sample values"),
@@ -292,16 +240,11 @@ else
     ];
 
     private IReadOnlyList<AttributeFlowTestInputDescriptor> _inputs = [];
-    private readonly Dictionary<string, List<string>> _values = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _noValue = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string?> _pendingValues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TestInputState> _states = new(StringComparer.Ordinal);
+    private DateTime? _asOf;
     private string? _resolvedFrom;
     private string _targetName = string.Empty;
     private bool _fromObject;
-    private string? _objectSearch;
-    private bool _searched;
-    private List<FoundObject> _objectResults = [];
-    private string? _loadedObjectName;
     private AttributeFlowTestResult? _result;
     private string? _parseError;
     private int? _errorPosition;
@@ -324,12 +267,6 @@ else
 
         _resolvedFrom = Expression;
         _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
-        foreach (var input in _inputs.Where(input => !_values.ContainsKey(input.Accessor)))
-        {
-            _values[input.Accessor] = [];
-            _noValue.Add(input.Accessor);
-        }
-
         ClearResult();
     }
 
@@ -340,95 +277,33 @@ else
         _errorPosition = null;
     }
 
-    private List<string> ValuesOf(string accessor) => _values.TryGetValue(accessor, out var values) ? values : [];
-
-    /// <summary>
-    /// Typing a value means the input has one, so "No value" is cleared; clearing the box leaves it as empty text until
-    /// "No value" is ticked again. The editor is never disabled, so an untouched input can simply be typed into.
-    /// </summary>
-    private void SetSingleValue(string accessor, string? value)
+    private TestInputState StateOf(string accessor)
     {
-        _values[accessor] = [value ?? string.Empty];
-        _noValue.Remove(accessor);
+        if (!_states.TryGetValue(accessor, out var state))
+            _states[accessor] = state = new TestInputState();
+        return state;
+    }
+
+    private void SetNoValue(TestInputState state, bool noValue)
+    {
+        state.NoValue = noValue;
         ClearResult();
     }
 
-    private void SetNoValue(string accessor, bool noValue)
+    private void SetAsOf(DateTime? asOf)
     {
-        if (noValue)
-            _noValue.Add(accessor);
-        else
-            _noValue.Remove(accessor);
+        _asOf = asOf;
         ClearResult();
     }
 
-    private void AddPendingValue(string accessor)
-    {
-        var pending = _pendingValues.GetValueOrDefault(accessor);
-        if (string.IsNullOrEmpty(pending))
-            return;
-
-        ValuesOf(accessor).Add(pending);
-        _values[accessor] = ValuesOf(accessor);
-        _pendingValues[accessor] = null;
-        _noValue.Remove(accessor);
-        ClearResult();
-    }
-
-    private void AddOnEnter(KeyboardEventArgs e, string accessor)
-    {
-        if (e.Key == "Enter")
-            AddPendingValue(accessor);
-    }
-
-    private void RemoveValue(string accessor, string value)
-    {
-        ValuesOf(accessor).Remove(value);
-        if (ValuesOf(accessor).Count == 0)
-            _noValue.Add(accessor);
-        ClearResult();
-    }
-
-    private void SetFromObject(bool fromObject)
-    {
-        _fromObject = fromObject;
-        _objectResults = [];
-        _objectSearch = null;
-        _searched = false;
-    }
-
-    private async Task SearchObjectsAsync(string? search)
-    {
-        _objectSearch = search;
-        _searched = false;
-        _objectResults = [];
-        if (string.IsNullOrWhiteSpace(search))
-            return;
-
-        using var jim = JimFactory.Create();
-        if (Exporting)
-        {
-            var found = await jim.Metaverse.GetMetaverseObjectsAsync(1, 8, SyncRule.MetaverseObjectType?.Id, search);
-            _objectResults = found.Results.Select(mvo => new FoundObject(mvo.Id, mvo.NameOrId, mvo.TypeName)).ToList();
-        }
-        else
-        {
-            var found = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(SyncRule.ConnectedSystemId, 1, 8, search,
-                objectTypeFilter: [SyncRule.ConnectedSystemObjectType.Id]);
-            _objectResults = found.Results
-                .Select(cso => new FoundObject(cso.Id, ObjectDescription.ChipName(cso.DisplayName, cso.ExternalIdValue), SyncRule.ConnectedSystemObjectType.Name))
-                .ToList();
-        }
-
-        _searched = true;
-    }
+    private void SetFromObject(bool fromObject) => _fromObject = fromObject;
 
     /// <summary>
     /// Fills the inputs from a real object (#2055): every value it holds for each attribute the Expression reads, as the
     /// text the inputs take, and "No value" for an attribute it holds none for. An import flow that reads mv[...] also
     /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
     /// </summary>
-    private async Task LoadObjectAsync(FoundObject found)
+    private async Task LoadObjectAsync(TestObjectPicker.PickedObject found)
     {
         using var jim = JimFactory.Create();
         var loaded = new List<AttributeFlowTestInput>();
@@ -445,17 +320,8 @@ else
         }
 
         foreach (var input in loaded)
-        {
-            _values[input.Accessor] = input.Values.Select(ToEditableText).ToList();
-            if (input.Values.Count == 0)
-                _noValue.Add(input.Accessor);
-            else
-                _noValue.Remove(input.Accessor);
-        }
+            StateOf(input.Accessor).Load(input.Values.Select(ToEditableText));
 
-        _loadedObjectName = found.Name ?? found.Id.ToString();
-        _objectResults = [];
-        _searched = false;
         ClearResult();
     }
 
@@ -483,13 +349,12 @@ else
         }
 
         var inputs = _inputs
-            .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName,
-                _noValue.Contains(input.Accessor) ? [] : ValuesOf(input.Accessor).Cast<object>().ToList()))
+            .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName, StateOf(input.Accessor).TestValues))
             .ToList();
 
         // The source as it stands in the editor, with the Expression as typed.
         var source = new SyncRuleMappingSource { Expression = Expression, MissingInputBehaviour = Source.MissingInputBehaviour };
-        _result = AttributeFlowTester.Test(SyncRule, Mapping, source, inputs, ExpressionEvaluator);
+        _result = AttributeFlowTester.Test(SyncRule, Mapping, source, inputs, ExpressionEvaluator, _asOf);
     }
 
     private static string DescribeType(AttributeFlowTestInputDescriptor input) => input.Type is { } type
@@ -500,17 +365,6 @@ else
         input.Source == ExpressionInputSource.ConnectedSystem && Exporting
             ? "An export Attribute Flow reads only the Metaverse Object, so this input never has a value."
             : $"'{(input.Source == ExpressionInputSource.ConnectedSystem ? SyncRule.ConnectedSystemObjectType?.Name : SyncRule.MetaverseObjectType?.Name)}' has no attribute of this name, so this input never has a value.";
-
-    private static string? Placeholder(AttributeDataType? type) => type switch
-    {
-        AttributeDataType.DateTime => "2026-03-15 or 2026-03-15T10:30:00Z",
-        AttributeDataType.Number or AttributeDataType.LongNumber => "A whole number",
-        AttributeDataType.Decimal => "A number, such as 12.5",
-        AttributeDataType.Guid => "A GUID",
-        AttributeDataType.Reference => "The id of the object it refers to",
-        AttributeDataType.Binary => "Base64",
-        _ => null
-    };
 
     private static string DescribeValueProcessing(AttributeFlowTestResult tested, AttributeFlowEvaluation evaluation)
     {

@@ -1,6 +1,6 @@
 ---
 title: Scoping Criteria
-description: "Decide which objects a Synchronisation Rule applies to, how criteria are evaluated, and how to preview a scope change."
+description: "Decide which objects a Synchronisation Rule applies to, how criteria are evaluated, and how to test and preview a scope change."
 type: object
 audience: administrator
 ---
@@ -80,6 +80,16 @@ A relative criterion is a **count**, a **unit** (Hours, Days, Weeks, Months or Y
 For example, to scope an export rule to leavers terminated between 30 and 364 days ago, use an **All** group with two criteria on the termination-date attribute: *on or before* `30 days ago` and *after* `364 days ago`.
 
 Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) and the REST API.
+
+## Testing a scope
+
+The **Test this scope** panel at the foot of the Scope tab answers whether one object would be in scope, before anything runs. It evaluates the criteria as they stand on the form, saved or not, with the same evaluation a synchronisation uses, so a test cannot pass where a synchronisation would not.
+
+- **Values**<br /> Each attribute the criteria compare gets an editor for its type: a date for a date/time attribute, True or False for a Boolean, several values for a multi-valued attribute. An attribute left untouched, or with **No value** ticked, holds no value. **From an object** loads a real object's values instead (a Connected System Object for an import rule, a Metaverse Object for an export rule), which you can then edit to try a variation.
+- **Run as of**<br /> Relative dates resolve against the date and time you choose (UTC), or the current time when you leave it empty. Use it to check a leaver rule on the day it should let go.
+- **Result**<br /> Whether the object is in scope, each group and criterion with what the object held, and when the outcome next changes as time passes, the values staying the same. For example, a leave date of 1 November under *after* `30 days ago` reports that the object leaves scope at midnight UTC on 1 December.
+
+Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint, which test the saved criteria.
 
 ## Previewing a scope change
 

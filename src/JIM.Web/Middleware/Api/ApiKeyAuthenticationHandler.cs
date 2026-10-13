@@ -73,7 +73,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         var clientIp = Context.Connection.RemoteIpAddress.ToNormalisedString();
 
         // Validate the key format
-        if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix))
+        if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix, StringComparison.Ordinal))
         {
             Log.Warning("ApiKeyAuthenticationHandler: Invalid API key format provided");
             RecordFailedAuthenticationEvent("Invalid API key format", apiKeyPrefix: null, clientIp);

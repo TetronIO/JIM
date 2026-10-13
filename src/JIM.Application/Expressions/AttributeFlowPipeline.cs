@@ -35,12 +35,15 @@ public static class AttributeFlowPipeline
     /// <param name="metaverseAttributes">The <c>mv[...]</c> view, or null where the Expression has none (the ordinary
     /// inbound pass). Absent inputs are counted only on the sides that have a view: an Expression with no Metaverse view
     /// reads nothing from <c>mv[...]</c>, and counting it as missing would fail every object.</param>
+    /// <param name="nowUtc">The instant <c>Now()</c> and <c>Today()</c> read; null for the real time, as synchronisation
+    /// runs. A test "as of" a moment passes it.</param>
     public static ExpressionSourceEvaluation EvaluateSource(
         IExpressionEvaluator expressionEvaluator,
         string expression,
         MissingInputBehaviour missingInputBehaviour,
         IDictionary<string, object?>? connectedSystemAttributes,
-        IDictionary<string, object?>? metaverseAttributes)
+        IDictionary<string, object?>? metaverseAttributes,
+        DateTime? nowUtc = null)
     {
         ArgumentNullException.ThrowIfNull(expressionEvaluator);
         ArgumentException.ThrowIfNullOrWhiteSpace(expression);
@@ -65,7 +68,7 @@ public static class AttributeFlowPipeline
         object? result;
         try
         {
-            result = expressionEvaluator.Evaluate(expression, new ExpressionContext(metaverseAttributes, connectedSystemAttributes));
+            result = expressionEvaluator.Evaluate(expression, new ExpressionContext(metaverseAttributes, connectedSystemAttributes) { NowUtc = nowUtc });
         }
         catch (ExpressionEvaluationException ex)
         {
@@ -130,13 +133,15 @@ public static class AttributeFlowPipeline
     /// </summary>
     /// <param name="metaverseAttributes">The Metaverse Object's effective values, for a Metaverse-Derived Attribute
     /// Flow (#1750) only; null for the ordinary inbound pass.</param>
+    /// <param name="nowUtc">See <see cref="EvaluateSource"/>.</param>
     public static AttributeFlowEvaluation EvaluateInbound(
         ConnectedSystemObject connectedSystemObject,
         ConnectedSystemObjectType connectedSystemObjectType,
         SyncRuleMapping mapping,
         SyncRuleMappingSource source,
         IExpressionEvaluator expressionEvaluator,
-        IDictionary<string, object?>? metaverseAttributes)
+        IDictionary<string, object?>? metaverseAttributes,
+        DateTime? nowUtc = null)
     {
         ArgumentNullException.ThrowIfNull(mapping);
         ArgumentNullException.ThrowIfNull(source);
@@ -145,7 +150,7 @@ public static class AttributeFlowPipeline
             ?? throw new ArgumentException("An import Attribute Flow has a target Metaverse attribute.", nameof(mapping));
         var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType);
 
-        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes);
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc);
         return Resolve(evaluated, target.Type, target.AttributePlurality, InboundTextProcessing(mapping, target));
     }
 
@@ -154,11 +159,13 @@ public static class AttributeFlowPipeline
     /// mapping's Missing Input Behaviour, the Expression and conversion to the target Connected System attribute's
     /// type. A Reference target takes the reference's text (for example a DN). Export applies no value processing.
     /// </summary>
+    /// <param name="nowUtc">See <see cref="EvaluateSource"/>.</param>
     public static AttributeFlowEvaluation EvaluateExport(
         IDictionary<string, object?> metaverseAttributes,
         SyncRuleMapping mapping,
         SyncRuleMappingSource source,
-        IExpressionEvaluator expressionEvaluator)
+        IExpressionEvaluator expressionEvaluator,
+        DateTime? nowUtc = null)
     {
         ArgumentNullException.ThrowIfNull(metaverseAttributes);
         ArgumentNullException.ThrowIfNull(mapping);
@@ -167,7 +174,7 @@ public static class AttributeFlowPipeline
         var target = mapping.TargetConnectedSystemAttribute
             ?? throw new ArgumentException("An export Attribute Flow has a target Connected System attribute.", nameof(mapping));
 
-        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes: null, metaverseAttributes);
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes: null, metaverseAttributes, nowUtc);
         return Resolve(evaluated, ExportValueType(target.Type), target.AttributePlurality, processText: null);
     }
 

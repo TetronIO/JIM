@@ -54,6 +54,23 @@ Describe 'Test-JIMExpression' {
         }
     }
 
+    It 'Posts the instant to test as of' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; resultLines = @('2027-01-15') }
+            }
+
+            Test-JIMExpression -Expression 'FormatDate(Today(), "yyyy-MM-dd")' -AsOf '2027-01-15' | Out-Null
+            $script:capturedBody.asOf | Should -Be '2027-01-15T00:00:00'
+
+            Test-JIMExpression -Expression 'Now()' -AsOf ([datetime]::new(2027, 1, 15, 9, 30, 0, [DateTimeKind]::Utc)) | Out-Null
+            $script:capturedBody.asOf | Should -Be '2027-01-15T09:30:00Z'
+        }
+    }
+
     It 'Posts the Attribute Flow to test the expression as' {
         InModuleScope JIM {
             $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
