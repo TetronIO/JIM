@@ -63,7 +63,7 @@ function Set-JIMConnectedSystemObjectPassword {
     .PARAMETER EnableAccount
         Enables the account as part of setting the password, whatever its Attribute Flows say. Omit it to leave the
         account's enabled state as it is, which is what a reset on an already-enabled account should do; the one
-        exception is a new Active Directory account JIM created disabled only until it had a password, which the
+        exception is an Active Directory account whose enable JIM held back until it had a password, which the
         password enables as its Attribute Flow asks. Directories that refuse to enable an account without a
         compliant password need the password first, which is why this belongs here.
 
