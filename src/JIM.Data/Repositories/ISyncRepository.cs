@@ -1260,6 +1260,12 @@ public interface ISyncRepository
     /// held, one whose account is not is released. Expired and Cancelled changes are never delivered, so they owe
     /// nothing.
     /// </para>
+    /// <para>
+    /// Asked too by the export run, once per batch holding an Update to an account joined to a Metaverse Object, sent
+    /// through a Connector that can set passwords (#2158): an Update to an account still owed one is flagged
+    /// (<c>PendingExport.InitialPasswordFollows</c>), so an enable the target refuses for want of a password is held
+    /// for the delivery to complete. The same test as the hold, so the flag and the hold never disagree.
+    /// </para>
     /// </summary>
     Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
 
