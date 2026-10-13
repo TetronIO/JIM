@@ -1,9 +1,9 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phases 3-0 and 3a to 3e complete; Phase 3f next)
+- **Status:** Done
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
-- **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
-- **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
+- **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/done/PRD_CAUSALITY_EXPLORER.md)
+- **Earlier phases:** [Phase 1 plan](CAUSAL_PROVENANCE.md), [Phase 2 plan](CAUSAL_PROVENANCE_PHASE_2.md)
 - **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
 - **Created:** 2026-10-11
 
@@ -189,13 +189,21 @@ Delivery notes:
 - **`-QueuedBy` has no `-All`** (a deviation from §8): the endpoint is not paged, since a Pending Export keeps a bounded list of stagers. Rows from the Pending Export list pipe in by `Id`; warnings say when runs are no longer retained or earlier ones may be missing.
 - Verified at runtime on the full stack: both timelines return worded rows with their header; `-All` pages a six-item timeline at two a page; a timeline row piped into `-Causes` walks its causes; an unknown object, a Connected System Object under the wrong Connected System and an unknown Pending Export each return 404. The sandbox held no Pending Exports at the time, so Queued by's populated response rests on the controller tests and on 3d's runtime check of the panel over the same read.
 
-### Phase 3f: Documentation, integration and close-out
+### Phase 3f: Documentation, integration and close-out ✅
 
 - `docs/configuration/causality.md` gains a section on the explorer, the entry points and the trail. "Causality Explorer" gets a glossary entry and a `vocabulary.psd1` entry (TERM-1). The PowerShell reference gains the new parameters and output tables. Docs conformance and docs coverage run clean.
 - Changelog entries.
 - Scenario 8 gains a step: after the leavers' Delta Synchronisation and before the Export, a Group's `-QueuedBy` names that synchronisation, and a leaver's account timeline lists its deprovision with the deletion as cause. Run at Medium.
 - Runtime check on the full stack against the mock, with screenshots.
 - PRD and plan moved to `done/` in the pull request that closes #2100.
+
+Delivery notes:
+
+- **The Scenario 8 step found a real gap, fixed in a stack layer below this one ([#2242](https://github.com/TetronIO/JIM/pull/2242)).** A Connected System Object that its Metaverse Object's deletion had already disconnected is deleted quietly by the confirming synchronisation, and that path wrote no deletion record. Deleting the row also clears the object's id from its execution items, so a deprovisioned account could not be traced back to its history at all: the explorer, the REST API and PowerShell answered 404 for it, and Deleted Objects did not list it. The quiet path now writes the Deleted record (no execution item, so run statistics are unchanged); the explorer needed no change of its own.
+- **The account timeline is asserted after the Export, not before it** (a change to the step as planned): the deprovision item the assertion looks for is the Export's, so it does not exist until the Export has run. Queued by is asserted before the Export, as planned.
+- Scenario 8 passed at Medium on OpenLDAP with the layer beneath: a Group losing a leaver and the leaver's account deletion each name the apply Synchronisation in `-QueuedBy`, and the deleted account's timeline lists its deprovision because "The Metaverse Object Tina Adams (S8-599) was deleted, so this run deleted the Connected System Object".
+- Verified at runtime on the full stack (Scenario 8 at Micro, one leaver deleted from the source directory and driven through to the confirming synchronisation): the quietly deleted Target object's explorer focus lists its four items, from its provisioning to the import confirming its deletion; the deprovision's Explore re-centres on its Lineage, which reads the whole story across both Connected Systems with the trail recording both steps; and View deletion record opens Deleted Objects on its history.
+- `main` moved `Get-JIMPendingExport`'s reference to its own generated page while this was in flight, so `-QueuedBy` declares its output type per parameter set and its example sits on the Pending Exports page.
 
 ### Phase ordering
 

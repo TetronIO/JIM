@@ -7,7 +7,7 @@
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
 - **Plan:** [CAUSAL_PROVENANCE.md](../../plans/done/CAUSAL_PROVENANCE.md)
 - **Phase 2 plan:** [CAUSAL_PROVENANCE_PHASE_2.md](../../plans/done/CAUSAL_PROVENANCE_PHASE_2.md)
-- **Phase 3 PRD:** [PRD_CAUSALITY_EXPLORER.md](../doing/PRD_CAUSALITY_EXPLORER.md) ([#2100](https://github.com/TetronIO/JIM/issues/2100))
+- **Phase 3 PRD:** [PRD_CAUSALITY_EXPLORER.md](PRD_CAUSALITY_EXPLORER.md) ([#2100](https://github.com/TetronIO/JIM/issues/2100))
 
 ## Problem Statement
 

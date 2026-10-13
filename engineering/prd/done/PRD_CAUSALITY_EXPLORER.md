@@ -1,12 +1,12 @@
 # Causality Explorer (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phase 3-0 merged in #2112; Phases 3a to 3d complete: the reads, the portal groundwork, and the explorer with its entry points)
+- **Status:** Done
 - **Created:** 2026-10-11
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
-- **Plan:** [CAUSALITY_EXPLORER.md](../../plans/doing/CAUSALITY_EXPLORER.md)
+- **Plan:** [CAUSALITY_EXPLORER.md](../../plans/done/CAUSALITY_EXPLORER.md)
 - **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
-- **Parent PRD:** [Causal Provenance](../done/PRD_CAUSAL_PROVENANCE.md), whose Phase 3 was sketched directionally and left to "its own design pass". This is that pass.
+- **Parent PRD:** [Causal Provenance](PRD_CAUSAL_PROVENANCE.md), whose Phase 3 was sketched directionally and left to "its own design pass". This is that pass.
 
 ## Problem Statement
 
@@ -150,11 +150,11 @@ All five settled at mock review on 2026-10-11, each as recommended.
 
 ## Acceptance Criteria
 
-- [ ] The Pending Export page's **Queued by** panel lists every run that staged a change into it, each with its nearest cause, and opens the explorer on that item (Scenario 1).
-- [ ] The Connected System Object, Metaverse Object and execution item pages each open the explorer focused on themselves.
-- [ ] An object focus lists the object's items newest first, paged, each with its nearest cause read in one batch per page (Scenario 2), and a Metaverse Object's timeline is complete without change tracking for everything recorded against its joined objects (Scenario 5).
-- [ ] Re-centring on an item or object causes no full page load; every focus has its own address; the trail survives reload and is shareable (Scenario 3).
-- [ ] A walk that stops at its bound offers to continue from the farthest item reached (Scenario 4).
-- [ ] REST and PowerShell expose both object timelines and a Pending Export's queueing runs, with tests and docs; re-centring and the trail are documented as portal-only.
-- [ ] An object with 10,000 items opens its first timeline page within the same budget as one with ten, verified by a database test against real PostgreSQL.
-- [ ] A changelog entry and a `docs/` update ship in the same pull request as the user-facing change.
+- [x] The Pending Export page's **Queued by** panel lists every run that staged a change into it, each with its nearest cause, and opens the explorer on that item (Scenario 1). *Evidence: Phase 3-0 (every staging path findable, #2112); the panel's bUnit tests and runtime walk-through in Phase 3d; Scenario 8 at Medium asserts `-QueuedBy` over the same read.*
+- [x] The Connected System Object, Metaverse Object and execution item pages each open the explorer focused on themselves. *Evidence: Phase 3d entry points, checked at runtime from each page.*
+- [x] An object focus lists the object's items newest first, paged, each with its nearest cause read in one batch per page (Scenario 2), and a Metaverse Object's timeline is complete without change tracking for everything recorded against its joined objects (Scenario 5). *Evidence: the Phase 3a and 3b reads and their unit and PostgreSQL tests; the timeline component's paging in Phase 3d; the not-recorded note through the API in Phase 3e.*
+- [x] Re-centring on an item or object causes no full page load; every focus has its own address; the trail survives reload and is shareable (Scenario 3). *Evidence: the explorer's page-level bUnit tests of re-centring and the trail (Phase 3d); Copy link and reload checked at runtime.*
+- [x] A walk that stops at its bound offers to continue from the farthest item reached (Scenario 4). *Evidence: Continue from, upwards and downwards, in Phase 3d.*
+- [x] REST and PowerShell expose both object timelines and a Pending Export's queueing runs, with tests and docs; re-centring and the trail are documented as portal-only. *Evidence: Phase 3e (controller and Pester tests, generated reference); the causality page's Causality Explorer section.*
+- [x] An object with 10,000 items opens its first timeline page within the same budget as one with ten, verified by a database test against real PostgreSQL. *Evidence: the Phase 3a budget and EXPLAIN tests over the three filtered indexes.*
+- [x] A changelog entry and a `docs/` update ship in the same pull request as the user-facing change. *Evidence: Phase 3f.*
