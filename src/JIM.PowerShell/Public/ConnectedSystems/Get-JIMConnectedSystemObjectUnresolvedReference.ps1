@@ -22,37 +22,32 @@ function Get-JIMConnectedSystemObjectUnresolvedReference {
         the cap and fetch every page.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier (integer) of the Connected System the object belongs to.
+        The ID of the Connected System the object belongs to.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object.
+        The ID of the Connected System Object.
 
     .PARAMETER Search
-        Optional case-insensitive text matched against each reference's value and attribute name.
+        Returns only the references whose value or attribute name contains this text, ignoring case.
 
     .PARAMETER Summary
-        Return the summary instead of the references: TotalCount, Causes (each a Cause, FixLocation and
-        Count), Fixes (every distinct next step with its Count, Finding and Remedy, most values first) and
-        LargestFix (the change to JIM's configuration that would address the most values, or null).
+        Returns the counts by likely cause and every distinct next step, rather than the references.
 
     .PARAMETER All
-        Automatically paginate through all results and return every reference. Cannot be used with -Page.
-        Fetches at most 1000 pages before stopping with a warning; use -Force to fetch beyond the cap.
+        Fetches every page instead of one. Stops after 1000 pages with a warning; -Force fetches the rest.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages). Only valid with -All.
+        With -All, fetches every page, past the 1000-page limit.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Cannot be used with -All.
+        The page to get.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 50. Maximum is 100.
+        How many references a page holds.
 
     .OUTPUTS
-        Without -Summary, PSCustomObject per reference: AttributeName, Value, Cause, FixLocation,
-        ContainerExternalId, PartitionExternalId, CandidateObjectTypeNames, Finding (what is wrong) and
-        Remedy (what to do).
-        With -Summary, one PSCustomObject: TotalCount, Causes, Fixes and LargestFix.
+        The object's unresolved references, each with its likely cause and what to do; or with -Summary, how they
+        split by cause and every distinct next step.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 1 -Id "12345678-1234-1234-1234-123456789abc"
@@ -84,7 +79,9 @@ function Get-JIMConnectedSystemObjectUnresolvedReference {
         Get-JIMConnectedSystemUnresolvedReferenceCount
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectUnresolvedReference', ParameterSetName = 'Page')]
+    [OutputType('JIM.ConnectedSystemObjectUnresolvedReference', ParameterSetName = 'All')]
+    [OutputType('JIM.ConnectedSystemObjectUnresolvedReferenceSummary', ParameterSetName = 'Summary')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

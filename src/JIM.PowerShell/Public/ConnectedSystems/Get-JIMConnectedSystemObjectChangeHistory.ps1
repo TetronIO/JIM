@@ -4,43 +4,32 @@
 function Get-JIMConnectedSystemObjectChangeHistory {
     <#
     .SYNOPSIS
-        Gets the change history for a Connected System Object in JIM.
+        Gets a Connected System Object's change history.
 
     .DESCRIPTION
-        Retrieves a paginated list of change records for the specified Connected System Object,
-        ordered by change time descending (most recent first). Each record carries the initiator
-        and run profile context, plus the per-attribute value changes.
-
-        By default, returns a single page of results. Use -All to automatically paginate
-        through all change records and return every row.
-
-        For safety, -All fetches at most 1000 pages (~50,000 records at the default page
-        size of 50) and then stops with a warning. Supply -Force to override the cap and
-        fetch every page.
+        Gets the changes made to a Connected System Object, most recent first: when each was made, who or what made
+        it, and what it changed. Returns one page unless -All is given.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier (integer) of the Connected System the object belongs to.
+        The ID of the Connected System the object belongs to.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object whose change history is being retrieved.
+        The ID of the Connected System Object.
 
     .PARAMETER All
-        Automatically paginate through all results and return every change record.
-        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
-        warning; use -Force to fetch beyond the cap.
+        Fetches every page instead of one. Stops after 1000 pages with a warning; -Force fetches the rest.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of
-        how large the change history is. Only valid with -All.
+        With -All, fetches every page, past the 1000-page limit.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Cannot be used with -All.
+        The page to get.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 50. Maximum is 100.
+        How many changes a page holds.
 
     .OUTPUTS
-        PSCustomObject representing change-history record(s).
+        The changes, most recent first.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 1 -Id "12345678-1234-1234-1234-123456789abc"
@@ -69,7 +58,7 @@ function Get-JIMConnectedSystemObjectChangeHistory {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.CsoChangeHistoryDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
