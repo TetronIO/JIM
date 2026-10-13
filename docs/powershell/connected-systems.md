@@ -810,7 +810,7 @@ Deselecting an Object Type takes it out of management: the next Full Import mark
 
 ## Set-JIMConnectedSystemAttribute
 
-Updates the selection, external ID configuration and data type of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
+Updates the selection, external ID configuration, data type and case-exact declaration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
 ### Syntax
 
@@ -818,7 +818,7 @@ Updates the selection, external ID configuration and data type of attributes on 
 # Single (default)
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
     -AttributeId <int> [-Selected <bool>] [-IsExternalId <bool>]
-    [-IsSecondaryExternalId <bool>] [-Type <string>] [-PassThru]
+    [-IsSecondaryExternalId <bool>] [-Type <string>] [-CaseExact <bool>] [-PassThru]
 
 # Bulk
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
@@ -836,8 +836,11 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
 | `IsExternalId` | `bool` | No (Single) | | Whether this attribute is the primary external identifier |
 | `IsSecondaryExternalId` | `bool` | No (Single) | | Whether this attribute is a secondary external identifier |
 | `Type` | `string` | No (Single) | | Overrides the data type schema discovery inferred. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary`. `Integer` is the friendly name for the Number type. |
-| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. A data type cannot be set in bulk. |
+| `CaseExact` | `bool` | No (Single) | | Whether the attribute's values are case-exact: `$true` when values differing only in case identify different things. Only Text attributes can be declared case-exact. |
+| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, `isSecondaryExternalId` and/or `caseExact`. A data type cannot be set in bulk. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated attribute(s) |
+
+`-CaseExact` is accepted on every Connector. Setting it makes the declaration yours: a schema refresh keeps it rather than restating what the Connected System's schema says. See [Case-exact values](../configuration/connected-system-attributes.md#case-exact-values).
 
 `-Type` is accepted only where the Connector's schema cannot state a type definitively, which today means the JIM File Connector and the JIM SQL Connector. It is refused once the attribute is referenced by a Synchronisation Rule or holds values. See [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types) for when an override is needed and why.
 
@@ -859,6 +862,11 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 # Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Long Number by default.
 # Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
+```
+
+```powershell title="Declare an attribute's values case-exact"
+# The source system treats JBloggs and jbloggs as two different codes.
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 7 -CaseExact $true
 ```
 
 ```powershell title="Bulk-update multiple attributes"
