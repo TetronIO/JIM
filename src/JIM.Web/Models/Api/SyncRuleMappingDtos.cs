@@ -740,6 +740,72 @@ public class TestExpressionRequest
     /// expression tested is <c>Expression</c>, so an edit can be tried before it is saved.
     /// </summary>
     public int? MappingId { get; set; }
+
+    /// <summary>
+    /// A Connected System Object of the Synchronisation Rule's Connected System whose values to test with, for an import
+    /// Attribute Flow. Its values for the attributes the expression reads are the inputs; a sample in
+    /// <c>CsAttributes</c> replaces the object's value for that attribute. An expression that also reads <c>mv[...]</c>
+    /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// A Metaverse Object whose values to test with, for an export Attribute Flow. A sample in <c>MvAttributes</c>
+    /// replaces the object's value for that attribute.
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+}
+
+/// <summary>
+/// One input an expression read when it was tested as an Attribute Flow.
+/// </summary>
+public class TestExpressionInputDto
+{
+    /// <summary>
+    /// The input as the expression writes it, such as <c>cs["hireDate"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// The attribute's type, or null when the object being synchronised cannot hold a value for it.
+    /// </summary>
+    public AttributeDataType? Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or several; null when <c>Type</c> is null.
+    /// </summary>
+    public AttributePlurality? Plurality { get; set; }
+
+    /// <summary>
+    /// The values the input was given, one line per value in JIM's text form. Empty when it had no value.
+    /// </summary>
+    public IReadOnlyList<string> ValueLines { get; set; } = [];
+}
+
+/// <summary>
+/// What an Attribute Flow would do if one of its inputs had no value.
+/// </summary>
+public class TestExpressionAbsentInputDto
+{
+    /// <summary>
+    /// The input made absent, such as <c>cs["sn"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// What the target attribute would then be given.
+    /// </summary>
+    public AttributeFlowOutcome Outcome { get; set; }
+
+    /// <summary>
+    /// Why that outcome is an error; null when it is not.
+    /// </summary>
+    public AttributeFlowErrorReason? ErrorReason { get; set; }
+
+    /// <summary>
+    /// What synchronisation would then do, in one sentence.
+    /// </summary>
+    public string OutcomeDescription { get; set; } = null!;
 }
 
 /// <summary>
@@ -822,4 +888,27 @@ public class TestExpressionResponse
     /// attribute. When present the expression was not evaluated.
     /// </summary>
     public IReadOnlyList<string>? InputErrors { get; set; }
+
+    /// <summary>
+    /// The inputs the expression read, with the values they were given: the samples, and any loaded from an object.
+    /// Set only when an Attribute Flow was given.
+    /// </summary>
+    public IReadOnlyList<TestExpressionInputDto>? Inputs { get; set; }
+
+    /// <summary>
+    /// The value processing the Attribute Flow applies to the expression's result, in the order it applies them. Set
+    /// only for an import Attribute Flow to a Text attribute whose expression returned a result; empty when none is set.
+    /// </summary>
+    public IReadOnlyList<AttributeFlowValueProcessingStep>? ValueProcessingSteps { get; set; }
+
+    /// <summary>
+    /// Whether value processing changed the expression's result. Set with <c>ValueProcessingSteps</c>.
+    /// </summary>
+    public bool? ValueProcessingChanged { get; set; }
+
+    /// <summary>
+    /// For each input given a value, what the Attribute Flow would do with that input absent. Set only when an Attribute
+    /// Flow was given and its sample values could be used.
+    /// </summary>
+    public IReadOnlyList<TestExpressionAbsentInputDto>? IfInputHasNoValue { get; set; }
 }
