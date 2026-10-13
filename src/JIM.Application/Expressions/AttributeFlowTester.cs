@@ -46,6 +46,171 @@ public static class AttributeFlowTester
         ArgumentNullException.ThrowIfNull(expressionEvaluator);
         ArgumentException.ThrowIfNullOrWhiteSpace(source.Expression);
 
+        var tested = TestOnce(syncRule, mapping, source, inputs, expressionEvaluator);
+        if (tested.Evaluation is not { } evaluation)
+            return tested;
+
+        // Each input that has a value, made absent in turn with the others as given: what the Missing Input Behaviour
+        // would then do. Only inputs the Expression reads; an input it does not read changes nothing.
+        var readAccessors = ExpressionInputResolver.Resolve(source.Expression).Select(input => input.Accessor).ToHashSet(StringComparer.Ordinal);
+        var ifInputHasNoValue = inputs
+            .Where(input => input.Values.Count > 0 && readAccessors.Contains(input.Accessor))
+            .Select(absent => new AttributeFlowAbsentInputOutcome(absent.Accessor,
+                TestOnce(syncRule, mapping, source,
+                    inputs.Select(input => ReferenceEquals(input, absent) ? input with { Values = [] } : input).ToList(),
+                    expressionEvaluator).Evaluation!))
+            .ToList();
+
+        return new AttributeFlowTestResult
+        {
+            Evaluation = evaluation,
+            ValueProcessing = DescribeValueProcessing(syncRule, mapping, evaluation),
+            IfInputHasNoValue = ifInputHasNoValue
+        };
+    }
+
+    /// <summary>
+    /// The inputs <paramref name="expression"/> reads, each described from <paramref name="syncRule"/>'s object types:
+    /// its type and plurality, or none where the object being synchronised cannot hold it.
+    /// </summary>
+    public static IReadOnlyList<AttributeFlowTestInputDescriptor> DescribeInputs(SyncRule syncRule, string? expression)
+    {
+        ArgumentNullException.ThrowIfNull(syncRule);
+
+        var exporting = syncRule.Direction == SyncRuleDirection.Export;
+        return ExpressionInputResolver.Resolve(expression)
+            .Select(input =>
+            {
+                // An export Attribute Flow reads only the Metaverse Object, so a cs[...] input has no type there.
+                var (type, plurality) = input.Source switch
+                {
+                    ExpressionInputSource.ConnectedSystem when exporting => default,
+                    ExpressionInputSource.ConnectedSystem => Find(syncRule.ConnectedSystemObjectType?.Attributes
+                        .Select(a => (a.Name, a.Type, a.AttributePlurality)), input.AttributeName),
+                    _ => Find(syncRule.MetaverseObjectType?.Attributes
+                        .Select(a => (a.Name, a.Type, a.AttributePlurality)), input.AttributeName)
+                };
+                return new AttributeFlowTestInputDescriptor(input.Source, input.AttributeName, type, plurality);
+            })
+            .ToList();
+
+        static (AttributeDataType?, AttributePlurality?) Find(
+            IEnumerable<(string Name, AttributeDataType Type, AttributePlurality Plurality)>? attributes, string name) =>
+            attributes?.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)) is { Name: not null } found
+                ? (found.Type, found.Plurality)
+                : (null, null);
+    }
+
+    /// <summary>
+    /// The values <paramref name="connectedSystemObject"/> holds for each <c>cs[...]</c> input
+    /// <paramref name="expression"/> reads, every value of a multi-valued attribute included, so a real object can be
+    /// tested and then edited. An attribute it holds no value for is an input with no value.
+    /// </summary>
+    public static IReadOnlyList<AttributeFlowTestInput> InputsFromConnectedSystemObject(
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        string? expression)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObject);
+        ArgumentNullException.ThrowIfNull(connectedSystemObjectType);
+
+        return ExpressionInputResolver.Resolve(expression)
+            .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+            .Select(input =>
+            {
+                var attribute = connectedSystemObjectType.Attributes
+                    .FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase));
+                var values = attribute == null
+                    ? []
+                    : connectedSystemObject.AttributeValues
+                        .Where(value => value.AttributeId == attribute.Id)
+                        .Select(value => attribute.Type == AttributeDataType.Reference
+                            ? (object?)(value.ReferenceValueId ?? value.ReferenceValue?.Id)
+                            : SyncEngine.ToExpressionValue(value, attribute.Type))
+                        .Where(value => value != null)
+                        .Select(value => value!)
+                        .ToList();
+                return new AttributeFlowTestInput(input.Source, input.AttributeName, values);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The values <paramref name="metaverseObject"/> holds for each <c>mv[...]</c> input <paramref name="expression"/>
+    /// reads, every value of a multi-valued attribute included. An asserted-null marker carries no value, as
+    /// synchronisation reads it.
+    /// </summary>
+    public static IReadOnlyList<AttributeFlowTestInput> InputsFromMetaverseObject(MetaverseObject metaverseObject, string? expression)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObject);
+
+        return ExpressionInputResolver.Resolve(expression)
+            .Where(input => input.Source == ExpressionInputSource.Metaverse)
+            .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName, metaverseObject.AttributeValues
+                .Where(value => !value.NullValue && value.Attribute != null
+                    && string.Equals(value.Attribute.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                .Select(value => MetaverseValue(value))
+                .Where(value => value != null)
+                .Select(value => value!)
+                .ToList()))
+            .ToList();
+
+        static object? MetaverseValue(MetaverseObjectAttributeValue value) => value.Attribute!.Type switch
+        {
+            AttributeDataType.Text => value.StringValue,
+            AttributeDataType.Number => value.IntValue,
+            AttributeDataType.LongNumber => value.LongValue,
+            AttributeDataType.Decimal => value.DecimalValue,
+            AttributeDataType.DateTime => value.DateTimeValue,
+            AttributeDataType.Boolean => value.BoolValue,
+            AttributeDataType.Guid => value.GuidValue,
+            AttributeDataType.Binary => value.ByteValue,
+            AttributeDataType.Reference => value.ReferenceValueId ?? value.ReferenceValue?.Id,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// The value processing step of the trace: the transforms an import Attribute Flow to a Text attribute applies, in
+    /// synchronisation's order, and whether they changed the Expression's result. Null where none can apply.
+    /// </summary>
+    private static AttributeFlowValueProcessing? DescribeValueProcessing(SyncRule syncRule, SyncRuleMapping mapping, AttributeFlowEvaluation evaluation)
+    {
+        if (syncRule.Direction == SyncRuleDirection.Export
+            || mapping.TargetMetaverseAttribute is not { Type: AttributeDataType.Text } target
+            || evaluation.Source.Outcome != ExpressionSourceOutcome.Result)
+            return null;
+
+        var steps = new List<AttributeFlowValueProcessingStep>();
+        if (mapping.InboundValueProcessing.HasFlag(InboundValueProcessing.TrimWhitespace))
+            steps.Add(AttributeFlowValueProcessingStep.TrimWhitespace);
+        if (mapping.InboundValueProcessing.HasFlag(InboundValueProcessing.CollapseInternalWhitespace))
+            steps.Add(AttributeFlowValueProcessingStep.CollapseInternalWhitespace);
+        switch (mapping.CaseNormalisation)
+        {
+            case InboundCaseNormalisation.Upper: steps.Add(AttributeFlowValueProcessingStep.UpperCase); break;
+            case InboundCaseNormalisation.Lower: steps.Add(AttributeFlowValueProcessingStep.LowerCase); break;
+            case InboundCaseNormalisation.Title: steps.Add(AttributeFlowValueProcessingStep.TitleCase); break;
+        }
+        if (mapping.InboundValueProcessing.HasFlag(InboundValueProcessing.TreatWhitespaceAsNoValue))
+            steps.Add(AttributeFlowValueProcessingStep.TreatWhitespaceAsNoValue);
+
+        // The same transform the pipeline applies, over the same text forms it converts to.
+        var processText = AttributeFlowPipeline.InboundTextProcessing(mapping, target)!;
+        var changed = ExpressionResultValues.Elements(evaluation.Source.Result)
+            .Select(element => ExpressionText.TryFormat(element, out var text) ? text : null)
+            .Any(text => text != null && !string.Equals(processText(text), text, StringComparison.Ordinal));
+
+        return new AttributeFlowValueProcessing { Steps = steps, Changed = changed };
+    }
+
+    private static AttributeFlowTestResult TestOnce(
+        SyncRule syncRule,
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        IReadOnlyList<AttributeFlowTestInput> inputs,
+        IExpressionEvaluator expressionEvaluator)
+    {
         var errors = new List<string>();
         var exporting = syncRule.Direction == SyncRuleDirection.Export;
         var connectedSystemValues = new List<ConnectedSystemObjectAttributeValue>();
@@ -159,7 +324,7 @@ public static class AttributeFlowTester
                 AttributeFlowErrorReason.MissingInputFailedObject =>
                     $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail the object, so {failsObject}.",
                 AttributeFlowErrorReason.EvaluationFailed =>
-                    $"The Expression failed: {evaluation.Source.EvaluationException?.Message} So {failsObject}.",
+                    $"The Expression failed, so {failsObject}: {evaluation.Source.EvaluationException?.Message}",
                 AttributeFlowErrorReason.ResultNotConvertible =>
                     $"The Expression returned '{evaluation.Resolution?.UnconvertibleValue}', which a {evaluation.TargetType} attribute cannot hold, so " +
                     $"{keepsValue}.",
