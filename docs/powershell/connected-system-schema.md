@@ -174,7 +174,7 @@ The Object Types, each with its attributes. An attribute whose Writability is Re
 | `ManagesClassMembership` | `bool` | Whether the Connected System hands this object type's class membership to JIM to compose, which is what makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own auxiliary classes into each structural class. |
 | `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs. |
 | `StructuralCarrierObjectTypeId` | `int` | For an auxiliary object type, the structural object type JIM writes alongside it when creating an object, or empty when none has been named and JIM therefore cannot create one. |
-| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `CaseInsensitive`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectType -->
 
 ### Examples
@@ -308,6 +308,7 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 | `Required` | `bool` | Whether the Connected System's schema requires this attribute for its class (an RFC 4512 MUST). JIM refuses an export that would add a class whose required attributes have no value. |
 | `SelectionLocked` | `bool` | Indicates if this attribute's selection state is locked and cannot be changed. This is true for External ID and Secondary External ID attributes. |
 | `Writability` | `string` | Indicates whether this attribute can be written to in the Connected System. One of `Writable`, `ReadOnly` or `WritableOnCreate`. `ReadOnly` attributes can be imported but cannot be targeted by export Attribute Flows. `WritableOnCreate` attributes can be targeted, but only ever flow on a Create Pending Export. |
+| `CaseInsensitive` | `bool` | Whether the Connected System treats two values of this attribute that differ only in letter case as the same value, as an LDAP directory does a distinguished name. JIM confirms an exported value the Connected System reports back in a different case, and does not export a change of case alone. |
 | `ReferencedObjectTypeId` | `int` | For a Reference attribute, the id of the Object Type this reference points at, when the Connected System's schema declares one (the SQL Connector's `referencesObjectType`). Import reference resolution resolves the reference within that Object Type alone; empty means the schema does not say and resolution requires the value to be unambiguous across Object Types. |
 | `ReferencedObjectTypeName` | `string` | The name of the Object Type identified by ReferencedObjectTypeId, when declared. |
 
@@ -317,7 +318,7 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 |----------|------|-------------|
 | `ActivityId` | `guid` | The activity ID for the bulk update operation. |
 | `UpdatedCount` | `int` | Number of attributes successfully updated. |
-| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `CaseInsensitive`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 | `Errors` | `object[]` | Any errors that occurred during the update. Empty if no errors. Each has `AttributeId` and `ErrorMessage`. |
 <!-- END GENERATED: Set-JIMConnectedSystemAttribute -->
 
