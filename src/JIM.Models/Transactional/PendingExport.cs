@@ -126,15 +126,22 @@ public class PendingExport
     public int? ProvisioningSyncRuleId { get; set; }
 
     /// <summary>
-    /// Set on a <see cref="PendingExportChangeType.Create"/> just before it is sent when its
-    /// <see cref="ProvisioningSyncRuleId"/> names a Synchronisation Rule whose Initial Password is enabled, so an
-    /// Initial Password will be staged for the account once it exists (#2039). A Connector whose target refuses an
-    /// enabled account with no password (Active Directory) reads it to create the account disabled, to be enabled once
-    /// the password is set. Worked out once per export batch by the export run, alongside the lookup that
-    /// stages the password; the Connector never sees the rule or any password material.
+    /// Whether a password follows this export, so a Connector whose target refuses to enable an account with no password
+    /// (Active Directory) can hold the enable back, to be completed once the password is set. Set just before the export
+    /// is sent:
+    /// <list type="bullet">
+    /// <item>on a <see cref="PendingExportChangeType.Create"/> whose <see cref="ProvisioningSyncRuleId"/> names a
+    /// Synchronisation Rule whose Initial Password is enabled, so an Initial Password will be staged for the account once
+    /// it exists (#2039); the LDAP Connector creates such an account disabled;</item>
+    /// <item>on a <see cref="PendingExportChangeType.Update"/> to an account whose person is still owed a password on
+    /// this Connected System, of any origin, queued, retrying or parked (#2158); the LDAP Connector sends such an Update
+    /// disabled only if Active Directory refuses to enable the account for want of a password.</item>
+    /// </list>
+    /// Whatever arrives first is the account's first password, which is why the name speaks of an initial one. Worked
+    /// out once per export batch by the export run; the Connector never sees the rule or any password material.
     /// <para>
-    /// Transient: never persisted, and false on every export the run has not decided for, so whether the rule asks
-    /// for a password is read when the account is created rather than stamped when the change was staged.
+    /// Transient: never persisted, and false on every export the run has not decided for, so whether a password follows
+    /// is read when the export is sent rather than stamped when the change was staged.
     /// </para>
     /// </summary>
     [NotMapped]

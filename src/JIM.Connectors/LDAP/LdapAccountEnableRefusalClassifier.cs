@@ -15,7 +15,13 @@ namespace JIM.Connectors.LDAP;
 /// password, and says so with the Win32 code ERROR_PASSWORD_RESTRICTIONS (<c>0000052D</c>) under WILL_NOT_PERFORM.
 /// Reported as it arrives, that reads as a bare directory error, and the execution item it lands on reads as a JIM
 /// defect. Classified, it names what to change: an Initial Password on the provisioning Synchronisation Rule (so JIM
-/// creates the account disabled and enables it once the password is set), or an account created disabled.
+/// holds the account disabled and enables it once the password is set), an account created disabled, or, for an
+/// account that already exists, a password set with the set-password action.
+/// </para>
+/// <para>
+/// The same recognition lets the Connector hold an enabling Update rather than fail it (#2158): where a password is
+/// still owed to the account, the Update is sent again disabled and the delivery completes the enable. So an Update
+/// that reaches the failure is one no password is owed to, or one whose resend was refused too.
 /// </para>
 /// <para>
 /// The same code also means "this password fails the policy", so the change decides as well as the code: a Create
@@ -54,9 +60,10 @@ internal static class LdapAccountEnableRefusalClassifier
         ConnectedSystemExportResult.Failed(
             "Active Directory will not enable an account that has no password " +
             $"({LdapConnectorConstants.AD_ERROR_PASSWORD_RESTRICTIONS}). Give the provisioning Synchronisation Rule an " +
-            "Initial Password, so that JIM creates the account disabled and enables it once the password is set, or create " +
-            $"the account disabled ({LdapConnectorConstants.UserAccountControlAttributeName} with ACCOUNTDISABLE, " +
-            $"0x{LdapConnectorConstants.UAC_ACCOUNTDISABLE:X}, set). If the Synchronisation Rule already has an Initial " +
+            "Initial Password, so that JIM holds the account disabled until the password is set and then enables it, or " +
+            $"create the account disabled ({LdapConnectorConstants.UserAccountControlAttributeName} with ACCOUNTDISABLE, " +
+            $"0x{LdapConnectorConstants.UAC_ACCOUNTDISABLE:X}, set). For an account that already exists, set a password on " +
+            "it with the set-password action, enabling it there. If the Synchronisation Rule already has an Initial " +
             "Password, look under Operations > Passwords for one that expired or was cancelled before it was set. " +
             $"The directory said: {DirectoryMessage(exception)}",
             ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount);

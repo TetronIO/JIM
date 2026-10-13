@@ -75,17 +75,17 @@ public class PasswordEnablementPolicyTests
         Assert.That(PasswordEnablementPolicy.DependsOnWithheldEnable(origin, administratorChoice), Is.EqualTo(expected));
     }
 
-    // An export still in flight may be about to disable the account, and records that it wrote the enabled state only
-    // once it has finished (#2173). JIM's own decision to enable waits for it; an administrator's does not, and a
-    // decision that enables nothing has nothing to wait for.
+    // An export still in flight may be disabling the account (#2173), or placing a hold this very delivery would
+    // complete (#2158), and records either only once its batch has come back. Every decision but an administrator's
+    // choice waits for it, whether it enables the account or not; an administrator's choice never waits.
     [TestCase(true, AccountEnablementBasis.SyncRuleSetting, true)]
+    [TestCase(null, AccountEnablementBasis.SyncRuleSetting, true)]
     [TestCase(true, AccountEnablementBasis.CompletesWithheldEnable, true)]
+    [TestCase(null, AccountEnablementBasis.LeftToAttributeFlow, true)]
+    [TestCase(null, AccountEnablementBasis.LeftAsIs, true)]
     [TestCase(true, AccountEnablementBasis.AdministratorChoice, false)]
     [TestCase(false, AccountEnablementBasis.AdministratorChoice, false)]
-    [TestCase(null, AccountEnablementBasis.SyncRuleSetting, false)]
-    [TestCase(null, AccountEnablementBasis.LeftToAttributeFlow, false)]
-    [TestCase(null, AccountEnablementBasis.LeftAsIs, false)]
-    public void WaitsForAnExportInFlight_OnlyWhereJimItselfWouldEnable(
+    public void WaitsForAnExportInFlight_EveryDecisionButAnAdministratorsChoice(
         bool? enableAccount, AccountEnablementBasis basis, bool expected)
     {
         var decision = new AccountEnablementDecision(enableAccount, basis);

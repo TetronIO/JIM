@@ -397,8 +397,7 @@ public class PasswordSynchronisationServer
     public static readonly TimeSpan ClaimLease = PendingPasswordChange.ClaimLease;
 
     /// <summary>
-    /// How long a delivery that would enable an account waits for an export to that account to finish before it tries
-    /// again (#2173). Short, because an export batch is seconds rather than minutes, and the wait costs nothing: the
+    /// How long a delivery waits for an export to that account to finish before it tries again (#2173, #2158). Short, because an export batch is seconds rather than minutes, and the wait costs nothing: the
     /// change is not attempted, so no attempt is counted against it.
     /// </summary>
     public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
@@ -941,8 +940,8 @@ public class PasswordSynchronisationServer
     /// the account is in flight (#2173). The facts the decision turns on are read afresh at the attempt, not taken from
     /// the claimed row: whether the account holds an enable JIM withheld until a password existed (#2039), and whether
     /// an export has written the account's enabled state. An export can mark a claimed row, a leaver disabled moments
-    /// ago, while the lane works through the accounts ahead of it; and one still being sent has not marked it yet,
-    /// which is why the caller waits for it before enabling. Returns a null decision when those facts cannot be read:
+    /// ago, while the lane works through the accounts ahead of it; and one still being sent has recorded neither its mark
+    /// nor any hold it placed yet, which is why the caller waits for it. Returns a null decision when those facts cannot be read:
     /// the caller keeps the change rather than guess, because guessing "not held" could leave an account disabled the
     /// flow asks to be enabled, and guessing "not marked" could enable one the flow has disabled.
     /// </summary>
@@ -992,11 +991,11 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Gives the change back unattempted because delivering it would enable an account an export is being sent to
-    /// right now (#2173). That export may be disabling the account (a leaver, say), and records that it wrote the
-    /// enabled state only once its batch has come back, so the delivery waits for it rather than enable the leaver
-    /// with a password JIM set. Nothing was sent and nothing failed, so no attempt is counted and no Activity is
-    /// recorded; the lane's summary counts the wait.
+    /// Gives the change back unattempted because an export is being sent to the account right now
+    /// (<see cref="PasswordEnablementPolicy.WaitsForAnExportInFlight"/>). That export may be disabling the account (a
+    /// leaver, say, #2173), or holding back an enable this delivery would complete (#2158), and records either only once
+    /// its batch has come back, so the delivery waits for it rather than decide without it. Nothing was sent and nothing
+    /// failed, so no attempt is counted and no Activity is recorded; the lane's summary counts the wait.
     /// </summary>
     private static (PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement) PostponeForExportInFlight(
         ConnectedSystem connectedSystem,
@@ -1006,7 +1005,7 @@ public class PasswordSynchronisationServer
     {
         change.Postpone(asOf + ExportInFlightWait);
         Log.Debug("DeliverDuePasswordChangesAsync: An export to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} is in flight, " +
-            "and delivering password change {PendingPasswordChangeId} would enable the account; it waits until {NextRetryAt}",
+            "and may change what delivering password change {PendingPasswordChangeId} does to the account's enabled state; it waits until {NextRetryAt}",
             account.Id, connectedSystem.Id, change.Id, change.NextRetryAt);
         return (PasswordDeliveryDisposition.Postponed, null);
     }
@@ -1112,7 +1111,7 @@ public class PasswordSynchronisationServer
             AccountEnablementBasis.LeftToAttributeFlow =>
                 $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Initial Password's \"Enable the Connected System Object once the password is set\" did not apply.",
             AccountEnablementBasis.CompletesWithheldEnable =>
-                $"{set}, and the account enabled as its Attribute Flow asks: it was created disabled only until it had a password.",
+                $"{set}, and the account enabled as its Attribute Flow asks: JIM held the enable back until the account had a password.",
             _ => $"{set}."
         };
     }

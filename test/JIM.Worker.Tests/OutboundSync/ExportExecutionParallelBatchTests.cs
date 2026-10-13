@@ -841,6 +841,67 @@ public class ExportExecutionParallelBatchTests
         }
     }
 
+    /// <summary>
+    /// An Update to an account still owed a password is flagged on the instances each parallel batch re-loaded, through
+    /// the batch's own repository (#2158): the owed passwords exist only there, so a decision made on the primary's
+    /// repository, or on the primary's copies, would hand every Connector an unflagged Update that Active Directory then
+    /// refuses.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatch_UpdateToAnAccountOwedAPassword_IsFlaggedOnTheBatchsOwnInstancesAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var updates = Enumerable.Range(0, 2)
+            .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, baseTime.AddSeconds(i), referencedMvoId))
+            .ToList();
+        foreach (var update in updates)
+            update.ConnectedSystemObject!.MetaverseObjectId = Guid.NewGuid();
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connectorFactoryCalled = false;
+        Func<IConnector> connectorFactory = () =>
+        {
+            connectorFactoryCalled = true;
+            return CreateCapturingConnector(handedToConnector, setsPasswords: true).Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
+        {
+            var batchRepository = TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+            batchRepository.QueuePasswordChangesAsync(updates.Select(update => OwedPassword(targetSystem.Id, update.ConnectedSystemObject!)).ToList())
+                .GetAwaiter().GetResult();
+            return new SyncRepositoryScope(batchRepository);
+        };
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateCapturingConnector(handedToConnector, setsPasswords: true).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectorFactoryCalled, Is.True, "precondition: the second batch ran on a connector of its own");
+            Assert.That(handedToConnector.Select(h => h.Id), Is.EquivalentTo(updates.Select(u => u.Id)));
+            Assert.That(handedToConnector.Select(h => h.InitialPasswordFollows), Is.All.True);
+            Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.Zero, "decided through each batch's own repository, never the primary's");
+        }
+    }
+
+    private static PendingPasswordChange OwedPassword(int connectedSystemId, ConnectedSystemObject account) => new()
+    {
+        Id = Guid.NewGuid(),
+        MetaverseObjectId = account.MetaverseObjectId!.Value,
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemObjectId = account.Id,
+        Origin = PendingPasswordChangeOrigin.Provisioned,
+        Status = PendingPasswordChangeStatus.Parked,
+        CreatedAt = DateTime.UtcNow,
+        ExpiresAt = DateTime.UtcNow.AddDays(7),
+        ActivityId = Guid.NewGuid()
+    };
+
     [Test]
     public void ExportExecutionOptions_MaxParallelism_DefaultsTo1()
     {
@@ -1286,10 +1347,13 @@ public class ExportExecutionParallelBatchTests
     /// A connector that succeeds for everything and records, as it is handed each Pending Export, whether an Initial
     /// Password was said to follow it.
     /// </summary>
-    private static Mock<IConnector> CreateCapturingConnector(System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)> handedToConnector)
+    private static Mock<IConnector> CreateCapturingConnector(System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)> handedToConnector,
+        bool setsPasswords = false)
     {
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        if (setsPasswords)
+            mockConnector.As<IConnectorPasswordManagement>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>

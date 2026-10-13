@@ -13,6 +13,9 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
@@ -690,8 +693,9 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
-    /// Only a Create is followed by an Initial Password: an Update changes an account that already exists, and
-    /// staging nothing for it is exactly what <see cref="ExecuteExportsAsync_UpdateExport_StagesNothingAsync"/> pins.
+    /// An Update is flagged from what is owed, never from the rule: the rule's Initial Password follows a Create, and an
+    /// Update to an account owed nothing on the Connected System is sent unflagged, whatever its rule asks for (#2158).
+    /// Staging nothing for it is exactly what <see cref="ExecuteExportsAsync_UpdateExport_StagesNothingAsync"/> pins.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_UpdateFromARuleThatAsksForAPassword_IsHandedToTheConnectorUnflaggedAsync()
@@ -699,7 +703,7 @@ public class InitialPasswordStagingTests
         var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
         export.ChangeType = PendingExportChangeType.Update;
 
-        var (_, handedToConnector) = await ExportCapturingAsync(system);
+        var (_, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: true);
 
         Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
     }
@@ -831,6 +835,196 @@ public class InitialPasswordStagingTests
         {
             Assert.That(handedToConnector, Is.Not.SameAs(export), "precondition: the Connector is handed a copy");
             Assert.That(handedToConnector.InitialPasswordFollows, Is.True);
+        }
+    }
+
+    #endregion
+
+    #region A password follows an Update to an account still owed one (#2158)
+
+    /// <summary>
+    /// An Update to an account whose person is still owed a password on the Connected System reaches the Connector
+    /// flagged, whatever the password's origin, so a target that refuses to enable an account with no password (Active
+    /// Directory) can hold the enable for the delivery to complete. The test is the import hold's own: queued, retrying
+    /// or parked.
+    /// </summary>
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending)]
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Parked)]
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Delivering)]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending)]
+    public async Task ExecuteExportsAsync_UpdateToAnAccountOwedAPassword_IsHandedToTheConnectorFlaggedAsync(
+        PendingPasswordChangeOrigin origin, PendingPasswordChangeStatus status)
+    {
+        var (system, export, _) = await ArrangeUpdateToAnAccountOwedAsync(origin, status);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.True);
+            Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.EqualTo(1), "one lookup for the batch");
+        }
+    }
+
+    /// <summary>
+    /// An expired or cancelled password will never be delivered, so nothing would complete a held enable: the Update is
+    /// sent as its Attribute Flow asks, and a target that refuses it reports the refusal with its remedies.
+    /// </summary>
+    [TestCase(PendingPasswordChangeStatus.Expired)]
+    [TestCase(PendingPasswordChangeStatus.Cancelled)]
+    public async Task ExecuteExportsAsync_UpdateToAnAccountWhosePasswordExpiredOrWasCancelled_IsHandedToTheConnectorUnflaggedAsync(
+        PendingPasswordChangeStatus status)
+    {
+        var (system, export, _) = await ArrangeUpdateToAnAccountOwedAsync(PendingPasswordChangeOrigin.Provisioned, status);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: true);
+
+        Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateToAnObjectWithNoMetaverseObject_IsHandedToTheConnectorUnflaggedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, withMetaverseObject: false);
+        export.ChangeType = PendingExportChangeType.Update;
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+            Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.Zero, "no person, so nothing can be owed");
+        }
+    }
+
+    /// <summary>
+    /// A batch of Creates has no Update to decide, so the owed lookup is never made: a provisioning run costs no more
+    /// queries than it did.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_BatchWithNoUpdates_NeverLooksUpOwedPasswordsAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportCapturingAsync(system, setsPasswords: true);
+
+        Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.Zero);
+    }
+
+    /// <summary>
+    /// A Connected System whose Connector cannot set passwords can have no password queued to complete a held enable,
+    /// so its Updates are never looked up: an export of a hundred thousand rows to a file or a database costs nothing.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorThatSetsNoPasswords_NeverLooksUpOwedPasswordsAsync()
+    {
+        var (system, export, _) = await ArrangeUpdateToAnAccountOwedAsync(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+            Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// A failed owed lookup is contained, as the rule lookup is: the Update is sent unflagged, so a target that refuses
+    /// the enable reports it on the execution item as it would have without the lookup, the batch carries on, and the
+    /// failure is logged as a warning naming the Connected System rather than passing quietly.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenTheOwedLookupFails_SendsTheUpdateUnflaggedAndTheExportProceedsAsync()
+    {
+        var (system, export, _) = await ArrangeUpdateToAnAccountOwedAsync(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending);
+        SyncRepo.FailOwedPasswordLookupWith = new InvalidOperationException("The database could not be reached.");
+        var sink = new CapturingSink();
+        var original = Log.Logger;
+        Log.Logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
+
+        ExportExecutionResult result;
+        List<PendingExport> handedToConnector;
+        try
+        {
+            (result, handedToConnector) = await ExportCapturingAsync(system, setsPasswords: true);
+        }
+        finally
+        {
+            Log.Logger = original;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the export still goes");
+            Assert.That(export.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(sink.Events.Any(e => e.Level == LogEventLevel.Warning
+                                             && e.Exception is InvalidOperationException
+                                             && e.RenderMessage().Contains(system.Name)), Is.True,
+                "contained, but never silent: a warning naming the Connected System");
+        }
+    }
+
+    /// <summary>
+    /// A flagged Update the Connector reports written with an interim value is held exactly as a Create is: the change is
+    /// marked, so the confirming import waits for the password; no password is staged for it, since one is already
+    /// queued; and the value the flow asked for is not recorded on the object as though it had been written.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportedAwaitingInitialPassword_MarksTheChangeStagesNothingAndRecordsNoAssertedValueAsync()
+    {
+        var (system, export, cso) = await ArrangeUpdateToAnAccountOwedAsync(PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Parked);
+        var displayNameChange = export.AttributeValueChanges.Single();
+        displayNameChange.ChangeType = PendingExportAttributeChangeType.Update;
+
+        var (result, _) = await ExportCapturingAsync(system, setsPasswords: true,
+            answer: _ => ConnectedSystemExportResult.Succeeded(null, null, ["DisplayName"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(displayNameChange.AwaitsInitialPassword, Is.True, "a report on a flagged Update is accepted");
+            Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1), "the queued password is the one that follows; nothing new is staged");
+            Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
+            Assert.That(cso.AttributeValues.Where(v => v.AttributeId == displayNameChange.AttributeId), Is.Empty,
+                "the Connector wrote an interim value, so the asserted one is not recorded as held");
+        }
+    }
+
+    /// <summary>
+    /// Arranges an Update to an account whose person has a queued password change on the Connected System, in the given
+    /// origin and status.
+    /// </summary>
+    private async Task<(ConnectedSystem System, PendingExport Export, ConnectedSystemObject Cso)> ArrangeUpdateToAnAccountOwedAsync(
+        PendingPasswordChangeOrigin origin, PendingPasswordChangeStatus status)
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id, origin, status,
+            connectedSystemObjectId: origin == PendingPasswordChangeOrigin.Provisioned ? cso.Id : null);
+        return (system, export, cso);
+    }
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        private readonly List<LogEvent> _events = [];
+
+        public List<LogEvent> Events
+        {
+            get
+            {
+                lock (_events)
+                    return [.. _events];
+            }
+        }
+
+        public void Emit(LogEvent logEvent)
+        {
+            lock (_events)
+                _events.Add(logEvent);
         }
     }
 
@@ -1076,20 +1270,27 @@ public class InitialPasswordStagingTests
     /// Runs an export whose Connector succeeds for everything, recording each Pending Export as the Connector was
     /// handed it (the flag is read there, not on the export the run holds).
     /// </summary>
+    /// <param name="setsPasswords">Whether the Connector can set passwords (<see cref="IConnectorPasswordManagement"/>),
+    /// as the LDAP Connector can: only then can a password owed to an account follow an Update (#2158).</param>
+    /// <param name="answer">The result for each export, success by default.</param>
     private async Task<(ExportExecutionResult Result, List<PendingExport> HandedToConnector)> ExportCapturingAsync(
         ConnectedSystem system,
-        ExportExecutionOptions? options = null)
+        ExportExecutionOptions? options = null,
+        bool setsPasswords = false,
+        Func<PendingExport, ConnectedSystemExportResult>? answer = null)
     {
         var handedToConnector = new List<PendingExport>();
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        if (setsPasswords)
+            mockConnector.As<IConnectorPasswordManagement>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
             {
                 // Copied as handed over: the flag is read now, before the run moves on.
                 handedToConnector.AddRange(exports.Select(pe => new PendingExport { Id = pe.Id, InitialPasswordFollows = pe.InitialPasswordFollows }));
-                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                return exports.Select(pe => answer?.Invoke(pe) ?? ConnectedSystemExportResult.Succeeded()).ToList();
             });
 
         var result = await Jim.ExportExecution.ExecuteExportsAsync(system, mockConnector.Object, SyncRunMode.PreviewAndSync,

@@ -51,7 +51,7 @@ public class SetMetaverseObjectPasswordRequest
 
     /// <summary>
     /// Whether to enable each named account as its password is set. Omitted leaves the accounts as they are, except
-    /// for a new Active Directory account JIM created disabled only until it had a password, which the password
+    /// for an Active Directory account whose enable JIM held back until it had a password, which the password
     /// enables as its Attribute Flow asks. Accepted only with <see cref="ConnectedSystemObjectIds"/>: a propagated
     /// password enables no other account, because it reaches accounts an administrator may have disabled on purpose.
     /// False is refused with a 400: setting a password never disables an account.
