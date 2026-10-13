@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1 and 2a complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -58,10 +58,26 @@ One PR, kept tight because #2053's multi-valued change starts once it merges.
 
 ### Phase 2: Testers per kind
 
-- **Inputs:** typed editors from the schema (text, number, date and time, Boolean, GUID); several values for a multi-valued attribute; an explicit "No value" per input, distinct from empty text; **load from an object** (a Connected System Object for import contexts, a Metaverse Object for export), editable once loaded; **run as of** for `Now`, `Today` and relative-date criteria (the evaluator gains an injectable clock).
-- **Results:** the step trace (expression result, value processing, conversion, outcome); the "If an input has no value" table; links to Preview Impact and Sync Preview.
-- **Kinds:** Attribute Flow (import and export), Generated Values (the base expression), Scope (criteria tree, met or not and why, when the object would enter or leave scope), Object Matching Rules in both modes (match values, and optionally the lookup: would join, no match, ambiguous), Example Data template expressions (REST API and PowerShell).
-- Parity for each kind in the same PR as its portal tester; split by kind if a PR grows past about 2,500 lines.
+Split by kind into reviewable PRs, in the order other work needs them.
+
+#### Phase 2a: Attribute Flow inputs and trace ✅
+
+- **Inputs:** each input described from the schema (type, plurality); typed editors; several values for a multi-valued attribute; an explicit **No value** distinct from empty text; **load from an object** (a Connected System Object for an import Attribute Flow, with its joined Metaverse Object for `mv[...]` inputs, or a Metaverse Object for an export one), editable once loaded.
+- **Results:** the step trace (expression result, value processing, conversion, outcome) and the "If an input has no value" table.
+- **Surfaces:** the portal's `AttributeFlowTestPanel`; `test-expression` gains `connectedSystemObjectId`, `metaverseObjectId`, `inputs`, `valueProcessingSteps` and `ifInputHasNoValue`; `Test-JIMExpression -ConnectedSystemObjectId -MetaverseObjectId`.
+- **As built:** Missing Input Behaviour treats empty text as missing, as synchronisation does, so "No value" and empty text differ in what the Expression sees, not in whether an input counts as missing.
+
+#### Phase 2b: Scope tester and run as of
+
+The scoping evaluator and its explanation: the criteria tree, each criterion met or not and why, and when the object would enter or leave scope. **Run as of** fixes the time used by `Now`, `Today` and relative-date criteria (the evaluator gains an injectable clock), for scope and Attribute Flow alike. #2054 builds on this.
+
+#### Phase 2c: Object Matching tester
+
+Both modes: the match values, and optionally the lookup against the current Metaverse (would join, no match, ambiguous), building on #2052's Try it.
+
+#### Phase 2d: Generated Values and Example Data
+
+A Generated Value's base expression (through the Attribute Flow tester, stopping before generation) and Example Data template expressions over REST and PowerShell.
 
 ### Phase 3: Validation on save everywhere
 
