@@ -1,9 +1,10 @@
 # Enabling an Active Directory Account While Its Password Is Owed
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** The Windows Active Directory lab run is owed: Scenario 024's `EnableWhileOwed` step (which also confirms that Active Directory answers an enabling modify on a password-less account with `0000052D`), Scenario 001 at Medium with `-InitialPassword` on the lab, and the Samba AD regressions (Scenario 001 at Medium with `-InitialPassword`, expecting no held changes; Scenario 017; Scenario 008 at Medium for the write-order change). The `RequiresPostgres` write-order test was written but not run in the implementing environment.
 - **Issue:** [#2158](https://github.com/TetronIO/JIM/issues/2158)
 - **Created:** 2026-10-13
-- **Builds on:** [AD_ENABLED_ACCOUNT_CREATE_WITH_INITIAL_PASSWORD.md](../done/AD_ENABLED_ACCOUNT_CREATE_WITH_INITIAL_PASSWORD.md) (#2039) and [INITIAL_PASSWORD_ENABLED_STATE_PRECEDENCE.md](../done/INITIAL_PASSWORD_ENABLED_STATE_PRECEDENCE.md) (#2064)
+- **Builds on:** [AD_ENABLED_ACCOUNT_CREATE_WITH_INITIAL_PASSWORD.md](AD_ENABLED_ACCOUNT_CREATE_WITH_INITIAL_PASSWORD.md) (#2039) and [INITIAL_PASSWORD_ENABLED_STATE_PRECEDENCE.md](INITIAL_PASSWORD_ENABLED_STATE_PRECEDENCE.md) (#2064)
 
 ## Overview
 
