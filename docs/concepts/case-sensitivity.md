@@ -15,8 +15,8 @@ Understanding this model helps you predict when a change will flow, when two obj
 
 | Question | Rule | Where JIM asks it |
 |----------|------|-------------------|
-| **Has this value changed?** | Exact | Change detection, export confirmation, Drift Detection |
-| **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
+| **Has this value changed?** | Exact; for an [identifier](#identifiers-a-target-reports-in-its-own-case), export confirmation and Drift Detection ask "Are these the same thing?" instead | Change detection, export confirmation, Drift Detection |
+| **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, Secondary External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
 | **Does this value meet a condition?** | Exact, unless you say otherwise | Scoping criteria, Predefined Search criteria, comparisons in expressions |
 | **Finding something** | Ignore case | Search boxes and list filters in the portal, log search |
 
@@ -40,8 +40,8 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Synchronising | Attribute Flow: whether a Metaverse value changed | Changed? | Exact | ❌ No |
 | Synchronising | [Generated values](#identifier-uniqueness-ignores-case): whether a candidate is already taken | Same thing? | Ignore case | ❌ No |
 | Synchronising | [Case normalisation](../configuration/attribute-mappings.md#value-processing-inbound) in value processing | Changes case rather than comparing it | Upper, lower or title case, as you choose | ✅ Per Attribute Flow |
-| Exporting | Export confirmation (did the value JIM sent arrive?) | Changed? | Exact | ❌ No |
-| Exporting | Drift Detection | Changed? | Exact | ❌ No |
+| Exporting | Whether a value needs exporting, export confirmation (did the value JIM sent arrive?) and Drift Detection | Changed? | Exact | ❌ No |
+| Exporting | The same three, for an [identifier](#identifiers-a-target-reports-in-its-own-case): an External ID, a Secondary External ID or a reference | Same thing? | Ignore case, unless the attribute is case-exact | ✅ Per attribute, by its case-exact declaration |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
 | Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
 | Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains` | Condition? | Exact | ✅ Wrap both sides in `Lower()` |
@@ -77,7 +77,7 @@ Only Text attributes carry the declaration. The Schema tab shows a **Case-exact*
 
 To change it, open the attribute's **Edit** dialog on the Schema tab and set **Values are case-exact**, or use `Set-JIMConnectedSystemAttribute -CaseExact` (see [Case-exact values](../configuration/connected-system-attributes.md#case-exact-values)). Your answer is kept when the schema is next refreshed; one you have not changed is restated from the Connected System's schema each time.
 
-The declaration sets the default case sensitivity of a new [Object Matching Rule](#object-matching-rules). Finding an existing Connected System Object by its External ID, and resolving references, ignore case for every attribute, whatever its declaration.
+The declaration sets the default case sensitivity of a new [Object Matching Rule](#object-matching-rules), and decides whether an External ID or Secondary External ID that the Connected System reports in a different case still counts as the value JIM exported (see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case)). Finding an existing Connected System Object by its External ID, and resolving references, ignore case for every attribute, whatever its declaration.
 
 ## 🎯 Scoping and search criteria
 
@@ -107,7 +107,7 @@ Why case is ignored here:
 
 ## 🔠 When a target changes the case of a value
 
-Because JIM confirms an export by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it retries the change on later exports, and once the retries are spent it reports the export as failed. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived.
+Because JIM confirms an export of ordinary text by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it retries the change on later exports, and once the retries are spent it reports the export as failed. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived. An identifier is the exception; see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case).
 
 Fold the case before the value reaches that system, so JIM sends what the system keeps:
 
@@ -115,6 +115,18 @@ Fold the case before the value reaches that system, so JIM sends what the system
 - **On an export Attribute Flow, or a generated value's base expression**<br /> Wrap the value in `Lower()` (or `Upper()`), for example `Lower(mv["Email"])`.
 
 Build the identifiers JIM generates in lower case for the same reason, as in `Lower(cs["firstName"]) + "." + Lower(cs["lastName"])`: every Connected System then holds the same value, however it treats case.
+
+### Identifiers a target reports in its own case
+
+An identifier is different. A directory reports a distinguished name in the case it stored, and for the parts above the object's own name (`DC=panoply,DC=local`, say) that case is the directory's, not JIM's: an export of `CN=Joe Bloggs,OU=Users,DC=panoply,DC=local` can come back as `CN=Joe Bloggs,OU=Users,DC=PANOPLY,DC=LOCAL`, naming the same entry. So for an External ID, a Secondary External ID and a reference, JIM asks whether the value names the same thing rather than whether it changed:
+
+- **Export confirmation** confirms the value when the Connected System holds it in any case.
+- **Exporting** does not stage a value the Connected System already holds in another case.
+- **Drift Detection** does not report a case-only difference as drift.
+
+A reference JIM has resolved to another Connected System Object is confirmed when the Connected System Object refers to that object, whatever its distinguished name looks like.
+
+An identifier declared [case-exact](#case-exact-attributes) still compares exactly, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers.
 
 ## 🧮 Case sensitivity in expressions
 
