@@ -150,7 +150,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int> -MetaverseObjec
 | `SourceExpression` | `string` | Yes (Expression) |  | An expression computing the value to match on, instead of a Connected System attribute, for an identifier held differently in each system: for example '"E" + Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result is converted to the type of `-TargetMetaverseAttributeId`, and a list of text values is matched value by value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one the Object Type does not have, or calls a function that returns a different value each time. |
 | `TargetMetaverseAttributeId` | `int` | Yes |  | The ID of the Metaverse attribute the source is matched against. |
 | `Order` | `int` | No |  | Where the rule comes in the order JIM tries the rules, lowest first. Without it, the rule goes after the existing ones. |
-| `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. Ignores case when omitted. |
+| `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. When omitted, follows the source: respects case when a source attribute's values are declared case-exact, and ignores it otherwise. |
 | `PassThru` | `switch` | No |  | Returns the rule created. |
 
 ### Output
@@ -360,7 +360,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int> -SourceExpression <string> -Target
 | `SourceExpression` | `string` | Yes (Expression) |  | An expression computing the value to match on, instead of a Connected System attribute, for an identifier held differently in each system: for example '"E" + Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result is converted to the type of `-TargetMetaverseAttributeId`, and a list of text values is matched value by value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one the Object Type does not have, or calls a function that returns a different value each time. |
 | `TargetMetaverseAttributeId` | `int` | Yes |  | The ID of the Metaverse attribute the source is matched against. |
 | `Order` | `int` | No |  | Where the rule comes in the order JIM tries the rules, lowest first. Without it, the rule goes after the existing ones. |
-| `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. Ignores case when omitted. |
+| `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. When omitted, follows the source: respects case when a source attribute's values are declared case-exact, and ignores it otherwise. |
 | `PassThru` | `switch` | No |  | Returns the rule created. |
 
 ### Output

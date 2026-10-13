@@ -5920,14 +5920,16 @@ public class SynchronisationController(
             MetaverseObjectTypeId = metaverseObjectType.Id,
             MetaverseObjectType = metaverseObjectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
-            TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
+            TargetMetaverseAttribute = targetMvAttr
         };
 
         var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, objectType, ruleId: 0, out var sources);
         if (sourcesError != null)
             return sourcesError;
         rule.Sources.AddRange(sources);
+
+        // Omitted, the setting follows the sources' case-exact declaration, as the portal's does (#2051).
+        rule.CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitiveFor(rule.Sources);
 
         try
         {
@@ -6258,8 +6260,7 @@ public class SynchronisationController(
             SyncRuleId = syncRule.Id,
             SyncRule = syncRule,
             TargetMetaverseAttributeId = targetMvAttr.Id,
-            TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
+            TargetMetaverseAttribute = targetMvAttr
         };
 
         // Add sources - for advanced mode, sources read the Synchronisation Rule's object type
@@ -6267,6 +6268,9 @@ public class SynchronisationController(
         if (sourcesError != null)
             return sourcesError;
         rule.Sources.AddRange(sources);
+
+        // Omitted, the setting follows the sources' case-exact declaration, as the portal's does (#2051).
+        rule.CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitiveFor(rule.Sources);
 
         try
         {
