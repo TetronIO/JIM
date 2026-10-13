@@ -40,14 +40,15 @@ public static class ScimCommonAttributes
     {
         return
         [
-            // Required and read-only: the provider assigns it, and JIM must never try to write it.
+            // Required and read-only: the provider assigns it, and JIM must never try to write it. RFC 7643 section 3.1
+            // defines both identifiers as case-exact, and no schema document will say so for them (#2051).
             new ScimFlattenedAttribute(Id, Id, AttributeDataType.Text, AttributePlurality.SingleValued,
                 required: true, AttributeWritability.ReadOnly, schemaUrn,
-                "The service provider's unique, immutable identifier for the resource."),
+                "The service provider's unique, immutable identifier for the resource.", caseExact: true),
 
             new ScimFlattenedAttribute(ExternalId, ExternalId, AttributeDataType.Text, AttributePlurality.SingleValued,
                 required: false, AttributeWritability.Writable, schemaUrn,
-                "An identifier assigned by the provisioning client, which JIM can populate on export."),
+                "An identifier assigned by the provisioning client, which JIM can populate on export.", caseExact: true),
 
             Meta("meta.resourceType", AttributeDataType.Text, "The name of the resource type, for example User."),
             Meta("meta.created", AttributeDataType.DateTime, "When the resource was created."),

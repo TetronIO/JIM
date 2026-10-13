@@ -72,7 +72,8 @@ public class CreateObjectMatchingRuleRequest
 
     /// <summary>
     /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
-    /// Omitted or null takes the default, which ignores case (see <see cref="ObjectMatchingDefaults"/>).
+    /// Omitted or null follows the sources: case is respected when any source attribute is declared case-exact, and
+    /// ignored otherwise, including for an expression source.
     /// </summary>
     public bool? CaseSensitive { get; set; }
 }
@@ -105,7 +106,8 @@ public class CreateSyncRuleObjectMatchingRuleRequest
 
     /// <summary>
     /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
-    /// Omitted or null takes the default, which ignores case (see <see cref="ObjectMatchingDefaults"/>).
+    /// Omitted or null follows the sources: case is respected when any source attribute is declared case-exact, and
+    /// ignored otherwise, including for an expression source.
     /// </summary>
     public bool? CaseSensitive { get; set; }
 }

@@ -33,6 +33,12 @@ internal static class SqlCatalogueColumns
 
     internal const string OrdinalPosition = "ORDINAL_POSITION";
 
+    /// <summary>
+    /// Whether a column's collation compares text exactly: 'YES' or 'NO', or null where the column has no
+    /// collation (it is not text) or the dialect cannot tell (#2051).
+    /// </summary>
+    internal const string CaseExact = "CASE_EXACT";
+
     internal const string ConstraintName = "CONSTRAINT_NAME";
 
     internal const string ReferencedSchema = "REFERENCED_SCHEMA";

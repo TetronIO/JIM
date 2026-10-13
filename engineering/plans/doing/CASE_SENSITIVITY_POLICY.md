@@ -1,6 +1,6 @@
 # One Case-Sensitivity Policy
 
-- **Status:** Doing (PR 1 in progress)
+- **Status:** Doing (PR 1 and PR 3 done)
 - **Issue:** [#2051](https://github.com/TetronIO/JIM/issues/2051)
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
 - **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](../done/CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
@@ -136,7 +136,7 @@ Each PR follows TDD, keeps the build and tests green, and updates the policy pag
   - 🔄 expression `StartsWith`/`EndsWith`;
   - 🔄 name lookups across the REST API and PowerShell.
 
-### PR 3: The case-exact declaration
+### PR 3: The case-exact declaration ✅
 
 - **Model and migration:**
   - `ConnectedSystemObjectTypeAttribute.CaseExact` and `CaseExactSetByAdministrator`, both non-nullable with a default of false.

@@ -40,8 +40,8 @@ function New-JIMMatchingRule {
         existing ones.
 
     .PARAMETER CaseSensitive
-        Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. Ignores case when
-        omitted.
+        Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. When omitted, follows
+        the source: respects case when a source attribute's values are declared case-exact, and ignores it otherwise.
 
     .PARAMETER PassThru
         Returns the rule created.
