@@ -3,10 +3,12 @@
 
 using Bunit;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -47,6 +49,8 @@ public class SyncRuleAttributeFlowTabRetiredValuesTests : JimComponentTestContex
         repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         Services.AddSingleton<IJimApplicationFactory>(
             new FakeJimApplicationFactory(new JimApplication(repo.Object, syncRepository: _syncRepository.Object)));
+        // The Attribute Flow dialog checks an expression's syntax as it is typed (#2053).
+        Services.AddSingleton<IExpressionEvaluator>(new DynamicExpressoEvaluator());
     }
 
     [Test]

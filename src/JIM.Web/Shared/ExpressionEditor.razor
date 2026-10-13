@@ -1,4 +1,6 @@
+@using JIM.Web.Models
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -15,6 +17,7 @@
    older value back over text typed while the previous keystroke was in flight. With value plus @oninput, typing at
    speed lost most of what was typed (43 of 125 characters survived in the runtime check). *@
 
+<div class="jim-expression-editor-host">
 <MudField Label="@Label" Variant="Variant.Outlined" HelperText="@HelperText" Error="@ShowError" ErrorText="@EffectiveErrorText"
           Disabled="@Disabled" Class="@FieldClass" InnerPadding="false" Underline="false">
     @* The frame's padding is the band between the border and the scrolling text; a press there focuses the textarea,
@@ -24,19 +27,68 @@
             <div class="jim-expression-editor-stack">
                 <pre class="jim-expression-editor-layer jim-expression-editor-highlight" aria-hidden="true">@((MarkupString)OverlayMarkup)</pre>
                 <textarea @ref="_textarea" id="@Id" class="jim-expression-editor-layer jim-expression-editor-input" rows="1"
-                          @bind:get="_value" @bind:set="CommitAsync" @bind:event="oninput" @onblur="OnBlur"
+                          @bind:get="_value" @bind:set="OnTypedAsync" @bind:event="oninput" @onblur="OnBlur"
                           @onmousedown:stopPropagation="true"
                           placeholder="@Placeholder" disabled="@Disabled"
                           spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
                           aria-label="@Label" aria-invalid="@(ShowError ? "true" : "false")"
-                          aria-required="@(Required ? "true" : null)"></textarea>
+                          aria-required="@(Required ? "true" : null)"
+                          aria-autocomplete="@(Assist ? "list" : null)" aria-controls="@(SuggestionsOpen ? ListId : null)"
+                          aria-activedescendant="@(SuggestionsOpen ? OptionId(_highlighted) : null)"
+                          data-assist-open="@(SuggestionsOpen ? "true" : "false")"></textarea>
             </div>
         </div>
     </div>
 </MudField>
 
+@* ─── Suggestions and signature help (#2053): from the function catalogue and the attributes the host passes ─── *@
+@if (SuggestionsOpen)
+{
+    @* Each option keeps the textarea focused (mousedown is prevented), so choosing one with the pointer leaves the caret
+       where the keyboard would have. *@
+    <div class="jim-expression-assist-list mud-elevation-8" id="@ListId" role="listbox" aria-label="Suggestions"
+         data-testid="jim-expression-suggestions">
+        @for (var i = 0; i < _completion!.Suggestions.Count; i++)
+        {
+            var index = i;
+            var suggestion = _completion.Suggestions[index];
+            <div @key="suggestion.Label" id="@OptionId(index)" role="option" aria-selected="@(index == _highlighted ? "true" : "false")"
+                 class="@($"jim-expression-assist-item{(index == _highlighted ? " jim-expression-assist-item-active" : string.Empty)}")"
+                 @onmousedown:preventDefault="true" @onmousedown="@(() => AcceptAsync(suggestion))">
+                <span class="@($"jim-expression-assist-kind jim-expression-assist-kind-{KindClass(suggestion.Kind)}")" aria-hidden="true">@KindGlyph(suggestion.Kind)</span>
+                <span class="jim-expression-assist-text">
+                    <span class="jim-expression-assist-label">@(suggestion.Detail ?? suggestion.Label)</span>
+                    @if (suggestion.Description != null)
+                    {
+                        <span class="jim-expression-assist-description">@suggestion.Description</span>
+                    }
+                </span>
+            </div>
+        }
+        <div class="jim-expression-assist-hint" aria-hidden="true">↑↓ to choose · Enter or Tab to insert · Esc to close</div>
+    </div>
+}
+else if (_signature != null)
+{
+    var signature = _signature;
+    <div class="jim-expression-signature" aria-live="polite" data-testid="jim-expression-signature">
+        <code class="jim-expression-signature-call">@foreach (var part in SignatureParts(signature)){@if (part.Active){<span class="jim-expression-signature-active">@part.Text</span>}else{@part.Text}}</code>
+        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(signature.Function.Description)</span>
+        @if (signature.Function.Parameters.Count > 0)
+        {
+            var active = signature.Function.Parameters[signature.ParameterIndex];
+            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @active.Description</span>
+        }
+    </div>
+}
+</div>
+
 @code {
     private ElementReference _textarea;
+    private DotNetObjectReference<ExpressionEditor>? _assistReference;
+    private ExpressionCompletion? _completion;
+    private ExpressionSignature? _signature;
+    private int _highlighted;
     private string? _value;
     private string? _lastParameterValue;
     private bool _touched;
@@ -85,6 +137,14 @@
     public string? ErrorText { get; set; }
 
     /// <summary>
+    /// Checks the expression as it is typed, returning why it does not parse, or null when it does; the reason shows
+    /// beneath the field. Pass <c>e => ExpressionSyntaxCheck.ErrorFor(evaluator, e)</c>, and gate the host's save on the
+    /// same check, so the field and the button cannot disagree. A host's own <see cref="Error"/> takes precedence.
+    /// </summary>
+    [Parameter]
+    public Func<string, string?>? SyntaxCheck { get; set; }
+
+    /// <summary>
     /// Classes for the field as a whole, for its surrounding geometry (<c>mt-5</c> and the like).
     /// </summary>
     [Parameter]
@@ -108,11 +168,86 @@
     [Parameter]
     public int MaxLines { get; set; } = 8;
 
-    private bool ShowError => Error || RequiredButEmpty;
+    /// <summary>
+    /// Suggests functions and attributes as the expression is typed, and shows the signature of the call the caret is
+    /// in (#2053). On by default.
+    /// </summary>
+    [Parameter]
+    public bool Assist { get; set; } = true;
+
+    /// <summary>
+    /// The Metaverse attribute names suggested inside <c>mv["..."]</c>; none where the host passes none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? MetaverseAttributeNames { get; set; }
+
+    /// <summary>
+    /// The Connected System attribute names suggested inside <c>cs["..."]</c>; none where the host passes none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? ConnectedSystemAttributeNames { get; set; }
+
+    private bool SuggestionsOpen => Assist && _completion is { Suggestions.Count: > 0 };
+
+    private string ListId => $"{Id ?? "jim-expression"}-suggestions";
+
+    private string OptionId(int index) => $"{ListId}-{index}";
+
+    /// <summary>
+    /// The signature as text in parts, the parameter the caret is on marked, so it can be emphasised.
+    /// </summary>
+    private static IEnumerable<(string Text, bool Active)> SignatureParts(ExpressionSignature signature)
+    {
+        var parameters = signature.Function.Parameters;
+        yield return (signature.Function.Name + "(", false);
+        for (var i = 0; i < parameters.Count; i++)
+        {
+            var separator = i == 0 ? string.Empty : ", ";
+            yield return (parameters[i].IsOptional ? $"[{separator}" : separator, false);
+            yield return (parameters[i].Name, i == signature.ParameterIndex);
+            if (parameters[i].IsOptional)
+                yield return ("]", false);
+        }
+
+        yield return (")", false);
+    }
+
+    private static string KindGlyph(ExpressionSuggestionKind kind) => kind switch
+    {
+        ExpressionSuggestionKind.MetaverseAttribute => "MV",
+        ExpressionSuggestionKind.ConnectedSystemAttribute => "CS",
+        _ => "fx"
+    };
+
+    private static string KindClass(ExpressionSuggestionKind kind) => kind switch
+    {
+        ExpressionSuggestionKind.MetaverseAttribute => "mv",
+        ExpressionSuggestionKind.ConnectedSystemAttribute => "cs",
+        _ => "function"
+    };
+
+    private bool ShowError => Error || SyntaxError != null || RequiredButEmpty;
 
     private bool RequiredButEmpty => Required && _touched && string.IsNullOrWhiteSpace(_value);
 
-    private string? EffectiveErrorText => Error ? ErrorText : RequiredButEmpty ? "Required" : null;
+    /// <summary>
+    /// The syntax check's finding, held back while the field is first typed in (until it is left), since every
+    /// half-typed expression is a syntax error and reporting each keystroke turns the field red mid-word. A value the
+    /// field opened with, or one typed after the field was left, is reported at once.
+    /// </summary>
+    private string? SyntaxError => SyntaxCheck != null && !string.IsNullOrWhiteSpace(_value) && (_touched || !_typed)
+        ? SyntaxCheck(_value)
+        : null;
+
+    private bool _typed;
+
+    private Task OnTypedAsync(string? value)
+    {
+        _typed = true;
+        return CommitAsync(value);
+    }
+
+    private string? EffectiveErrorText => Error ? ErrorText : SyntaxError ?? (RequiredButEmpty ? "Required" : null);
 
     // mud-input-required is the class MudBlazor's own required inputs carry, which is what draws the asterisk after
     // the label, so a required expression is marked exactly as the fields around it are.
@@ -221,6 +356,147 @@
     }
 
     private void OnBlur() => _touched = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !Assist)
+            return;
+
+        _assistReference = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("jimExpressionAssist.attach", _textarea, _assistReference);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the field works without suggestions.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available (prerendering, or a test renderer); the field works without suggestions.
+        }
+    }
+
+    /// <summary>
+    /// The caret moved, or the text changed (<paramref name="typed"/>): suggestions open only as text is typed, and the
+    /// signature help follows the caret wherever it goes. A selection shows neither.
+    /// </summary>
+    [JSInvokable]
+    public Task OnCaretMoved(string text, int start, int end, bool typed)
+    {
+        if (start != end)
+        {
+            _completion = null;
+            _signature = null;
+        }
+        else
+        {
+            _completion = typed
+                ? ExpressionAssist.Complete(text, start, MetaverseAttributeNames ?? [], ConnectedSystemAttributeNames ?? [])
+                : null;
+            _highlighted = 0;
+            _signature = ExpressionAssist.SignatureAt(text, start);
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// A key the browser held back while the suggestions were open: the arrows move through them, Enter or Tab inserts
+    /// the one highlighted, Escape closes them.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnAssistKey(string key)
+    {
+        if (!SuggestionsOpen)
+            return;
+
+        var count = _completion!.Suggestions.Count;
+        switch (key)
+        {
+            case "ArrowDown":
+                _highlighted = (_highlighted + 1) % count;
+                break;
+            case "ArrowUp":
+                _highlighted = (_highlighted - 1 + count) % count;
+                break;
+            case "Enter" or "Tab":
+                await AcceptAsync(_completion.Suggestions[Math.Clamp(_highlighted, 0, count - 1)]);
+                return;
+            case "Escape":
+                _completion = null;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// The field lost focus: the suggestions close, the signature help with them.
+    /// </summary>
+    [JSInvokable]
+    public Task OnAssistBlur()
+    {
+        _completion = null;
+        _signature = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task AcceptAsync(ExpressionSuggestion suggestion)
+    {
+        if (_completion == null)
+            return;
+
+        var current = _value ?? string.Empty;
+        var start = Math.Clamp(_completion.ReplaceStart, 0, current.Length);
+        var end = Math.Clamp(_completion.ReplaceEnd, start, current.Length);
+        var replaced = current[start..end];
+        _completion = null;
+        StateHasChanged();
+
+        try
+        {
+            // The browser makes the edit and raises input, which commits it through the binding and reports the caret
+            // for the signature help. Writing the whole value from here would undo any key typed while the choice was
+            // on its way; the browser declines (false) when the text it would replace has changed since.
+            await JS.InvokeAsync<bool>("jimExpressionAssist.insert", _textarea, start, end, replaced, suggestion.InsertText);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; there is no field to edit.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available (prerendering, or a test renderer): make the edit here instead.
+            var updated = string.Concat(current.AsSpan(0, start), suggestion.InsertText, current.AsSpan(end));
+            _signature = ExpressionAssist.SignatureAt(updated, start + suggestion.InsertText.Length);
+            await CommitAsync(updated);
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_assistReference == null)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("jimExpressionAssist.detach", _textarea);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the listeners went with the page.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available; nothing was attached.
+        }
+
+        _assistReference.Dispose();
+    }
 
     private async Task FocusFromFrameAsync()
     {
