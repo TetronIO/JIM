@@ -263,17 +263,31 @@ function ConvertTo-JIMExampleDataAttributeDependency {
     }
 
     # Enum values must be sent as names, not numbers: the API rejects numeric enum values
-    # on request DTOs (#1060). Canonicalise the casing so the exact enum name is sent.
-    $validComparisonTypes = @('Equals', 'NotEquals', 'LessThan', 'GreaterThan', 'GreaterThanOrEqual', 'LessThanOrEqual', 'Like')
+    # on request DTOs (#1060). Canonicalise the casing so the exact enum name is sent. These are the operator
+    # catalogue's names, shared with scoping and Predefined Searches (#2053); which apply depends on the depended-on
+    # attribute's data type, which the API checks.
+    $validComparisonTypes = @('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
+        'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+        'HasValue', 'HasNoValue', 'MatchesPattern', 'NotMatchesPattern')
+    # The names Example Data used before it shared the catalogue, with what replaced each.
+    $retiredComparisonTypes = @{ GreaterThanOrEqual = 'GreaterThanOrEquals'; LessThanOrEqual = 'LessThanOrEquals'; Like = 'Contains' }
     $comparisonType = [string]$Dependency['ComparisonType']
     $canonicalComparisonType = $validComparisonTypes | Where-Object { $_ -eq $comparisonType } | Select-Object -First 1
     if (-not $canonicalComparisonType) {
+        $retired = $retiredComparisonTypes.Keys | Where-Object { $_ -eq $comparisonType } | Select-Object -First 1
+        if ($retired) {
+            throw "AttributeDependency ComparisonType '$comparisonType' has been renamed; use '$($retiredComparisonTypes[$retired])'."
+        }
         throw "Invalid AttributeDependency ComparisonType '$comparisonType'. Valid values: $($validComparisonTypes -join ', ')."
     }
 
-    return @{
+    $converted = @{
         metaverseAttributeId = $metaverseAttributeId
         comparisonType       = $canonicalComparisonType
-        stringValue          = [string]$Dependency['StringValue']
     }
+    # HasValue and HasNoValue take no value, so a dependency using them can leave StringValue out.
+    if ($Dependency.ContainsKey('StringValue')) {
+        $converted.stringValue = [string]$Dependency['StringValue']
+    }
+    return $converted
 }
