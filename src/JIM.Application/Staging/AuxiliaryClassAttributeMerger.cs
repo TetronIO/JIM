@@ -149,6 +149,9 @@ internal static class AuxiliaryClassAttributeMerger
                     // class must satisfy its MUSTs, whichever structural class it is merged onto.
                     Required = attribute.Required,
 
+                    // So does its case-exact declaration: the values compare the same way on any class (#2051).
+                    CaseExact = attribute.CaseExact,
+
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name
 

@@ -2697,7 +2697,8 @@ public partial class ConnectedSystemServer
             Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
             {
                 Id = attribute.Id,
-                Name = attribute.Name
+                Name = attribute.Name,
+                CaseExact = attribute.CaseExact
             }).ToList()
         }).ToList();
 
@@ -2818,6 +2819,11 @@ public partial class ConnectedSystemServer
                             existingAttribute.Type = schemaAttribute.Type;
                         }
 
+                        // The case-exact declaration follows the same rule as the data type: discovered unless an
+                        // administrator decided it, and a refresh never overrules the administrator (#2051).
+                        if (!existingAttribute.CaseExactSetByAdministrator)
+                            existingAttribute.CaseExact = schemaAttribute.CaseExact;
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
@@ -2835,7 +2841,8 @@ public partial class ConnectedSystemServer
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
-                            Required = schemaAttribute.Required
+                            Required = schemaAttribute.Required,
+                            CaseExact = schemaAttribute.CaseExact
                         });
                     }
                 }
@@ -2866,7 +2873,8 @@ public partial class ConnectedSystemServer
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
-                        Required = a.Required
+                        Required = a.Required,
+                        CaseExact = a.CaseExact
                     }).ToList()
                 };
 
