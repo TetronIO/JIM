@@ -87,6 +87,29 @@ An override survives a schema refresh. JIM records that the type was chosen rath
 !!! note "Existing Connected Systems"
     Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
 
+## Case-exact values
+
+Each Text attribute says whether its values are **case-exact**: whether `JBloggs` and `jbloggs` are two different values or one. Most identifiers are not case-exact (directory account names, email addresses, distinguished names), so a Text attribute ignores case unless its Connected System's schema says otherwise. [Case Sensitivity](../concepts/case-sensitivity.md#case-exact-attributes) lists what each Connector discovers, and what the declaration decides.
+
+The Schema tab shows a **Case-exact** column for any Object Type with a case-exact attribute, and the tooltip on each says whether the Connected System's schema stated it or an administrator set it.
+
+### Changing the declaration
+
+A Connected System's schema cannot always say. A delimited file says nothing about case, and a Connected System can compare values more strictly than its schema states. Every Connector therefore lets you set it: open the attribute's **Edit** control on the Schema tab, set **Values are case-exact**, confirm, and save the schema.
+
+From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 12 -CaseExact $true
+```
+
+In bulk, give `caseExact` in an attribute's hashtable: `-AttributeUpdates @{ 12 = @{ caseExact = $true } }`. Through the REST API, the attribute update and bulk attribute update both take `caseExact` (`PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`). A non-text attribute cannot be declared case-exact, and the request says so rather than ignoring it.
+
+Your answer survives a schema refresh. JIM records that the declaration was set rather than discovered, exactly as it does for an overridden data type, so a refresh restates what the Connector discovered and leaves your choice alone.
+
+!!! note "Existing Connected Systems"
+    A Connected System created before JIM recorded case-exactness has every attribute ignoring case until its schema is next refreshed, when the discovered declarations are filled in. Refresh the schema to see them.
+
 ## Credential attributes are never managed
 
 Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:
