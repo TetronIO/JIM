@@ -320,7 +320,7 @@ pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>
 | `Conflict` / `Behind` | Merge `origin/main` in and push (never rebase; see below). |
 | `Blocked` | Every check passed and no thread is open: check the head commit is signed and every required check ran (see "`failures: none` is not `mergeable`"). |
 
-After acting, run it again; repeat until `Merged`. A thread you leave open on purpose (a security finding waiting on the user's call) goes in `-AcknowledgedThreadIds` so it stops ending the wait. A Bash background command is the right primitive per the Monitor tool's own guidance: a single completion event is a command that exits when its condition holds. Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check; wait for the notification. In Claude Code on the web there is no `gh`; `subscribe_pr_activity` delivers the same events instead.
+After acting, run it again; repeat until `Merged`. A thread you leave open on purpose (a security finding waiting on the user's call) goes in `-AcknowledgedThreadIds` so it stops ending the wait. A Bash background command is the right primitive per the Monitor tool's own guidance: a single completion event is a command that exits when its condition holds. Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check; wait for the notification. It works in Claude Code on the web too: GraphQL is refused there, and the script falls back to REST and the relay's review-thread route on its own. In a web session, still `subscribe_pr_activity` (it wakes the session without a running command); the watcher is for a one-off read (`-Once`) or a session that cannot subscribe.
 
 When it reports `Merged`, run cleanup:
 
