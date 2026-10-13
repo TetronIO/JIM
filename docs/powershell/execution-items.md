@@ -1,6 +1,6 @@
 ---
 title: Execution Items
-description: "The cmdlets that read what happened to one object in a Run Profile execution, what caused it, and what it went on to cause."
+description: "The cmdlets that read what happened to one object in a Run Profile execution, what caused it, what it went on to cause, and every item about one object."
 type: reference
 audience: automation-author
 ---
@@ -16,6 +16,8 @@ A Run Profile execution records one execution item (a Run Profile Execution Item
 Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
 
 With `-Causes` it returns what caused the item instead, and with `-Consequences` what the item went on to cause, in later runs as well as its own: the same story the [Lineage view](../configuration/causality.md) tells, one row per cohort.
+
+With `-ConnectedSystemId` and `-ConnectedSystemObjectId`, or with `-MetaverseObjectId`, it returns the object's causal timeline: every execution item about the object, newest first, each with its nearest cause in `Because`, as the [Causality Explorer](../configuration/causality.md#the-causality-explorer) lists them. Each row's `Id` is the item's own, so rows pipe straight back in for `-Causes` or `-Consequences`.
 
 <!-- BEGIN GENERATED: Get-JIMActivityExecutionItem -->
 ### Syntax
@@ -218,6 +220,17 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 ```powershell title="Show what caused an execution item"
 Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
     Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
+```
+
+```powershell title="List what happened to a Connected System Object, and why"
+Get-JIMActivityExecutionItem -ConnectedSystemId 3 -ConnectedSystemObjectId "c3d4e5f6-a7b8-9012-cdef-123456789012" |
+    Format-Table Executed, TargetName, ObjectChangeType, Because
+```
+
+```powershell title="Walk back from every deprovision of a Metaverse Object"
+Get-JIMActivityExecutionItem -MetaverseObjectId "d4e5f6a7-b8c9-0123-def0-234567890123" -All |
+    Where-Object ObjectChangeType -eq 'Deprovisioned' |
+    Get-JIMActivityExecutionItem -Causes
 ```
 
 ```powershell title="Show which consequences are still waiting, and on what"

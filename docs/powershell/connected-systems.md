@@ -1636,7 +1636,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 ## Get-JIMPendingExport
 
-Retrieves Pending Export operations queued for a Connected System.
+Retrieves Pending Export operations queued for a Connected System, or the synchronisation runs that queued one.
 
 ### Syntax
 
@@ -1657,6 +1657,9 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string>
 
 # AttributeChangesAll
 Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All [-Force]
+
+# QueuedBy
+Get-JIMPendingExport -Id <guid> -QueuedBy
 ```
 
 ### Parameters
@@ -1664,7 +1667,8 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes (List, ListAll) | | Connected System identifier |
-| `Id` | `guid` | Yes (ById, AttributeChanges, AttributeChangesAll) | | Pending Export operation identifier |
+| `Id` | `guid` | Yes (ById, AttributeChanges, AttributeChangesAll, QueuedBy) | | Pending Export operation identifier. With `-QueuedBy`, accepts pipeline input by property name, so the rows of a list can be piped in. |
+| `QueuedBy` | `switch` | Yes (QueuedBy) | | Return the runs that queued the Pending Export instead. |
 | `AttributeName` | `string` | No | | Name of a multi-valued attribute to page through its changes |
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
@@ -1677,6 +1681,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
 - **ById**: Detailed view of a single Pending Export, including all attribute changes. Each attribute change carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced it; both are `$null` if the contributing rule has since been deleted. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/unresolved-references.md#on-export). `ValueSources` names where each attribute's queued value came from: `ConnectedSystemAttributeId` identifies the attribute, `IsComputed` is `$true` for an expression, chained mapping or generated value (`Expression` describes an expression or chained mapping; for a generated value `IsGeneratedValue` is `$true` and `Expression` is `$null`), and otherwise `SourceMetaverseAttributeId`/`SourceMetaverseAttributeName` name the single Metaverse attribute it was read from, with `Origin` (the same shape [`Get-JIMMetaverseObjectProvenance`](metaverse.md#get-jimmetaverseobjectprovenance) returns) giving that attribute's current source and `HasSeveralOrigins` flagging a multi-valued attribute whose values came from more than one source. There is no entry for an attribute whose export mapping cannot be resolved (its staging rule has since been deleted).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
+- **QueuedBy**: One row per synchronisation run that queued the Pending Export, newest first, each the execution item that staged it, with its nearest cause in `Because`. The rows have the same shape as an object's causal timeline (see [`Get-JIMActivityExecutionItem`](execution-items.md)), so they pipe straight into `Get-JIMActivityExecutionItem -Causes`. A warning says when some runs are no longer retained, or when earlier ones may be missing because the Pending Export keeps only its most recent.
 
 ### Examples
 
@@ -1694,6 +1699,11 @@ Get-JIMPendingExport -ConnectedSystemId 3 -All
 
 ```powershell title="View details of a specific Pending Export"
 Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="See which synchronisation runs queued a Pending Export, and why"
+Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -QueuedBy |
+    Format-Table Executed, TargetName, TargetContext, Because
 ```
 
 ```powershell title="Page through member additions on a group export"

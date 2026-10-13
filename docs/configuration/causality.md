@@ -1,6 +1,6 @@
 ---
 title: Causality
-description: "How an execution item's Lineage explains what caused a change and what the change went on to cause in later runs."
+description: "How the Lineage explains what caused a change and what it went on to cause, and how the Causality Explorer follows one story across objects."
 type: concept
 audience: operator
 ---
@@ -75,8 +75,25 @@ Consequences can still be happening, so the Lineage shows a reading taken when t
 
 The summary band adds an **After this run** strip of what followed, separate from the run's own outcomes, and it shows in every view. Choosing a pill opens the Lineage, which is the one view that shows consequences; the Timeline and Table describe the run alone.
 
+## The Causality Explorer
+
+The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. Open it from wherever the question starts:
+
+- **Explore causality** on a Connected System Object or a Metaverse Object opens that object's causal timeline.
+- **Open in explorer** in an execution item's causality panel opens the item's Lineage in the explorer.
+- **Queued by** on a Pending Export lists the synchronisation runs that queued the change, each with **Explore** beside it.
+
+An object's timeline lists every execution item about it, newest first: when the run happened, what kind of run it was, what it did, and **Because**, the item's nearest cause in one line ("Tina Adams was deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"). Where nothing earlier was recorded, the line says so, and it says differently where the cause has aged out of history, so a story cut short never reads as complete. Long timelines load 50 items at a time with **Show 50 more**. Choosing a row opens that item's Lineage, and any object or item named in a Lineage opens in turn, so the explorer re-centres on whatever you choose.
+
+Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button, and **Copy link** gives an address that opens the same focus with the same trail, to send to a colleague. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
+
+A deleted object stays explorable: its timeline is read through the records its deletion kept, and the focus header says when it was deleted, and **View deletion record** opens what its deletion kept. A Metaverse Object's timeline on a deployment that does not record Metaverse Object changes holds only what its joined Connected System Objects recorded, and says so above the list.
+
+**Queued by** answers the question an export raises on its own: why is this change waiting? A Pending Export can be queued by several synchronisations before it exports, and each is listed with its own nearest cause. A Pending Export queued before your deployment recorded its queueing runs says that no run is recorded rather than showing an empty list, and runs whose records retention has removed are counted rather than listed.
+
 ## Related
 
 - [Activities](activities.md): execution items and the causality panel's views.
-- [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort.
+- [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort; and `-ConnectedSystemObjectId` or `-MetaverseObjectId`, which return an object's causal timeline.
+- [PowerShell: Connected Systems](../powershell/connected-systems.md): `Get-JIMPendingExport -QueuedBy`, the runs that queued a Pending Export.
 - [Deprovisioning Action](deprovisioning.md) and [grace period](metaverse.md#grace-period): the settings the deletion cards name.
