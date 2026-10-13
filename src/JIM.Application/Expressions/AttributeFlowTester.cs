@@ -324,7 +324,7 @@ public static class AttributeFlowTester
                 AttributeFlowErrorReason.MissingInputFailedObject =>
                     $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail the object, so {failsObject}.",
                 AttributeFlowErrorReason.EvaluationFailed =>
-                    $"The Expression failed: {evaluation.Source.EvaluationException?.Message} So {failsObject}.",
+                    $"The Expression failed, so {failsObject}: {evaluation.Source.EvaluationException?.Message}",
                 AttributeFlowErrorReason.ResultNotConvertible =>
                     $"The Expression returned '{evaluation.Resolution?.UnconvertibleValue}', which a {evaluation.TargetType} attribute cannot hold, so " +
                     $"{keepsValue}.",

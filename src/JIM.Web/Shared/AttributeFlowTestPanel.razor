@@ -89,7 +89,7 @@ else
                                 @foreach (var value in ValuesOf(accessor).ToList())
                                 {
                                     var held = value;
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Disabled="absent"
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
                                              OnClose="@(() => RemoveValue(accessor, held))">@held</MudChip>
                                 }
                             </MudStack>
@@ -104,8 +104,7 @@ else
                         else if (descriptor.Type == AttributeDataType.Boolean)
                         {
                             <MudSelect T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
-                                       Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))"
-                                       Disabled="absent">
+                                       Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))">
                                 <MudSelectItem T="string" Value="@("True")">True</MudSelectItem>
                                 <MudSelectItem T="string" Value="@("False")">False</MudSelectItem>
                             </MudSelect>
@@ -113,7 +112,7 @@ else
                         else
                         {
                             <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
-                                          Placeholder="@Placeholder(descriptor.Type)" Disabled="absent"
+                                          Placeholder="@Placeholder(descriptor.Type)"
                                           Value="@ValuesOf(accessor).FirstOrDefault()" ValueChanged="@(v => SetSingleValue(accessor, v))" />
                         }
                     </td>
@@ -200,6 +199,14 @@ else
                                 <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                             }
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@evaluation.TargetType</MudText>
+                        }
+                        else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultNotConvertible)
+                        {
+                            <MudText Typo="Typo.body2">'@evaluation.Resolution?.UnconvertibleValue' is not a @evaluation.TargetType value</MudText>
+                        }
+                        else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultMultiValued)
+                        {
+                            <MudText Typo="Typo.body2">@evaluation.Resolution?.ValueCount values, for an attribute that holds one</MudText>
                         }
                         else if (evaluation.Resolution != null && evaluation.Outcome == AttributeFlowOutcome.NoValue)
                         {
@@ -336,7 +343,8 @@ else
     private List<string> ValuesOf(string accessor) => _values.TryGetValue(accessor, out var values) ? values : [];
 
     /// <summary>
-    /// Typing a value means the input has one; clearing the box leaves it as empty text until "No value" is ticked.
+    /// Typing a value means the input has one, so "No value" is cleared; clearing the box leaves it as empty text until
+    /// "No value" is ticked again. The editor is never disabled, so an untouched input can simply be typed into.
     /// </summary>
     private void SetSingleValue(string accessor, string? value)
     {
@@ -447,6 +455,7 @@ else
 
         _loadedObjectName = found.Name ?? found.Id.ToString();
         _objectResults = [];
+        _searched = false;
         ClearResult();
     }
 
