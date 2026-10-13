@@ -26,33 +26,8 @@
 
 @if (_fromObject)
 {
-    <div class="mt-3">
-        <SearchField Value="@_objectSearch" ValueChanged="SearchObjectsAsync" Label="@ObjectSearchLabel"
-                     Placeholder="Search by name" />
-        @if (_objectResults.Count > 0)
-        {
-            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
-                @foreach (var found in _objectResults)
-                {
-                    var choice = found;
-                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="pa-0" OnClick="@(() => LoadObjectAsync(choice))"
-                               aria-label="@($"Load values from {choice.Name}")">
-                        <ObjectChip Kind="ObjectKind" TypeName="@choice.TypeName" Name="@choice.Name" Class="ma-0" />
-                    </MudButton>
-                }
-            </MudStack>
-        }
-        else if (!string.IsNullOrWhiteSpace(_objectSearch) && _searched)
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No objects match.</MudText>
-        }
-        @if (_loadedObjectName != null)
-        {
-            <MudText Typo="Typo.body2" Class="mt-2">
-                Values loaded from <strong>@_loadedObjectName</strong>. Change any of them to try a variation.
-            </MudText>
-        }
-    </div>
+    <TestObjectPicker Kind="ObjectKind" ConnectedSystemId="SyncRule.ConnectedSystemId" ConnectedSystemObjectType="SyncRule.ConnectedSystemObjectType"
+                      MetaverseObjectTypeId="SyncRule.MetaverseObjectType?.Id" Label="@ObjectSearchLabel" OnPicked="LoadObjectAsync" Class="mt-3" />
 }
 
 @if (_inputs.Count == 0)
@@ -258,8 +233,6 @@ else
     [Parameter, EditorRequired]
     public SyncRuleMappingSource Source { get; set; } = null!;
 
-    private sealed record FoundObject(Guid Id, string? Name, string? TypeName);
-
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
         new(false, "Sample values"),
@@ -272,10 +245,6 @@ else
     private string? _resolvedFrom;
     private string _targetName = string.Empty;
     private bool _fromObject;
-    private string? _objectSearch;
-    private bool _searched;
-    private List<FoundObject> _objectResults = [];
-    private string? _loadedObjectName;
     private AttributeFlowTestResult? _result;
     private string? _parseError;
     private int? _errorPosition;
@@ -327,46 +296,14 @@ else
         ClearResult();
     }
 
-    private void SetFromObject(bool fromObject)
-    {
-        _fromObject = fromObject;
-        _objectResults = [];
-        _objectSearch = null;
-        _searched = false;
-    }
-
-    private async Task SearchObjectsAsync(string? search)
-    {
-        _objectSearch = search;
-        _searched = false;
-        _objectResults = [];
-        if (string.IsNullOrWhiteSpace(search))
-            return;
-
-        using var jim = JimFactory.Create();
-        if (Exporting)
-        {
-            var found = await jim.Metaverse.GetMetaverseObjectsAsync(1, 8, SyncRule.MetaverseObjectType?.Id, search);
-            _objectResults = found.Results.Select(mvo => new FoundObject(mvo.Id, mvo.NameOrId, mvo.TypeName)).ToList();
-        }
-        else
-        {
-            var found = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(SyncRule.ConnectedSystemId, 1, 8, search,
-                objectTypeFilter: [SyncRule.ConnectedSystemObjectType.Id]);
-            _objectResults = found.Results
-                .Select(cso => new FoundObject(cso.Id, ObjectDescription.ChipName(cso.DisplayName, cso.ExternalIdValue), SyncRule.ConnectedSystemObjectType.Name))
-                .ToList();
-        }
-
-        _searched = true;
-    }
+    private void SetFromObject(bool fromObject) => _fromObject = fromObject;
 
     /// <summary>
     /// Fills the inputs from a real object (#2055): every value it holds for each attribute the Expression reads, as the
     /// text the inputs take, and "No value" for an attribute it holds none for. An import flow that reads mv[...] also
     /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
     /// </summary>
-    private async Task LoadObjectAsync(FoundObject found)
+    private async Task LoadObjectAsync(TestObjectPicker.PickedObject found)
     {
         using var jim = JimFactory.Create();
         var loaded = new List<AttributeFlowTestInput>();
@@ -385,9 +322,6 @@ else
         foreach (var input in loaded)
             StateOf(input.Accessor).Load(input.Values.Select(ToEditableText));
 
-        _loadedObjectName = found.Name ?? found.Id.ToString();
-        _objectResults = [];
-        _searched = false;
         ClearResult();
     }
 

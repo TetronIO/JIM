@@ -111,6 +111,7 @@
         'New-JIMSyncRuleMatchingRule',
         'Set-JIMSyncRuleMatchingRule',
         'Remove-JIMSyncRuleMatchingRule',
+        'Test-JIMMatchingRule',
         'Switch-JIMMatchingMode',
 
         # Scoping Criteria

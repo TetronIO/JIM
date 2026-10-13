@@ -26,11 +26,11 @@ public static class ScopeTester
     /// The attributes <paramref name="syncRule"/>'s scoping criteria compare, each once, in the order the criteria
     /// reach them: the inputs a test of its scope takes.
     /// </summary>
-    public static IReadOnlyList<ScopeTestInputDescriptor> DescribeInputs(SyncRule syncRule)
+    public static IReadOnlyList<AttributeSampleDescriptor> DescribeInputs(SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         return ComparedAttributes(syncRule)
-            .Select(attribute => new ScopeTestInputDescriptor(attribute.Name, attribute.Type, attribute.Plurality))
+            .Select(attribute => new AttributeSampleDescriptor(attribute.Name, attribute.Type, attribute.Plurality))
             .ToList();
     }
 
@@ -38,11 +38,11 @@ public static class ScopeTester
     /// The values <paramref name="connectedSystemObject"/> holds for each attribute an import rule's scoping criteria
     /// compare, every value of a multi-valued attribute included, so a real object can be tested and then edited.
     /// </summary>
-    public static IReadOnlyList<ScopeTestInput> InputsFromConnectedSystemObject(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
+    public static IReadOnlyList<AttributeSample> InputsFromConnectedSystemObject(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(connectedSystemObject);
         return ComparedAttributes(syncRule)
-            .Select(attribute => new ScopeTestInput(attribute.Name, connectedSystemObject.AttributeValues
+            .Select(attribute => new AttributeSample(attribute.Name, connectedSystemObject.AttributeValues
                 .Where(value => value.AttributeId == attribute.Id)
                 .Select(value => TestSampleValues.FromConnectedSystemValue(value, attribute.Type))
                 .Where(value => value != null)
@@ -55,11 +55,11 @@ public static class ScopeTester
     /// The values <paramref name="metaverseObject"/> holds for each attribute an export rule's scoping criteria
     /// compare. An asserted-null marker carries no value, as scoping reads it.
     /// </summary>
-    public static IReadOnlyList<ScopeTestInput> InputsFromMetaverseObject(MetaverseObject metaverseObject, SyncRule syncRule)
+    public static IReadOnlyList<AttributeSample> InputsFromMetaverseObject(MetaverseObject metaverseObject, SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(metaverseObject);
         return ComparedAttributes(syncRule)
-            .Select(attribute => new ScopeTestInput(attribute.Name, metaverseObject.AttributeValues
+            .Select(attribute => new AttributeSample(attribute.Name, metaverseObject.AttributeValues
                 .Where(value => !value.NullValue && (value.AttributeId == attribute.Id || value.Attribute?.Id == attribute.Id))
                 .Select(value => TestSampleValues.FromMetaverseValue(value, attribute.Type))
                 .Where(value => value != null)
@@ -75,7 +75,7 @@ public static class ScopeTester
     /// <param name="syncRule">The Synchronisation Rule, with its scoping criteria and their attributes. Its criteria
     /// need not be saved, so an edit can be tried before saving it.</param>
     /// <param name="asOfUtc">The instant relative date criteria resolve against.</param>
-    public static ScopeTestResult Test(SyncRule syncRule, IReadOnlyList<ScopeTestInput> inputs, DateTime asOfUtc)
+    public static ScopeTestResult Test(SyncRule syncRule, IReadOnlyList<AttributeSample> inputs, DateTime asOfUtc)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         ArgumentNullException.ThrowIfNull(inputs);
