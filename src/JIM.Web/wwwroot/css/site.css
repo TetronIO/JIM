@@ -3330,7 +3330,7 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
 
 .jim-expression-assist-item-active,
 .jim-expression-assist-item-active:hover {
-    background: var(--mud-palette-primary-hover, var(--mud-palette-action-default-hover));
+    background: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
     box-shadow: inset 3px 0 0 var(--mud-palette-primary);
 }
 
