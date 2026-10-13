@@ -206,9 +206,10 @@ public enum AccountEnablementBasis
     AdministratorChoice = 1,
 
     /// <summary>
-    /// JIM created the account disabled only because Active Directory refuses an enabled account with no password,
-    /// and held back the enabled value the Attribute Flow asked for (#2039). The password now exists, so the
-    /// delivery enables the account, which is what the flow asked for.
+    /// JIM held back the enabled value the Attribute Flow asked for only because Active Directory refuses an enabled
+    /// account with no password: on the Create that provisioned the account (#2039), or on an Update that enabled it
+    /// while a password was still owed (#2158). The password now exists, so the delivery enables the account, which is
+    /// what the flow asked for.
     /// </summary>
     CompletesWithheldEnable = 2,
 

@@ -12,8 +12,10 @@ namespace JIM.Application.Services;
 /// </para>
 /// <list type="number">
 /// <item>An administrator who named the account and chose to enable or disable it gets that choice.</item>
-/// <item>An account JIM created disabled only because Active Directory refuses an enabled account with no password
-/// (#2039), while the Attribute Flow still asks for it enabled, is enabled: the password is what it was waiting for.</item>
+/// <item>An account whose enable JIM held back only because Active Directory refuses an enabled account with no
+/// password, while the Attribute Flow still asks for it enabled, is enabled: the password is what it was waiting for.
+/// The hold is placed on the Create that provisions the account (#2039), or on an Update that enables it while a
+/// password is still owed (#2158).</item>
 /// <item>A first password for an account whose enabled state an export wrote leaves that state to the Attribute Flow.
 /// This is the case the policy exists for: an account the flow deliberately creates disabled (a pre-hire, or a person
 /// archived at creation) used to be enabled with a password JIM knows.</item>
@@ -76,14 +78,20 @@ public static class PasswordEnablementPolicy
     }
 
     /// <summary>
-    /// Whether the delivery has to wait while an export to the account is in flight (#2173). An export records that it
-    /// wrote the enabled state only once its batch has come back from the Connector, so one still being sent may be
-    /// disabling the very account this decision would enable: a leaver, say. JIM's own decision to enable waits for it,
-    /// whether it follows the Synchronisation Rule or completes a withheld enable. An administrator's choice does not
-    /// wait, and a decision that enables nothing cannot undo what the export writes.
+    /// Whether the delivery has to wait while an export to the account is in flight. An export records what it did to
+    /// the account's enabled state only once its batch has come back from the Connector, and one still being sent may be
+    /// doing either of two things this delivery must see first:
+    /// <list type="bullet">
+    /// <item>disabling the account (a leaver, say) that this decision would enable (#2173);</item>
+    /// <item>enabling an account that has no password, which Active Directory refuses, so the Connector holds the enable
+    /// back for this very delivery to complete (#2158). Decided before that hold is recorded, the delivery sets the
+    /// password and leaves the account disabled until a later export enables it.</item>
+    /// </list>
+    /// So every decision JIM takes waits for it, whether it enables the account or not. An administrator's choice does
+    /// not: it is applied whatever the export writes.
     /// </summary>
     public static bool WaitsForAnExportInFlight(AccountEnablementDecision decision) =>
-        decision.EnableAccount == true && decision.Basis != AccountEnablementBasis.AdministratorChoice;
+        decision.Basis != AccountEnablementBasis.AdministratorChoice;
 
     /// <summary>
     /// Whether <see cref="Decide"/>'s answer can depend on a withheld enable, so the delivery needs to probe for one.
