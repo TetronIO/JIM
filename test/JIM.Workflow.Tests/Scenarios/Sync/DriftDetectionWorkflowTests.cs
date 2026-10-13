@@ -723,6 +723,49 @@ public class DriftDetectionWorkflowTests
     }
 
     /// <summary>
+    /// An expression into a multi-valued attribute (#2180): export staging writes "SMTP:" + mail to proxyAddresses as an
+    /// Update, which the Connector applies as a replace. After the export and its confirming import, Drift Detection on
+    /// the target's next synchronisation must find the object already holding exactly that value. It used to compare the
+    /// raw expression result with the attribute's set, always find drift, and stage the removal of the very value export
+    /// had just written.
+    /// </summary>
+    [Test]
+    public async Task DriftNotDetected_ExpressionIntoMultiValuedAttribute_ValueSurvivesExportConfirmingImportAndSyncAsync()
+    {
+        await SetUpExpressionIntoMultiValuedAttributeScenarioAsync();
+        await ImportAndExportUserWithMailAsync("john@example.com");
+
+        await _harness.ExecuteFullSyncAsync("AD");
+        var afterSync = await _harness.TakeSnapshotAsync("After AD Sync");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterSync.PendingExportCount, Is.EqualTo(0),
+                "the target already holds exactly what export staging wrote, so there is nothing to correct");
+            Assert.That(ProxyAddressesOnAd(), Is.EqualTo(new[] { "SMTP:john@example.com" }), "the exported value survives");
+        }
+    }
+
+    /// <summary>
+    /// The same mapping where values were added to the multi-valued attribute out of band: Drift Detection corrects it to
+    /// exactly the value export staging asserts, rather than removing every value (#2180).
+    /// </summary>
+    [Test]
+    public async Task DriftDetected_ExpressionIntoMultiValuedAttributeWithStrayValues_CorrectedToExactlyTheExpectedValueAsync()
+    {
+        await SetUpExpressionIntoMultiValuedAttributeScenarioAsync();
+        await ImportAndExportUserWithMailAsync("john@example.com");
+        AddProxyAddressOutOfBand("smtp:stray@example.com");
+
+        await _harness.ExecuteFullSyncAsync("AD");
+        await _harness.ExecuteExportAsync("AD");
+        ConfirmProxyAddressesFromPendingExports();
+
+        Assert.That(ProxyAddressesOnAd(), Is.EqualTo(new[] { "SMTP:john@example.com" }),
+            "the correction leaves the attribute holding exactly the expression's value");
+    }
+
+    /// <summary>
     /// Verifies that drift is detected for a genuinely different Decimal value and that the
     /// corrective Pending Export carries the expected value in DecimalValue (via
     /// DriftDetectionService.SetAttributeChangeValue), never as a string.
@@ -1034,6 +1077,158 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvDisplayName, adCn)
                 .WithExpressionFlow("ToFileTime(mv[\"Employee End Date\"])", adAccountExpires)
                 .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
+    }
+
+    /// <summary>
+    /// HR (mail) projects a Person whose Email flows to AD's multi-valued proxyAddresses as "SMTP:" + Email, through an
+    /// enforcing export expression; AD contributes nothing.
+    /// </summary>
+    private async Task SetUpExpressionIntoMultiValuedAttributeScenarioAsync()
+    {
+        await _harness.CreateConnectedSystemAsync("HR");
+        await _harness.CreateObjectTypeAsync("HR", "User", t => t
+            .WithGuidExternalId("employeeId")
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("mail"));
+
+        await _harness.CreateConnectedSystemAsync("AD");
+        await _harness.CreateObjectTypeAsync("AD", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringSecondaryExternalId("distinguishedName")
+            .WithStringAttribute("cn")
+            .WithMultiValuedStringAttribute("proxyAddresses"));
+
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithGuidAttribute("employeeId")
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Email"));
+
+        var hrUserType = _harness.GetObjectType("HR", "User");
+        var adUserType = _harness.GetObjectType("AD", "User");
+        var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvEmail = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Email");
+
+        await _harness.CreateSyncRuleAsync(
+            "HR Import",
+            "HR",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, hrUserType.Attributes.First(a => a.Name == "displayName"))
+                .WithAttributeFlow(mvEmail, hrUserType.Attributes.First(a => a.Name == "mail")));
+
+        await _harness.CreateSyncRuleAsync(
+            "AD Export",
+            "AD",
+            "User",
+            personType,
+            SyncRuleDirection.Export,
+            r => r
+                .WithProvisioning()
+                .WithEnforceState(true)
+                .WithAttributeFlow(mvDisplayName, adUserType.Attributes.First(a => a.Name == "cn"))
+                .WithExpressionFlow("\"SMTP:\" + mv[\"Email\"]", adUserType.Attributes.First(a => a.Name == "proxyAddresses"))
+                .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"",
+                    adUserType.Attributes.First(a => a.Name == "distinguishedName")));
+    }
+
+    /// <summary>
+    /// Imports one HR user, synchronises it, exports it to AD and simulates the confirming import, leaving no Pending
+    /// Exports behind.
+    /// </summary>
+    private async Task ImportAndExportUserWithMailAsync(string mail)
+    {
+        _harness.GetConnector("HR").QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "John Smith" } },
+                    new() { Name = "mail", StringValues = new List<string> { mail } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+        var afterHrSync = await _harness.TakeSnapshotAsync("After HR Sync");
+        Assert.That(afterHrSync.PendingExportCount, Is.EqualTo(1), "arrange: one provisioning Pending Export to AD");
+
+        await _harness.ExecuteExportAsync("AD");
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
+        Assert.That(ProxyAddressesOnAd(), Is.EqualTo(new[] { $"SMTP:{mail}" }), "arrange: the export wrote the expression's value");
+    }
+
+    /// <summary>
+    /// The proxyAddresses values the AD Connected System Object holds.
+    /// </summary>
+    private List<string?> ProxyAddressesOnAd()
+    {
+        var cso = SingleAdCso();
+        var proxyAddresses = cso.Type.Attributes.Single(a => a.Name == "proxyAddresses");
+        return cso.AttributeValues.Where(av => av.AttributeId == proxyAddresses.Id).Select(av => av.StringValue).ToList();
+    }
+
+    /// <summary>
+    /// Simulates a value added to the AD object's proxyAddresses directly in AD, bypassing JIM.
+    /// </summary>
+    private void AddProxyAddressOutOfBand(string value)
+    {
+        var cso = SingleAdCso();
+        var proxyAddresses = cso.Type.Attributes.Single(a => a.Name == "proxyAddresses");
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            AttributeId = proxyAddresses.Id,
+            StringValue = value
+        });
+        cso.LastUpdated = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Simulates the confirming import of the AD object's proxyAddresses after an export, applying each staged change the
+    /// way a Connector applies it to a multi-valued attribute: an Update replaces the whole set, an Add adds a value and a
+    /// Remove removes one.
+    /// </summary>
+    private void ConfirmProxyAddressesFromPendingExports()
+    {
+        var cso = SingleAdCso();
+        var proxyAddresses = cso.Type.Attributes.Single(a => a.Name == "proxyAddresses");
+        var changes = _harness.SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(change => change.AttributeId == proxyAddresses.Id);
+
+        foreach (var change in changes)
+        {
+            if (change.ChangeType == PendingExportAttributeChangeType.Update)
+                cso.AttributeValues.RemoveAll(av => av.AttributeId == proxyAddresses.Id);
+            else if (change.ChangeType == PendingExportAttributeChangeType.Remove)
+                cso.AttributeValues.RemoveAll(av => av.AttributeId == proxyAddresses.Id && av.StringValue == change.StringValue);
+
+            if (change.ChangeType != PendingExportAttributeChangeType.Remove && change.StringValue != null)
+            {
+                cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    ConnectedSystemObject = cso,
+                    AttributeId = proxyAddresses.Id,
+                    StringValue = change.StringValue
+                });
+            }
+        }
+    }
+
+    private ConnectedSystemObject SingleAdCso()
+    {
+        var ad = _harness.GetConnectedSystem("AD");
+        return _harness.SyncRepo.ConnectedSystemObjects.Values.Single(cso => cso.ConnectedSystemId == ad.Id);
     }
 
     /// <summary>
