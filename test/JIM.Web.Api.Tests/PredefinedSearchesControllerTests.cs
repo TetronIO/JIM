@@ -326,6 +326,7 @@ public class PredefinedSearchesControllerTests
         var dto = (PredefinedSearchCriteriaDto)((CreatedAtRouteResult)result).Value!;
         Assert.That(dto.StringValue, Is.EqualTo("Finance"));
         Assert.That(dto.AttributeDataType, Is.EqualTo("Text"));
+        Assert.That(dto.CaseSensitive, Is.True, "a condition is exact unless the request says otherwise");
     }
 
     [Test]
@@ -627,6 +628,39 @@ public class PredefinedSearchesControllerTests
         var dto = (PredefinedSearchCriteriaDto)((OkObjectResult)result).Value!;
         Assert.That(dto.ComparisonType, Is.EqualTo("Contains"));
         Assert.That(dto.StringValue, Is.EqualTo("new"));
+    }
+
+    [Test]
+    public async Task UpdateCriterionAsync_CaseSensitiveOmitted_KeepsTheStoredSettingAsync()
+    {
+        // Set-JIMPredefinedSearchCriterion without -CaseSensitive used to reset an ignore-case criterion (#2051).
+        var existing = new PredefinedSearchCriteria { Id = 5, ComparisonType = SearchComparisonType.Equals, StringValue = "old", CaseSensitive = false };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup(existing));
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+        _mockSearchRepo.Setup(r => r.UpdatePredefinedSearchCriterionAsync(It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((PredefinedSearchCriteria c) => c);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Equals", StringValue = "new" };
+        var result = await _controller.UpdateCriterionAsync(SearchId, GroupId, criterionId: 5, request);
+
+        var dto = (PredefinedSearchCriteriaDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.CaseSensitive, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateCriterionAsync_CaseSensitiveSupplied_AppliesItAsync()
+    {
+        var existing = new PredefinedSearchCriteria { Id = 5, ComparisonType = SearchComparisonType.Equals, StringValue = "old", CaseSensitive = false };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup(existing));
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+        _mockSearchRepo.Setup(r => r.UpdatePredefinedSearchCriterionAsync(It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((PredefinedSearchCriteria c) => c);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Equals", StringValue = "new", CaseSensitive = true };
+        var result = await _controller.UpdateCriterionAsync(SearchId, GroupId, criterionId: 5, request);
+
+        var dto = (PredefinedSearchCriteriaDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.CaseSensitive, Is.True);
     }
 
     [Test]

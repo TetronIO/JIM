@@ -16,7 +16,7 @@ Understanding this model helps you predict when a change will flow, when two obj
 | Question | Rule | Where JIM asks it |
 |----------|------|-------------------|
 | **Has this value changed?** | Exact; for an [identifier](#identifiers-a-target-reports-in-its-own-case), export confirmation and Drift Detection ask "Are these the same thing?" instead | Change detection, export confirmation, Drift Detection |
-| **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, Secondary External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions |
+| **Are these the same thing?** | Ignore case, unless the attribute is [case-exact](#case-exact-attributes) | External IDs, Secondary External IDs, references, Object Matching Rules, generated-value uniqueness, attribute names in expressions, [configuration names](#configuration-names-ignore-case) |
 | **Does this value meet a condition?** | Exact, unless you say otherwise | Scoping criteria, Predefined Search criteria, comparisons in expressions |
 | **Finding something** | Ignore case | Search boxes and list filters in the portal, log search |
 
@@ -42,13 +42,16 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Synchronising | [Case normalisation](../configuration/attribute-mappings.md#value-processing-inbound) in value processing | Changes case rather than comparing it | Upper, lower or title case, as you choose | ✅ Per Attribute Flow |
 | Exporting | Whether a value needs exporting, export confirmation (did the value JIM sent arrive?) and Drift Detection | Changed? | Exact | ❌ No |
 | Exporting | The same three, for an [identifier](#identifiers-a-target-reports-in-its-own-case): an External ID, a Secondary External ID or a reference | Same thing? | Ignore case, unless the attribute is case-exact | ✅ Per attribute, by its case-exact declaration |
+| Exporting | Drift Detection: whether a Connected System contributes an attribute that an export expression names | Same thing? | Ignore case | ❌ No |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
 | Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
-| Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains` | Condition? | Exact | ✅ Wrap both sides in `Lower()` |
+| Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
 | Expressions | `Where` | Condition? | Exact | ✅ Pass `true` as the fourth argument |
 | Expressions | `Replace`, `Split` | Changes text rather than comparing it | Exact | ❌ No |
 | Searching | Predefined Search criteria | Condition? | Exact | ✅ Per criterion |
 | Searching | Portal search boxes and list filters, log search | Finding? | Ignore case | ❌ No |
+| Configuration | [Names you give JIM](#configuration-names-ignore-case): attribute, Object Type, Connected System, Run Profile, Connector and Predefined Search names | Same thing? | Ignore case | ❌ No |
+| Configuration | [Schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema): matching the Object Types and attributes a Connected System reports to the ones JIM holds | Same thing? | Ignore case | ❌ No |
 
 ## 🔗 Object Matching Rules
 
@@ -82,6 +85,8 @@ The declaration sets the default case sensitivity of a new [Object Matching Rule
 ## 🎯 Scoping and search criteria
 
 Scoping criteria and Predefined Search criteria ask whether a value meets a condition, so each one is exact unless you switch it to ignore case. That is the right default for a condition: `Sales` means `Sales`. Where a source is inconsistent, for example an HR feed that sometimes records a department as `Sales` and sometimes `SALES`, switch off case sensitivity on that criterion and it matches both.
+
+Updating a criterion through the REST API or PowerShell keeps its case sensitivity unless the update states it, so `Set-JIMScopingCriterion` or `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive` leaves a criterion that ignores case as it is.
 
 ## 🪪 Identifier uniqueness (ignores case)
 
@@ -128,12 +133,20 @@ A reference JIM has resolved to another Connected System Object is confirmed whe
 
 An identifier declared [case-exact](#case-exact-attributes) still compares exactly, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers.
 
+## 🏷️ Configuration names ignore case
+
+A name you give JIM identifies a piece of configuration, so it asks whether two names are the same thing and ignores case. `Get-JIMMetaverseObject -AttributeName 'employee id'` finds Employee Id, `Get-JIMActivity -ConnectedSystem 'hr'` finds HR's Activities, and an Example Data pattern's `{first name}` reads First Name. This covers attribute and Object Type names, Connected System and Run Profile names in Activity filters, Connector names and Predefined Search URIs, across the REST API, PowerShell and the portal.
+
+Some Connected Systems can hold two attributes whose names differ only in case, such as a CSV file with both a `Mail` and a `mail` column. An exact name always wins, so each still finds its own attribute. A name that matches neither exactly, such as `MAIL`, finds nothing, because choosing one of them would be a guess.
+
+The same rule applies when a [schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema) finds an Object Type or attribute under a name that differs only in case from the one JIM holds. It is the same Object Type or attribute: it keeps every Synchronisation Rule mapping and Object Matching Rule that uses it, takes the Connected System's new casing, and the preview lists it as renamed.
+
 ## 🧮 Case sensitivity in expressions
 
 Two different questions are asked inside an [expression](expressions.md), and keeping them straight avoids most surprises:
 
 - **Attribute names identify an attribute, so they ignore case.**<br /> `mv["Department"]` and `mv["department"]` refer to the same attribute.
-- **Comparing a value is a condition, so it is exact.**<br /> `==` and `Eq()` are exact, case-sensitive matches. To compare without regard to case, lower-case both sides first:
+- **Comparing a value is a condition, so it is exact.**<br /> `==`, `Eq()`, `StartsWith()` and `EndsWith()` compare character by character, so case counts, and so do characters that look alike but are stored differently, such as a hidden soft hyphen. To compare without regard to case, lower-case both sides first:
 
 ```csharp
 Eq(Lower(mv["Status"]), "active")

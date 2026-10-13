@@ -165,7 +165,7 @@ public class SchedulerServerSafeStartTests
                 "every step is queued as waiting; none is runnable until the start is complete");
             Assert.That(_events.Last(), Is.EqualTo("start:0"),
                 "the first step group is released only after every step has been queued");
-            Assert.That(_events.Count(e => e.StartsWith("start:")), Is.EqualTo(1));
+            Assert.That(_events.Count(e => e.StartsWith("start:", StringComparison.Ordinal)), Is.EqualTo(1));
             Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
         }
     }
@@ -201,7 +201,7 @@ public class SchedulerServerSafeStartTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(ex!.Message, Is.EqualTo(expectedMessage), "the caller is told the same reason the execution records");
-            Assert.That(_events.Any(e => e.StartsWith("start:")), Is.False, "no step may be released");
+            Assert.That(_events.Any(e => e.StartsWith("start:", StringComparison.Ordinal)), Is.False, "no step may be released");
             Assert.That(_createdTasks.Select(t => t.Status), Is.All.EqualTo(WorkerTaskStatus.WaitingForPreviousStep),
                 "no task was ever runnable");
             Assert.That(_createdTasks.Select(t => t.ScheduleStepIndex), Is.EqualTo(new int?[] { 0, 1 }),
@@ -265,7 +265,7 @@ public class SchedulerServerSafeStartTests
             Assert.That(_createdTasks.Select(t => t.ScheduleStepIndex), Is.EqualTo(new int?[] { 0, 1, 3 }),
                 "every step that can be queued is; the one that cannot gets no task");
             Assert.That(_events.Last(), Is.EqualTo("start:0"), "and the Schedule starts as normal");
-            Assert.That(_events.Any(e => e.StartsWith("cancel-waiting:")), Is.False);
+            Assert.That(_events.Any(e => e.StartsWith("cancel-waiting:", StringComparison.Ordinal)), Is.False);
             Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
             Assert.That(failed.Status, Is.EqualTo(ActivityStatus.FailedWithError), "the skipped step shows why it did not run");
             Assert.That(failed.ScheduleStepId, Is.EqualTo(stepThree.Id));
@@ -301,7 +301,7 @@ public class SchedulerServerSafeStartTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_createdTasks, Is.Empty);
-            Assert.That(_events.Any(e => e.StartsWith("start:")), Is.False, "there is nothing to release");
+            Assert.That(_events.Any(e => e.StartsWith("start:", StringComparison.Ordinal)), Is.False, "there is nothing to release");
             Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.CompleteWithError),
                 "with nothing left to run the execution ends straight away rather than waiting for the safety net, and " +
                 "the steps skipped because they could not be queued make it Complete With Error, not Complete (#1787)");
@@ -417,7 +417,7 @@ public class SchedulerServerSafeStartTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(ex!.Message, Is.EqualTo("The database did not respond."), "the original error is rethrown");
-            Assert.That(_events.Any(e => e.StartsWith("start:")), Is.False);
+            Assert.That(_events.Any(e => e.StartsWith("start:", StringComparison.Ordinal)), Is.False);
             Assert.That(_events, Does.Contain($"cancel-waiting:{ScheduleStepNotRunReasons.ScheduleCouldNotStart}"));
             Assert.That(_createdExecution!.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
             Assert.That(_createdExecution.ErrorMessage, Is.EqualTo(
@@ -445,7 +445,7 @@ public class SchedulerServerSafeStartTests
             // Marking it Failed now would leave its waiting task behind with nothing ever to remove it. Left Queued,
             // the Scheduler's stale-start safety net removes the task and fails the execution.
             Assert.That(_createdExecution!.Status, Is.EqualTo(ScheduleExecutionStatus.Queued));
-            Assert.That(_events.Any(e => e.StartsWith("start:")), Is.False, "and still nothing is released");
+            Assert.That(_events.Any(e => e.StartsWith("start:", StringComparison.Ordinal)), Is.False, "and still nothing is released");
         }
     }
 

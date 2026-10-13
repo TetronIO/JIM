@@ -1307,7 +1307,7 @@ public class ExampleDataServer
     #endregion
 
     #region Attribute Value Generation
-    private static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
+    internal static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
     {
         // match attribute variables (that do not contain numbers)
         // enumerate, find their value and replace
@@ -1317,8 +1317,9 @@ public class ExampleDataServer
             // snip off the brackets: {} to get the attribute name, i.e FirstName
             var attributeName = match.Value[1..^1];
 
-            // find the attribute value on the Metaverse Object:
-            var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName) ?? throw new InvalidDataException($"AttributeValue not found for Attribute: {attributeName}. Check your pattern. Check that you have added the ExampleDataTemplateAttribute before the pattern is defined.");
+            // find the attribute value on the Metaverse Object. Attribute names ignore case (#2051).
+            var resolvedName = ConfigurationName.Resolve(metaverseObject.AttributeValues.Select(q => q.Attribute.Name), attributeName);
+            var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == resolvedName) ?? throw new InvalidDataException($"AttributeValue not found for Attribute: {attributeName}. Check your pattern. Check that you have added the ExampleDataTemplateAttribute before the pattern is defined.");
             textToProcess = textToProcess.Replace(match.Value, attribute.StringValue);
         }
 

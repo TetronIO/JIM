@@ -8,7 +8,7 @@ function Set-JIMScopingCriterion {
 
     .DESCRIPTION
         Replaces a criterion: its attribute, comparison and value are all set from what you give, as
-        New-JIMScopingCriterion would set them.
+        New-JIMScopingCriterion would set them. Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule.
@@ -63,8 +63,8 @@ function Set-JIMScopingCriterion {
         The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        Whether a Text comparison respects case: $false ignores it. Case-sensitive when omitted, even if the
-        criterion ignored case before, because the whole criterion is replaced.
+        Whether a Text comparison respects case: $false ignores it. When omitted, the criterion keeps its current
+        setting.
 
     .PARAMETER ValueMode
         For a DateTime attribute: Absolute compares with -DateTimeValue, and Relative with a date worked out from
