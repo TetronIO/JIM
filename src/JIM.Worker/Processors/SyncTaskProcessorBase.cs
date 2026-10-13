@@ -5267,10 +5267,11 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task FlushObsoleteCsoOperationsAsync()
     {
-        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion)
+        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion): no execution item, but a
+        // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncRepo.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
+            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
