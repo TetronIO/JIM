@@ -4274,8 +4274,11 @@ public class SyncImportTaskProcessor
             // anchor, so its value goes into every type's group and a value found under more than one is
             // ambiguous. This replaces a single-attribute batch that collapsed mixed-type runs onto
             // whichever attribute the first unresolved item happened to carry.
-            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Values are kept as the reference holds them (ordinal) or compared as their anchor compares its values
+            // (#2051); the repositories answer each by the value asked for.
+            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.Ordinal);
             var primaryValueGroups = new Dictionary<int, HashSet<string>>();
+            var anchorCaseExactById = new Dictionary<int, bool>();
 
             foreach (var (_, attrValue, externalIdAttribute) in unresolvedItems)
             {
@@ -4289,8 +4292,9 @@ public class SyncImportTaskProcessor
                     {
                         if (!primaryValueGroups.TryGetValue(candidate.AnchorAttribute.Id, out var values))
                         {
-                            values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            values = new HashSet<string>(IdentifierKey.Comparer(candidate.AnchorAttribute.CaseExact));
                             primaryValueGroups[candidate.AnchorAttribute.Id] = values;
+                            anchorCaseExactById[candidate.AnchorAttribute.Id] = candidate.AnchorAttribute.CaseExact;
                         }
 
                         values.Add(attrValue.UnresolvedReferenceValue!);
@@ -4300,11 +4304,11 @@ public class SyncImportTaskProcessor
 
             // Batch query the database in pages using the configurable sync page size
             var dbPrimaryResultsByAttribute = new Dictionary<int, Dictionary<string, ConnectedSystemObject>>();
-            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
 
             foreach (var (anchorAttributeId, values) in primaryValueGroups)
             {
-                var groupResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                var groupResults = new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(anchorCaseExactById[anchorAttributeId]));
                 dbPrimaryResultsByAttribute[anchorAttributeId] = groupResults;
                 var valuesList = values.ToList();
                 for (var i = 0; i < valuesList.Count; i += pageSize)
@@ -4782,7 +4786,8 @@ public class SyncImportTaskProcessor
                         switch (attrType)
                         {
                             case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
-                                partition.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+                                // Same thing? Ignoring case unless the anchor is case-exact (#2051), as the database fallback.
+                                partition.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(primaryIdAttrValue.Attribute.CaseExact));
                                 if (!partition.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
                                     throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.StringValue, secondary: false);
                                 break;
@@ -4824,11 +4829,11 @@ public class SyncImportTaskProcessor
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
-                                    // OrdinalIgnoreCase: LDAP Distinguished Names are case-insensitive per RFC 4514.
-                                    // The SQL fixup (FixupCrossBatchReferenceIdsAsync) uses LOWER() for this reason.
-                                    // Matching that behaviour here means in-memory resolution succeeds for LDAP references,
-                                    // avoiding the expensive post-import SQL fixup entirely.
-                                    partition.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                                    // Same thing? Ignoring case unless the anchor is case-exact (#2051): LDAP Distinguished
+                                    // Names are case-insensitive per RFC 4514. The SQL fixup (FixupCrossBatchReferenceIdsAsync)
+                                    // follows the same declaration, so in-memory resolution succeeds wherever it would, avoiding
+                                    // the expensive post-import SQL fixup.
+                                    partition.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(secondaryIdAttrValue.Attribute.CaseExact));
                                     if (!partition.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
                                         throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.StringValue, secondary: true);
                                     break;
@@ -4892,9 +4897,8 @@ public class SyncImportTaskProcessor
         }
 
         /// <summary>
-        /// One Object Type's external ID dictionaries. Primary dictionaries use case-sensitive comparers per
-        /// the case sensitivity policy (external ID matching is always case-sensitive); the secondary text
-        /// dictionary is case-insensitive because LDAP Distinguished Names are (RFC 4514). Decimal
+        /// One Object Type's external ID dictionaries. The text dictionaries ignore case unless their anchor
+        /// attribute is case-exact, per the case sensitivity policy (#2051). Decimal
         /// dictionaries key on the decimal itself, not its canonical string: equal decimals hash equally
         /// regardless of scale, so 4200.00m and 4200m are the same key without normalising (#1283).
         /// Only the dictionaries needed for the data types present in the import are initialised.

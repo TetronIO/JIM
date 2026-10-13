@@ -2847,16 +2847,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
         var values = attributeValues.ToList();
-        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         if (values.Count == 0)
-            return result;
+            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
 
-        var attributeType = await Repository.Database.ConnectedSystemAttributes
+        var attribute = await Repository.Database.ConnectedSystemAttributes
             .Where(a => a.Id == attributeId)
-            .Select(a => (AttributeDataType?)a.Type)
+            .Select(a => new { a.Type, a.CaseExact })
             .FirstOrDefaultAsync();
-        if (attributeType == null)
+
+        // Keyed by the value the caller asked for, compared as the anchor compares its values: ignoring case unless it is
+        // case-exact (#2051), so a caller probing with a value in another case finds it only where that is the same object.
+        var result = new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(attribute?.CaseExact ?? false));
+        if (attribute == null)
             return result;
+        var attributeType = (AttributeDataType?)attribute.Type;
 
         // Lightweight query: only include AttributeValues with Attribute for key extraction.
         // No Type/Attributes or deep ReferenceValue chains needed; the CSO entity itself is
@@ -2865,21 +2869,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             case AttributeDataType.Text:
             {
-                // Use case-insensitive matching consistent with the single-value method
-                var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
-                var csos = await Repository.Database.ConnectedSystemObjects
+                // Same thing? Exact for a case-exact anchor, else ignoring case, the sought values folded as SQL's lower()
+                // folds the stored ones (IdentifierKey.For).
+                var caseExact = attribute.CaseExact;
+                var requestedByKey = values
+                    .Distinct(StringComparer.Ordinal)
+                    .GroupBy(v => IdentifierKey.For(v, caseExact), StringComparer.Ordinal)
+                    .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+                var keys = requestedByKey.Keys.ToList();
+                var query = Repository.Database.ConnectedSystemObjects
                     .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
-                    .Where(cso =>
-                        cso.ConnectedSystem.Id == connectedSystemId &&
-                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+                    .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
+                var csos = await (caseExact
+                        ? query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && keys.Contains(av.StringValue)))
+                        : query.Where(cso => cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && keys.Contains(av.StringValue.ToLower()))))
                     .ToListAsync();
 
                 foreach (var cso in csos)
                 {
                     var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
-                    if (matchingAttrValue?.StringValue != null && !result.TryAdd(matchingAttrValue.StringValue, cso))
-                        LogDuplicateReferenceFallbackMatch(matchingAttrValue.StringValue, connectedSystemId);
+                    if (matchingAttrValue?.StringValue == null ||
+                        !requestedByKey.TryGetValue(IdentifierKey.For(matchingAttrValue.StringValue, caseExact), out var requested))
+                        continue;
+
+                    foreach (var requestedValue in requested.Where(requestedValue => !result.TryAdd(requestedValue, cso)))
+                        LogDuplicateReferenceFallbackMatch(requestedValue, connectedSystemId);
                 }
 
                 break;
@@ -3013,12 +3028,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
-        var values = secondaryExternalIdValues.ToList();
+        // Keyed by the value the caller asked for (ordinal, since that is the value it probes with). Whether a stored value
+        // answers it follows each object's own secondary external id attribute: ignoring case unless that attribute is
+        // case-exact (#2051). The query finds every value equal ignoring case, a superset of both, and the case-exact
+        // ones are then held to their own case below.
+        var values = secondaryExternalIdValues.Distinct(StringComparer.Ordinal).ToList();
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         if (values.Count == 0)
-            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            return result;
 
-        // Use case-insensitive matching consistent with the single-value method
-        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        var requestedByLowerKey = values
+            .GroupBy(v => IdentifierKey.For(v, caseExact: false), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        var lowerValues = requestedByLowerKey.Keys.ToList();
+        var caseExactAttributeIds = (await Repository.Database.ConnectedSystemAttributes
+                .Where(a => a.ConnectedSystemObjectType.ConnectedSystemId == connectedSystemId && a.IsSecondaryExternalId && a.CaseExact)
+                .Select(a => a.Id)
+                .ToListAsync())
+            .ToHashSet();
         // Lightweight query: only include AttributeValues for key extraction (using scalar FK AttributeId).
         // No Attribute navigation, Type/Attributes or deep ReferenceValue chains needed — the CSO entity
         // itself is sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
@@ -3033,8 +3060,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     lowerValues.Contains(av.StringValue.ToLower())))
             .ToListAsync();
 
-        // Build dictionary keyed by the secondary external ID value for case-insensitive lookup.
-        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in csos)
         {
             if (!cso.SecondaryExternalIdAttributeId.HasValue)
@@ -3042,13 +3067,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av =>
                 av.AttributeId == cso.SecondaryExternalIdAttributeId && av.StringValue != null);
-            if (matchingAttrValue?.StringValue != null)
+            if (matchingAttrValue?.StringValue == null)
+                continue;
+
+            if (!requestedByLowerKey.TryGetValue(IdentifierKey.For(matchingAttrValue.StringValue, caseExact: false), out var requested))
+                continue;
+
+            var storedValue = matchingAttrValue.StringValue;
+            var answered = caseExactAttributeIds.Contains(matchingAttrValue.AttributeId)
+                ? requested.Where(v => string.Equals(v, storedValue, StringComparison.Ordinal))
+                : requested;
+            foreach (var requestedValue in answered.Where(v => !result.TryAdd(v, cso)))
             {
-                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
-                {
-                    Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
-                        matchingAttrValue.StringValue, connectedSystemId);
-                }
+                Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
+                    LogSanitiser.Sanitise(requestedValue), connectedSystemId);
             }
         }
 

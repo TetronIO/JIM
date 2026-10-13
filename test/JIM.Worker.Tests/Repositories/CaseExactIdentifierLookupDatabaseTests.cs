@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
@@ -143,7 +145,160 @@ public class CaseExactIdentifierLookupDatabaseTests
         Assert.That(lookup.ContainsKey(CsoLookupKey.For(seeded.SystemId, seeded.AnchorAttributeId, "jbloggs")), Is.True);
     }
 
+    [Test]
+    public async Task GetConnectedSystemObjectsByAttributeValuesAsync_CaseExactAnchor_ResolvesOnlyTheValueInItsOwnCaseAsync()
+    {
+        var seeded = await SeedAsync(caseExact: true, "Abc", "abc");
+
+        await using var ctx = NewContext();
+        var result = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectsByAttributeValuesAsync(seeded.SystemId, seeded.AnchorAttributeId, ["Abc", "ABC"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Keys, Is.EquivalentTo(new[] { "Abc" }), "only the value in its own case resolves, keyed as it was asked for");
+            Assert.That(result["Abc"].Id, Is.EqualTo(seeded.CsoIds[0]));
+            Assert.That(result.ContainsKey("ABC"), Is.False, "a probe in another case must not find it either");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsByAttributeValuesAsync_AnchorIgnoringCase_ResolvesTheValueAskedForInAnotherCaseAsync()
+    {
+        var seeded = await SeedAsync(caseExact: false, "Abc");
+
+        await using var ctx = NewContext();
+        var result = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectsByAttributeValuesAsync(seeded.SystemId, seeded.AnchorAttributeId, ["ABC"]);
+
+        Assert.That(result.TryGetValue("ABC", out var cso) ? cso.Id : (Guid?)null, Is.EqualTo(seeded.CsoIds[0]));
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync_ValueInAnotherCase_FollowsTheDeclarationAsync(bool caseExact, bool expectFound)
+    {
+        var seeded = await SeedAsync(caseExact: false, secondaryCaseExact: caseExact, secondaryValue: "CN=Joe,DC=PANOPLY", anchorValues: "id-1");
+
+        await using var ctx = NewContext();
+        var result = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(seeded.SystemId, ["cn=joe,dc=panoply"]);
+
+        Assert.That(result.TryGetValue("cn=joe,dc=panoply", out var cso) ? cso.Id : (Guid?)null,
+            expectFound ? Is.EqualTo(seeded.CsoIds[0]) : Is.Null);
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task FixupCrossBatchReferenceIdsAsync_ReferenceInAnotherCase_FollowsTheTargetsDeclarationAsync(bool caseExact, bool expectResolved)
+    {
+        var seeded = await SeedReferenceAsync(caseExact);
+
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).Sync.FixupCrossBatchReferenceIdsAsync(seeded.SystemId);
+
+        await using var read = NewContext();
+        var referenceValueId = await read.ConnectedSystemObjectAttributeValues
+            .Where(av => av.Id == seeded.ReferenceValueId)
+            .Select(av => av.ReferenceValueId)
+            .SingleAsync();
+        Assert.That(referenceValueId, Is.EqualTo(expectResolved ? seeded.TargetCsoId : null));
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_ReferenceInAnotherCase_FollowsTheTargetsDeclarationAsync(bool caseExact, bool expectResolved)
+    {
+        var seeded = await SeedReferenceAsync(caseExact);
+
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).Sync.FixupCrossBatchChangeRecordReferenceIdsAsync(seeded.SystemId);
+
+        await using var read = NewContext();
+        var referenceValueId = await read.ConnectedSystemObjectChangeAttributeValues
+            .Where(v => v.Id == seeded.ChangeValueId)
+            .Select(v => EF.Property<Guid?>(v, "ReferenceValueId"))
+            .SingleAsync();
+        Assert.That(referenceValueId, Is.EqualTo(expectResolved ? seeded.TargetCsoId : null));
+    }
+
     #region seeding
+
+    private sealed record SeededReference(int SystemId, Guid TargetCsoId, Guid ReferenceValueId, Guid ChangeValueId);
+
+    /// <summary>
+    /// A target object whose Secondary External ID (a DN, with the given declaration) is stored in upper case, an owner
+    /// object whose unresolved reference names it in lower case, and a change record doing the same.
+    /// </summary>
+    private async Task<SeededReference> SeedReferenceAsync(bool secondaryCaseExact)
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var connectedSystem = new ConnectedSystem { Name = "Panoply", ConnectorDefinition = connectorDefinition };
+        var objectType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = connectedSystem, Selected = true };
+        var anchor = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "objectGUID", ConnectedSystemObjectType = objectType, Type = AttributeDataType.Guid,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsExternalId = true
+        };
+        var dn = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName", ConnectedSystemObjectType = objectType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsSecondaryExternalId = true, CaseExact = secondaryCaseExact
+        };
+        var member = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "member", ConnectedSystemObjectType = objectType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        objectType.Attributes.AddRange([anchor, dn, member]);
+        seed.AddRange(connectorDefinition, connectedSystem, objectType);
+        await seed.SaveChangesAsync();
+
+        var target = new ConnectedSystemObject
+        {
+            ConnectedSystemId = connectedSystem.Id, TypeId = objectType.Id, ExternalIdAttributeId = anchor.Id,
+            SecondaryExternalIdAttributeId = dn.Id, Status = ConnectedSystemObjectStatus.Normal
+        };
+        target.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = target, AttributeId = anchor.Id, GuidValue = Guid.NewGuid() });
+        target.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = target, AttributeId = dn.Id, StringValue = "CN=Joe,DC=PANOPLY" });
+
+        var owner = new ConnectedSystemObject
+        {
+            ConnectedSystemId = connectedSystem.Id, TypeId = objectType.Id, ExternalIdAttributeId = anchor.Id,
+            SecondaryExternalIdAttributeId = dn.Id, Status = ConnectedSystemObjectStatus.Normal
+        };
+        owner.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = owner, AttributeId = anchor.Id, GuidValue = Guid.NewGuid() });
+        var reference = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = owner, AttributeId = member.Id, UnresolvedReferenceValue = "cn=joe,dc=panoply" };
+        owner.AttributeValues.Add(reference);
+        seed.AddRange(target, owner);
+
+        var change = new ConnectedSystemObjectChange
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Exported,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        var memberChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(), ConnectedSystemChange = change, AttributeName = "member", AttributeType = AttributeDataType.Reference
+        };
+        var changeValue = new ConnectedSystemObjectChangeAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObjectChangeAttribute = memberChange, ValueChangeType = ValueChangeType.Add, StringValue = "cn=joe,dc=panoply"
+        };
+        memberChange.ValueChanges.Add(changeValue);
+        change.AttributeChanges.Add(memberChange);
+        seed.Add(change);
+        await seed.SaveChangesAsync();
+
+        return new SeededReference(connectedSystem.Id, target.Id, reference.Id, changeValue.Id);
+    }
+
+
 
     private sealed record Seeded(int SystemId, int ObjectTypeId, int AnchorAttributeId, List<Guid> CsoIds);
 
@@ -151,7 +306,14 @@ public class CaseExactIdentifierLookupDatabaseTests
     /// One Connected System, one Object Type whose Text anchor carries the given declaration, and one Connected System
     /// Object per anchor value, in the order given.
     /// </summary>
-    private async Task<Seeded> SeedAsync(bool caseExact, params string[] anchorValues)
+    private Task<Seeded> SeedAsync(bool caseExact, params string[] anchorValues) =>
+        SeedAsync(caseExact, secondaryCaseExact: false, secondaryValue: null, anchorValues);
+
+    /// <summary>
+    /// As above, optionally with a Text Secondary External ID carrying its own declaration, given the same value on
+    /// every object.
+    /// </summary>
+    private async Task<Seeded> SeedAsync(bool caseExact, bool secondaryCaseExact, string? secondaryValue, params string[] anchorValues)
     {
         await using var seed = NewContext();
 
@@ -169,6 +331,17 @@ public class CaseExactIdentifierLookupDatabaseTests
             CaseExact = caseExact
         };
         objectType.Attributes.Add(anchorAttribute);
+        var secondaryAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName",
+            ConnectedSystemObjectType = objectType,
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            Selected = true,
+            IsSecondaryExternalId = true,
+            CaseExact = secondaryCaseExact
+        };
+        objectType.Attributes.Add(secondaryAttribute);
         seed.AddRange(connectorDefinition, connectedSystem, objectType);
         await seed.SaveChangesAsync();
 
@@ -179,6 +352,7 @@ public class CaseExactIdentifierLookupDatabaseTests
                 ConnectedSystemId = connectedSystem.Id,
                 TypeId = objectType.Id,
                 ExternalIdAttributeId = anchorAttribute.Id,
+                SecondaryExternalIdAttributeId = secondaryValue != null ? secondaryAttribute.Id : null,
                 Status = ConnectedSystemObjectStatus.Normal
             };
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -187,6 +361,15 @@ public class CaseExactIdentifierLookupDatabaseTests
                 AttributeId = anchorAttribute.Id,
                 StringValue = value
             });
+            if (secondaryValue != null)
+            {
+                cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    ConnectedSystemObject = cso,
+                    AttributeId = secondaryAttribute.Id,
+                    StringValue = secondaryValue
+                });
+            }
             return cso;
         }).ToList();
         seed.AddRange(csos);
