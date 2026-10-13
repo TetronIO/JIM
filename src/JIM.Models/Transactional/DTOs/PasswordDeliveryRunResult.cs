@@ -61,6 +61,13 @@ public class PasswordDeliveryRunResult
     public int WithheldEnablesCompletedCount { get; set; }
 
     /// <summary>
+    /// Passwords delivered where the Connected System could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159): the password is set, and its Activity is completed with a warning
+    /// naming what was applied instead. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int ExpiryBehaviourNotHonouredCount { get; set; }
+
+    /// <summary>
     /// Changes given back unattempted because delivering them would have enabled an account an export was being sent
     /// to (#2173): that export may be disabling it, so the delivery waits for it and tries again shortly. Nothing is
     /// counted against them, and they are neither retrying nor delivered.

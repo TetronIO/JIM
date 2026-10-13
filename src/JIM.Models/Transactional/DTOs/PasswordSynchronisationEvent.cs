@@ -98,4 +98,10 @@ public class PasswordSynchronisationEventOutcome
         ActivityStatus.Cancelled => false,
         _ => null
     };
+
+    /// <summary>
+    /// Whether the Connected System took the password but could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159). Still a success; <see cref="Message"/> says what was applied.
+    /// </summary>
+    public bool CompletedWithWarning => Status == ActivityStatus.CompleteWithWarning;
 }

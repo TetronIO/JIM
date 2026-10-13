@@ -119,6 +119,11 @@ public class SetPasswordRequestTests
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
             },
+            activity =>
+            {
+                activity.Status = ActivityStatus.CompleteWithWarning;
+                return Task.CompletedTask;
+            },
             new PasswordGeneratorService(),
             () => _protection);
     }

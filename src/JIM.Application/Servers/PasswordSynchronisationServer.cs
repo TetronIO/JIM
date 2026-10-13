@@ -46,6 +46,7 @@ public class PasswordSynchronisationServer
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
+    private readonly Func<Activity, Task> _completeActivityWithWarning;
     private readonly IPasswordGeneratorService _passwordGenerator;
     private readonly Func<ICredentialProtectionService> _credentialProtection;
 
@@ -87,6 +88,12 @@ public class PasswordSynchronisationServer
     /// password is an operational outcome rather than a thrown exception: nothing here has an exception to pass,
     /// and the outcome still has to be recorded as a failure rather than described in prose on a completed one.
     /// </param>
+    /// <param name="completeActivityWithWarning">
+    /// Completes an Activity with a warning: for a delivery that set the password but where the Connected System
+    /// could not apply everything asked of it, such as an expiry behaviour the directory has no equivalent for
+    /// (#2159). The password is set, so it is not a failure; recorded as a plain completion, the difference would be
+    /// invisible to everything that counts, filters or alerts on outcomes.
+    /// </param>
     /// <param name="passwordGenerator">
     /// Generates a Provisioned row's first password from its Synchronisation Rule's settings at the moment of
     /// delivery (#1697): mirrors <see cref="InitialPasswordServer"/>, which resolves the same way
@@ -107,6 +114,7 @@ public class PasswordSynchronisationServer
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
         Func<Activity, string, Task> completeActivityWithError,
+        Func<Activity, Task> completeActivityWithWarning,
         IPasswordGeneratorService passwordGenerator,
         Func<ICredentialProtectionService> credentialProtection)
     {
@@ -119,6 +127,7 @@ public class PasswordSynchronisationServer
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
+        _completeActivityWithWarning = completeActivityWithWarning;
         _passwordGenerator = passwordGenerator;
         _credentialProtection = credentialProtection;
     }
@@ -566,10 +575,10 @@ public class PasswordSynchronisationServer
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information(
             "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered ({LeftToFlow} leaving the enabled state to an Attribute Flow, " +
-            "{WithheldEnables} completing an enable withheld until the password), {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, " +
-            "{Postponed} waiting for an export to the account to finish, {Released} released unattempted.",
+            "{WithheldEnables} completing an enable withheld until the password, {NotHonoured} where the system could not apply everything asked), {Retrying} retrying, " +
+            "{Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Postponed} waiting for an export to the account to finish, {Released} released unattempted.",
             connectedSystem.Id, result.DeliveredCount, result.EnabledStateLeftToAttributeFlowCount, result.WithheldEnablesCompletedCount,
-            result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.PostponedCount, result.ReleasedCount);
+            result.ExpiryBehaviourNotHonouredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.PostponedCount, result.ReleasedCount);
 
         return result;
     }
@@ -633,18 +642,20 @@ public class PasswordSynchronisationServer
                     continue;
                 }
 
-                var (disposition, enablement) = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
+                var attempt = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
                     initialPasswordConfigurations, discoveredPolicy, initialPasswordResolver, asOf, cancellationToken);
 
-                switch (disposition)
+                switch (attempt.Disposition)
                 {
                     case PasswordDeliveryDisposition.Delivered:
                         delivered.Add(change.Id);
                         result.DeliveredCount++;
-                        if (enablement == AccountEnablementBasis.LeftToAttributeFlow)
+                        if (attempt.Enablement == AccountEnablementBasis.LeftToAttributeFlow)
                             result.EnabledStateLeftToAttributeFlowCount++;
-                        else if (enablement == AccountEnablementBasis.CompletesWithheldEnable)
+                        else if (attempt.Enablement == AccountEnablementBasis.CompletesWithheldEnable)
                             result.WithheldEnablesCompletedCount++;
+                        if (!attempt.ExpiryBehaviourHonoured)
+                            result.ExpiryBehaviourNotHonouredCount++;
                         break;
 
                     case PasswordDeliveryDisposition.Withdrawn:
@@ -712,7 +723,7 @@ public class PasswordSynchronisationServer
     /// it was delivered, kept for another attempt or for a person to look at, or withdrawn because there is
     /// nothing left to deliver; and, for a delivery, which rule decided the account's enabled state (#2064).
     /// </summary>
-    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> DeliverOneAsync(
+    private async Task<PasswordDeliveryAttempt> DeliverOneAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -757,7 +768,7 @@ public class PasswordSynchronisationServer
                 change.Status = PendingPasswordChangeStatus.Parked;
                 change.NextRetryAt = null;
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return (PasswordDeliveryDisposition.Kept, null);
+                return PasswordDeliveryAttempt.Kept;
             }
         }
         else
@@ -772,7 +783,7 @@ public class PasswordSynchronisationServer
                 change.RecordAttempt(PasswordSetFailureReason.TargetObjectNotFound,
                     "The identity has no account in this Connected System yet.", configuration, asOf);
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return (PasswordDeliveryDisposition.Kept, null);
+                return PasswordDeliveryAttempt.Kept;
             }
 
             change.ConnectedSystemObjectId = account.Id;
@@ -792,7 +803,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return (PasswordDeliveryDisposition.Kept, null);
+            return PasswordDeliveryAttempt.Kept;
         }
 
         string password;
@@ -815,7 +826,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return (PasswordDeliveryDisposition.Kept, null);
+            return PasswordDeliveryAttempt.Kept;
         }
 
         // Only an administrator who named the account decides to enable or disable it. A propagated password reaches
@@ -840,11 +851,10 @@ public class PasswordSynchronisationServer
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return (PasswordDeliveryDisposition.Kept, null);
+            return PasswordDeliveryAttempt.Kept;
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, enablement.Basis);
-        return (PasswordDeliveryDisposition.Delivered, enablement.Basis);
+        return await RecordDeliveredAsync(connectedSystem, change, enablement.Basis, setResult, password);
     }
 
     /// <summary>
@@ -853,7 +863,7 @@ public class PasswordSynchronisationServer
     /// settings, and sends it. Withdraws the row rather than delivering or retrying wherever there is nothing
     /// left to deliver, so a stale row never sits parked or retrying against work nobody needs done any more.
     /// </summary>
-    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> DeliverProvisionedAsync(
+    private async Task<PasswordDeliveryAttempt> DeliverProvisionedAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -876,7 +886,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 $"Initial password no longer needed: the account it was for no longer exists in {connectedSystem.Name}, or is no longer joined to this person.");
-            return (PasswordDeliveryDisposition.Withdrawn, null);
+            return PasswordDeliveryAttempt.Withdrawn;
         }
 
         // Read fresh rather than trusted from when the row was staged, so a Synchronisation Rule switched off or
@@ -890,7 +900,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 "Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.");
-            return (PasswordDeliveryDisposition.Withdrawn, null);
+            return PasswordDeliveryAttempt.Withdrawn;
         }
 
         var resolution = initialPasswordResolver.Resolve(initialPasswordConfiguration, discoveredPolicy);
@@ -903,7 +913,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return (PasswordDeliveryDisposition.Kept, null);
+            return PasswordDeliveryAttempt.Kept;
         }
 
         // Where an export wrote the account's enabled state, the Attribute Flow decides it and the rule's Enable
@@ -929,11 +939,10 @@ public class PasswordSynchronisationServer
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return (PasswordDeliveryDisposition.Kept, null);
+            return PasswordDeliveryAttempt.Kept;
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, enablement.Basis);
-        return (PasswordDeliveryDisposition.Delivered, enablement.Basis);
+        return await RecordDeliveredAsync(connectedSystem, change, enablement.Basis, setResult, resolution.Password!);
     }
 
     /// <summary>
@@ -998,7 +1007,7 @@ public class PasswordSynchronisationServer
     /// with a password JIM set. Nothing was sent and nothing failed, so no attempt is counted and no Activity is
     /// recorded; the lane's summary counts the wait.
     /// </summary>
-    private static (PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement) PostponeForExportInFlight(
+    private static PasswordDeliveryAttempt PostponeForExportInFlight(
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemObject account,
@@ -1008,14 +1017,14 @@ public class PasswordSynchronisationServer
         Log.Debug("DeliverDuePasswordChangesAsync: An export to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} is in flight, " +
             "and delivering password change {PendingPasswordChangeId} would enable the account; it waits until {NextRetryAt}",
             account.Id, connectedSystem.Id, change.Id, change.NextRetryAt);
-        return (PasswordDeliveryDisposition.Postponed, null);
+        return PasswordDeliveryAttempt.Postponed;
     }
 
     /// <summary>
     /// Keeps a change whose effect on the account's enabled state could not be decided, as a transient failure:
     /// nothing was sent, and the next attempt decides afresh.
     /// </summary>
-    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> KeepUndecidedAsync(
+    private async Task<PasswordDeliveryAttempt> KeepUndecidedAsync(
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemPasswordSynchronisation configuration,
@@ -1025,7 +1034,7 @@ public class PasswordSynchronisationServer
             "JIM could not read whether this account's enabled state is set by an Attribute Flow, or waiting for its password, so nothing was sent.",
             configuration, asOf);
         await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-        return (PasswordDeliveryDisposition.Kept, null);
+        return PasswordDeliveryAttempt.Kept;
     }
 
     /// <summary>
@@ -1037,7 +1046,7 @@ public class PasswordSynchronisationServer
     /// </para>
     /// </summary>
     private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success,
-        AccountEnablementBasis? enablement = null)
+        AccountEnablementBasis? enablement = null, string? caveat = null)
     {
         var failure = success ? null : DescribeFailure(connectedSystem, change);
 
@@ -1053,7 +1062,7 @@ public class PasswordSynchronisationServer
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
-            Message = success ? DescribeDelivery(connectedSystem, change, enablement) : failure
+            Message = success ? DescribeDelivery(connectedSystem, change, enablement) + (caveat == null ? string.Empty : $" {caveat}") : failure
         };
 
         // System-attributed, not "attributed to nobody". Every Activity must name a principal, and passing no
@@ -1067,10 +1076,63 @@ public class PasswordSynchronisationServer
         // never completed sits in the Activities list looking like work still under way; and a refusal recorded
         // only as prose in the Message is invisible to everything that counts, filters or alerts on outcomes,
         // which is most of what an audit record is for (requirement 23).
-        if (success)
-            await _completeActivity(activity);
-        else
+        // A delivery carrying a caveat set the password, so it is no failure, but it did not do everything asked of it
+        // (#2159). Completed with a warning so the difference reaches everything that reads outcomes by status, which
+        // is how the portal, the REST API and PowerShell decide whether to say "Set" plainly.
+        if (!success)
             await _completeActivityWithError(activity, failure!);
+        else if (caveat != null)
+            await _completeActivityWithWarning(activity);
+        else
+            await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// Records a delivery that set the password, completed plainly where the Connected System applied everything asked
+    /// of it and with a warning where it did not (#2159), and says which it was.
+    /// </summary>
+    /// <param name="password">
+    /// The password just sent, in scope only so the Connector's warning can be checked for it before it is recorded.
+    /// Never recorded or logged itself.
+    /// </param>
+    private async Task<PasswordDeliveryAttempt> RecordDeliveredAsync(ConnectedSystem connectedSystem, PendingPasswordChange change,
+        AccountEnablementBasis enablement, PasswordSetResult setResult, string password)
+    {
+        var caveat = DescribeCaveat(connectedSystem, setResult, password);
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, enablement, caveat);
+        return PasswordDeliveryAttempt.Delivered(enablement, expiryBehaviourHonoured: caveat == null);
+    }
+
+    /// <summary>
+    /// What a Connector that set the password could not do of what was asked (#2159), for the delivery's Activity:
+    /// what was applied instead, then the Connector's own words. Null where it did everything asked.
+    /// <para>
+    /// The Connector's words go onto an Activity that the portal, the REST API and PowerShell all show, and a
+    /// Connector is under no obligation to keep the password out of them. Withheld whole rather than patched where
+    /// they contain it, for the reason the LDAP Connector withholds a directory's message: cutting the value out
+    /// depends on the echo matching exactly.
+    /// </para>
+    /// </summary>
+    private static string? DescribeCaveat(ConnectedSystem connectedSystem, PasswordSetResult setResult, string password)
+    {
+        if (setResult.ExpiryBehaviourHonoured)
+            return null;
+
+        var applied = setResult.AppliedExpiryBehaviour switch
+        {
+            PasswordExpiryBehaviour.RequireChangeAtNextSignIn => ": a change is required at the next sign-in",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy => $": the password expires according to {connectedSystem.Name}'s own password policy",
+            PasswordExpiryBehaviour.NeverExpires => ": the password never expires",
+            _ => string.Empty
+        };
+
+        var warning = setResult.ExpiryBehaviourWarning?.Trim();
+        if (!string.IsNullOrEmpty(warning) && !string.IsNullOrEmpty(password) && warning.Contains(password, StringComparison.OrdinalIgnoreCase))
+            warning = "[the Connected System's warning is withheld because it contained the password]";
+
+        return string.IsNullOrEmpty(warning)
+            ? $"Not everything asked for could be applied{applied}."
+            : $"Not everything asked for could be applied{applied}. {warning}";
     }
 
     /// <summary>
@@ -1419,7 +1481,10 @@ public class PasswordSynchronisationServer
             State = set ? PasswordChangeTargetState.Set : PasswordChangeTargetState.Parked,
             Message = set ? newest.Message : newest.ErrorMessage ?? newest.Message,
             OccurredAt = newest.OccurredAt,
-            AttemptCount = attemptCount
+            AttemptCount = attemptCount,
+            // The password is set either way; the warning says the system could not apply everything asked of it,
+            // and the Activity's Message above says what it applied instead (#2159).
+            CompletedWithWarning = set && newest.CompletedWithWarning
         };
     }
 

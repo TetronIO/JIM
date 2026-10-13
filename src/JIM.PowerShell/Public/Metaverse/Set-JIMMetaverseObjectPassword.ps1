@@ -41,7 +41,10 @@ function Set-JIMMetaverseObjectPassword {
         Each target's State says where its password got to: Set, Retrying (with NextAttemptAt), Parked (with the
         system's own Message), Held behind a switched-off system, or Queued and Delivering while still in flight.
         A Parked target is reported as a non-terminating error as well, so a script that stops on errors stops
-        on a refusal; the result is written to the pipeline first either way.
+        on a refusal; the result is written to the pipeline first either way. A target that is Set with
+        CompletedWithWarning took the password but could not apply everything asked of it (OpenLDAP and 389
+        Directory Server cannot require a change at the next sign-in, for example); its Message says what was
+        applied, and it is reported as a warning.
 
     .PARAMETER Id
         The unique identifier (GUID) of the Metaverse Object whose password this is.
@@ -303,6 +306,13 @@ function Set-JIMMetaverseObjectPassword {
 
         foreach ($parkedTarget in @($result.Targets | Where-Object { $_.State -eq 'Parked' })) {
             Write-Error -Message "$($parkedTarget.ConnectedSystemName) refused the password: $($parkedTarget.Message)" -TargetObject $result
+        }
+
+        # A password set where the system could not apply everything asked of it (an expiry behaviour OpenLDAP and
+        # 389 Directory Server have no equivalent for) is no refusal, so not an error. It is still something a
+        # script telling the person "you will be asked to change it" has to hear, in the words of the delivery.
+        foreach ($warnedTarget in @($result.Targets | Where-Object { $_.CompletedWithWarning })) {
+            Write-Warning "$($warnedTarget.ConnectedSystemName) set the password, with a warning: $($warnedTarget.Message)"
         }
 
         if ($null -ne $result.PSObject.Properties['Settled'] -and -not $result.Settled -and $PSBoundParameters.ContainsKey('Wait') -and $Wait -gt 0) {

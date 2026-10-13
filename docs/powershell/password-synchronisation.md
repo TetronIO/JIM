@@ -83,7 +83,7 @@ One object describing the change: the Activity that records it, and where delive
 |----------|------|-------------|
 | `ActivityId` | `guid` | The Activity recording the change. It is the durable record, outliving the queue, and is where the per-system outcomes appear once delivery has been attempted. |
 | `Origin` | `string` | Which way the change was aimed: `Explicit` at the accounts the caller named, or `Propagated` to every Connected System configured for Password Synchronisation. One of `Propagated`, `Explicit` or `Provisioned`. |
-| `Targets` | `object[]` | One entry per Connected System the change was queued for. Each has `ConnectedSystemId`, `ConnectedSystemName`, `Enabled`, `ConnectedSystemObjectId`, `State`, `NextAttemptAt`, `Message`, `AttemptCount` and `FailureReason`. |
+| `Targets` | `object[]` | One entry per Connected System the change was queued for. Each has `ConnectedSystemId`, `ConnectedSystemName`, `Enabled`, `ConnectedSystemObjectId`, `State`, `NextAttemptAt`, `Message`, `AttemptCount`, `FailureReason` and `CompletedWithWarning`. |
 | `QueuedForNoSystems` | `bool` | True where a propagated change found no Connected System configured for Password Synchronisation, so nothing was queued. Reported explicitly rather than as an empty list alone: silence here would let a caller believe a password propagated when nothing was even recorded (requirement 14). Always false for named accounts, which are refused rather than queued for nothing. |
 | `Settled` | `bool` | True when no target is still Queued or Delivering: every one has been set, is retrying on its own clock, is parked waiting on a person, is held behind a switched-off system, or has expired. A waited request answers `200` when this is true and `202` when it is not. A change queued for no systems is settled. |
 | `GeneratedPassword` | `securestring` | The password JIM generated, present only with `-Generate`. This is the only chance to read it. |
@@ -101,8 +101,9 @@ Each entry in `Targets`:
 | `Message` | The system's own words on its most recent outcome (why it refused, or that the password was set), or `$null` before anything has been said. |
 | `AttemptCount` | How many delivery attempts this system has had. |
 | `FailureReason` | Why the most recent attempt failed: `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. Empty before any attempt and once the password is set. |
+| `CompletedWithWarning` | `$true` where the password was set but the system could not apply everything asked of it, such as a change at the next sign-in on OpenLDAP or 389 Directory Server, which leave expiry to their own policy. `State` is still `Set`, and `Message` says what was applied instead. |
 
-A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal and can still read the other targets from the exception it caught. A target still in flight when a wait ran out is reported as a warning.
+A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal and can still read the other targets from the exception it caught. A target that is `Set` with `CompletedWithWarning` is reported as a warning in its `Message`'s words, and so is a target still in flight when a wait ran out.
 
 ### Examples
 

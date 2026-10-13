@@ -91,6 +91,7 @@ public class PasswordDeliveryPassTests
             },
             _ => Task.CompletedTask,
             (_, _) => Task.CompletedTask,
+            _ => Task.CompletedTask,
             new PasswordGeneratorService(),
             () => _protection);
     }

@@ -42,6 +42,13 @@ public class PasswordDeliveryPassResult
     public int PostponedCount { get; private set; }
 
     /// <summary>
+    /// Passwords delivered where the Connected System could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159). Included in <see cref="DeliveredCount"/>; each one's Activity is
+    /// completed with a warning naming what was applied instead.
+    /// </summary>
+    public int ExpiryBehaviourNotHonouredCount { get; private set; }
+
+    /// <summary>
     /// Systems the pass could not deliver to at all, one line each, named so an administrator reading the
     /// Activity knows where to look. Never contains a password or anything derived from one.
     /// </summary>
@@ -70,6 +77,7 @@ public class PasswordDeliveryPassResult
         ExpiredCount += result.ExpiredCount;
         WithdrawnCount += result.WithdrawnCount;
         PostponedCount += result.PostponedCount;
+        ExpiryBehaviourNotHonouredCount += result.ExpiryBehaviourNotHonouredCount;
 
         if (result.CouldNotOpenPasswordConnection)
             Problems.Add($"{connectedSystemName}: the password channel could not be opened, so nothing was attempted.");
@@ -105,7 +113,10 @@ public class PasswordDeliveryPassResult
         var parts = new List<string>();
 
         if (DeliveredCount > 0)
-            parts.Add($"{DeliveredCount} password change(s) delivered");
+            parts.Add(ExpiryBehaviourNotHonouredCount > 0
+                ? $"{DeliveredCount} password change(s) delivered ({ExpiryBehaviourNotHonouredCount} not exactly as asked, because the system could not apply " +
+                  "everything requested; each one's Activity says what was applied)"
+                : $"{DeliveredCount} password change(s) delivered");
         if (RetryingCount > 0)
             parts.Add($"{RetryingCount} will be retried");
         if (ParkedCount > 0)

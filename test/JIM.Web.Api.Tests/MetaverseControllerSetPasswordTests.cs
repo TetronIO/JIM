@@ -496,6 +496,31 @@ public class MetaverseControllerSetPasswordTests
         }
     }
 
+    /// <summary>
+    /// A system that set the password but could not apply the requested expiry (#2159) reads Set and carries the
+    /// warning flag, so a caller is not left to infer from Set that a change will be demanded at the next sign-in.
+    /// </summary>
+    [Test]
+    public async Task SetPassword_AccountsNamed_ExpiryCouldNotBeApplied_ReportsSetWithTheWarningAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+        var waiter = new RecordingWaiter(() =>
+        {
+            var outcomes = OutcomesWhereEveryTargetIs(PasswordChangeTargetState.Set, (CorporateAdId, "Corporate AD"));
+            outcomes.Targets[0].CompletedWithWarning = true;
+            return outcomes;
+        });
+
+        var result = await SetPasswordAsync(connectedSystemObjectIds: accounts, waiter: waiter);
+
+        var target = BodyOf(result).Targets[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Set));
+            Assert.That(target.CompletedWithWarning, Is.True);
+        }
+    }
+
     [Test]
     public async Task SetPassword_AccountsNamed_DefaultsToRequiringAChangeAtNextSignInAsync()
     {

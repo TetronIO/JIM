@@ -195,11 +195,38 @@ public class PasswordHistoryTimelineModelTests
             Change(Now, outcomes:
             [
                 Outcome(1, "Corporate Directory", ActivityStatus.Complete, Now),
-                Outcome(2, "HR Portal", ActivityStatus.CompleteWithWarning, Now)
+                Outcome(2, "HR Portal", ActivityStatus.Complete, Now)
             ])
         ], [], Now));
 
         Assert.That(entry.DotColour, Is.EqualTo(Color.Success));
+    }
+
+    /// <summary>
+    /// A delivery completed with a warning set the password but could not apply everything asked of it, such as a
+    /// change at the next sign-in on a directory with no equivalent (#2159). It still reads as set, but in amber,
+    /// with the Activity's words saying what was applied, because a green chip is what told the helpdesk a change
+    /// would be demanded when it would not.
+    /// </summary>
+    [Test]
+    public void Build_SystemSetWithAWarning_IsSetInAmberWithTheActivitysWords()
+    {
+        const string words = "Password set on HR Portal. Not everything asked for could be applied: the password ages according to HR Portal's own policy.";
+        var warned = Outcome(2, "HR Portal", ActivityStatus.CompleteWithWarning, Now);
+        warned.Message = words;
+
+        var entry = Single(PasswordHistoryTimelineModel.Build(
+            [Change(Now, outcomes: [Outcome(1, "Corporate Directory", ActivityStatus.Complete, Now), warned])], [], Now));
+
+        var target = entry.Targets.Single(t => t.Name == "HR Portal");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.State, Is.EqualTo(PasswordHistoryTimelineModel.TargetState.Set), "the password is set");
+            Assert.That(target.PillModifier, Is.EqualTo("warn"));
+            Assert.That(target.Detail, Is.EqualTo(words));
+            Assert.That(entry.DotColour, Is.EqualTo(Color.Warning));
+            Assert.That(entry.Targets.Single(t => t.Name == "Corporate Directory").PillModifier, Is.EqualTo("ok"));
+        }
     }
 
     [Test]

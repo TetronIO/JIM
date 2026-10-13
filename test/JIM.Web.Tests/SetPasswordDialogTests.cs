@@ -879,6 +879,38 @@ public class SetPasswordDialogTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// Regression for #2159. A system that set the password but could not apply what was asked of it (OpenLDAP and
+    /// 389 Directory Server have no "change at next sign-in") must not be described from the request: the row
+    /// carries what the delivery's Activity says was applied, and the summary is a warning rather than a success,
+    /// because "must be changed at next sign-in" is what the helpdesk passes on to the person.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemCouldNotApplyTheExpiry_ShowsWhatWasAppliedAndWarns()
+    {
+        const string applied = "Password set on Fabrikam HR. Not everything asked for could be applied: the password ages according to Fabrikam HR's own policy.";
+        var warned = Target("Fabrikam HR", PasswordChangeTargetState.Set, applied);
+        warned.CompletedWithWarning = true;
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."), warned);
+        var provider = ShowDialog(allowSelection: true);
+        Click(provider, SelectAllMarker);
+        Generate(provider);
+
+        SubmitAndSettle(provider);
+
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Fabrikam HR"),
+                "the summary names the system that did not apply everything asked");
+            Assert.That(rows.Select(r => r.GetAttribute("data-state")), Is.All.EqualTo("Set"), "the password is set on both");
+            Assert.That(rows[0].TextContent, Does.Contain("must be changed at next sign-in"), "the system that applied it says so");
+            Assert.That(rows[1].TextContent, Does.Contain(applied));
+            Assert.That(rows[1].TextContent, Does.Not.Contain("must be changed at next sign-in"));
+        }
+    }
+
+    /// <summary>
     /// The rows appear from what was queued, so the stage is never empty while the first wait is in flight, and
     /// each one moves as its system answers.
     /// </summary>

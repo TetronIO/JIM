@@ -355,6 +355,34 @@ Describe 'Set-JIMMetaverseObjectPassword' {
             }
         }
 
+        It 'Should warn, not error, for a target that took the password but could not apply everything asked' {
+            # The password is set, so it is no refusal; but a script telling the person they will be asked to change
+            # it at the next sign-in must hear that the system could not do that.
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi -MockWith {
+                    [PSCustomObject]@{
+                        ActivityId = [guid]::NewGuid()
+                        Origin     = 'Propagated'
+                        Settled    = $true
+                        Targets    = @(
+                            [PSCustomObject]@{ ConnectedSystemId = 3; ConnectedSystemName = 'Corporate AD'; Enabled = $true; State = 'Set'; NextAttemptAt = $null; Message = 'Password set on Corporate AD.'; AttemptCount = 1; CompletedWithWarning = $false },
+                            [PSCustomObject]@{ ConnectedSystemId = 9; ConnectedSystemName = 'Corporate OpenLDAP'; Enabled = $true; State = 'Set'; NextAttemptAt = $null; Message = 'Password set on Corporate OpenLDAP. Not everything asked for could be applied: the password ages according to its own policy.'; AttemptCount = 1; CompletedWithWarning = $true }
+                        )
+                    }
+                }
+
+                $result = Set-JIMMetaverseObjectPassword -Id ([guid]'8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f') `
+                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -Force `
+                    -WarningVariable warnings -WarningAction SilentlyContinue -ErrorVariable refusals -ErrorAction SilentlyContinue
+
+                @($result.Targets | Where-Object CompletedWithWarning).ConnectedSystemName | Should -Be 'Corporate OpenLDAP'
+                @($refusals).Count | Should -Be 0
+                @($warnings).Count | Should -Be 1
+                "$($warnings[0])" | Should -BeLike 'Corporate OpenLDAP*own policy.'
+            }
+        }
+
         It 'Should report Settled false with what is known when the wait ran out' {
             InModuleScope JIM {
                 $script:JIMConnection = @{ Url = 'https://jim.example.test' }

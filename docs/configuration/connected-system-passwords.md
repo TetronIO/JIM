@@ -78,6 +78,8 @@ Leaving the switch off has one exception: where JIM created a new Active Directo
 
 The dialog waits for the outcome and shows it: **Set**, **Retrying** with the next attempt where the system could not be reached (JIM keeps trying on its own clock, and you can stop it), or **Parked** where the system refused the password, carrying its own words so you can try another one. Every attempt is recorded as an Activity, whether it succeeded or not; the Activity records that a password was set, never the password.
 
+A system can take the password but not apply everything you chose for it. OpenLDAP and 389 Directory Server leave expiry to their own password policy, so they cannot require a change at the next sign-in or make a password never expire. The outcome is then **Set** with a warning, and the dialog shows what was applied instead, in the words of its Activity, which completes with a warning rather than plainly. Tell the person what the dialog says, not what you asked for: a password that was meant to be changed at the next sign-in still works after it.
+
 !!! warning "This resets the password on whichever Connected System Object you point it at"
     Anyone who can reach this action can reset the password of any Connected System Object in this Connector Space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
 
@@ -94,7 +96,7 @@ Choose some or all of them and JIM sets one password across them, one queued cha
 
 The password is generated to satisfy the strictest of the selected systems' rules: the longest minimum length any of them demands, and the character categories all of them count. A category only one system recognises cannot help satisfy another system's complexity rule, so JIM counts only what they have in common. Where a selected system has never published a policy, JIM says so rather than assuming it will accept anything.
 
-The dialog waits for the outcomes and shows one per Connected System: **Set**, **Retrying** with the next attempt (and a way to stop trying), **Parked** with the system's own words, or **Held**.
+The dialog waits for the outcomes and shows one per Connected System: **Set**, **Retrying** with the next attempt (and a way to stop trying), **Parked** with the system's own words, or **Held**. A system that set the password but could not apply what you chose for its expiry reads **Set** with a warning saying what it applied, as it does for one Connected System Object above.
 
 !!! warning "There is no transaction across Connected Systems"
     Each system is delivered to independently. A reset can end with the new password in some systems and not yet in others, and the person has a different password where a system refused it. JIM says which, in as many words. A system that could not be reached is retried by JIM on its own clock; nothing is lost while it is down.

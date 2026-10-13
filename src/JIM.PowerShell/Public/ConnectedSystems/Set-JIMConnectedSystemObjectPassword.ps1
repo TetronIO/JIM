@@ -19,7 +19,9 @@ function Set-JIMConnectedSystemObjectPassword {
         Activity. A system that was unreachable is retried on JIM's own clock; one that refused the password parks
         it, with its own words in the target's Message, for you to look at. A Parked target is reported as a
         non-terminating error as well, so a script that stops on errors stops on a refusal; the result is written
-        to the pipeline first either way.
+        to the pipeline first either way. A system that takes the password but cannot apply everything asked of it
+        (OpenLDAP and 389 Directory Server cannot require a change at the next sign-in, for example) reports the
+        target as Set with CompletedWithWarning, says in its Message what was applied, and is reported as a warning.
 
         This is the automation counterpart of the Set Password action on a Connected System Object in the
         administration portal, for the new starter about to sign in for the first time, the account whose
@@ -100,6 +102,8 @@ function Set-JIMConnectedSystemObjectPassword {
         | NextAttemptAt           | When the next attempt falls due, for a Retrying target                         |
         | Message                 | The system's own words on its most recent outcome                              |
         | AttemptCount            | How many delivery attempts this account has had                                |
+        | FailureReason           | Why the most recent attempt failed, where it did                               |
+        | CompletedWithWarning    | $true where the password was set but not everything asked could be applied; Message says what was |
 
         No property carries the password you supplied.
 
@@ -249,6 +253,13 @@ function Set-JIMConnectedSystemObjectPassword {
 
         foreach ($parkedTarget in @($result.Targets | Where-Object { $_.State -eq 'Parked' })) {
             Write-Error -Message "$($parkedTarget.ConnectedSystemName) refused the password: $($parkedTarget.Message)" -TargetObject $result
+        }
+
+        # A password set where the system could not apply everything asked of it (an expiry behaviour OpenLDAP and
+        # 389 Directory Server have no equivalent for) is no refusal, so not an error. It is still something a
+        # script telling the person "you will be asked to change it" has to hear, in the words of the delivery.
+        foreach ($warnedTarget in @($result.Targets | Where-Object { $_.CompletedWithWarning })) {
+            Write-Warning "$($warnedTarget.ConnectedSystemName) set the password, with a warning: $($warnedTarget.Message)"
         }
 
         if ($null -ne $result.PSObject.Properties['Settled'] -and -not $result.Settled -and -not ($PSBoundParameters.ContainsKey('Wait') -and $Wait -eq 0)) {

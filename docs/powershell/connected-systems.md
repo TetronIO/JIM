@@ -1803,8 +1803,10 @@ The entry under `Targets`:
 | `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
 | `Message` | The system's own words on its most recent outcome, or `$null` before anything has been said. |
 | `AttemptCount` | How many delivery attempts this account has had. |
+| `FailureReason` | Why the most recent attempt failed, where it did; empty before any attempt and once the password is set. |
+| `CompletedWithWarning` | `$true` where the password was set but the system could not apply everything asked of it, such as a change at the next sign-in on OpenLDAP or 389 Directory Server. `State` is still `Set`, and `Message` says what was applied instead. |
 
-A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal. A target still in flight when the wait ran out is reported as a warning.
+A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal. A `Set` target with `CompletedWithWarning` is reported as a warning in its `Message`'s words, and so is a target still in flight when the wait ran out.
 
 ### Examples
 
@@ -1829,7 +1831,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 
 - **This resets the password on whichever account you point it at.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
 - The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
-- A Connected System that cannot honour the requested expiry behaviour applies what it can and says so in the target's `Message`; the password is still set.
+- A Connected System that cannot honour the requested expiry behaviour still sets the password, applies what it can, and says what in the target's `Message`, with `CompletedWithWarning` set and a warning written. On OpenLDAP and 389 Directory Server, `RequireChangeAtNextSignIn` and `NeverExpires` both end this way, because those directories leave expiry to their own password policy.
 - A system that refused the password parks it, with its own reason in `Message`. A system that could not be reached is `Retrying`, because nothing was established about the password itself; JIM tries again on its own clock, and nothing is lost while the system is down.
 - The account must be joined to a Metaverse Object. An unjoined object is reported as not found, with the remedy: join it first.
 - Routine initial passwords belong on the Synchronisation Rule that provisions the account; see [`Set-JIMSyncRuleInitialPassword`](initial-password.md#set-jimsyncruleinitialpassword).

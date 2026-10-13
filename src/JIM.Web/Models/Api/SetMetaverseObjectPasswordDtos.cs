@@ -149,7 +149,8 @@ public class SetMetaverseObjectPasswordResponse
                     NextAttemptAt = outcome?.NextAttemptAt,
                     Message = outcome?.Message,
                     AttemptCount = outcome?.AttemptCount ?? 0,
-                    FailureReason = outcome?.FailureReason
+                    FailureReason = outcome?.FailureReason,
+                    CompletedWithWarning = outcome?.CompletedWithWarning ?? false
                 };
             }).ToList()
         };
@@ -209,4 +210,13 @@ public class SetMetaverseObjectPasswordTarget
     /// after the queue row has gone. The portal chooses its remedy guidance from this; a script can do the same.
     /// </summary>
     public PasswordSetFailureReason? FailureReason { get; set; }
+
+    /// <summary>
+    /// True where the password was set but the Connected System could not apply everything asked of it, such as an
+    /// expiry behaviour it has no equivalent for: a request to require a change at the next sign-in, sent to a
+    /// directory that leaves expiry to its own password policy, sets the password without that requirement. The
+    /// state is still Set, and <c>message</c> says what was applied instead. False in every other case.
+    /// </summary>
+    /// <remarks>Read from the delivery Activity, which is completed with a warning in this case (#2159).</remarks>
+    public bool CompletedWithWarning { get; set; }
 }

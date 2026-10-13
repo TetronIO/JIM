@@ -115,6 +115,11 @@ public class PasswordDeliveryTests
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
             },
+            activity =>
+            {
+                activity.Status = ActivityStatus.CompleteWithWarning;
+                return Task.CompletedTask;
+            },
             new PasswordGeneratorService(),
             () => _protection);
     }
@@ -549,6 +554,111 @@ public class PasswordDeliveryTests
             _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         Assert.That(_createdActivities.Single().Status, Is.EqualTo(ActivityStatus.Complete));
+    }
+
+    /// <summary>
+    /// The warning an OpenLDAP or 389 Directory Server target returns when asked to require a change at the next
+    /// sign-in: the password is set, and expiry is left to the directory's own policy (#2159).
+    /// </summary>
+    private const string ExpiryDowngradeWarning =
+        "'Require a change at next sign-in' is an Active Directory behaviour with no portable equivalent on this directory, " +
+        "so the password will expire according to whichever password policy the directory applies to the account.";
+
+    private static PasswordSetResult ExpiryDowngrade(string warning = ExpiryDowngradeWarning) =>
+        PasswordSetResult.SucceededWithExpiryDowngrade(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, warning);
+
+    /// <summary>
+    /// Regression for #2159. A Connector that sets the password but cannot apply the requested expiry reports it on
+    /// the result, and the delivery used to read only Success, so the outcome was a plain completion: the helpdesk
+    /// was told a change would be demanded at the next sign-in when it would not. The password is set, so it is
+    /// not a failure, but it is completed with a warning saying what was applied, in the Connector's words.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ConnectorCouldNotApplyTheExpiry_CompletesTheOutcomeWithAWarningAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade());
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1), "the password is set, so the change is delivered and leaves the queue");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.StartWith("Password set on Corporate AD"));
+            Assert.That(activity.Message, Does.Contain("expires according to"), "the message names what was applied");
+            Assert.That(activity.Message, Does.Contain(ExpiryDowngradeWarning), "and carries the Connector's own words");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ConnectorCouldNotApplyTheExpiry_CountsItOnTheRunResultAsync()
+    {
+        var downgraded = await QueueAsync();
+        var honoured = await QueueAsync();
+        ArrangeAccount(downgraded);
+        ArrangeAccount(honoured);
+        _connector.WithPasswordSetResult(target =>
+            target.Id == downgraded.ConnectedSystemObjectId
+                ? ExpiryDowngrade()
+                : PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(2));
+            Assert.That(result.ExpiryBehaviourNotHonouredCount, Is.EqualTo(1));
+            Assert.That(_createdActivities.Select(a => a.Status),
+                Is.EquivalentTo(new[] { ActivityStatus.Complete, ActivityStatus.CompleteWithWarning }),
+                "a clean success still completes plainly");
+        }
+    }
+
+    /// <summary>
+    /// The Connector's warning goes onto an Activity, which the portal and the API show. A Connector is under no
+    /// obligation to keep the password out of its own words, so one that echoes it has the warning withheld.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ConnectorWarningContainingThePassword_IsWithheldFromTheActivityAsync()
+    {
+        var change = await QueueAsync("Correct-Horse-Battery-Staple");
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade("Could not apply expiry to the password Correct-Horse-Battery-Staple."));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That($"{activity.Message} {activity.ErrorMessage}", Does.Not.Contain("Correct-Horse"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_ConnectorCouldNotApplyTheExpiry_CompletesWithAWarningAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade());
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ExpiryBehaviourNotHonouredCount, Is.EqualTo(1));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.StartWith("Initial password set on Corporate AD"));
+            Assert.That(activity.Message, Does.Contain(ExpiryDowngradeWarning));
+        }
     }
 
     /// <summary>
