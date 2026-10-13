@@ -10,6 +10,7 @@ function Set-JIMPredefinedSearchCriterion {
         Replaces a criterion's attribute, comparison operator and value. This is a full update;
         provide the value carrier that matches the attribute's data type. The operator must be
         applicable to the attribute's data type (see New-JIMPredefinedSearchCriterion).
+        Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER PredefinedSearchId
         The ID of the Predefined Search.
@@ -57,7 +58,8 @@ function Set-JIMPredefinedSearchCriterion {
         The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        Whether a Text comparison respects case. $false ignores case; it does when omitted.
+        Whether a Text comparison respects case: $false ignores it. When omitted, the criterion keeps its current
+        setting.
 
     .PARAMETER ValueMode
         For a DateTime attribute: Absolute compares with -DateTimeValue, and is the default; Relative compares with

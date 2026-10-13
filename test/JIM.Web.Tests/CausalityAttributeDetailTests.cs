@@ -163,7 +163,7 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
         var cut = RenderDetail();
         cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(6)));
 
-        var addChip = cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Add"));
+        var addChip = cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Add", StringComparison.Ordinal));
         addChip.Click();
 
         cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(2)));
