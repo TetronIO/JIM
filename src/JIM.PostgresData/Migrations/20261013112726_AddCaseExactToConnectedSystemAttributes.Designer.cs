@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261013083752_AddCaseExactToConnectedSystemAttributes")]
+    [Migration("20261013112726_AddCaseExactToConnectedSystemAttributes")]
     partial class AddCaseExactToConnectedSystemAttributes
     {
         /// <inheritdoc />
