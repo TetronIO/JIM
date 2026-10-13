@@ -57,3 +57,31 @@ public enum MissingInputBehaviour
     /// </summary>
     FailObject
 }
+
+/// <summary>
+/// What an Expression's result gives the attribute it flows to, once converted to that attribute's type (#2179).
+/// </summary>
+public enum ExpressionResultResolutionKind
+{
+    /// <summary>
+    /// No value: the result was null, an empty collection, or values that all collapsed to nothing.
+    /// </summary>
+    NoValue,
+
+    /// <summary>
+    /// One or more distinct values, each converted to the attribute's type.
+    /// </summary>
+    Values,
+
+    /// <summary>
+    /// A value the attribute's type cannot hold, such as text that is not a number for a Number attribute. Nothing
+    /// is stored and the existing value is kept; the failure is reported.
+    /// </summary>
+    NotConvertible,
+
+    /// <summary>
+    /// More than one distinct value for a single-valued attribute. JIM will not pick one, so nothing is stored and
+    /// the existing value is kept; the failure is reported.
+    /// </summary>
+    SeveralValues
+}

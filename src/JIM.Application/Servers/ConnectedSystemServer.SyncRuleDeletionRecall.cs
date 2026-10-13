@@ -243,9 +243,9 @@ public partial class ConnectedSystemServer
                     survivorObjectTypes, expressionEvaluator);
 
                 // Capture pending changes BEFORE applying (which clears the pending lists), additions
-                // first: export evaluation stages a single-valued attribute's FIRST matching changed
-                // value, so a re-elected survivor's addition must precede the recalled removal or the
-                // target would be staged with the stale value.
+                // first, and every removal in removedAttributes: where the source or target is single-valued,
+                // export evaluation stages the first changed value that was not removed (#2182), so a
+                // re-elected survivor's addition is exported rather than the recalled, stale value.
                 var additions = mvo.PendingAttributeValueAdditions.ToList();
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
                 var changedAttributes = additions.Concat(removals).ToList();

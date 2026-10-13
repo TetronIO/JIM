@@ -273,6 +273,16 @@ public class ExportExecutionServer
                 connectedSystem.Name, result.ClassMembershipRefusedCount);
         }
 
+        // Only when it happened, which should be never: export staging gives a single-valued attribute exactly one
+        // change (#2182), so an export carrying two is a fault in JIM rather than a configuration gap, and is said so.
+        if (result.SingleValuedContradictionRefusedCount > 0)
+        {
+            Log.Error("ExecuteExportsAsync: Single-valued attribute summary for {SystemName}: {RefusedCount} export(s) refused because each carries more " +
+                "than one change for a single-valued attribute, which is a fault in JIM rather than in its configuration. Each names the attributes on its " +
+                "own Pending Export, and none was sent, so no Connected System Object was changed by it.",
+                connectedSystem.Name, result.SingleValuedContradictionRefusedCount);
+        }
+
         // Report completion
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -776,8 +786,9 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                (exportResults, var immediateRefused) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
-                                result.ClassMembershipRefusedCount += immediateRefused;
+                                (exportResults, var immediateClassRefused, var immediateContradictions) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                result.ClassMembershipRefusedCount += immediateClassRefused;
+                                result.SingleValuedContradictionRefusedCount += immediateContradictions;
                             }
 
                             // Process results
@@ -1383,8 +1394,9 @@ public class ExportExecutionServer
                 using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                     .SetTag("batchSize", batch.Count))
                 {
-                    (exportResults, var deferredRefused) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
-                    result.ClassMembershipRefusedCount += deferredRefused;
+                    (exportResults, var deferredClassRefused, var deferredContradictions) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    result.ClassMembershipRefusedCount += deferredClassRefused;
+                    result.SingleValuedContradictionRefusedCount += deferredContradictions;
                 }
 
                 using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1545,10 +1557,11 @@ public class ExportExecutionServer
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
                     // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var (exportResults, batchRefused) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    var (exportResults, batchClassRefused, batchContradictions) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
-                    batchResult.ClassMembershipRefusedCount = batchRefused;
+                    batchResult.ClassMembershipRefusedCount = batchClassRefused;
+                    batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
                     await ProcessBatchSuccessAsync(batch, exportResults, statesBeforeExecuting, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
@@ -1755,6 +1768,7 @@ public class ExportExecutionServer
         into.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
         into.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
         into.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
+        into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
         into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
         into.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
         if (includeItems)
@@ -1917,14 +1931,18 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
-    /// System and failing it with the attributes named. Results come back in the batch's own order either way.
+    /// System, or that carries more than one change for a single-valued attribute, and failing it with the attributes
+    /// named. Results come back in the batch's own order either way, with the two kinds of refusal counted apart.
     /// </summary>
     /// <remarks>
     /// Refusing here rather than letting the Connected System reject the change gives an administrator something
     /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
-    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
+    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector. An export contradicting
+    /// itself over a single-valued attribute (#2182) is refused for a different reason: it is a fault in JIM, and a
+    /// Connector could apply it in an order that clears the value and report success. The two are counted apart
+    /// because they point at different remedies: a class membership refusal at configuration, a contradiction at JIM.
     /// </remarks>
-    internal static async Task<(List<ConnectedSystemExportResult> Results, int Refused)> ExportBatchAsync(
+    internal static async Task<(List<ConnectedSystemExportResult> Results, int ClassMembershipRefused, int ContradictionsRefused)> ExportBatchAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
         List<PendingExport> batch,
@@ -1933,30 +1951,69 @@ public class ExportExecutionServer
     {
         var refusals = new Dictionary<int, ConnectedSystemExportResult>();
         var sendable = new List<PendingExport>();
+        var contradictions = 0;
 
         for (var i = 0; i < batch.Count; i++)
         {
-            var refusal = ClassMembershipValidator.Check(batch[i], connectedSystem);
+            // An export that contradicts itself over a single-valued attribute is refused first (#2182): it is a fault
+            // in JIM rather than configuration, and no class check is meaningful over changes that cannot all apply.
+            var contradiction = SingleValuedAttributeChangeValidator.Check(ForConnector(batch[i]));
+            var refusal = contradiction ?? ClassMembershipValidator.Check(batch[i], connectedSystem);
             if (refusal == null)
+            {
                 sendable.Add(batch[i]);
-            else
-                refusals[i] = refusal;
+                continue;
+            }
+
+            refusals[i] = refusal;
+            if (contradiction != null)
+                contradictions++;
         }
 
         if (refusals.Count == 0)
-            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0);
+            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0, 0);
 
-        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
-            refusals.Count, batch.Count, connectedSystem.Name);
+        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' before sending them: " +
+            "{ContradictionCount} carrying more than one change for a single-valued attribute, {ClassMembershipCount} adding a class whose required " +
+            "attributes have no value. The reason is recorded against each object.",
+            refusals.Count, batch.Count, connectedSystem.Name, contradictions, refusals.Count - contradictions);
 
         var sentResults = sendable.Count > 0
             ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
             : [];
 
-        // Rebuild in the batch's order, because the caller pairs results with exports by index.
-        var results = new List<ConnectedSystemExportResult>(batch.Count);
+        return (InBatchOrder(batch.Count, refusals, sentResults), refusals.Count - contradictions, contradictions);
+    }
+
+    /// <summary>
+    /// The refusals that keep each export carrying more than one change for a single-valued attribute (#2182) back from
+    /// the Connector, keyed by the export's position in <paramref name="exports"/>.
+    /// </summary>
+    private static Dictionary<int, ConnectedSystemExportResult> RefuseSelfContradictingExports(IList<PendingExport> exports)
+    {
+        var refusals = new Dictionary<int, ConnectedSystemExportResult>();
+        for (var i = 0; i < exports.Count; i++)
+        {
+            var refusal = SingleValuedAttributeChangeValidator.Check(exports[i]);
+            if (refusal != null)
+                refusals[i] = refusal;
+        }
+
+        return refusals;
+    }
+
+    /// <summary>
+    /// One result per export of a batch, in the batch's own order, from the refusals held back and the results of the
+    /// exports that were sent. The caller pairs results with exports by index.
+    /// </summary>
+    private static List<ConnectedSystemExportResult> InBatchOrder(
+        int batchCount,
+        Dictionary<int, ConnectedSystemExportResult> refusals,
+        IList<ConnectedSystemExportResult> sentResults)
+    {
+        var results = new List<ConnectedSystemExportResult>(batchCount);
         var sentIndex = 0;
-        for (var i = 0; i < batch.Count; i++)
+        for (var i = 0; i < batchCount; i++)
         {
             if (refusals.TryGetValue(i, out var refusal))
                 results.Add(refusal);
@@ -1964,7 +2021,7 @@ public class ExportExecutionServer
                 results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
         }
 
-        return (results, refusals.Count);
+        return results;
     }
 
     /// <summary>
@@ -2786,11 +2843,12 @@ public class ExportExecutionServer
     /// Pending Export updates, or the Activity (D7).
     /// </summary>
     /// <returns>
-    /// True when the values were recorded (or there was nothing to record); false when recording failed. The calls
-    /// path does not need the answer, because its confirming import self-heals; an auto-confirmed file export does
-    /// (#1936), because nothing ever imports from its target.
+    /// The exports whose values were not all recorded: every one of them when recording failed, otherwise those carrying a
+    /// change whose value is held in another data type's column than its attribute's (#2183). The calls path does not
+    /// need the answer, because its confirming import self-heals; an auto-confirmed file export does (#1936), because
+    /// nothing ever imports from its target.
     /// </returns>
-    private async Task<bool> ApplyOptimisticExportUpdatesAsync(
+    private async Task<List<PendingExport>> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
         ISyncRepository repository)
@@ -2813,6 +2871,9 @@ public class ExportExecutionServer
             // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(
                 successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
+
+            if (delta.UnrecordedChanges.Count > 0)
+                LogUnrecordedChanges(delta.UnrecordedChanges, successfulNonDeleteExports[0].ConnectedSystemId);
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -2869,7 +2930,8 @@ public class ExportExecutionServer
                     successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
             }
 
-            return true;
+            var unrecordedExportIds = delta.UnrecordedChanges.Select(c => c.PendingExportId).ToHashSet();
+            return successfulNonDeleteExports.Where(pe => unrecordedExportIds.Contains(pe.Id)).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2877,8 +2939,28 @@ public class ExportExecutionServer
             Log.Warning(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply failed for Connected System {ConnectedSystemId} " +
                 "({Count} Pending Exports); a confirming import will self-heal, and auto-confirmed exports are left to be sent again",
                 successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
-            return false;
+            return successfulNonDeleteExports;
         }
+    }
+
+    /// <summary>
+    /// Logs, once per batch, the exported changes optimistic apply could not record (#2183): each was written with its
+    /// value in another data type's column than its attribute's, which only a fault elsewhere produces, since export
+    /// staging converts expression results to the attribute's type (#2179). A Warning, because the target now holds a
+    /// value JIM has no record of; the Activity of an auto-confirmed export says so too, and names this log as where
+    /// the cause is.
+    /// </summary>
+    private static void LogUnrecordedChanges(IReadOnlyCollection<OptimisticExportUnrecordedChange> unrecordedChanges, int connectedSystemId)
+    {
+        var attributes = string.Join(", ", unrecordedChanges
+            .Select(c => $"{LogSanitiser.Sanitise(c.AttributeName)} ({c.AttributeType}, given {c.HeldDataType?.ToString() ?? "nothing"})")
+            .Distinct());
+        Log.Warning("ApplyOptimisticExportUpdatesAsync: {Count} exported changes to Connected System {ConnectedSystemId} could not be " +
+            "recorded, because each gave its attribute a value of another data type (an export Attribute Flow expression " +
+            "returning another type does this): {Attributes}. A confirming import records what the target holds; an " +
+            "auto-confirmed export is left unconfirmed. Connected System Objects: {ConnectedSystemObjectIds}",
+            unrecordedChanges.Count, connectedSystemId, attributes,
+            DescribeConnectedSystemObjectIds(unrecordedChanges.Select(c => c.ConnectedSystemObjectId).Distinct()));
     }
 
     /// <summary>
@@ -3121,18 +3203,21 @@ public class ExportExecutionServer
     /// <c>IsReadyForExecution</c> treats as "send again" for a Create and an Update alike. The next export run then
     /// writes the same row again (the File Connector merges into the existing file, so a repeat is harmless) and
     /// retries the recording. Confirming it regardless would leave JIM's view of the target missing those values,
-    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target.
+    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target. An
+    /// export carrying a value held as another data type than its attribute's (#2183) is left the same way; its recording
+    /// fails again on every retry until the Attribute Flow stages the attribute's own type, so the warning repeats on each
+    /// run instead of the export being confirmed with nothing recorded.
     /// </summary>
-    /// <param name="successfulNonDeleteExports">The exports whose values the failed recording covered.</param>
+    /// <param name="unrecordedExports">The exports whose values were not all recorded.</param>
     /// <param name="exportsToDelete">The auto-confirmed exports about to be deleted; those left unconfirmed are taken out.</param>
     /// <param name="result">Counts the exports left unconfirmed, for the Activity's warning.</param>
     private async Task LeaveUnrecordedExportsUnconfirmedAsync(
-        List<PendingExport> successfulNonDeleteExports,
+        List<PendingExport> unrecordedExports,
         List<PendingExport> exportsToDelete,
         ExportExecutionResult result)
     {
         var now = DateTime.UtcNow;
-        foreach (var export in successfulNonDeleteExports)
+        foreach (var export in unrecordedExports)
         {
             foreach (var change in export.AttributeValueChanges.Where(c => c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
                 change.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
@@ -3141,19 +3226,19 @@ public class ExportExecutionServer
             export.LastAttemptedAt = now;
         }
 
-        var unrecorded = successfulNonDeleteExports.ToHashSet();
+        var unrecorded = unrecordedExports.ToHashSet();
         exportsToDelete.RemoveAll(unrecorded.Contains);
 
         using (Diagnostics.Diagnostics.Database.StartSpan("UpdateUnrecordedPendingExports")
-            .SetTag("count", successfulNonDeleteExports.Count))
+            .SetTag("count", unrecordedExports.Count))
         {
-            await SyncRepo.UpdatePendingExportsAsync(successfulNonDeleteExports);
+            await SyncRepo.UpdatePendingExportsAsync(unrecordedExports);
         }
 
-        result.UnrecordedExportCount += successfulNonDeleteExports.Count;
+        result.UnrecordedExportCount += unrecordedExports.Count;
         Log.Warning("LeaveUnrecordedExportsUnconfirmedAsync: {Count} auto-confirmed exports to Connected System {ConnectedSystemId} were written, " +
             "but their values could not be recorded; they are left unconfirmed and will be sent again on the next export run",
-            successfulNonDeleteExports.Count, successfulNonDeleteExports[0].ConnectedSystemId);
+            unrecordedExports.Count, unrecordedExports[0].ConnectedSystemId);
     }
 
     /// <summary>
@@ -3314,7 +3399,28 @@ public class ExportExecutionServer
                 Message = subPhase
             });
 
-            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            // An export contradicting itself over a single-valued attribute is refused before the file is written, as
+            // ExportBatchAsync refuses one on the call-based path (#2182): the File Connector applies changes in turn, so
+            // an add followed by a removal would leave the column empty and be reported as a success.
+            var refusals = RefuseSelfContradictingExports(pendingExports);
+            List<ConnectedSystemExportResult> exportResults;
+            if (refusals.Count == 0)
+            {
+                exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            }
+            else
+            {
+                Log.Warning("ExecuteUsingFilesWithBatchingAsync: Refused {RefusedCount} of {ExportCount} export(s) on '{ConnectedSystem}' before writing them: " +
+                    "each carries more than one change for a single-valued attribute. The reason is recorded against each object.",
+                    refusals.Count, pendingExports.Count, connectedSystem.Name);
+                result.SingleValuedContradictionRefusedCount += refusals.Count;
+
+                List<PendingExport> sendable = [.. pendingExports.Where((_, index) => !refusals.ContainsKey(index))];
+                var sentResults = sendable.Count > 0
+                    ? await connector.ExportAsync(connectedSystem.SettingValues, sendable, cancellationToken, connectorProgress)
+                    : [];
+                exportResults = InBatchOrder(pendingExports.Count, refusals, sentResults);
+            }
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;
@@ -3454,12 +3560,14 @@ public class ExportExecutionServer
             // Issue #1936: record the exported values. LAST among the CSO writes, after
             // BatchUpdateCsosAfterSuccessfulExportAsync, so its external-Id additions are already reflected in each
             // CSO's AttributeValues (#1079's D9/D11 ordering), and BEFORE the auto-confirmed exports are deleted,
-            // because confirming an export whose values were not recorded would leave nothing to repair it.
-            var valuesRecorded = successfulNonDeleteExports.Count == 0 ||
-                                 await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+            // because confirming an export whose values were not recorded would leave nothing to repair it. That covers
+            // a recording that failed outright and an export carrying a value it could not record (#2183).
+            var unrecordedExports = successfulNonDeleteExports.Count == 0
+                ? []
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
 
-            if (autoConfirm && !valuesRecorded)
-                await LeaveUnrecordedExportsUnconfirmedAsync(successfulNonDeleteExports, exportsToDelete, result);
+            if (autoConfirm && unrecordedExports.Count > 0)
+                await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
 
             await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, SyncRepo);
 

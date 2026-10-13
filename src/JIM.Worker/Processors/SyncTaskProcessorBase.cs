@@ -6706,6 +6706,18 @@ public abstract class SyncTaskProcessorBase
                     "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
                     $"text value, not an array: '{error.Expression}'.");
 
+            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
+                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
+                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued:
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
+                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting
@@ -7005,10 +7017,11 @@ public abstract class SyncTaskProcessorBase
                         // Queue for export evaluation so target systems receive Pending Exports for the recalled
                         // (and any re-elected) attribute values; without this, downstream Connected Systems keep
                         // the departed source's stale values forever. Same construction as the obsoletion path
-                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
-                        // its first matching changed value, so the re-elected survivor's value must precede the
-                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
-                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        // and the normal Attribute Flow path: additions FIRST, with every removal in
+                        // removedAttributes. Where the source or target is single-valued, export evaluation exports
+                        // the first changed value that was not removed (#2182), so the re-elected survivor's value
+                        // is exported rather than the leaver's, and a genuine clear, with no such value,
+                        // null-clears the target.
                         var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
                         var removedAttributes = recalledAttributeValues.ToHashSet();
                         MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);

@@ -81,10 +81,12 @@ public static class ScimPatchBuilder
 
         if (removing)
         {
+            // A removal naming no value clears the attribute, so its path names no value either: a filter on an
+            // empty value would match no member and remove nothing.
             return new ScimPatchOperation
             {
                 Op = ScimPatchOperations.Remove,
-                Path = multiValued
+                Path = multiValued && change.Value != null
                     ? Qualify(attribute, $"{attribute.SourceAttributeName}[{ValueSubAttribute} eq \"{Escape(change.Value)}\"]")
                     : Qualify(attribute, attribute.SourceAttributeName)
             };

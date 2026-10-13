@@ -76,6 +76,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Every evaluation runs under JIM's expression culture (<see cref="ExpressionText.Culture"/>), set here and
+    /// restored afterwards, so what the language writes as text (a date or a number joined to text with <c>+</c>)
+    /// is the same on every server whatever its <c>LANG</c> (#2153, N1). Every failure the Expression can cause is
+    /// thrown as one <see cref="ExpressionEvaluationException"/> (N5).
+    /// </remarks>
     public object? Evaluate(string expression, ExpressionContext context)
     {
         ArgumentNullException.ThrowIfNull(expression);
@@ -83,11 +89,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         if (expression.Length > MaxExpressionLength)
         {
-            throw new ArgumentException(
-                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).",
-                nameof(expression));
+            throw new ExpressionEvaluationException(
+                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
         }
 
+        var hostCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = ExpressionText.Culture;
         var sw = Stopwatch.StartNew();
         try
         {
@@ -97,17 +104,37 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
                 new Parameter("mv", context.Mv),
                 new Parameter("cs", context.Cs));
         }
+        // The failures an Expression can cause, from parsing it to running it, each made the one expression error.
+        // Anything else (an out-of-memory condition, a JIM fault) propagates unchanged, as does an
+        // ExpressionEvaluationException a function raised itself.
+        catch (DynamicExpressoException ex) { throw ToExpressionError(ex); }
+        catch (ArgumentException ex) { throw ToExpressionError(ex); }
+        catch (FormatException ex) { throw ToExpressionError(ex); }
+        catch (ArithmeticException ex) { throw ToExpressionError(ex); }
+        catch (InvalidOperationException ex) { throw ToExpressionError(ex); }
+        catch (InvalidCastException ex) { throw ToExpressionError(ex); }
+        catch (KeyNotFoundException ex) { throw ToExpressionError(ex); }
+        catch (NullReferenceException ex) { throw ToExpressionError(ex); }
+        catch (IndexOutOfRangeException ex) { throw ToExpressionError(ex); }
         finally
         {
+            CultureInfo.CurrentCulture = hostCulture;
             sw.Stop();
             if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
             {
                 Log.Warning("Slow expression evaluation: '{Expression}' took {ElapsedMs}ms",
-                    expression.Length > 50 ? expression[..50] + "..." : expression,
+                    LogSanitiser.Sanitise(expression.Length > 50 ? expression[..50] + "..." : expression),
                     sw.ElapsedMilliseconds);
             }
         }
     }
+
+    /// <summary>
+    /// Wraps a failure the Expression caused as the one expression error, keeping its message so the administrator
+    /// reads what went wrong exactly as before.
+    /// </summary>
+    private static ExpressionEvaluationException ToExpressionError(Exception exception) =>
+        new(exception.Message, exception);
 
     /// <summary>
     /// Gets the current expression cache metrics.
@@ -170,8 +197,16 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             var result = Evaluate(expression, context);
             return ExpressionTestResult.Success(result);
         }
-        catch (Exception ex)
+        catch (ExpressionEvaluationException ex)
         {
+            return ExpressionTestResult.Failure(ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Evaluate lets a failure outside the expression errors propagate (an expression can still raise one, such
+            // as "x".PadLeft(2000000000), which exceeds the maximum string length). Test has a result to carry any
+            // failure in, and the portal tester, the REST endpoint, Example Data and the generated-value previews rely
+            // on it never throwing.
             return ExpressionTestResult.Failure(ex.Message);
         }
     }
@@ -225,8 +260,10 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) => AsString(o)?.StartsWith(AsString(prefix) ?? "") ?? false));
         target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) => AsString(o)?.EndsWith(AsString(suffix) ?? "") ?? false));
         target.SetFunction("Length", (Func<object?, int>)(o => AsString(o)?.Length ?? 0));
-        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)(o => string.IsNullOrEmpty(AsString(o))));
-        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o => string.IsNullOrWhiteSpace(AsString(o))));
+        // The presence tests ask whether there is a value, not what its text is, so a Binary value (which has no text
+        // form) is a value unless it holds no bytes, rather than an error.
+        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)(o => o is byte[] bytes ? bytes.Length == 0 : string.IsNullOrEmpty(AsString(o))));
+        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o => o is byte[] bytes ? bytes.Length == 0 : string.IsNullOrWhiteSpace(AsString(o))));
 
         // Containment functions
         target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) => AsString(o)?.Contains(AsString(value) ?? "") ?? false));
@@ -249,12 +286,15 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         // each evaluation; NonRepeatableFunctionDetector lists them, so keep it in step when adding another.
         target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
         target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
-        target.SetFunction("FormatDate", (Func<DateTime?, string, string?>)((dt, format) => dt?.ToString(format, CultureInfo.InvariantCulture)));
+        // FormatDate and ParseDate are counterparts: one writes a date as text in a given format, the other reads text
+        // in a given format as a date. Every other reading of text as a date uses the ISO 8601 rule (ExpressionDates).
+        target.SetFunction("FormatDate", (Func<object?, string, string?>)FormatDate);
+        target.SetFunction("ParseDate", (Func<object?, string, DateTime?>)ParseDate);
         target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(o)));
         target.SetFunction("FromFileTime", (Func<object?, DateTime?>)(o => FromFileTime(o)));
 
         // Conversion functions
-        target.SetFunction("ToString", (Func<object?, string?>)(o => o?.ToString()));
+        target.SetFunction("ToString", (Func<object?, string?>)AsString);
         target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(o), out var i) ? i : 0));
         // ToDecimal: exact for decimal/int/long inputs; strings parse with invariant culture and accept
         // exponent notation (e.g. "1.5E3" becomes 1500). Deliberately no double/float path: binary
@@ -281,11 +321,23 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Converts an object to string, handling null and various types.
+    /// A function's input as text, in JIM's one text form (#2153, N1): a date as <c>2026-03-15 10:30:00Z</c>, a
+    /// number with <c>.</c> as the decimal point. A Binary value has no text form, so using one as text is an
+    /// expression error rather than the text <c>System.Byte[]</c>.
     /// </summary>
+    /// <remarks>
+    /// Several values keep their old text here for now: how a function treats several values is #2053's multi-valued
+    /// slice, which gives them their own error.
+    /// </remarks>
     private static string? AsString(object? value)
     {
-        return value?.ToString();
+        if (ExpressionText.TryFormat(value, out var text))
+            return text;
+
+        if (value is byte[])
+            throw new ExpressionEvaluationException("A Binary value has no text form, so it cannot be used as text.");
+
+        return value!.ToString();
     }
 
     /// <summary>
@@ -624,28 +676,22 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         if (value == null)
             return null;
 
-        DateTime? dateTime = value switch
+        // A date (DateTime, or DateTimeOffset from PostgreSQL) or text, read by the one date rule (#2153, N2): text
+        // only in ISO 8601, an Unspecified date taken as UTC. Unreadable text is no date, so no FILETIME.
+        if (!ExpressionDates.IsDate(value) && value is not string)
         {
-            DateTime dt => dt,
-            DateTimeOffset dto => dto.UtcDateTime,  // Handle DateTimeOffset from PostgreSQL
-            string s => ParseDateTimeOrNull(s),     // Handle string dates (may return null for invalid strings)
-            _ => throw new ArgumentException(
+            throw new ArgumentException(
                 $"ToFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                $"Expected DateTime, DateTimeOffset, or string. Value: '{value}'")
-        };
+                "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+        }
 
-        if (dateTime == null)
+        if (!ExpressionDates.TryRead(value, out var utcDateTime))
             return null;
 
         // Handle PostgreSQL's -infinity (DateTime.MinValue) and +infinity (DateTime.MaxValue)
         // These represent "no date" or "never" and should return null
-        if (dateTime.Value == DateTime.MinValue || dateTime.Value == DateTime.MaxValue)
+        if (utcDateTime == DateTime.MinValue || utcDateTime == DateTime.MaxValue)
             return null;
-
-        // Ensure we're working with UTC
-        var utcDateTime = dateTime.Value.Kind == DateTimeKind.Utc
-            ? dateTime.Value
-            : dateTime.Value.ToUniversalTime();
 
         // FILETIME can only represent dates from 1601-01-01 onwards
         // Return null for dates before this (shouldn't happen with valid data, but be safe)
@@ -656,17 +702,72 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Attempts to parse a string as a DateTime, returning null if parsing fails.
-    /// This allows graceful handling of empty strings or unparseable date formats.
+    /// Writes a date as text in <paramref name="format"/> (a .NET date format, read with the invariant culture). The
+    /// value is a date, or text read by the one date rule (#2153, N3): ISO 8601 only, no offset meaning UTC. Null,
+    /// empty or unreadable text gives null; a value of any other type is an expression error.
     /// </summary>
-    private static DateTime? ParseDateTimeOrNull(string s)
+    private static string? FormatDate(object? value, string format)
     {
-        if (string.IsNullOrWhiteSpace(s))
+        if (value == null)
             return null;
 
-        return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed)
-            ? parsed
-            : null;
+        DateTime date;
+        switch (value)
+        {
+            // A date is formatted as it is, exactly as before FormatDate accepted text.
+            case DateTime dateTime:
+                date = dateTime;
+                break;
+            case DateTimeOffset dateWithOffset:
+                date = dateWithOffset.UtcDateTime;
+                break;
+            case string text:
+                if (!ExpressionDates.TryReadText(text, out date))
+                    return null;
+                break;
+            default:
+                throw new ArgumentException(
+                    $"FormatDate cannot format a value of type '{value.GetType().Name}'. " +
+                    "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+        }
+
+        return date.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Reads text in <paramref name="format"/> (a .NET custom date format, with the invariant culture) as a date: the
+    /// counterpart of <see cref="FormatDate"/>, and the way to read a date in any form other than ISO 8601. The text
+    /// is taken as UTC unless the format carries an offset (<c>zzz</c> or <c>K</c>); the result is the canonical
+    /// UTC date, to the microsecond. A date passed in is returned as UTC.
+    /// </summary>
+    /// <returns>Null for no value or empty text.</returns>
+    /// <exception cref="FormatException">Non-empty text that does not match the format: an expression error, so the
+    /// attribute keeps its value rather than being cleared by a null.</exception>
+    private static DateTime? ParseDate(object? value, string format)
+    {
+        switch (value)
+        {
+            case null:
+            case "":
+                return null;
+            case DateTime dateTime:
+                return DateTimeAttributeValue.ToCanonical(dateTime);
+            case DateTimeOffset dateWithOffset:
+                return DateTimeAttributeValue.ToCanonical(dateWithOffset.UtcDateTime);
+            case string text:
+                if (string.IsNullOrEmpty(format))
+                    throw new ArgumentException("ParseDate needs the format the text is in, such as \"dd/MM/yyyy\".");
+
+                // The message names the format, never the text: it reaches the worker's logs, which must not carry
+                // source data such as a date of birth; the Run Profile Execution Item identifies the object.
+                if (!DateTimeOffset.TryParseExact(text, format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+                    throw new FormatException($"ParseDate could not read the text as a date in the format '{format}'.");
+
+                return DateTimeAttributeValue.ToCanonical(parsed.UtcDateTime);
+            default:
+                throw new ArgumentException(
+                    $"ParseDate cannot read a value of type '{value.GetType().Name}'. Expected text, or a date.");
+        }
     }
 
     /// <summary>
@@ -685,7 +786,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             string s => ParseLongOrNull(s),  // Handle string values (may return null for invalid numbers)
             _ => throw new ArgumentException(
                 $"FromFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                $"Expected long, int, or string. Value: '{value}'")
+                "Expected long, int, or string.")
         };
 
         if (fileTime == null || fileTime.Value <= 0)
@@ -761,6 +862,15 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         // Handle null cases
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
+
+        // Dates compare by instant (#2153, N2), and text compared with a date is read by the one date rule: ISO 8601
+        // only, so the host's own date text ("15/03/2026 10:30:00" on en-GB) is not equal on one server and unequal
+        // on the next. Text that cannot be read as a date is not equal to one.
+        if (ExpressionDates.IsDate(a) || ExpressionDates.IsDate(b))
+        {
+            return ExpressionDates.TryRead(a, out var dateA) && ExpressionDates.TryRead(b, out var dateB) &&
+                   dateA.Ticks == dateB.Ticks;
+        }
 
         // String comparison (most common case)
         if (a is string strA && b is string strB)

@@ -743,6 +743,98 @@ public class SqlConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_AnUpdateOfAMultiValuedAttribute_ReplacesTheParentsRelatedRowsRatherThanAppendingOneAsync()
+    {
+        // An Update means "the attribute is exactly this value": a single-valued Metaverse attribute flowing to a
+        // related table. Appending a row per change left the table holding every value the attribute ever had.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("PhoneNumbers", AttributeDataType.Text, text: "555-0199", plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
+
+        var statements = provider.ExecutedStatements;
+        var transaction = provider.Transactions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(statements.Select(statement => statement.CommandText), Is.EqualTo(new[]
+            {
+                "DELETE FROM [HR].[EMPLOYEE_PHONES] WHERE [EMPLOYEE_ID] = @exAnchor0",
+                "INSERT INTO [HR].[EMPLOYEE_PHONES] ([EMPLOYEE_ID], [PHONE_NUMBER]) VALUES (@exAnchor0, @exValue0)"
+            }), "every row the parent holds goes, then the one value is written");
+            Assert.That(statements[1].Parameters.Values, Does.Contain("555-0199").And.Contain(4711));
+            Assert.That(statements, Is.All.Matches<FakeExecutedCommand>(statement => statement.Transaction == transaction),
+                "the old rows and the new one change together or not at all");
+            Assert.That(transaction.Committed, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnUpdateClearingAMultiValuedAttributeWithNoValue_DeletesTheParentsRelatedRowsAndInsertsNothingAsync()
+    {
+        // A clear (an all-null Update, the shape reference recall stages too) once inserted a row holding NULL.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(provider.ExecutedStatements.Select(statement => statement.CommandText), Is.EqualTo(new[]
+            {
+                "DELETE FROM [HR].[EMPLOYEE_PHONES] WHERE [EMPLOYEE_ID] = @exAnchor0"
+            }));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_TwoChangesForOneColumn_FailsThatObjectNamingTheColumnRatherThanWritingItAsync()
+    {
+        // A column holds one value, so a Pending Export carrying two changes for it is not one this Connector can
+        // write. Microsoft SQL Server and Oracle Database both refuse an UPDATE assigning one column twice; saying
+        // which column is what the administrator needs, and the database's own message does not.
+        var provider = new FakeSqlProvider();
+        var displayName = Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Add);
+        var sameColumn = Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada Lovelace", changeType: PendingExportAttributeChangeType.Remove);
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), displayName, sameColumn);
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("DISPLAY_NAME"));
+            Assert.That(provider.ExecutedStatements, Is.Empty, "nothing is written for an object whose changes contradict each other");
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AMultiValuedSourceWithOneValueChangedIntoASingleValuedColumn_StagesOneUpdateAndSetsTheColumnOnceAsync()
+    {
+        // End to end: what export staging produces for the Metaverse Object's only email changing is what this
+        // Connector writes. It once staged an Add and a Remove, which became two assignments to one column.
+        var staged = StagedEmailChange.StageFor(SingleValuedColumn("MAIL"));
+
+        var provider = new FakeSqlProvider();
+        var results = await ExportAsync(provider, PersonDocument, [Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), [.. staged])]);
+
+        var update = provider.ExecutedStatements.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(staged.Select(change => change.ChangeType), Is.EqualTo(new[] { PendingExportAttributeChangeType.Update }));
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(update.CommandText, Is.EqualTo("UPDATE [HR].[EMPLOYEES] SET [MAIL] = @exValue0 WHERE [EMPLOYEE_ID] = @exAnchor0"));
+            Assert.That(update.Parameters[ParameterFor(update, "MAIL")], Is.EqualTo(StagedEmailChange.NewValue));
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_AnUpdateClearingAMultiValuedAttribute_DeletesEveryRelatedRowForThatParentOnly()
     {
         var provider = new FakeSqlProvider();
@@ -1754,6 +1846,7 @@ public class SqlConnectorExportTests
             new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
             new FakeCatalogueColumn("COMPANY_ID", "int", IsNullable: false),
             new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar", MaxLength: 200),
+            new FakeCatalogueColumn("MAIL", "nvarchar", MaxLength: 256),
             new FakeCatalogueColumn("Grace", "nvarchar", MaxLength: 200),
             new FakeCatalogueColumn("FTE", "decimal", Precision: 5, Scale: 3),
             new FakeCatalogueColumn("STAFF_GUID", "uniqueidentifier"),
@@ -1859,6 +1952,17 @@ public class SqlConnectorExportTests
             GuidValue = guid
         };
     }
+
+    /// <summary>
+    /// A single-valued text attribute written to the parent row's column of that name.
+    /// </summary>
+    private static ConnectedSystemObjectTypeAttribute SingleValuedColumn(string name) => new()
+    {
+        Id = ++_attributeId,
+        Name = name,
+        Type = AttributeDataType.Text,
+        AttributePlurality = AttributePlurality.SingleValued
+    };
 
     private static PendingExportAttributeValueChange Change(
         string name,

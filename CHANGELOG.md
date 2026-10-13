@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 - ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
 - ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
+- ✨ A new `ParseDate(text, format)` expression function reads a date written in any form, such as `ParseDate(cs["startDate"], "dd/MM/yyyy")`. Text that does not match the format is an error, so a source sending an unexpected form never clears the attribute. (#2153)
+- ✨ `Test-JIMExpression` and the REST expression tester now return `ResultLines`, the result exactly as the portal's tester shows it: one value per line, with dates as JIM writes them. (#2179)
 
 ### Changed
 
@@ -73,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
+- 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 
 ### Removed
@@ -81,6 +84,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
+- 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)
+- 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
+- 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
+- 🐛 An attribute now exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, a target is no longer cleared in error or left with stray values, and a SQL related table no longer accumulates rows. (#2182)
 - 🐛 Sync Preview now shows that an object with no import Synchronisation Rule would join through its Object Type's Object Matching Rules in simple mode, and no longer predicts such joins in advanced mode, where the synchronisation ignores those rules. (#2176)
 - 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
 - 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)

@@ -6545,6 +6545,21 @@ public partial class ConnectedSystemServer
     /// <param name="valueChangeType">The type of change, i.e. CREATE/UPDATE/DELETE.</param>
     private static void AddChangeAttributeValueObject(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue, ValueChangeType valueChangeType)
     {
+        // A value holding nothing in any column has nothing to record (#2183). Some other component stored it, so removing
+        // it records no value change and does not error the object; it is checked before the attribute change is created,
+        // so the history is not left with an attribute change that has no values. An addition holding nothing is still
+        // reported as corrupt below: nothing should be adding one.
+        if (valueChangeType == ValueChangeType.Remove && connectedSystemObjectAttributeValue.HeldDataType() == null)
+        {
+            Log.Warning("AddChangeAttributeValueObject: Connected System Object {CsoId} had a value of attribute {AttributeName} " +
+                "({AttributeType}) that held nothing; its removal records no value change. Such a value is stored only by a fault " +
+                "elsewhere.",
+                connectedSystemObjectChange.ConnectedSystemObjectId ?? connectedSystemObjectChange.DeletedConnectedSystemObjectId,
+                LogSanitiser.Sanitise(connectedSystemObjectAttributeValue.Attribute.Name),
+                connectedSystemObjectAttributeValue.Attribute.Type);
+            return;
+        }
+
         var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == connectedSystemObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
