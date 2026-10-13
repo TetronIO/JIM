@@ -92,6 +92,11 @@ public class TrustServerCertificateRequest : ServerCertificateDraftSettings
 /// </summary>
 public class TrustServerCertificateResponse
 {
+    /// <summary>
+    /// What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was
+    /// there already, ThumbprintMismatch when the server presented a different certificate from the one named. The
+    /// other values say why nothing could be trusted.
+    /// </summary>
     public ServerCertificateTrustOutcome Outcome { get; set; }
 
     /// <summary>
@@ -100,24 +105,24 @@ public class TrustServerCertificateResponse
     public string? Message { get; set; }
 
     /// <summary>
-    /// The certificate as it now sits in the JIM certificate store. Set when the outcome is
-    /// <see cref="ServerCertificateTrustOutcome.Trusted"/>.
+    /// The certificate as it now sits in the certificate store; null unless the Outcome is Trusted.
     /// </summary>
     public TrustedCertificateDetailDto? Certificate { get; set; }
 
     /// <summary>
-    /// The thumbprint the caller named, and the one the server is presenting now. Both are set when the outcome is
-    /// <see cref="ServerCertificateTrustOutcome.ThumbprintMismatch"/>, so the two can be compared rather than the
-    /// caller being told only that something changed.
+    /// The thumbprint named in the request; set when the Outcome is ThumbprintMismatch.
     /// </summary>
     public string? ExpectedThumbprint { get; set; }
 
+    /// <summary>
+    /// The thumbprint of the certificate the server presents now; set when the Outcome is ThumbprintMismatch, so
+    /// the two can be compared.
+    /// </summary>
     public string? PresentedThumbprint { get; set; }
 
     /// <summary>
-    /// Certificate authorities JIM stored alongside the trusted certificate because it downloaded them rather than
-    /// the server sending them; without them a connection could not link the trusted certificate to the server's.
-    /// Empty unless the outcome is <see cref="ServerCertificateTrustOutcome.Trusted"/>.
+    /// The certificate authorities JIM stored with the certificate because it downloaded them rather than the
+    /// server sending them; without them a connection could not link the two. Empty unless the Outcome is Trusted.
     /// </summary>
     public List<TrustedCertificateDetailDto> StoredIntermediates { get; set; } = [];
 

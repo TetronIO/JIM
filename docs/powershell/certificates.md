@@ -1,10 +1,13 @@
 ---
 title: Certificates
+description: "The cmdlets that manage JIM's trusted certificate store, and read and approve the certificate a Connected System's server presents."
+type: reference
+audience: automation-author
 ---
 
 # Certificates
 
-Cmdlets for managing certificates in JIM's trusted certificate store. Certificates are used for secure authentication with Connected Systems (e.g. LDAP over TLS).
+Cmdlets for managing certificates in JIM's trusted certificate store, which JIM uses to trust the TLS connections it makes to Connected Systems (LDAP over TLS, for instance). The last two read the certificate a Connected System's server presents, and approve it into the store.
 
 ---
 
@@ -390,6 +393,133 @@ Get-JIMCertificate -EnabledOnly | ForEach-Object {
     Export-JIMCertificate -Id $_.Id -Path "./certs/$($_.Name).der" -Force
 }
 ```
+
+---
+
+## Get-JIMConnectedSystemServerCertificate
+
+Reads the certificate the Connected System's server is presenting, without storing anything.
+
+JIM connects to the endpoint the Connected System is configured for, purely to look at the certificate the server offers, and refuses the connection. The endpoint is always worked out by the Connected System's own connector from that system's settings; it is never named directly, so this cannot be used to make JIM connect to an address of your choosing.
+
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemServerCertificate -->
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> [-SettingValues <hashtable>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System whose server is asked. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `SettingValues` | `hashtable` | No |  | Connectivity settings entered but not yet saved, keyed by setting ID (from `Get-JIMConnectorDefinition`). Give them when configuring a Connected System that cannot be saved yet: JIM does not save settings that fail validation, and an untrusted certificate fails it, so without them JIM reads the endpoint last saved. They are never saved, and encrypted settings are ignored. |
+
+### Output
+
+The certificate the server presented, the chain JIM built from it, which check it fails and what to do, and when it was read.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Certificate` | `object` | The certificate the server presented and which check it fails, judged with the JIM certificate store taken into account. It has `Host`, `Port`, `FailureReason`, `Subject`, `Issuer`, `SubjectAlternativeNames`, `ValidFrom`, `ValidTo`, `Thumbprint`, `SignatureAlgorithm`, `IsSelfSigned`, `IssuerThumbprint`, `IsIssuerCertificateAvailable`, `Chain`, `IsChainComplete`, `MissingIssuer`, `RootThumbprint`, `RootSubject`, `Remediation`, `IsExpired` and `IsNotYetValid`. |
+| `ReadAt` | `datetime` | When the server was asked, so a caller knows how current the answer is. |
+<!-- END GENERATED: Get-JIMConnectedSystemServerCertificate -->
+
+### Examples
+
+```powershell title="Read the certificate the configured server presents"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+```
+
+```powershell title="Show the identifying details and which check it fails"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 |
+    Select-Object -ExpandProperty certificate |
+    Select-Object host, subject, thumbprint, failureReason
+```
+
+```powershell title="List the certificate chain and where each certificate came from"
+(Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42).certificate.chain |
+    Format-Table subject, source, downloadedFrom
+```
+
+```powershell title="Read an endpoint that has been entered but not saved"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' }
+```
+
+### Notes
+
+- **Why `-SettingValues` exists.** JIM does not save settings that fail validation, and a certificate JIM does not trust is a validation failure. A Connected System being configured for the first time therefore has the address you typed and nothing in the database, so without these JIM would look at the endpoint last saved, or report that the system is not configured for an encrypted connection. Setting identifiers come from `Get-JIMConnectorDefinition`. The values are never persisted, and values for encrypted settings are ignored.
+- Reading stores nothing. Trusting the certificate is a separate call to `Approve-JIMConnectedSystemServerCertificate`.
+
+---
+
+## Approve-JIMConnectedSystemServerCertificate
+
+Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
+
+JIM reads the certificate from the server again, checks it against the thumbprint you supply, and adds it through the audited path, so the addition carries an Activity naming who trusted it and why.
+
+<!-- BEGIN GENERATED: Approve-JIMConnectedSystemServerCertificate -->
+### Syntax
+
+```powershell
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> -Thumbprint <string> [-ChangeReason <string>] [-SettingValues <hashtable>] [-PassThru] [-WhatIf] [-Confirm]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System whose server is asked. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `Thumbprint` | `string` | Yes |  | The thumbprint to trust, as read from the server. JIM reads the server again and trusts whichever certificate in the chain matches. Spaces and colons between the pairs are ignored. |
+| `ChangeReason` | `string` | No |  | Why the certificate was trusted, recorded on the Activity and in the certificate's change history. JIM records a sentence naming the Connected System when none is given. |
+| `SettingValues` | `hashtable` | No |  | Connectivity settings entered but not yet saved, keyed by setting ID, as for `Get-JIMConnectedSystemServerCertificate`. |
+| `PassThru` | `switch` | No |  | Returns the outcome, with the certificate as it now sits in the certificate store. |
+
+### Output
+
+With `-PassThru`, the outcome; otherwise nothing.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Outcome` | `string` | What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was there already, ThumbprintMismatch when the server presented a different certificate from the one named. The other values say why nothing could be trusted. One of `Trusted`, `AlreadyTrusted`, `ThumbprintMismatch`, `ConnectedSystemNotFound`, `NotConfiguredForSecureConnection`, `ServerUnreachable` or `InvalidChain`. |
+| `Message` | `string` | A sentence explaining the outcome. |
+| `Certificate` | `object` | The certificate as it now sits in the certificate store; empty unless the Outcome is Trusted. It has `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon` and `DaysUntilExpiry`. |
+| `ExpectedThumbprint` | `string` | The thumbprint named in the request; set when the Outcome is ThumbprintMismatch. |
+| `PresentedThumbprint` | `string` | The thumbprint of the certificate the server presents now; set when the Outcome is ThumbprintMismatch, so the two can be compared. |
+| `StoredIntermediates` | `object[]` | The certificate authorities JIM stored with the certificate because it downloaded them rather than the server sending them; without them a connection could not link the two. Empty unless the Outcome is Trusted. Each has `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon` and `DaysUntilExpiry`. |
+<!-- END GENERATED: Approve-JIMConnectedSystemServerCertificate -->
+
+### Examples
+
+```powershell title="Trust the certificate you have checked"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
+```
+
+```powershell title="Trust the root of the chain, rather than the server's own certificate"
+$reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+$reading.certificate.chain | Format-Table subject, source, downloadedFrom
+
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint $reading.certificate.rootThumbprint `
+    -ChangeReason 'Unblocking the HR Cloud connection test.'
+```
+
+```powershell title="Trust an endpoint that has been entered but not saved"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01' `
+    -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' } -PassThru
+```
+
+### Notes
+
+- **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
+- **Any certificate in the chain works; the root lasts longest.** JIM accepts the server when any certificate in its chain is in the Trusted Certificates store. `rootThumbprint` is populated when JIM reached the root, and trusting it survives the renewal of every certificate beneath it; trusting the server's own certificate has to be repeated at every renewal. Where `isChainComplete` is `$false`, trust the highest certificate JIM found, or add `missingIssuer` under Admin > Certificates. A self-signed certificate is its own root.
+- **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
+- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted.
+- Supports `ShouldProcess`.
+- Remove a certificate later with `Remove-JIMCertificate`.
 
 ---
 

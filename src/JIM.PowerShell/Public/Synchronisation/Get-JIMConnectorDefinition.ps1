@@ -4,20 +4,20 @@
 function Get-JIMConnectorDefinition {
     <#
     .SYNOPSIS
-        Gets connector definitions from JIM.
+        Gets the Connectors JIM has.
 
     .DESCRIPTION
         Retrieves connector definition metadata including available settings, capabilities,
         and configuration options for each connector type.
 
     .PARAMETER Id
-        The unique identifier of a specific connector definition to retrieve.
+        The ID of the Connector to get.
 
     .PARAMETER Name
-        The name of a specific connector definition to retrieve. Must be an exact match.
+        The name of the Connector to get, matched exactly.
 
     .OUTPUTS
-        Array of connector definition objects, or a single connector definition if Id or Name is specified.
+        The Connectors, or with -Id or -Name the one Connector, with its settings and what it supports.
 
     .EXAMPLE
         Get-JIMConnectorDefinition
@@ -39,7 +39,9 @@ function Get-JIMConnectorDefinition {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectorDefinitionHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ConnectorDefinitionDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.ConnectorDefinitionDto', ParameterSetName = 'ByName')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [int]$Id,

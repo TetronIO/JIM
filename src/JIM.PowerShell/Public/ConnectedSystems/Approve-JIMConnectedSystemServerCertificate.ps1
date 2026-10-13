@@ -22,29 +22,25 @@ function Approve-JIMConnectedSystemServerCertificate {
         download, rather than the server sending them, are stored alongside the one you trust.
 
     .PARAMETER ConnectedSystemId
-        The identifier of the Connected System whose server is asked.
+        The ID of the Connected System whose server is asked.
 
     .PARAMETER Thumbprint
-        The thumbprint being trusted, as read from the server. Matched against every certificate in the
-        chain JIM assembles when it reads the server again; whichever matches is what gets trusted.
-        Spaces and colons between the pairs are ignored.
+        The thumbprint to trust, as read from the server. JIM reads the server again and trusts whichever
+        certificate in the chain matches. Spaces and colons between the pairs are ignored.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the certificate's
-        configuration change history. JIM records a sentence naming the Connected System when none is given.
+        Why the certificate was trusted, recorded on the Activity and in the certificate's change history. JIM
+        records a sentence naming the Connected System when none is given.
 
     .PARAMETER SettingValues
-        Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier.
-        Supply these when configuring a Connected System that cannot be saved yet; see
+        Connectivity settings entered but not yet saved, keyed by setting ID, as for
         Get-JIMConnectedSystemServerCertificate.
 
     .PARAMETER PassThru
-        If specified, returns the outcome, including the certificate as it now sits in the store.
+        Returns the outcome, with the certificate as it now sits in the certificate store.
 
     .OUTPUTS
-        If -PassThru is specified, returns a PSCustomObject with the outcome (Trusted, AlreadyTrusted,
-        ThumbprintMismatch or InvalidChain), the certificate that was added, any certificate authorities
-        stored alongside it (storedIntermediates), and the expected and presented thumbprints.
+        With -PassThru, the outcome; otherwise nothing.
 
     .EXAMPLE
         Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
@@ -75,7 +71,7 @@ function Approve-JIMConnectedSystemServerCertificate {
         Remove-JIMCertificate
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TrustServerCertificateResponse')]
     param(
         # Aliased so a Connected System object pipes in; the noun here is the certificate, not the system,
         # so -Id unambiguously means "the Connected System" (see src/JIM.PowerShell/CLAUDE.md).

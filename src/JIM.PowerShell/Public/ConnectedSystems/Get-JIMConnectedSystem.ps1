@@ -4,36 +4,32 @@
 function Get-JIMConnectedSystem {
     <#
     .SYNOPSIS
-        Gets Connected Systems from JIM.
+        Gets Connected Systems.
 
     .DESCRIPTION
-        Retrieves Connected System configurations from JIM. Can retrieve all systems,
-        a specific system by ID, or filter by name using wildcards.
+        Gets Connected Systems: every one, those whose name matches, or one by ID. With -Id, -ObjectTypes gets its
+        Object Types instead, and -DeletionPreview what deleting it would affect.
 
-        To retrieve Connected System Objects, use Get-JIMConnectedSystemObject instead.
+        The Connected System Objects in a Connected System are read with Get-JIMConnectedSystemObject.
 
     .PARAMETER Id
-        The unique identifier of a specific Connected System to retrieve.
+        The ID of the Connected System to get.
 
     .PARAMETER Name
-        Filter Connected Systems by name. Supports wildcards (e.g., "HR*").
+        Returns only the Connected Systems whose name matches.
 
     .PARAMETER ObjectTypes
-        If specified, retrieves the object types defined in the Connected System's schema.
-        Only valid when -Id is specified.
+        Returns the Connected System's Object Types, from its imported schema.
 
     .PARAMETER DeletionPreview
-        Gets a preview of what would be affected by deleting the Connected System.
-        Only valid when -Id is specified.
+        Returns what deleting the Connected System would affect.
 
     .OUTPUTS
-        PSCustomObject representing Connected System(s), object types, or deletion preview.
-
-        The -Id form includes a ConfigurationDrift object describing whether the configuration has changed in a way
-        that needs a Full Synchronisation to take effect: HasPendingChanges, IsDeterminable, NeverFullySynchronised,
-        TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass. Note that
-        HasPendingChanges is also false when JIM cannot tell (never synchronised, or change tracking switched off),
-        so test IsDeterminable before treating false as "up to date".
+        The Connected Systems, or with -Id the one Connected System, its Object Types or its deletion preview. A
+        Connected System read by ID carries ConfigurationDrift: whether its configuration has changed in a way that
+        needs a Full Synchronisation, in HasPendingChanges, IsDeterminable, NeverFullySynchronised,
+        TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass.
+        HasPendingChanges is also $false when JIM cannot tell, so test IsDeterminable first.
 
     .EXAMPLE
         Get-JIMConnectedSystem
@@ -72,7 +68,10 @@ function Get-JIMConnectedSystem {
         Remove-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ConnectedSystemDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.ConnectedSystemObjectTypeDto', ParameterSetName = 'ObjectTypes')]
+    [OutputType('JIM.ConnectedSystemDeletionPreview', ParameterSetName = 'DeletionPreview')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ObjectTypes', ValueFromPipelineByPropertyName)]

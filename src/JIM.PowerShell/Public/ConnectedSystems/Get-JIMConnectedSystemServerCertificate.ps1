@@ -16,27 +16,17 @@ function Get-JIMConnectedSystemServerCertificate {
         your choosing.
 
     .PARAMETER ConnectedSystemId
-        The identifier of the Connected System whose server is asked.
+        The ID of the Connected System whose server is asked.
 
     .PARAMETER SettingValues
-        Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier.
-        Supply these when configuring a Connected System that cannot be saved yet: JIM does not save
-        settings that fail validation, and a certificate JIM does not trust is a validation failure, so
-        without them JIM would look at the endpoint last saved rather than the one being configured.
-
-        The setting identifiers come from Get-JIMConnectorDefinition. Values are never persisted, and
-        values for encrypted settings are ignored.
+        Connectivity settings entered but not yet saved, keyed by setting ID (from Get-JIMConnectorDefinition). Give
+        them when configuring a Connected System that cannot be saved yet: JIM does not save settings that fail
+        validation, and an untrusted certificate fails it, so without them JIM reads the endpoint last saved. They
+        are never saved, and encrypted settings are ignored.
 
     .OUTPUTS
-        PSCustomObject with the certificate the server presented (subject, issuer, the names it was issued
-        for, validity dates, thumbprint, whether it is self-signed, which check it fails and what to do
-        about it) and when it was read.
-
-        certificate.chain lists the certificate chain JIM found, the server's own certificate first and the
-        root last where JIM reached one. Each entry carries subject, issuer, thumbprint, validity dates,
-        isCertificateAuthority, isSelfSigned, source (SentByServer, Downloaded, JimCertificateStore or
-        OperatingSystem) and downloadedFrom. certificate.rootThumbprint names the root, the most durable
-        certificate to trust; isChainComplete and missingIssuer say whether JIM reached it.
+        The certificate the server presented, the chain JIM built from it, which check it fails and what to do, and
+        when it was read.
 
     .EXAMPLE
         Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
@@ -63,7 +53,7 @@ function Get-JIMConnectedSystemServerCertificate {
         Get-JIMCertificate
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ServerCertificateResponse')]
     param(
         # Aliased so a Connected System object pipes in; the noun here is the certificate, not the system,
         # so -Id unambiguously means "the Connected System" (see src/JIM.PowerShell/CLAUDE.md).

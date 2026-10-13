@@ -13,153 +13,157 @@ namespace JIM.Web.Models.Api;
 public class ConnectorDefinitionDto
 {
     /// <summary>
-    /// The unique identifier of the Connector Definition.
+    /// The ID of the Connector.
     /// </summary>
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the Connector Definition, e.g. "JIM LDAP Connector".
+    /// The name of the Connector, such as "JIM LDAP Connector".
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// A description of what the connector synchronises with.
+    /// What the Connector connects to; null when none is given.
     /// </summary>
     public string? Description { get; set; }
 
     /// <summary>
-    /// An optional URL with more information about the connector.
+    /// Where to read more about the Connector; null when none is given.
     /// </summary>
     public string? Url { get; set; }
 
     /// <summary>
-    /// Whether the connector ships with JIM (as opposed to being third-party supplied).
+    /// Whether the Connector ships with JIM, rather than being supplied by someone else.
     /// </summary>
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// When the Connector Definition was created (UTC).
+    /// When the Connector was added (UTC).
     /// </summary>
     public DateTime Created { get; set; }
 
     /// <summary>
-    /// The display name of the principal that created the Connector Definition.
+    /// Who added the Connector.
     /// </summary>
     public string? CreatedByName { get; set; }
 
     /// <summary>
-    /// When the Connector Definition was last modified (UTC). Null if never modified after creation.
+    /// When the Connector was last changed (UTC); null if it never has been.
     /// </summary>
     public DateTime? LastUpdated { get; set; }
 
     /// <summary>
-    /// The display name of the principal that last modified the Connector Definition.
+    /// Who last changed the Connector.
     /// </summary>
     public string? LastUpdatedByName { get; set; }
 
     /// <summary>
-    /// The settings the connector asks an administrator to supply when configuring a Connected System.
+    /// The settings an administrator gives a Connected System that uses the Connector.
     /// </summary>
     public List<ConnectorDefinitionSettingDto> Settings { get; set; } = new();
 
     /// <summary>
-    /// Metadata about the files that make up the connector. The file contents are never returned by the API.
+    /// The files that make up the Connector. Their contents are never returned.
     /// </summary>
     public List<ConnectorDefinitionFileDto> Files { get; set; } = new();
 
     /// <summary>
-    /// Whether the connector supports Full Imports.
+    /// Whether the Connector can run a Full Import.
     /// </summary>
     public bool SupportsFullImport { get; set; }
 
     /// <summary>
-    /// Whether the connector supports Delta Imports.
+    /// Whether the Connector can run a Delta Import.
     /// </summary>
     public bool SupportsDeltaImport { get; set; }
 
     /// <summary>
-    /// Whether the connector supports exporting changes to the Connected System.
+    /// Whether the Connector can export changes to the Connected System.
     /// </summary>
     public bool SupportsExport { get; set; }
 
     /// <summary>
-    /// Whether the connector supports partitions.
+    /// Whether the Connector reads its Connected System as partitions.
     /// </summary>
     public bool SupportsPartitions { get; set; }
 
     /// <summary>
-    /// Whether the connector supports partition containers.
+    /// Whether the Connector reads the containers in each partition, so you can choose which ones JIM imports from.
     /// </summary>
     public bool SupportsPartitionContainers { get; set; }
 
     /// <summary>
-    /// Whether the connector uses a secondary identifier (i.e. an LDAP DN) alongside the immutable external id.
+    /// Whether the Connector gives each object a second identifier, such as an LDAP Distinguished Name, beside its
+    /// unchanging external ID.
     /// </summary>
     public bool SupportsSecondaryExternalId { get; set; }
 
     /// <summary>
-    /// Whether the administrator selects which attribute is the external id.
+    /// Whether the administrator chooses which attribute is the external ID.
     /// </summary>
     public bool SupportsUserSelectedExternalId { get; set; }
 
     /// <summary>
-    /// Whether the administrator can override discovered attribute data types.
+    /// Whether the administrator can change the data type the Connector found for an attribute.
     /// </summary>
     public bool SupportsUserSelectedAttributeTypes { get; set; }
 
     /// <summary>
-    /// Whether the connector can confirm exports immediately rather than via the next import cycle.
+    /// Whether the Connector confirms an export as soon as it is made, rather than at the next import.
     /// </summary>
     public bool SupportsAutoConfirmExport { get; set; }
 
     /// <summary>
-    /// Whether the connector supports parallel export batch processing.
+    /// Whether the Connector can export batches in parallel.
     /// </summary>
     public bool SupportsParallelExport { get; set; }
 
     /// <summary>
-    /// Whether the connector supports paged imports/exports.
+    /// Whether the Connector imports and exports a page at a time.
     /// </summary>
     public bool SupportsPaging { get; set; }
 
     /// <summary>
-    /// Whether the connector uses file paths for import and/or export operations.
+    /// Whether the Connector imports from or exports to files.
     /// </summary>
     public bool SupportsFilePaths { get; set; }
 
     /// <summary>
-    /// Whether the connector can set passwords on objects in the Connected System.
+    /// Whether the Connector can set passwords on objects in the Connected System.
     /// </summary>
     public bool SupportsPasswordSet { get; set; }
 
     /// <summary>
-    /// Whether the connector can read the password policy the Connected System enforces.
+    /// Whether the Connector can read the password policy the Connected System enforces.
     /// </summary>
     public bool SupportsPasswordPolicyDiscovery { get; set; }
 
     /// <summary>
-    /// Whether the connector can search the Connected System for values already in use, so that unique value
-    /// generation can avoid values held by accounts JIM has never imported.
+    /// Whether the Connector can search the Connected System for values already in use, so that generating a unique
+    /// value can avoid one held by an account JIM has never imported.
     /// </summary>
     public bool SupportsUniquenessProbe { get; set; }
 
     /// <summary>
-    /// Whether the connector reports an export its Connected System rejected because a value is already in use as
-    /// such, rather than as an ordinary export failure, so that unique value generation can act on it.
+    /// Whether the Connector reports an export refused because a value is already in use as that, rather than as an
+    /// ordinary export failure, so that JIM can generate another value.
     /// </summary>
     public bool SupportsUniquenessRejectionClassification { get; set; }
 
     /// <summary>
-    /// Whether an External ID identifies one object across every Object Type of a Connected System using this
-    /// Connector (#2049). When true, an import refuses an object that has changed Object Type rather than treating
-    /// it as a deletion plus a new object, unless the Full Import Run Profile allows Object Type changes; when
-    /// false, a Run Profile's Allow Object Type Changes setting has no effect.
+    /// Whether an external ID identifies one object across every Object Type of a Connected System using the
+    /// Connector. When true, an import refuses an object that has changed Object Type, rather than treating it as a
+    /// deletion and a new object, unless the Full Import Run Profile allows Object Type changes. When false, a Run
+    /// Profile's Allow Object Type Changes setting has no effect.
     /// </summary>
+    /// <remarks>
+    /// #2049.
+    /// </remarks>
     public bool ExternalIdsUniqueAcrossObjectTypes { get; set; }
 
     /// <summary>
-    /// Which wire standard's vocabulary the connector's schema follows (e.g. "Scim", "Ldap", "NotSet").
-    /// Advisory metadata used for Standard Mapping hints.
+    /// Which standard's attribute names the Connector's schema follows, such as Scim or Ldap; NotSet when it
+    /// follows none. JIM uses it to suggest Standard Mappings.
     /// </summary>
     public string SchemaStandard { get; set; } = null!;
 

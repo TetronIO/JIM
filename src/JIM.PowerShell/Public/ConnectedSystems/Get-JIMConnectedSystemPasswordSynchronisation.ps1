@@ -21,25 +21,14 @@ function Get-JIMConnectedSystemPasswordSynchronisation {
         returned by any surface.
 
     .PARAMETER Id
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER InputObject
-        Connected System object to read the configuration from (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .OUTPUTS
-        An object with the following properties:
-
-        - configured                   [bool]     Whether Password Synchronisation has been configured here
-        - connectorSupportsPasswordSet [bool]     Whether this Connector can set passwords at all
-        - enabled                      [bool]     Whether queued password changes are delivered
-        - targetObjectTypeId           [int]      The Object Type that receives passwords
-        - targetObjectTypeName         [string]   Its name
-        - maxRetries                   [int]      Attempts before parking; 0 means use JIM's default
-        - effectiveMaxRetries          [int]      The retry count actually applied
-        - retryBackoffBase             [timespan] The first retry interval; 0 means use JIM's default
-        - effectiveRetryBackoffBase    [timespan] The backoff base actually applied
-        - requireSecureTransport       [bool]     Whether an unencrypted connection is refused
-        - effectiveTimeToLive          [timespan] How long a queued change waits before it expires
+        The Connected System's Password Synchronisation configuration, or JIM's defaults with Configured $false when
+        it has none.
 
     .EXAMPLE
         Get-JIMConnectedSystemPasswordSynchronisation -Id 3
@@ -59,7 +48,7 @@ function Get-JIMConnectedSystemPasswordSynchronisation {
         Get-JIMConnectedSystemPasswordPolicy
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemPasswordSynchronisationResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

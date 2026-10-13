@@ -70,7 +70,8 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 |----------|---------|-------------|
 | [System](system.md) | 6 | Health checks, Service Health of the Worker and Scheduler, version, auth config, user info, and system reset |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 11 | Manage Connected Systems, server certificates, Password Synchronisation configuration, and connector definitions |
+| [Connected Systems](connected-systems.md) | 7 | Create, configure, clear and delete Connected Systems, and preview what a deletion removes |
+| [Connectors](connectors.md) | 1 | List the Connectors a Connected System can be created from, and read one Connector's settings and capabilities |
 | [Connected System Schema](connected-system-schema.md) | 4 | Import a Connected System's schema, and choose which Object Types and attributes JIM manages |
 | [Auxiliary Object Classes](connected-system-auxiliary-classes.md) | 5 | Choose the auxiliary classes an LDAP Connected System's Object Types carry, and discover which are in use |
 | [Partitions and Containers](partitions-and-containers.md) | 7 | Import a Connected System's hierarchy, and choose which partitions and containers JIM imports from |
@@ -85,7 +86,8 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Metaverse](metaverse.md) | 6 | Find and read Metaverse Objects, explain their values and connections, and review pending deletions |
 | [Metaverse Object Types](metaverse-object-types.md) | 4 | List, create, change and delete Object Types, and set their deletion rules |
 | [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |
-| [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and list, retry and cancel queued password changes |
+| [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and choose which Connected Systems receive synchronised passwords |
+| [Password Queue](password-queue.md) | 3 | List, retry and cancel queued password changes |
 | [Generated Values](generated-values.md) | 7 | List the values JIM generated and retired, read and restart a Sequence's counter, and decide on values a target rejected |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
@@ -93,7 +95,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Activities](activities.md) | 3 | Monitor operation history, a run's statistics, and child Activities |
 | [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
-| [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
+| [Certificates](certificates.md) | 8 | Manage trusted certificates for connector authentication, and approve the certificate a Connected System's server presents |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |

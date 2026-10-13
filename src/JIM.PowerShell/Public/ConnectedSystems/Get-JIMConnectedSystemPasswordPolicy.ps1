@@ -26,27 +26,14 @@ function Get-JIMConnectedSystemPasswordPolicy {
         It is null when the schema has not been read since JIM could discover policies.
 
     .PARAMETER Id
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER InputObject
-        Connected System object to read the policy from (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .OUTPUTS
-        An object with the following properties:
-
-        - discovered                  [datetime?] When JIM last read this from the system
-        - minimumLength               [int?]      The shortest password the system will accept
-        - complexityRequired          [bool?]     Whether the system enforces a complexity rule
-        - requiredCharacterClassCount [int?]      How many character categories a password must draw on
-        - recognisedCharacterClasses  [string[]]  The categories this system counts towards that rule
-        - passwordHistoryLength       [int?]      How many previous passwords it remembers and refuses
-        - maximumPasswordAgeDays      [int?]      How long a password may live
-        - minimumPasswordAgeDays      [int?]      How soon it may be changed again
-        - policyOverrideSignal        [string]    Absent, Present or CouldNotDetermine
-        - furtherChecksApply          [bool]      Whether the directory applies checks JIM cannot see
-        - discoveryOutcome            [string?]   Read, NotPublished, ConfigurationNotReadable or NoPolicyConfigured;
-                                                  null when nothing has been read yet
-        - hasAnyDiscoveredConstraint  [bool]      Whether JIM discovered anything at all
+        The password policy JIM last read from the Connected System. An empty figure means JIM could not read
+        that rule, not that the rule does not exist.
 
     .EXAMPLE
         Get-JIMConnectedSystemPasswordPolicy -Id 3
@@ -66,7 +53,7 @@ function Get-JIMConnectedSystemPasswordPolicy {
         Get-JIMSyncRuleInitialPassword
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemPasswordPolicyResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

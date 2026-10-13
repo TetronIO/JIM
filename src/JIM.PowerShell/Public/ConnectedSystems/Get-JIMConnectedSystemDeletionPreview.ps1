@@ -4,7 +4,7 @@
 function Get-JIMConnectedSystemDeletionPreview {
     <#
     .SYNOPSIS
-        Gets a deletion impact preview for a Connected System in JIM.
+        Gets what deleting a Connected System would affect.
 
     .DESCRIPTION
         Retrieves a detailed impact analysis of what would be affected if the connected system were deleted.
@@ -12,10 +12,10 @@ function Get-JIMConnectedSystemDeletionPreview {
         would be impacted. Use this before Remove-JIMConnectedSystem to understand the scope of the operation.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject representing the deletion impact preview.
+        What deleting the Connected System would remove, disconnect and recall.
 
     .EXAMPLE
         Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId 1
@@ -33,7 +33,7 @@ function Get-JIMConnectedSystemDeletionPreview {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemDeletionPreview')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

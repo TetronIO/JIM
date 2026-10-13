@@ -9,34 +9,37 @@ namespace JIM.Models.Staging.DTOs;
 public class ConnectedSystemDeletionResult
 {
     /// <summary>
-    /// Whether the deletion request was accepted.
+    /// Whether JIM accepted the deletion; false when it failed, and ErrorMessage says why.
     /// </summary>
     public bool Success { get; set; }
 
     /// <summary>
-    /// The outcome of the deletion request.
+    /// How the deletion runs: at once, as a background job, or once a running synchronisation finishes; or Failed.
     /// </summary>
     public DeletionOutcome Outcome { get; set; }
 
     /// <summary>
-    /// Error message if the deletion failed.
+    /// Why the deletion failed; null unless the Outcome is Failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// The ID of the worker task if deletion was queued.
+    /// The ID of the worker task carrying out the deletion; null when it completed at once.
     /// </summary>
     public Guid? WorkerTaskId { get; set; }
 
     /// <summary>
-    /// The ID of the activity tracking this deletion.
+    /// The ID of the Activity recording the deletion; null when it failed.
     /// </summary>
     public Guid? ActivityId { get; set; }
 
     /// <summary>
-    /// What the caller should know about a deletion that went ahead, such as the preview it cites having been out of
-    /// date (#2022). Empty when there is nothing to say.
+    /// What the caller should know about a deletion that went ahead, such as the preview it cites having been out
+    /// of date. Empty when there is nothing to say.
     /// </summary>
+    /// <remarks>
+    /// #2022.
+    /// </remarks>
     public List<string> Warnings { get; set; } = [];
 
     /// <summary>Adds what the caller should be told, and returns this result.</summary>
