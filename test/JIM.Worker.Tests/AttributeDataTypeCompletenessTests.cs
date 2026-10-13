@@ -243,7 +243,7 @@ public class AttributeDataTypeCompletenessTests
     [TestCaseSource(nameof(CriteriaSupportedTypes))]
     public void SearchComparisonOperators_ValidOperatorsFor_CriteriaSupportedType_ReturnsOperators(AttributeDataType type)
     {
-        Assert.That(SearchComparisonOperators.ValidOperatorsFor(type), Is.Not.Empty,
+        Assert.That(SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.Scoping), Is.Not.Empty,
             $"{type} must offer search/scoping comparison operators.");
     }
 
@@ -254,7 +254,7 @@ public class AttributeDataTypeCompletenessTests
         // so a future member landing in the wrong bucket is a conscious choice, not an accident
         var unsupported = Enum.GetValues<AttributeDataType>().Except(CriteriaSupportedTypes);
         foreach (var type in unsupported)
-            Assert.That(SearchComparisonOperators.ValidOperatorsFor(type), Is.Empty,
+            Assert.That(SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.Scoping), Is.Empty,
                 $"{type} unexpectedly offers criteria operators; if deliberate, move it to CriteriaSupportedTypes.");
     }
 }

@@ -28,7 +28,7 @@ The count is the true total for the whole list, not the number of rows currently
 
 ## Narrowing a list
 
-Type in the search box at the top right of any list to narrow it. Search runs on the server against the whole list, not against the rows on screen, and the count updates to tell you how much your search matched.
+Type in the search box at the top right of any list to narrow it. Search runs on the server against the whole list, not against the rows on screen, and the count updates to tell you how much your search matched. Every character you type is matched as itself, including `%`, `_` and `\`, so searching for `svc_` does not also find `svcX`.
 
 Some lists carry filters of their own above the table (Activities can be filtered by status, type and initiator, for example). Those combine with the search box.
 

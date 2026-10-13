@@ -1459,6 +1459,24 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
                 LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
         }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // A scoping criterion could not be evaluated for this object (#2053): whether it is in scope is unknown,
+            // so it is neither brought into scope nor taken out, and keeps any join it has. Configuration for the
+            // administrator to correct, named in the message; every other object in the run carries on.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            runProfileExecutionItem.ErrorMessage = scopingEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // As for the expression errors above: anything staged on a shared Metaverse Object is never applied.
+            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Scope of {CsoId} could not be decided: {Message}",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(scopingEx.Message));
+        }
         catch (Exception e)
         {
             // Create execution item for unhandled error tracking
