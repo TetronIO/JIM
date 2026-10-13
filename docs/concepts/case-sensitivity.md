@@ -45,7 +45,8 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Exporting | Drift Detection: whether a Connected System contributes an attribute that an export expression names | Same thing? | Ignore case | ❌ No |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
 | Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
-| Expressions | `Eq`, `StartsWith`, `EndsWith`, `Contains`, `CollectionContains` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
+| Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
+| Expressions | `Where` | Condition? | Exact | ✅ Pass `true` as the fourth argument |
 | Expressions | `Replace`, `Split` | Changes text rather than comparing it | Exact | ❌ No |
 | Searching | Predefined Search criteria | Condition? | Exact | ✅ Per criterion |
 | Searching | Portal search boxes and list filters, log search | Finding? | Ignore case | ❌ No |
@@ -133,10 +134,10 @@ The same rule applies when a [schema refresh](../configuration/connected-system-
 Two different questions are asked inside an [expression](expressions.md), and keeping them straight avoids most surprises:
 
 - **Attribute names identify an attribute, so they ignore case.**<br /> `mv["Department"]` and `mv["department"]` refer to the same attribute.
-- **Comparing a value is a condition, so it is exact.**<br /> `Eq()`, `StartsWith()` and `EndsWith()` compare character by character, so case counts, and so do characters that look alike but are stored differently, such as a hidden soft hyphen. To compare without regard to case, lower-case both sides first:
+- **Comparing a value is a condition, so it is exact.**<br /> `==`, `Eq()`, `StartsWith()` and `EndsWith()` compare character by character, so case counts, and so do characters that look alike but are stored differently, such as a hidden soft hyphen. To compare without regard to case, lower-case both sides first:
 
 ```csharp
 Eq(Lower(mv["Status"]), "active")
 ```
 
-This is why [Expressions](expressions.md) recommends `Eq()` (never `==`) for text, and `Lower()` when you want a case-insensitive check.
+Use `Lower()` whenever you want a case-insensitive check; [Expressions](expressions.md#string-comparison) covers where `==` and `Eq()` differ.

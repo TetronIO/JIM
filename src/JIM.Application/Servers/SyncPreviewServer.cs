@@ -1259,6 +1259,9 @@ public class SyncPreviewServer
             AttributeFlowErrorKind.ExpressionResultNotConvertible => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
                 $"The Expression targeting '{flowError.TargetAttributeName}' returned '{flowError.Value}', which a {flowError.TargetAttributeType} attribute cannot hold, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"'{flowError.SourceAttributeName}' has {flowError.ValueCount} values but '{flowError.TargetAttributeName}' is single-valued, so the attribute would not flow and would keep its current value. Use Where, Join, Count, Min or Max in the Expression to say which value it should have: '{flowError.Expression}'."),
             AttributeFlowErrorKind.ExpressionResultMultiValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
                 $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),

@@ -337,6 +337,23 @@ public class AttributeFlowTesterFidelityTests
         }
     }
 
+    [Test]
+    public void Test_EveryValueOfAMultiValuedAttributeForASingleValuedTarget_NamesTheAttributeAsSynchronisationDoes()
+    {
+        // #2053: cs["mail"] reads both values, so a single-valued target is refused, and both name the attribute.
+        var scenario = Import("cs[\"mail\"]", Mv("Display Name"));
+
+        var synchronised = Synchronise(scenario, ("mail", v => v.StringValue = "a@example.org"), ("mail", v => v.StringValue = "b@example.org"));
+        var tested = Test(scenario, CsInput("mail", "a@example.org", "b@example.org"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(synchronised.Errors.Single().SourceAttributeName, Is.EqualTo("mail"));
+            Assert.That(tested.Evaluation!.Resolution!.SourceAttributeName, Is.EqualTo("mail"));
+            Assert.That(tested.Evaluation!.Resolution!.ValueCount, Is.EqualTo(2));
+        }
+    }
+
     #endregion
 
     #region Export: the tester against ComputeAttributeValueChanges
