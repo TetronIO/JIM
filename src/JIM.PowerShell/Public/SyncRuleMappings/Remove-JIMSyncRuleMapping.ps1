@@ -4,10 +4,10 @@
 function Remove-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Removes a Synchronisation Rule Mapping (attribute flow rule) from JIM.
+        Deletes an Attribute Flow from a Synchronisation Rule.
 
     .DESCRIPTION
-        Deletes an attribute flow mapping from a Synchronisation Rule.
+        Deletes an Attribute Flow (mapping) from a Synchronisation Rule.
 
         When an import mapping still contributes Metaverse attribute values, deleting it recalls them by
         default: the values are withdrawn at the next Full Synchronisation of the contributing system, with
@@ -25,26 +25,24 @@ function Remove-JIMSyncRuleMapping {
         applies only while the Metaverse-Derived Attribute Flows feature is enabled.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule the mapping belongs to.
 
     .PARAMETER MappingId
-        The unique identifier of the Mapping to delete.
+        The ID of the mapping to delete.
 
     .PARAMETER InputObject
-        Mapping object to delete (from pipeline).
+        A mapping from Get-JIMSyncRuleMapping, through the pipeline.
 
     .PARAMETER KeepContributedValues
-        Keeps the Metaverse attribute values the mapping contributed instead of leaving them to be recalled
-        at the next Full Synchronisation of the contributing system. WARNING: the kept values remain in place
-        with no provenance, so nothing can ever recall them; surviving lower-priority contributors are not
-        re-elected. Omit this switch to let the recall happen (the default).
+        Keeps the Metaverse attribute values the mapping contributed, instead of leaving them to be recalled at the
+        next Full Synchronisation of the contributing Connected System. The kept values have no provenance, so
+        nothing can ever recall them, and the other contributors to those attributes are not re-elected.
 
     .PARAMETER Force
-        Skips the confirmation prompt.
+        Suppresses the confirmation prompt, and the count of contributed values it states.
 
     .OUTPUTS
-        None. Attribute Flows deriving Metaverse attributes that the deletion left with a missing input are
-        reported with Write-Warning.
+        None. Derived Attribute Flows the deletion left with a missing input are written to the warning stream.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5
@@ -78,6 +76,7 @@ function Remove-JIMSyncRuleMapping {
         Get-JIMSyncRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory)]
         [int]$SyncRuleId,
