@@ -13,7 +13,7 @@ These cmdlets work with the values a generated Attribute Flow issues: those a Me
 
 ## Get-JIMGeneratedValue
 
-Lists the generated values a Metaverse Object holds, one per generated attribute, or nothing when it holds none. A generated Attribute Flow is configured with `New-JIMSyncRuleMapping -Generate`; see [Synchronisation Rules](attribute-mappings.md#new-jimsyncrulemapping).
+Lists the generated values a Metaverse Object holds, one per generated attribute, or nothing when it holds none. A generated Attribute Flow is configured with `New-JIMSyncRuleMapping -Generate`; see [Attribute Mappings](attribute-mappings.md#new-jimsyncrulemapping).
 
 <!-- BEGIN GENERATED: Get-JIMGeneratedValue -->
 ### Syntax
