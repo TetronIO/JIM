@@ -187,41 +187,47 @@ public enum PasswordDeliveryDisposition
 }
 
 /// <summary>
-/// Why delivering a password enabled, disabled or left an account alone (#2064): the row of
-/// <c>PasswordEnablementPolicy</c>'s precedence table that decided it. Stated on the delivery's Activity, so an
-/// account left disabled, or enabled, is never left unexplained.
+/// Why delivering a password wrote one of an account's flags, or left it alone: the row of <c>AccountFlagsPolicy</c>'s
+/// ownership ladder that decided it. One ladder decides both flags a delivery can touch, whether the account is
+/// enabled (#2064) and whether its password never expires (#2159), each with its own basis. Stated on the delivery's
+/// Activity, so an account left disabled or enabled, or with a password that never expires or one that does, is never
+/// left unexplained.
 /// </summary>
-public enum AccountEnablementBasis
+public enum AccountFlagBasis
 {
     /// <summary>
-    /// The account's enabled state was left as it was: a propagated password, or an administrator's set with no
-    /// enable decision, changes it only to complete a withheld enable (<c>CompletesWithheldEnable</c>).
+    /// The flag was left as the account has it. A propagated password never changes either flag (bar completing a
+    /// withheld enable, <c>CompletesWithheldEnable</c>), and an administrator's set with no enable decision leaves the
+    /// enabled state alone.
     /// </summary>
     LeftAsIs = 0,
 
     /// <summary>
-    /// An administrator named the account and chose to enable or disable it with the password. That choice is
-    /// applied whatever the Attribute Flows say; Enforce State reverts it where a flow disagrees.
+    /// An administrator named the account and chose what the delivery does: to enable or disable it, or which expiry
+    /// the password has, which sets or clears "Password never expires". That choice is applied whatever the Attribute
+    /// Flows say; Enforce State puts a flow's value back where it disagrees.
     /// </summary>
     AdministratorChoice = 1,
 
     /// <summary>
-    /// JIM held back the enabled value the Attribute Flow asked for only because Active Directory refuses an enabled
-    /// account with no password: on the Create that provisioned the account (#2039), or on an Update that enabled it
-    /// while a password was still owed (#2158). The password now exists, so the delivery enables the account, which is
-    /// what the flow asked for.
+    /// The enabled state only. JIM held back the enabled value the Attribute Flow asked for only because Active Directory
+    /// refuses an enabled account with no password: on the Create that provisioned the account (#2039), or on an Update
+    /// that enabled it while a password was still owed (#2158). The password now exists, so the delivery enables the
+    /// account, which is what the flow asked for.
     /// </summary>
     CompletesWithheldEnable = 2,
 
     /// <summary>
-    /// An export wrote the attribute through which the account is enabled or disabled, so the Attribute Flow
-    /// decides that state and the delivery leaves it alone.
+    /// An export wrote the attribute holding the account's flags (on Active Directory, userAccountControl, which carries
+    /// both the enabled state and "Password never expires"), so the Attribute Flow behind that export decides the flag
+    /// and the delivery leaves it alone.
     /// </summary>
     LeftToAttributeFlow = 3,
 
     /// <summary>
-    /// Nothing sets the account's enabled state, so the provisioning Synchronisation Rule's Enable Account
-    /// decides: on enables the account, off leaves it as it was created.
+    /// Nothing writes the account's flags, so the provisioning Synchronisation Rule's Initial Password decides: Enable
+    /// Account on enables the account (off leaves it as it was created), and its expiry sets "Password never expires"
+    /// for Never expires and clears it otherwise.
     /// </summary>
     SyncRuleSetting = 4
 }

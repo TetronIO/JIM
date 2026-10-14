@@ -34,7 +34,7 @@ log() { echo "[session-start] $*"; }
 # the sandbox exists to provide (Start-SandboxStack.ps1, Generate-OpenApiDoc).
 # Keep in step with .devcontainer/Dockerfile; engineering/DEPENDENCY_PINNING.md
 # lists the pins that move together.
-DOTNET_SDK_VERSION="10.0.400"
+DOTNET_SDK_VERSION="10.0.402"
 
 # Liveness is probed by asking what is installed, not by looking for the file.
 # A sandbox container resumed from a previous session already has a dotnet on

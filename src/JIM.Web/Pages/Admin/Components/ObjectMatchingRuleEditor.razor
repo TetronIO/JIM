@@ -50,8 +50,10 @@
         {
             <ExpressionEditor @ref="_expressionEditor" @bind-Value="Draft.Expression" @bind-Value:after="OnDraftChangedAsync"
                               Id="object-matching-rule-expression" Label="Expression" Required="true"
-                              Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText" />
+                              Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText"
+                              ConnectedSystemAttributeNames="SuggestedAttributeNames" />
             <div class="mt-1">
+                <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
                 <InsertAttributeMenu MetaverseAttributes="null"
                                      ConnectedSystemAttributes="SelectableAttributes"
                                      ConnectedSystemName="@ConnectedSystemName"
@@ -277,6 +279,11 @@
     private bool _lookUp = true;
     private ConnectedSystemObject? _testedObject;
     private ObjectMatchingTestResult? _tryItTest;
+
+    /// <summary>
+    /// The names the expression editor suggests inside <c>cs["</c> (#2053): the attributes Insert attribute offers.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedAttributeNames => SelectableAttributes.Select(a => a.Name).ToList();
 
     /// <summary>The attributes a rule can read: those JIM imports, never a credential.</summary>
     private IReadOnlyList<ConnectedSystemObjectTypeAttribute> SelectableAttributes =>

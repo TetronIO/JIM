@@ -108,7 +108,7 @@ public class SyncRuleInitialPassword
     /// <para>
     /// Applies only where no export has written the account's enabled state by the time the password is delivered
     /// (#2064); where one has, the Attribute Flow decides. Off leaves the account as it was created rather than
-    /// disabling it. <c>PasswordEnablementPolicy</c> holds the whole precedence.
+    /// disabling it. <c>AccountFlagsPolicy</c> holds the whole precedence.
     /// </para>
     /// </summary>
     public bool EnableAccount { get; set; } = true;

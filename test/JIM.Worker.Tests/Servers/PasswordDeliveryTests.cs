@@ -115,6 +115,11 @@ public class PasswordDeliveryTests
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
             },
+            activity =>
+            {
+                activity.Status = ActivityStatus.CompleteWithWarning;
+                return Task.CompletedTask;
+            },
             new PasswordGeneratorService(),
             () => _protection);
     }
@@ -549,6 +554,111 @@ public class PasswordDeliveryTests
             _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         Assert.That(_createdActivities.Single().Status, Is.EqualTo(ActivityStatus.Complete));
+    }
+
+    /// <summary>
+    /// The warning an OpenLDAP or 389 Directory Server target returns when asked to require a change at the next
+    /// sign-in: the password is set, and expiry is left to the directory's own policy (#2159).
+    /// </summary>
+    private const string ExpiryDowngradeWarning =
+        "'Require a change at next sign-in' is an Active Directory behaviour with no portable equivalent on this directory, " +
+        "so the password will expire according to whichever password policy the directory applies to the account.";
+
+    private static PasswordSetResult ExpiryDowngrade(string warning = ExpiryDowngradeWarning) =>
+        PasswordSetResult.SucceededWithExpiryDowngrade(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, warning);
+
+    /// <summary>
+    /// Regression for #2159. A Connector that sets the password but cannot apply the requested expiry reports it on
+    /// the result, and the delivery used to read only Success, so the outcome was a plain completion: the helpdesk
+    /// was told a change would be demanded at the next sign-in when it would not. The password is set, so it is
+    /// not a failure, but it is completed with a warning saying what was applied, in the Connector's words.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ConnectorCouldNotApplyTheExpiry_CompletesTheOutcomeWithAWarningAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade());
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1), "the password is set, so the change is delivered and leaves the queue");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.StartWith("Password set on Corporate AD"));
+            Assert.That(activity.Message, Does.Contain("expires according to"), "the message names what was applied");
+            Assert.That(activity.Message, Does.Contain(ExpiryDowngradeWarning), "and carries the Connector's own words");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ConnectorCouldNotApplyTheExpiry_CountsItOnTheRunResultAsync()
+    {
+        var downgraded = await QueueAsync();
+        var honoured = await QueueAsync();
+        ArrangeAccount(downgraded);
+        ArrangeAccount(honoured);
+        _connector.WithPasswordSetResult(target =>
+            target.Id == downgraded.ConnectedSystemObjectId
+                ? ExpiryDowngrade()
+                : PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(2));
+            Assert.That(result.ExpiryBehaviourNotHonouredCount, Is.EqualTo(1));
+            Assert.That(_createdActivities.Select(a => a.Status),
+                Is.EquivalentTo(new[] { ActivityStatus.Complete, ActivityStatus.CompleteWithWarning }),
+                "a clean success still completes plainly");
+        }
+    }
+
+    /// <summary>
+    /// The Connector's warning goes onto an Activity, which the portal and the API show. A Connector is under no
+    /// obligation to keep the password out of its own words, so one that echoes it has the warning withheld.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ConnectorWarningContainingThePassword_IsWithheldFromTheActivityAsync()
+    {
+        var change = await QueueAsync("Correct-Horse-Battery-Staple");
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade("Could not apply expiry to the password Correct-Horse-Battery-Staple."));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That($"{activity.Message} {activity.ErrorMessage}", Does.Not.Contain("Correct-Horse"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_ConnectorCouldNotApplyTheExpiry_CompletesWithAWarningAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId);
+        _connector.WithPasswordSetResult(_ => ExpiryDowngrade());
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ExpiryBehaviourNotHonouredCount, Is.EqualTo(1));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.StartWith("Initial password set on Corporate AD"));
+            Assert.That(activity.Message, Does.Contain(ExpiryDowngradeWarning));
+        }
     }
 
     /// <summary>
@@ -1093,6 +1203,332 @@ public class PasswordDeliveryTests
         }
     }
 
+    #region "Password never expires" left to whoever owns userAccountControl (#2159)
+
+    /// <summary>
+    /// The reported bug: an Attribute Flow asserts "Password never expires" (66048) and the Initial Password's expiry
+    /// used to clear it. Where an export wrote the account's flags, the flow owns both, so the delivery tells the
+    /// Connector to leave the flag, and counts that it did.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_FlagsWrittenByAnExport_LeavesPasswordNeverExpiresToTheFlowAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.LeavePasswordNeverExpiresAsIs, Is.True);
+            Assert.That(options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy),
+                "the expiry still travels, for the parts of it that belong to the password");
+            Assert.That(result.PasswordNeverExpiresLeftToAttributeFlowCount, Is.EqualTo(1), "the decision is counted, never silent");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_NothingWritesTheFlags_SendsTheRulesExpiryWholeAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.LeavePasswordNeverExpiresAsIs, Is.False, "nothing else owns the flag, so the rule's expiry sets it");
+            Assert.That(options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+            Assert.That(result.PasswordNeverExpiresLeftToAttributeFlowCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// The mark is read afresh at the attempt for the flag as for the enabled state: an export landing while the lane
+    /// works through the accounts ahead of this one takes the flag with it.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_MarkedAfterTheClaim_LeavesPasswordNeverExpiresToTheFlowAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (first, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-2));
+        var (second, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-1));
+        _connector.WithPasswordSetResult(account =>
+        {
+            if (account.Id == first.ConnectedSystemObjectId)
+                _syncRepository.PendingPasswordChanges[second.Id].EnabledStateSetByAttributeFlow = true;
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var attempts = _connector.PasswordSetAttempts.ToDictionary(a => a.ConnectedSystemObjectId, a => a.Options.LeavePasswordNeverExpiresAsIs);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attempts[first.ConnectedSystemObjectId!.Value], Is.False);
+            Assert.That(attempts[second.ConnectedSystemObjectId!.Value], Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A propagated password reaches accounts an administrator may have exempted from expiry on purpose; clearing the
+    /// flag as a side effect of a password change elsewhere would undo that silently.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRow_LeavesPasswordNeverExpiresAsIsAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.LeavePasswordNeverExpiresAsIs, Is.True);
+    }
+
+    /// <summary>
+    /// Completing an enable withheld until a password existed (#2039) touches the enabled state only: the flow's
+    /// "Password never expires" stays (66050 becomes 66048, not 512).
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRow_HeldEnable_EnablesAndLeavesPasswordNeverExpiresAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.EnableAccount, Is.True);
+            Assert.That(options.LeavePasswordNeverExpiresAsIs, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRow_SendsTheAdministratorsExpiryWholeAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.LeavePasswordNeverExpiresAsIs, Is.False,
+            "an administrator who named the account chose its expiry, flag and all");
+    }
+
+    /// <summary>
+    /// A row queued with Never expires and no named accounts (one queued before such requests were refused) is left
+    /// alone: the flag stays as the account has it, which is not a failure, and the Activity says why the expiry asked
+    /// for was not applied.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PropagatedRowQueuedWithNeverExpires_LeavesTheFlagAndSaysSoAsync()
+    {
+        var change = await QueueAsync();
+        _syncRepository.PendingPasswordChanges[change.Id].ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires;
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.LeavePasswordNeverExpiresAsIs, Is.True);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("Password never expires"));
+            Assert.That(activity.Message, Does.Contain("as each account has it"));
+        }
+    }
+
+    /// <summary>
+    /// The mirror of the reported bug: the rule asks for Never expires and the flow asserts 512. The flow wins, which is
+    /// not a failure to apply anything, but the Activity says so and says how to have such passwords never expire.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_FlowLeavesPasswordNeverExpiresClear_SaysSoWithoutAWarningAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("left to the export that writes userAccountControl"));
+            Assert.That(activity.Message, Does.Contain("65536"), "names how to have the flow set the flag");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_FlowSetsPasswordNeverExpires_SaysTheFlowDecidedAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Succeeded(PasswordExpiryBehaviour.NeverExpires));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("left to the export that writes userAccountControl"));
+            Assert.That(activity.Message, Does.Contain("the password never expires"));
+        }
+    }
+
+    /// <summary>
+    /// Require a change at the next sign-in, under a flow that keeps "Password never expires": the Connector still
+    /// writes pwdLastSet = 0, but Active Directory ignores it, so the delivery completes with a warning. For a Static
+    /// Initial Password the consequence is worse, and the Activity says so: every account keeps the one shared password.
+    /// </summary>
+    [TestCase(InitialPasswordSource.Discovered, false)]
+    [TestCase(InitialPasswordSource.Static, true)]
+    public async Task Deliver_ProvisionedRow_RequireChangeDefeatedByTheFlowsPasswordNeverExpires_CompletesWithAWarningAsync(
+        InitialPasswordSource source, bool namesTheSharedPassword)
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.Source = source;
+            if (source == InitialPasswordSource.Static)
+                ip.StaticPasswordEncryptedValue = _protection.Protect("Static-Provision-42");
+        });
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.SucceededWithExpiryDowngrade(PasswordExpiryBehaviour.NeverExpires,
+            "Active Directory does not ask for a new password while that flag is set."));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(result.ExpiryBehaviourNotHonouredCount, Is.EqualTo(1));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.Contain("the password never expires"));
+            Assert.That(activity.Message!.Contains("shared password"), Is.EqualTo(namesTheSharedPassword));
+        }
+    }
+
+    /// <summary>
+    /// An administrator's reset changed "Password never expires" on an account whose userAccountControl an export
+    /// Synchronisation Rule with Enforce State writes: Enforce State will put the flow's value back, and with it whether
+    /// a change is asked for at the next sign-in. Completed with a warning saying so, rather than leaving the helpdesk to
+    /// find out from the user.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowChangingPasswordNeverExpires_UnderAnEnforcedFlow_CompletesWithAWarningAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        SeedAccountControlExportRule(enforceState: true);
+        _connector.WithPasswordSetResult(_ => FlagChanged(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.Contain("Enforce State"));
+            Assert.That(activity.Message, Does.Contain("Provisioning rule 9"), "names the Synchronisation Rule that puts it back");
+        }
+    }
+
+    [TestCase(false, true, TestName = "Deliver_ExplicitRowChangingPasswordNeverExpires_FlowWithoutEnforceState_CompletesPlainlyAsync")]
+    [TestCase(true, false, TestName = "Deliver_ExplicitRowNotChangingPasswordNeverExpires_UnderAnEnforcedFlow_CompletesPlainlyAsync")]
+    public async Task Deliver_ExplicitRow_NothingWillPutTheFlagBack_CompletesPlainlyAsync(bool enforceState, bool flagChanged)
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        SeedAccountControlExportRule(enforceState);
+        _connector.WithPasswordSetResult(_ => flagChanged
+            ? FlagChanged(PasswordExpiryBehaviour.RequireChangeAtNextSignIn)
+            : PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_createdActivities.Single().Status, Is.EqualTo(ActivityStatus.Complete));
+    }
+
+    /// <summary>
+    /// The critique's missed case: an administrator resets an account Active Directory still holds disabled for its
+    /// first password (#2039). The delivery completes the enable, and the held export still carries the flow's
+    /// userAccountControl, which the next export writes back, "Password never expires" and all.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowChangingPasswordNeverExpires_OnAnAccountHeldForItsPassword_CompletesWithAWarningAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+        _connector.WithPasswordSetResult(_ => FlagChanged(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(activity.Message, Does.Contain("held"));
+        }
+    }
+
+    private static PasswordSetResult FlagChanged(PasswordExpiryBehaviour applied)
+    {
+        var result = PasswordSetResult.Succeeded(applied);
+        result.PasswordNeverExpiresChanged = true;
+        return result;
+    }
+
+    /// <summary>
+    /// Seeds an export Synchronisation Rule on this Connected System whose Attribute Flow writes userAccountControl for
+    /// the account's Object Type.
+    /// </summary>
+    private void SeedAccountControlExportRule(bool enforceState) =>
+        _syncRepository.SeedSyncRule(new SyncRule
+        {
+            Id = 9,
+            Name = "Provisioning rule 9",
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectTypeId = UserObjectTypeId,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = enforceState,
+            AttributeFlowRules =
+            [
+                new SyncRuleMapping
+                {
+                    Id = 90,
+                    TargetConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 900, Name = "userAccountControl" },
+                    TargetConnectedSystemAttributeId = 900
+                }
+            ]
+        });
+
+    #endregion
+
     #region an export to the account still in flight (#2173)
 
     /// <summary>
@@ -1165,6 +1601,11 @@ public class PasswordDeliveryTests
         }
     }
 
+    /// <summary>
+    /// Enable Account off enables nothing, but where nothing has yet written the account's flags the rule's expiry still
+    /// writes "Password never expires" (#2159). The export in flight may be the Attribute Flow that owns that flag, and
+    /// records so only once it has finished, so JIM's own write of it waits as an enable does.
+    /// </summary>
     [Test]
     public async Task Deliver_ProvisionedRow_ExportInFlightAndTheRuleOff_WaitsWithoutSendingOrCountingAnAttemptAsync()
     {

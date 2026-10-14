@@ -115,23 +115,30 @@ public class PendingPasswordChange
     /// an account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
     /// as a side effect of somebody changing their password elsewhere would undo that silently. The one enable any
     /// delivery completes is the one JIM itself withheld until a password existed (#2039), because that is what the
-    /// account's Attribute Flow asked for; <c>PasswordEnablementPolicy</c> holds the whole precedence (#2064).
+    /// account's Attribute Flow asked for; <c>AccountFlagsPolicy</c> holds the whole precedence (#2064).
     /// </para>
     /// </summary>
     public bool? EnableAccount { get; set; }
 
     /// <summary>
-    /// Whether an export to this row's account wrote the attribute through which the Connected System enables or
-    /// disables it (#2064): <c>userAccountControl</c> on Active Directory and Samba AD. Where it did, that Attribute
-    /// Flow decides whether the account is enabled: delivering the first password does not apply the provisioning
-    /// Synchronisation Rule's Enable Account, and changes the enabled state only to complete an enable JIM withheld
-    /// until the password existed (#2039).
+    /// Whether an export to this row's account wrote the attribute holding the account's flags (#2064, #2159):
+    /// <c>userAccountControl</c> on Active Directory and Samba AD, which carries both whether the account is enabled and
+    /// whether its password never expires. Where it did, the export that writes that attribute owns both flags:
+    /// delivering the first password does not apply the provisioning Synchronisation Rule's Enable Account or its
+    /// expiry's "Password never expires", and changes the enabled state only to complete an enable JIM withheld until
+    /// the password existed (#2039). "Must change at next sign-in" belongs to the password, not to the flags, and is
+    /// still applied. The name predates the second flag and is kept because the column is persisted;
+    /// <c>AccountFlagsPolicy</c> calls it what it means there, whether the account's flags were written by an export.
     /// <para>
     /// Meaningful only for a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Set when the row is staged,
-    /// from the Create that provisioned the account, and set again by any later export that writes the enabled state
+    /// from the Create that provisioned the account, and set again by any later export that writes the attribute
     /// while the password is still owed (a leaver disabled, or an account disabled on deprovisioning), so a late
     /// delivery never re-enables it. Recorded rather than inferred at delivery, because nothing else can tell an
     /// account the flow created disabled from one the directory created disabled by default.
+    /// </para>
+    /// <para>
+    /// One fact for both flags holds because Active Directory keeps them in one attribute. A Connector whose targets
+    /// keep the enabled state and the expiry in separate attributes would need a fact per attribute.
     /// </para>
     /// </summary>
     public bool EnabledStateSetByAttributeFlow { get; set; }

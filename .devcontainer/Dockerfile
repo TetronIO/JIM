@@ -27,11 +27,11 @@ FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:8ba49796e4cb84c1
 #     Pair this with the dotnetAcquisitionExtension.existingDotnetPath setting
 #     in devcontainer.json so both ms-dotnettools.csharp and .csdevkit use this
 #     install instead of acquiring their own.
-# SDK 10.0.301 ships .NET runtime + ASP.NET Core runtime 10.0.9, matching
+# SDK 10.0.402 ships .NET runtime + ASP.NET Core runtime 10.0.13, matching
 # JIM.Web's current RuntimeFrameworkVersion.
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --version 10.0.400 --install-dir /usr/share/dotnet --no-path \
+    && /tmp/dotnet-install.sh --version 10.0.402 --install-dir /usr/share/dotnet --no-path \
     && rm /tmp/dotnet-install.sh
 
 # Remove the PowerShell bundled in the base image (stable 7.6.x in the 2.x image

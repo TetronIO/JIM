@@ -58,9 +58,9 @@ internal sealed class JimPasswordDeliveryWork : IPasswordDeliveryWork
         // Synchronisation Integrity: summary statistics at the end of every lane. Problems are named so an
         // administrator reading the log knows where to look; the per-system pass has already logged its own
         // counts, and this is the lane's line.
-        Log.Information("PasswordDeliveryService: Lane for {ConnectedSystem} finished: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, " +
-            "{Postponed} waiting for an export to the account to finish, {Problems} problem(s).{ProblemDetail}",
-            LogSanitiser.Sanitise(lane.Describe()), result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount,
+        Log.Information("PasswordDeliveryService: Lane for {ConnectedSystem} finished: {Delivered} delivered ({NotHonoured} where the system could not apply everything asked), " +
+            "{Retrying} retrying, {Parked} parked, {Expired} expired, {Postponed} waiting for an export to the account to finish, {Problems} problem(s).{ProblemDetail}",
+            LogSanitiser.Sanitise(lane.Describe()), result.DeliveredCount, result.ExpiryBehaviourNotHonouredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount,
             result.PostponedCount, result.Problems.Count, result.Problems.Count == 0 ? string.Empty : " " + LogSanitiser.Sanitise(string.Join(" ", result.Problems)));
 
         // A problem is a lane that could not deliver at all (its claims went back unattempted); the pass reports
