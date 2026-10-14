@@ -282,8 +282,10 @@ public class SyncExportTaskProcessor
 
             exportSpan.SetSuccess();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_cancellationTokenSource.IsCancellationRequested)
         {
+            // Only a cancellation someone asked for ends the run as cancelled; one nobody asked for, such as a timeout
+            // surfacing as an OperationCanceledException, fails it below (#2083).
             Log.Information("PerformExportAsync: Export cancelled for {SystemName}", _connectedSystem.Name);
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Export cancelled");
         }

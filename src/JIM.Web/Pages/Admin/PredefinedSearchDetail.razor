@@ -159,7 +159,7 @@
                                Required="true"
                                Class="mt-5"
                                Variant="Variant.Outlined">
-                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type))
+                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type, CriterionContext.PredefinedSearch))
                         {
                             <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
                         }
@@ -265,7 +265,10 @@
                     <ChildContent>@criteria.GetAttributeName()</ChildContent>
                 </MudChip>
                 <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
-                <MudChip T="string">@criteria.ToString()</MudChip>
+                @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
+                {
+                    <MudChip T="string">@criteria.ToString()</MudChip>
+                }
                 <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Edit criteria")" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
                                    aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" Disabled="builtIn" />
@@ -464,6 +467,7 @@
             return;
 
         _newCriterion.MetaverseAttributeId = _newCriterionAttribute.Id;
+        CriterionValidation.ClearValues(_newCriterion);
         var editing = _editingCriterionId.HasValue;
         try
         {
@@ -505,22 +509,8 @@
     {
         if (_newCriterion == null || _newCriterionAttribute == null)
             return true;
-        if (_newCriterion.ComparisonType == SearchComparisonType.NotSet)
-            return true;
-
-        return _newCriterionAttribute.Type switch
-        {
-            AttributeDataType.Text => string.IsNullOrEmpty(_newCriterion.StringValue),
-            AttributeDataType.Guid => !_newCriterion.GuidValue.HasValue,
-            AttributeDataType.Number => !_newCriterion.IntValue.HasValue,
-            AttributeDataType.LongNumber => !_newCriterion.LongValue.HasValue,
-            AttributeDataType.Decimal => !_newCriterion.DecimalValue.HasValue,
-            AttributeDataType.DateTime => _newCriterion.ValueMode == DateCriteriaValueMode.Relative
-                ? !(_newCriterion.RelativeCount.HasValue && _newCriterion.RelativeUnit.HasValue && _newCriterion.RelativeDirection.HasValue)
-                : !_newCriterion.DateTimeValue.HasValue,
-            AttributeDataType.Boolean => !_newCriterion.BoolValue.HasValue,
-            _ => true
-        };
+        // The same rule the REST API applies (#2053).
+        return CriterionValidation.Validate(_newCriterion, _newCriterionAttribute.Type, CriterionContext.PredefinedSearch, _newCriterionAttribute.Name) != null;
     }
 
     /// <summary>

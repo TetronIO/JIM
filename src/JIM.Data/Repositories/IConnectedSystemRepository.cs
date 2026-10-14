@@ -345,6 +345,12 @@ public interface IConnectedSystemRepository
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
 
     /// <summary>
+    /// Writes each retry state onto its Pending Export while that row is still Executing. See
+    /// <see cref="ISyncRepository.ReleaseExecutingPendingExportsAsync"/> for the full rationale.
+    /// </summary>
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states);
+
+    /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
     /// one set-based statement: moved to Exported when any attribute change already carries
     /// ExportedPendingConfirmation or ExportedNotConfirmed (something was already sent), otherwise to Pending

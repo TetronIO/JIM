@@ -325,7 +325,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | `ManagerDepthPercentage` | `int` | For Manager attributes, how far into the organisational hierarchy managers are present. |
 | `MvaRefMinAssignments` / `MvaRefMaxAssignments` | `int` | For multi-valued reference attributes, the minimum and maximum number of values to assign. |
 | `ReferenceMetaverseObjectTypeIds` | `int[]` | For reference attributes, the Metaverse Object Types generated references may point at. |
-| `AttributeDependency` | `hashtable` | A condition that must hold for the attribute to be generated: `@{ MetaverseAttribute = <name or id>; ComparisonType = "Equals"; StringValue = "Contractor" }`. Valid comparison types are `Equals`, `NotEquals`, `LessThan`, `GreaterThan`, `GreaterThanOrEqual`, `LessThanOrEqual` and `Like`. |
+| `AttributeDependency` | `hashtable` | A condition that must hold for the attribute to be generated: `@{ MetaverseAttribute = <name or id>; ComparisonType = "Equals"; StringValue = "Contractor" }`. The comparison types are the [scoping operators](../configuration/scoping-criteria.md#operators) for the depended-on attribute's data type, by name (`Equals`, `GreaterThanOrEquals`, `StartsWith`, `MatchesPattern`, `HasNoValue` and the rest); `HasValue` and `HasNoValue` take no `StringValue`. Write `StringValue` as that type reads it: numbers with a full stop, dates as `2026-07-01`, Booleans as `true` or `false`. Text compares case-sensitively. |
 
 Any other key in an `-ObjectType` or attribute hashtable throws, so a mis-typed key is caught before anything is sent.
 
@@ -502,7 +502,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `MvaRefMinAssignments` | `int` | No |  | For multi-valued reference attributes, the minimum number of values to assign. |
 | `MvaRefMaxAssignments` | `int` | No |  | For multi-valued reference attributes, the maximum number of values to assign. |
 | `ReferenceMetaverseObjectType` | `object[]` | No |  | For reference attributes, the Metaverse Object Types (names or ids) generated references may point at. |
-| `AttributeDependency` | `hashtable` | No |  | A condition on another attribute that must hold for this attribute to be generated: @{ MetaverseAttribute = <name or id>; ComparisonType = <Equals\|NotEquals\|LessThan\|GreaterThan\|GreaterThanOrEqual\|LessThanOrEqual\|Like>; StringValue = <value> }. |
+| `AttributeDependency` | `hashtable` | No |  | A condition on another attribute that must hold for this attribute to be generated: @{ MetaverseAttribute = <name or id>; ComparisonType = <operator>; StringValue = <value> }. The operators are the ones Synchronisation Rule scoping offers for the depended-on attribute's data type, such as Equals, GreaterThanOrEquals, StartsWith, MatchesPattern, HasValue and HasNoValue (which take no StringValue). Write StringValue as the attribute's type reads it: numbers with a full stop, dates as 2026-07-01, Booleans as true or false. Text is compared case-sensitively. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated Data Generation Template. |
 
@@ -639,5 +639,5 @@ Invoke-JIMExampleDataTemplate -Id $template.Id -Wait
 
 ## See also
 
-- [Metaverse](metaverse.md): cmdlets for managing the metaverse schema and querying identity objects
+- [Metaverse](metaverse.md): cmdlets for querying Metaverse Objects; the schema has [Metaverse Object Types](metaverse-object-types.md) and [Metaverse Attributes](metaverse-attributes.md)
 - [Activities](activities.md): cmdlets for reviewing activity history and execution results

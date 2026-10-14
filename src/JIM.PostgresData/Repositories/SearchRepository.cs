@@ -5,6 +5,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 namespace JIM.PostgresData.Repositories;
@@ -48,7 +49,17 @@ public class SearchRepository : ISearchRepository
 
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
     {
-        return await GetPredefinedSearchWithCriteriaAsync(q => q.Uri == uri);
+        // Configuration names ignore case (#2051); an exact URI wins over one differing only in case.
+        var uriLower = uri.ToLowerInvariant();
+        var candidateUris = await Repository.Database.PredefinedSearches
+            .Where(q => q.Uri.ToLower() == uriLower)
+            .Select(q => q.Uri)
+            .ToListAsync();
+        var resolvedUri = ConfigurationName.Resolve(candidateUris, uri);
+        if (resolvedUri == null)
+            return null;
+
+        return await GetPredefinedSearchWithCriteriaAsync(q => q.Uri == resolvedUri);
     }
 
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)

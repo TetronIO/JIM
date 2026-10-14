@@ -1459,6 +1459,24 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
                 LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
         }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // A scoping criterion could not be evaluated for this object (#2053): whether it is in scope is unknown,
+            // so it is neither brought into scope nor taken out, and keeps any join it has. Configuration for the
+            // administrator to correct, named in the message; every other object in the run carries on.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            runProfileExecutionItem.ErrorMessage = scopingEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // As for the expression errors above: anything staged on a shared Metaverse Object is never applied.
+            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Scope of {CsoId} could not be decided: {Message}",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(scopingEx.Message));
+        }
         catch (Exception e)
         {
             // Create execution item for unhandled error tracking
@@ -6706,6 +6724,25 @@ public abstract class SyncTaskProcessorBase
                     "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
                     $"text value, not an array: '{error.Expression}'.");
 
+            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
+                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
+                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued when error.SourceAttributeName != null:
+                // The Expression handed on every value of one attribute (#2053): name it, and how to choose one.
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"'{error.SourceAttributeName}' has {error.ValueCount} values but target attribute {target} is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Use Where, " +
+                    $"Join, Count, Min or Max in the Expression to say which value it should have, or map it to a multi-valued attribute: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued:
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
+                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting
@@ -7005,10 +7042,11 @@ public abstract class SyncTaskProcessorBase
                         // Queue for export evaluation so target systems receive Pending Exports for the recalled
                         // (and any re-elected) attribute values; without this, downstream Connected Systems keep
                         // the departed source's stale values forever. Same construction as the obsoletion path
-                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
-                        // its first matching changed value, so the re-elected survivor's value must precede the
-                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
-                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        // and the normal Attribute Flow path: additions FIRST, with every removal in
+                        // removedAttributes. Where the source or target is single-valued, export evaluation exports
+                        // the first changed value that was not removed (#2182), so the re-elected survivor's value
+                        // is exported rather than the leaver's, and a genuine clear, with no such value,
+                        // null-clears the target.
                         var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
                         var removedAttributes = recalledAttributeValues.ToHashSet();
                         MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);
@@ -7247,6 +7285,12 @@ public abstract class SyncTaskProcessorBase
         await _uniqueValueGenerationServer!.PrefetchAssignmentsAsync([], connectedSystemObjectIds, _uniqueValueResolveOptions!);
     }
 
+    /// <summary>
+    /// Opens the message of an error that stopped Drift Detection checking an object (#2180), so it reads as the reason
+    /// no correction was staged rather than as an export that failed.
+    /// </summary>
+    private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
+
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
     {
         // Skip if no drift detection export rules exist
@@ -7267,15 +7311,69 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoId", cso.Id);
         span.SetTag("mvoId", targetMvo.Id);
 
-        var result = _syncServer.EvaluateDrift(
-            cso,
-            targetMvo,
-            _driftDetectionExportRules,
-            _importMappingCache,
-            _attributePriorityContext,
-            _uniqueValueResolveOptions);
+        DriftDetectionResult result;
+        try
+        {
+            result = _syncServer.EvaluateDrift(
+                cso,
+                targetMvo,
+                _driftDetectionExportRules,
+                _importMappingCache,
+                _attributePriorityContext,
+                _uniqueValueResolveOptions);
+        }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // An enforced export expression failed while working out what this object should hold (#2180). Reported
+            // against the object exactly as export staging reports the same failure, never only logged, and nothing is
+            // staged for it, so the Connected System keeps its values. One object's failure never fails the page.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + BuildExpressionEvaluationErrorMessage(expressionEx, targetMvo.Id);
+            runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-        if (result.HasDrift)
+            Log.Error(expressionEx, "EvaluateDriftAndEnforceState: Expression evaluation error checking CSO {CsoId} for drift. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            // Missing Input Behaviour is Fail the object: as export staging does, nothing is staged for the object and
+            // the fault is reported against it (#2180).
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + missingInputEx.DescribeForAdministrator();
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("EvaluateDriftAndEnforceState: Expression not evaluated checking CSO {CsoId} for drift; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+
+        // Mapping-level errors (#2180): the attribute is left as it is and the error is recorded against the object, in
+        // the words export staging uses for the same fault; the object's other attributes are still corrected.
+        foreach (var attributeFlowError in result.AttributeFlowErrors)
+        {
+            var errorRpei = _activity.PrepareRunProfileExecutionItem();
+            errorRpei.ConnectedSystemObject = cso;
+            errorRpei.ConnectedSystemObjectId = cso.Id;
+            var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
+            errorRpei.ErrorType = errorType;
+            errorRpei.ErrorMessage = errorMessage;
+            _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that
+        // changes nothing.
+        if (result.HasDrift && result.CorrectiveExports.Count > 0)
         {
             Log.Information("EvaluateDriftAndEnforceState: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
                 "staged {ExportCount} corrective Pending Exports for batch save",

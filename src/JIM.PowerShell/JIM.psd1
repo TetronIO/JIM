@@ -111,6 +111,7 @@
         'New-JIMSyncRuleMatchingRule',
         'Set-JIMSyncRuleMatchingRule',
         'Remove-JIMSyncRuleMatchingRule',
+        'Test-JIMMatchingRule',
         'Switch-JIMMatchingMode',
 
         # Scoping Criteria
@@ -121,6 +122,7 @@
         'New-JIMScopingCriterion',
         'Set-JIMScopingCriterion',
         'Remove-JIMScopingCriterion',
+        'Test-JIMScope',
 
         # Run Profiles
         'Get-JIMRunProfile',

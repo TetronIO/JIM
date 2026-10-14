@@ -41,7 +41,10 @@ function Set-JIMMetaverseObjectPassword {
         Each target's State says where its password got to: Set, Retrying (with NextAttemptAt), Parked (with the
         system's own Message), Held behind a switched-off system, or Queued and Delivering while still in flight.
         A Parked target is reported as a non-terminating error as well, so a script that stops on errors stops
-        on a refusal; the result is written to the pipeline first either way.
+        on a refusal; the result is written to the pipeline first either way. A target that is Set with
+        CompletedWithWarning took the password but could not apply everything asked of it (OpenLDAP and 389
+        Directory Server cannot require a change at the next sign-in, for example); its Message says what was
+        applied, and it is reported as a warning.
 
     .PARAMETER Id
         The unique identifier (GUID) of the Metaverse Object whose password this is.
@@ -68,14 +71,17 @@ function Set-JIMMetaverseObjectPassword {
         the only chance to capture it.
 
     .PARAMETER ExpiryBehaviour
-        What happens to the password once each target has it.
-        Valid values: RequireChangeAtNextSignIn, ExpiresAccordingToTargetPolicy, NeverExpires.
-        Defaults to RequireChangeAtNextSignIn with -ConnectedSystemId (somebody else chose this password) and to
-        ExpiresAccordingToTargetPolicy without it (the person chose it, and should not be made to choose another).
+        What happens to the password once each target has it. Defaults to RequireChangeAtNextSignIn with
+        -ConnectedSystemId (somebody else chose this password) and to ExpiresAccordingToTargetPolicy without it (the
+        person chose it, and should not be made to choose another). On Active Directory and Samba AD, with
+        -ConnectedSystemId, NeverExpires sets Password never expires on each account and the other two clear it; a
+        Synchronisation Rule that writes the account's userAccountControl with Enforce State on puts its value back at
+        the next synchronisation. Without -ConnectedSystemId, Password never expires is left as each account has it,
+        so NeverExpires is refused.
 
     .PARAMETER EnableAccount
         Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
-        except for a new Active Directory account JIM created disabled only until it had a password, which the
+        except for an Active Directory account whose enable JIM held back until it had a password, which the
         password enables as its Attribute Flow asks. Only available with -ConnectedSystemId: a password propagated to
         every configured system enables no other account, because it reaches accounts an administrator may have
         disabled on purpose.
@@ -91,32 +97,12 @@ function Set-JIMMetaverseObjectPassword {
         Skips the confirmation prompt.
 
     .OUTPUTS
-        One PSCustomObject describing the change:
+        One object describing the change: the Activity that records it, and where delivery to each Connected System
+        stands. No property carries the password you supplied.
 
-        | Property           | Description                                                                          |
-        |--------------------|--------------------------------------------------------------------------------------|
-        | ActivityId         | The Activity recording the change; its children hold each system's outcome           |
-        | Origin             | Explicit (accounts named) or Propagated (every configured system)                    |
-        | Settled            | Whether every target had reached an outcome you need not wait on when this returned  |
-        | QueuedForNoSystems | True when a propagated change found no configured system; nothing was queued         |
-        | Targets            | One entry per Connected System, described below                                      |
-        | GeneratedPassword  | The password JIM produced, as a SecureString; present only with -Generate            |
-
-        Each entry under Targets:
-
-        | Property                | Description                                                                     |
-        |-------------------------|---------------------------------------------------------------------------------|
-        | ConnectedSystemId       | The Connected System                                                            |
-        | ConnectedSystemName     | Its name                                                                        |
-        | ConnectedSystemObjectId | The account, or null where the person has no account in this system yet         |
-        | Enabled                 | Whether the system is taking propagated passwords; false means Held             |
-        | State                   | Queued, Delivering, Set, Retrying, Parked, Held, Expired or Cancelled           |
-        | NextAttemptAt           | When the next attempt falls due, for a Retrying target                          |
-        | Message                 | The system's own words on its most recent outcome                               |
-        | AttemptCount            | How many delivery attempts this system has had                                  |
-        | FailureReason           | Why the last attempt failed; empty before an attempt or once set                |
-
-        No property carries the password you supplied.
+        JIM.SetMetaverseObjectPasswordResult
+        GeneratedPassword (securestring): The password JIM generated, present only with -Generate. This is the only
+            chance to read it.
 
     .EXAMPLE
         $password = Read-Host -AsSecureString "New password"
@@ -166,7 +152,7 @@ function Set-JIMMetaverseObjectPassword {
         supplied password (decision D5): the event case, which needs no account selection.
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'PropagateSuppliedPassword')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SetMetaverseObjectPasswordResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id,
@@ -208,6 +194,13 @@ function Set-JIMMetaverseObjectPassword {
         }
 
         $namedAccounts = $PSBoundParameters.ContainsKey('ConnectedSystemId')
+
+        # The server refuses this too. Refused here first only so that -Generate does not produce, and hand back, a
+        # password for a request that is then turned down.
+        if (-not $namedAccounts -and $ExpiryBehaviour -eq 'NeverExpires') {
+            Write-Error "-ExpiryBehaviour NeverExpires needs -ConnectedSystemId. A password set on every Connected System configured for Password Synchronisation leaves Password never expires as each account has it; name the Connected Systems to choose NeverExpires for those accounts. Nothing was set."
+            return
+        }
 
         # The person's accounts are needed to resolve named systems to the accounts the API takes, and to know
         # which systems a generated password has to satisfy. A propagated change with a supplied password needs
@@ -324,6 +317,13 @@ function Set-JIMMetaverseObjectPassword {
 
         foreach ($parkedTarget in @($result.Targets | Where-Object { $_.State -eq 'Parked' })) {
             Write-Error -Message "$($parkedTarget.ConnectedSystemName) refused the password: $($parkedTarget.Message)" -TargetObject $result
+        }
+
+        # A password set where the system could not apply everything asked of it (an expiry behaviour OpenLDAP and
+        # 389 Directory Server have no equivalent for) is no refusal, so not an error. It is still something a
+        # script telling the person "you will be asked to change it" has to hear, in the words of the delivery.
+        foreach ($warnedTarget in @($result.Targets | Where-Object { $_.CompletedWithWarning })) {
+            Write-Warning "$($warnedTarget.ConnectedSystemName) set the password, with a warning: $($warnedTarget.Message)"
         }
 
         if ($null -ne $result.PSObject.Properties['Settled'] -and -not $result.Settled -and $PSBoundParameters.ContainsKey('Wait') -and $Wait -gt 0) {

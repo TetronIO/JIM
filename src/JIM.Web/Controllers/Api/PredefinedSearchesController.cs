@@ -399,7 +399,9 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (attribute == null)
             return BadRequest(ApiErrorResponse.BadRequest(attributeError!));
 
-        var (criterion, validationError) = BuildCriterion(attribute, request);
+        // Omitted CaseSensitive keeps the stored setting (#2051), so a PUT that does not mention it cannot reset it.
+        var storedCaseSensitive = group.Criteria.First(c => c.Id == criterionId).CaseSensitive;
+        var (criterion, validationError) = BuildCriterion(attribute, request, storedCaseSensitive);
         if (criterion == null)
             return BadRequest(ApiErrorResponse.BadRequest(validationError!));
 
@@ -564,7 +566,11 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// comparison operator applies to the attribute's data type and the matching value carrier is provided.
     /// Returns (null, error) on any validation failure.
     /// </summary>
-    private static (PredefinedSearchCriteria? criterion, string? error) BuildCriterion(MetaverseAttribute attribute, PredefinedSearchCriterionRequest request)
+    /// <param name="attribute">The criterion's Metaverse Attribute.</param>
+    /// <param name="request">The criterion request.</param>
+    /// <param name="caseSensitiveWhenOmitted">The case sensitivity to use when the request leaves it out: a new criterion
+    /// respects case, and an updated one keeps its stored setting.</param>
+    private static (PredefinedSearchCriteria? criterion, string? error) BuildCriterion(MetaverseAttribute attribute, PredefinedSearchCriterionRequest request, bool caseSensitiveWhenOmitted = true)
     {
         if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var op) || op == SearchComparisonType.NotSet)
             return (null, $"Invalid comparison type '{request.ComparisonType}'.");
@@ -573,7 +579,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         {
             MetaverseAttributeId = attribute.Id,
             ComparisonType = op,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? caseSensitiveWhenOmitted
         };
 
         // Relative-date validation (rejects relative-on-non-date, missing/negative offset, both-modes-set).
@@ -586,72 +592,32 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
 
         if (valueMode == DateCriteriaValueMode.Relative)
         {
-            // Validation has confirmed the attribute is DateTime; only date operators apply.
-            if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");
             criterion.ValueMode = DateCriteriaValueMode.Relative;
             criterion.RelativeCount = relativeCount;
             criterion.RelativeUnit = relativeUnit;
             criterion.RelativeDirection = relativeDirection;
-            return (criterion, null);
         }
-
-        switch (attribute.Type)
+        else
         {
-            case AttributeDataType.Text:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the Text attribute '{attribute.Name}'.");
-                if (request.StringValue == null)
-                    return (null, "StringValue is required for a Text criterion.");
-                criterion.StringValue = request.StringValue;
-                break;
-            case AttributeDataType.Number:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the Number attribute '{attribute.Name}'.");
-                if (!request.IntValue.HasValue)
-                    return (null, "IntValue is required for a Number criterion.");
-                criterion.IntValue = request.IntValue;
-                break;
-            case AttributeDataType.LongNumber:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the LongNumber attribute '{attribute.Name}'.");
-                if (!request.LongValue.HasValue)
-                    return (null, "LongValue is required for a LongNumber criterion.");
-                criterion.LongValue = request.LongValue;
-                break;
-            case AttributeDataType.Decimal:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the Decimal attribute '{attribute.Name}'.");
-                if (!request.DecimalValue.HasValue)
-                    return (null, "DecimalValue is required for a Decimal criterion.");
-                criterion.DecimalValue = request.DecimalValue;
-                break;
-            case AttributeDataType.DateTime:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");
-                if (!request.DateTimeValue.HasValue)
-                    return (null, "DateTimeValue is required for a DateTime criterion.");
-                criterion.DateTimeValue = ToUtc(request.DateTimeValue.Value);
-                break;
-            case AttributeDataType.Boolean:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the Boolean attribute '{attribute.Name}'.");
-                if (!request.BoolValue.HasValue)
-                    return (null, "BoolValue is required for a Boolean criterion.");
-                criterion.BoolValue = request.BoolValue;
-                break;
-            case AttributeDataType.Guid:
-                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
-                    return (null, $"Operator '{op}' is not valid for the Guid attribute '{attribute.Name}'.");
-                if (!request.GuidValue.HasValue)
-                    return (null, "GuidValue is required for a Guid criterion.");
-                criterion.GuidValue = request.GuidValue;
-                break;
-            default:
-                return (null, $"Search criteria are not supported for {attribute.Type} attributes.");
+            // Only the carrier for the attribute's own data type is kept.
+            switch (attribute.Type)
+            {
+                case AttributeDataType.Text: criterion.StringValue = request.StringValue; break;
+                case AttributeDataType.Number: criterion.IntValue = request.IntValue; break;
+                case AttributeDataType.LongNumber: criterion.LongValue = request.LongValue; break;
+                case AttributeDataType.Decimal: criterion.DecimalValue = request.DecimalValue; break;
+                case AttributeDataType.DateTime: criterion.DateTimeValue = request.DateTimeValue.HasValue ? ToUtc(request.DateTimeValue.Value) : null; break;
+                case AttributeDataType.Boolean: criterion.BoolValue = request.BoolValue; break;
+                case AttributeDataType.Guid: criterion.GuidValue = request.GuidValue; break;
+                default: return (null, $"Search criteria are not supported for {attribute.Type} attributes.");
+            }
         }
 
-        return (criterion, null);
+        // The operator catalogue decides what this criterion may be (#2053): an operator offered for the attribute's
+        // type in a Predefined Search, with the value it compares against. "has a value" and "has no value" store none.
+        CriterionValidation.ClearValues(criterion);
+        var error = CriterionValidation.Validate(criterion, attribute.Type, CriterionContext.PredefinedSearch, attribute.Name);
+        return error != null ? (null, error) : (criterion, null);
     }
 
     /// <summary>

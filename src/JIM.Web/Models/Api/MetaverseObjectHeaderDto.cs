@@ -40,16 +40,16 @@ public class MetaverseObjectHeaderDto
     public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>
-    /// Additional attribute values requested via the 'attributes' query parameter.
-    /// Key is the attribute name; value is the attribute value in its natural JSON type:
-    /// a string for Text, a number for Number/LongNumber/Decimal, a boolean for Boolean,
-    /// an ISO-8601 string for DateTime, a GUID string for Guid, a base64-encoded string for
-    /// Binary (System.Text.Json's representation for byte arrays), and for Reference the
-    /// referenced Metaverse Object's id as a GUID string (consistent with
-    /// MetaverseObjectAttributeValueDto.ReferenceValueId). For multi-valued attributes a
-    /// single value is surfaced (the last value wins). DisplayName is not included here as
-    /// it has its own property.
+    /// The object's other attribute values, keyed by attribute name: the attributes the request named, or for a
+    /// Predefined Search, the attributes the search lists. Each value has its natural type: text, a number, a
+    /// boolean, an ISO-8601 date and time, a GUID, or base64 for Binary; a Reference holds the referenced Metaverse
+    /// Object's ID as a GUID. A multi-valued attribute shows one of its values (the last). DisplayName is not
+    /// included, as it has its own property.
     /// </summary>
+    /// <remarks>
+    /// The REST list endpoint takes the names in its <c>attributes</c> query parameter. Base64 is System.Text.Json's
+    /// representation for a byte array, and a Reference matches MetaverseObjectAttributeValueDto.ReferenceValueId.
+    /// </remarks>
     public Dictionary<string, object?> Attributes { get; set; } = new();
 
     /// <summary>

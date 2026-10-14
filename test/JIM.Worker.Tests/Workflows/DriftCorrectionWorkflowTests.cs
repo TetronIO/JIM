@@ -2,8 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -116,10 +118,77 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// The arrangement of the first test in this fixture: a projecting import rule, an enforcing export rule whose
-    /// constant Description the object has drifted from, and the drifted object.
+    /// An enforced export expression that fails is reported against the Connected System Object (#2180), never only
+    /// logged, and the target keeps its value: no correction is staged, and the run carries on.
     /// </summary>
-    private async Task<(ConnectedSystem System, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute DisplayNameAttr)> ArrangeDriftedObjectAsync()
+    [Test]
+    public async Task FullSync_EnforcedExpressionFails_RecordsAnExpressionErrorForTheObjectAndStagesNoCorrectionAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync(descriptionExpression: "ToFileTime(42)");
+
+        var activity = await RunFullSyncAsync(system);
+
+        await AssertDriftErrorRecordedAndNothingCorrectedAsync(activity, system, cso, ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError);
+    }
+
+    /// <summary>
+    /// Missing Input Behaviour of Fail the object applies to Drift Detection as it does to export staging (#2180).
+    /// </summary>
+    [Test]
+    public async Task FullSync_EnforcedExpressionMissingAnInputWithFailObject_RecordsTheMissingInputForTheObjectAndStagesNoCorrectionAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync(
+            descriptionExpression: "mv[\"DisplayName\"] + \" \" + mv[\"Nickname\"]", missingInputBehaviour: MissingInputBehaviour.FailObject);
+
+        var activity = await RunFullSyncAsync(system);
+
+        await AssertDriftErrorRecordedAndNothingCorrectedAsync(activity, system, cso, ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput);
+    }
+
+    /// <summary>
+    /// A mapping-level error Drift Detection finds (here Missing Input Behaviour of Fail this mapping) is recorded on a
+    /// Run Profile Execution Item for the object, exactly as export staging records it (#2180).
+    /// </summary>
+    [Test]
+    public async Task FullSync_EnforcedExpressionMissingAnInputWithFailMapping_RecordsTheMappingErrorForTheObjectAndStagesNoCorrectionAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync(
+            descriptionExpression: "mv[\"DisplayName\"] + \" \" + mv[\"Nickname\"]", missingInputBehaviour: MissingInputBehaviour.FailMapping);
+
+        var activity = await RunFullSyncAsync(system);
+
+        await AssertDriftErrorRecordedAndNothingCorrectedAsync(activity, system, cso, ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput);
+    }
+
+    private async Task AssertDriftErrorRecordedAndNothingCorrectedAsync(JIM.Models.Activities.Activity activity, ConnectedSystem system,
+        ConnectedSystemObject cso, ActivityRunProfileExecutionItemErrorType expectedErrorType)
+    {
+        var items = activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values).ToList();
+        var correctionsForObject = (await SyncRepo.GetPendingExportsAsync(system.Id))
+            .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Any(i => i.ConnectedSystemObjectId == cso.Id && i.ErrorType == expectedErrorType), Is.True,
+                "the failure must be recorded against the Connected System Object, not only logged");
+            Assert.That(items.Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection), Is.False,
+                "nothing was corrected, so no Drift Correction is reported");
+            Assert.That(correctionsForObject, Is.Empty, "the target keeps its value: nothing is staged to clear or overwrite it");
+            Assert.That(items.Any(i => i.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError), Is.False,
+                "an expression fault is the object's error, never an unhandled one");
+        }
+    }
+
+    /// <summary>
+    /// The arrangement of the first test in this fixture: a projecting import rule, an enforcing export rule whose
+    /// constant Description the object has drifted from, and the drifted object. The Description expression and its
+    /// Missing Input Behaviour can be replaced, to drive the export expression's failure modes.
+    /// </summary>
+    private async Task<(ConnectedSystem System, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute DisplayNameAttr)> ArrangeDriftedObjectAsync(
+        string? descriptionExpression = null,
+        MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.EvaluateAnyway)
     {
         var system = await CreateConnectedSystemAsync("Drift Source");
         var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -162,7 +231,15 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
             SyncRule = exportRule,
             TargetConnectedSystemAttribute = descriptionAttr,
             TargetConnectedSystemAttributeId = descriptionAttr.Id,
-            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "\"" + EnforcedValue + "\"" } }
+            Sources =
+            {
+                new SyncRuleMappingSource
+                {
+                    Order = 0,
+                    Expression = descriptionExpression ?? "\"" + EnforcedValue + "\"",
+                    MissingInputBehaviour = missingInputBehaviour
+                }
+            }
         });
         DbContext.SyncRules.Add(exportRule);
         await DbContext.SaveChangesAsync();

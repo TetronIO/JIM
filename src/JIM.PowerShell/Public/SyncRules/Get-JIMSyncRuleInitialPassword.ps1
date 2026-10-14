@@ -4,46 +4,31 @@
 function Get-JIMSyncRuleInitialPassword {
     <#
     .SYNOPSIS
-        Gets a Synchronisation Rule's initial password configuration.
+        Gets a Synchronisation Rule's initial password settings, and the Connected System Objects waiting on them.
 
     .DESCRIPTION
-        Returns whether JIM sets an initial password on the accounts a Synchronisation Rule provisions, and
-        how it generates one.
+        Gets whether JIM sets an initial password on the Connected System Objects a Synchronisation Rule provisions,
+        how it generates one, and which Connected System Objects are waiting on a person. A rule with nothing
+        configured reports the setting switched off with JIM's defaults, which is how it behaves.
 
-        A rule with nothing configured reports the setting switched off with JIM's defaults, which is how it
-        behaves; there is no need to special-case rules nobody has touched.
+        Where a target refused the password these settings produced, JIM parks the Connected System Object rather
+        than retrying, and correcting the settings releases it. ParkedReasons says what the target said, grouped by
+        reason with the biggest group first. ExpiredAccountCount is separate and never added to it: those Connected
+        System Objects were never given a password within its time to live, and correcting these settings does
+        nothing for them.
 
-        Also reports the accounts waiting on a person. Where a target refused the password these settings
-        produced, JIM parks those accounts rather than retrying, and correcting the settings releases them;
-        parkedReasons says what the target said, grouped by reason with the biggest group first, so a script
-        can report the fault rather than only the count. expiredAccountCount is kept separate and is never
-        added to it: those accounts were provisioned, never given a password within its time to live, and
-        correcting these settings does nothing for them.
-
-        No password value is ever returned. A generated password is produced at the moment it is set and stored
-        nowhere; where the rule uses one static password (source Static) that password is stored, encrypted, and
-        is write-only, so all that comes back is that one is set and when it last changed.
+        No password is ever returned. A generated password is produced at the moment it is set and stored nowhere.
+        Where the rule sets one static password, that password is stored encrypted and is write-only, so all that
+        comes back is that one is set and when it last changed.
 
     .PARAMETER Id
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER InputObject
-        Synchronisation Rule object to read the configuration from (from pipeline).
+        A Synchronisation Rule from Get-JIMSyncRule, through the pipeline.
 
     .OUTPUTS
-        An object with the following properties:
-
-        - enabled              [bool]    Whether JIM sets an initial password on accounts this rule provisions
-        - source               [string]  Discovered, Custom or Static
-        - customPolicy         [object]  The generator settings used when source is Custom
-        - expiryBehaviour      [string]  What happens to the password once it is set
-        - enableAccount        [bool]    Whether the account is enabled once the password is set, where no export has written its enabled state by the time the password is delivered
-        - staticPasswordSet    [bool]    Whether one password is stored for every account this rule provisions
-        - staticPasswordSetAt  [datetime] When that password last changed, or null where none is set
-        - parkedAccountCount   [int]     Accounts waiting on a change to these settings
-        - expiredAccountCount  [int]     Accounts never given an initial password within its time to live
-        - parkedReasons        [array]   One entry per distinct refusal, biggest group first, each with
-                                         targetMessage, failureReason, accountCount and firstSeenAt
+        The rule's initial password settings, and the Connected System Objects waiting on them.
 
     .EXAMPLE
         Get-JIMSyncRuleInitialPassword -Id 5
@@ -94,7 +79,7 @@ function Get-JIMSyncRuleInitialPassword {
         Get-JIMSyncRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleInitialPasswordResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

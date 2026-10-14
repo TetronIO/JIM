@@ -36,11 +36,11 @@ public class ConnectedSystemExportResult
     public string? RejectedAttributeName { get; set; }
 
     /// <summary>
-    /// The attributes the Connector wrote with an interim value, on a successful Create, because JIM said an Initial
-    /// Password will follow (<see cref="Transactional.PendingExport.InitialPasswordFollows"/>, #2039). Active Directory
-    /// refuses an enabled account with no password, so the LDAP Connector creates the account disabled, adding
-    /// ACCOUNTDISABLE to <c>userAccountControl</c>, and names that attribute here; the account is enabled once the
-    /// password is set. The Pending Export still carries the value the Synchronisation Rule asked for, which is the one the
+    /// The attributes the Connector wrote with an interim value, on a successful Create, or an Update Active Directory
+    /// refused to apply enabled for want of a password, because JIM said a password will follow
+    /// (<see cref="Transactional.PendingExport.InitialPasswordFollows"/>, #2039, #2158). Active Directory refuses an
+    /// enabled account with no password, so the LDAP Connector writes the account disabled, adding ACCOUNTDISABLE to
+    /// <c>userAccountControl</c>, and names that attribute here; the account is enabled once the password is set. The Pending Export still carries the value the Synchronisation Rule asked for, which is the one the
     /// confirming import is judged against. Null from every Connector that rewrote nothing, which is every Connector but
     /// the LDAP Connector against Active Directory.
     /// </summary>
@@ -56,6 +56,11 @@ public class ConnectedSystemExportResult
     /// Synchronisation Rule's Enable Account. Without it an account the flow creates disabled (a pre-hire, or a person
     /// archived at creation) would be enabled with a password JIM knows. The Connector only observes: it decides
     /// nothing about the account.
+    /// </para>
+    /// <para>
+    /// On Active Directory the same attribute carries "Password never expires", so the delivery leaves that flag to the
+    /// export too, rather than applying the Initial Password's expiry over it (#2159). A Connector whose targets keep
+    /// the enabled state and the expiry in separate attributes would need to report each separately.
     /// </para>
     /// <para>
     /// A non-empty <see cref="AttributesAwaitingInitialPassword"/> implies this is true: an enable withheld until the
@@ -78,6 +83,15 @@ public class ConnectedSystemExportResult
     /// For systems without secondary IDs, this may be null.
     /// </summary>
     public string? SecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// Whether the Connector never started this export because the run was cancelled before it reached it (#2083).
+    /// JIM records the results of the exports the Connector did write, and puts this one back exactly as it was before
+    /// the batch was sent: no attempt is counted and no execution item is recorded, because nothing was sent and
+    /// nothing failed. <see cref="Success"/> is false, so anything that does not know this flag fails safe rather than
+    /// reading the export as written.
+    /// </summary>
+    public bool IsNotAttempted { get; set; }
 
     /// <summary>
     /// Creates a successful result with no external ID feedback.
@@ -132,6 +146,18 @@ public class ConnectedSystemExportResult
             ErrorMessage = errorMessage,
             ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse,
             RejectedAttributeName = rejectedAttributeName
+        };
+
+    /// <summary>
+    /// Creates the result for an export the Connector did not start because the run was cancelled (#2083). See
+    /// <see cref="IsNotAttempted"/>.
+    /// </summary>
+    public static ConnectedSystemExportResult NotAttempted() =>
+        new()
+        {
+            Success = false,
+            IsNotAttempted = true,
+            ErrorMessage = "Not attempted: the export run was cancelled before this change was started."
         };
 
     /// <summary>

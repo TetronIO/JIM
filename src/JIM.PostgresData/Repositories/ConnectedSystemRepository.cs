@@ -88,7 +88,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        // Configuration names ignore case (#2051); an exact name wins over one differing only in case.
+        var nameLower = name.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectorDefinitions
+            .Where(cd => cd.Name.ToLower() == nameLower)
+            .Select(cd => cd.Name)
+            .ToListAsync();
+        var resolvedName = ConfigurationName.Resolve(candidateNames, name);
+        if (resolvedName == null)
+            return null;
+
+        return await query.SingleOrDefaultAsync(cd => cd.Name == resolvedName);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -1248,7 +1258,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(cso =>
                 // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
@@ -2253,6 +2263,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the object's own Object Type, where an exact name
+        // wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.Id == connectedSystemObjectId)
+            .SelectMany(cso => cso.Type.Attributes)
+            .Where(a => a.Name.ToLower() == attributeNameLower)
+            .Select(a => a.Name)
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
             .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
                          && av.Attribute.Name == attributeName);
@@ -4971,7 +4992,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (exportList.Count == 0)
             return;
 
-        await BulkUpdatePendingExportsRawAsync(exportList);
+        // The Pending Exports and their attribute changes are written by separate statements, and land together or not
+        // at all (#2083): an export recorded as Exported with its changes left unsent would read as recorded to the
+        // guarded release, and the confirming import could never reconcile it.
+        await using (var ownTransaction = await BeginTransactionIfNoneAsync())
+        {
+            await BulkUpdatePendingExportsRawAsync(exportList);
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
 
         // Detach updated entities and their children from the change tracker (no-op if loaded with
         // AsNoTracking) so no later SaveChangesAsync re-persists what the raw SQL already wrote.
@@ -5044,6 +5073,87 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             export.Status = PendingExportStatus.Executing;
             export.LastAttemptedAt = now;
         }
+    }
+
+    /// <summary>
+    /// Writes each retry state onto its Pending Export while that row is still Executing (see interface doc for the full
+    /// rationale), in one statement over the unnested states. The Status guard is what keeps a result already recorded
+    /// from being overwritten: a batch that failed after part of it was persisted has those rows out of Executing.
+    /// Tracked copies of the rows written are detached, so no later save on a long-lived context writes Executing back.
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    {
+        if (states.Count == 0)
+            return new HashSet<Guid>();
+
+        const string sql = """
+            UPDATE "PendingExports" AS t
+            SET "Status" = v."Status",
+                "ErrorCount" = v."ErrorCount",
+                "LastAttemptedAt" = v."LastAttemptedAt",
+                "NextRetryAt" = v."NextRetryAt",
+                "LastErrorMessage" = v."LastErrorMessage",
+                "LastErrorStackTrace" = v."LastErrorStackTrace"
+            FROM unnest(@ids, @statuses, @errorCounts, @lastAttemptedAts, @nextRetryAts, @lastErrorMessages, @lastErrorStackTraces)
+                AS v("Id", "Status", "ErrorCount", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace")
+            WHERE t."Id" = v."Id"
+              AND t."Status" = @executing
+            RETURNING t."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = states.Select(s => s.PendingExportId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("statuses", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = states.Select(s => (int)s.Status).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("errorCounts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = states.Select(s => s.ErrorCount).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastAttemptedAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            { Value = states.Select(s => s.LastAttemptedAt).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("nextRetryAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            { Value = states.Select(s => s.NextRetryAt).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastErrorMessages", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = states.Select(s => s.LastErrorMessage).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastErrorStackTraces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = states.Select(s => s.LastErrorStackTrace).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("executing", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Executing });
+
+        var released = new HashSet<Guid>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                released.Add(reader.GetGuid(0));
+        }
+
+        if (released.Count > 0)
+        {
+            // Change detection suspended while enumerating, as src/CLAUDE.md requires of tracker surgery: the batch's tracked
+            // graphs can hold duplicate-key instances, and attaching them would throw after the write has committed.
+            var tracker = Repository.Database.ChangeTracker;
+            var autoDetectChanges = tracker.AutoDetectChangesEnabled;
+            tracker.AutoDetectChangesEnabled = false;
+            List<PendingExport> trackedReleased;
+            try
+            {
+                trackedReleased = tracker.Entries<PendingExport>()
+                    .Where(e => released.Contains(e.Entity.Id))
+                    .Select(e => e.Entity)
+                    .ToList();
+            }
+            finally
+            {
+                tracker.AutoDetectChangesEnabled = autoDetectChanges;
+            }
+
+            if (trackedReleased.Count > 0)
+                DetachPendingExportGraphs(trackedReleased);
+        }
+
+        return released;
     }
 
     /// <summary>
@@ -5284,7 +5394,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(pe =>
                 (pe.LastErrorMessage != null && EF.Functions.ILike(pe.LastErrorMessage, searchPattern)) ||
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
@@ -5530,13 +5640,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the attributes this Pending Export changes, where an
+        // exact name wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId && avc.Attribute.Name.ToLower() == attributeNameLower)
+            .Select(avc => avc.Attribute.Name)
+            .Distinct()
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId
                           && avc.Attribute.Name == attributeName);
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
@@ -5633,7 +5753,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
                 || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
@@ -7001,7 +7121,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // searches.
         if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            var searchPattern = $"%{externalIdSearch}%";
+            var searchPattern = LikePattern.Contains(externalIdSearch);
             query = query.Where(c =>
                 c.DeletedObjectExternalId != null &&
                 EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));
@@ -8587,6 +8707,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
+        // The attribute value changes are written first, while each Pending Export still holds the status it had, and
+        // the Pending Exports second. The order applies to every caller, and matters wherever the two statements do not
+        // commit together (UpdatePendingExportAsync runs them without a transaction; UpdatePendingExportsAsync commits
+        // them as one, #2083):
+        //  - A delivery waits while an export to the account is Executing, and completes an enable the export held back
+        //    for want of a password once it reads the hold (AwaitsInitialPassword, #2173, #2158). Written in this order,
+        //    the hold is readable before the export stops being in flight, so no delivery can find neither.
+        //  - A crash between the two leaves sent changes under a Pending Export still Executing, which
+        //    RecoverStrandedExecutingPendingExportsAsync resolves to Exported at the next start. The opposite order
+        //    would leave a Pending Export recorded as Exported over changes never marked as sent.
+        // Reconciliation and the unreconciled-hold sweep both skip Executing Pending Exports, so nothing misreads the
+        // moment in between.
+        //
+        // Persists the attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
+        // AwaitsInitialPassword). Without this, reconciliation during confirming import cannot find
+        // ExportedPendingConfirmation changes and the PE is never confirmed/deleted, causing stale Create exports on
+        // re-evaluation.
+        await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
+
         const int columnsPerRow = 11; // Id + 10 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
@@ -8625,12 +8764,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
-
-        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
-        // AwaitsInitialPassword).
-        // Without this, reconciliation during confirming import cannot find ExportedPendingConfirmation changes
-        // and the PE is never confirmed/deleted, causing stale Create exports on re-evaluation.
-        await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
     }
 
     /// <summary>

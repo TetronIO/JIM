@@ -67,21 +67,22 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
         var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
         var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
 
-        // OperationCanceledException is not caught by the per-batch failure handler (which only
-        // catches and records plain export failures) - it propagates straight past ExportAsync,
-        // through the finally that closes the connection, exercising the "the run is already failing"
-        // path. SyncExportTaskProcessor itself then swallows OperationCanceledException (treats it as
-        // a graceful stop), so PerformExportAsync completes without throwing here.
-        var connector = new MockCallConnector
+        // The run is cancelled while the Connector holds the batch: the cancellation is not a batch failure the per-batch
+        // handler records, so it propagates through the finally that closes the connection, exercising the "the run is
+        // already failing" path. SyncExportTaskProcessor itself then treats a requested cancellation as a graceful stop,
+        // so PerformExportAsync completes without throwing here.
+        using var run = new CancellationTokenSource();
+        var connector = new MockCallConnector();
+        connector.WithConnectedSystemExportResultFactory(_ =>
         {
-            ExportExceptionToThrow = new OperationCanceledException("simulated mid-export cancellation")
-        };
+            run.Cancel();
+            return ConnectedSystemExportResult.Succeeded();
+        });
         connector.WithCloseExportConnectionReturnValue("invalidated-pin");
 
         var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
         var processor = new SyncExportTaskProcessor(
-            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask,
-            new CancellationTokenSource());
+            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask, run);
 
         // Act
         await processor.PerformExportAsync();
@@ -130,6 +131,43 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
             Assert.That(thrown, Is.SameAs(openFailure), "the open failure must be what fails the run");
             Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("pin-invalidated-state"),
                 "the connection must be closed after a failed open, and what the connector returned at close persisted");
+        }
+    }
+
+    /// <summary>
+    /// #2083: an <see cref="OperationCanceledException"/> nobody asked for (a timeout surfacing as one, outside any batch)
+    /// was taken for the run being cancelled, and the Activity completed as "Export cancelled". It is a failure of the
+    /// run, and fails its Activity.
+    /// </summary>
+    [Test]
+    public async Task Export_OperationCanceledExceptionWithoutTheRunBeingCancelled_FailsTheRunAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("Target System");
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var displayNameAttr = csoType.Attributes.Single(a => a.Name == "DisplayName");
+        var cso = await CreateCsoAsync(connectedSystem.Id, csoType, "Original Name");
+        CreatePendingExport(connectedSystem, cso, displayNameAttr);
+
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
+
+        var timeout = new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
+        var connector = new MockCallConnector { OpenExportExceptionToThrow = timeout };
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+        var processor = new SyncExportTaskProcessor(
+            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask,
+            new CancellationTokenSource());
+
+        // Act
+        var thrown = Assert.CatchAsync<OperationCanceledException>(async () => await processor.PerformExportAsync());
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown, Is.SameAs(timeout), "the run fails on the exception itself rather than reading it as a cancellation");
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
         }
     }
 

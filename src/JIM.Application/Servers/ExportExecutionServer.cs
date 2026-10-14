@@ -217,15 +217,16 @@ public class ExportExecutionServer
 
         // Second pass: retry any exports with deferred references that might now be resolvable
         if (!cancellationToken.IsCancellationRequested)
-        {
             await ExecuteDeferredReferencesAsync(connectedSystem, connector, result);
 
-            // Drain any items from deferred reference resolution via callback
-            if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
-            {
-                await batchCompletedCallback(result.ProcessedExportItems);
-                result.ProcessedExportItems = [];
-            }
+        // Hand on whatever is still held, cancelled or not: the items of deferred reference resolution, and those of a
+        // batch that failed when nothing after it handed them on (#2083). Taken off the result before the callback, so a
+        // callback that fails part-way is never handed the same items twice.
+        if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+        {
+            var remainingItems = result.ProcessedExportItems;
+            result.ProcessedExportItems = [];
+            await batchCompletedCallback(remainingItems);
         }
 
         // Run Profile Safeguards (#1618): copy the ledger's final withheld counts onto the result.
@@ -270,6 +271,16 @@ public class ExportExecutionServer
                 "required attributes with no value. Each names the attributes on its own Pending Export; add an Attribute Flow for them, or withdraw the " +
                 "auxiliary class selection that brought the class in.",
                 connectedSystem.Name, result.ClassMembershipRefusedCount);
+        }
+
+        // Only when it happened, which should be never: export staging gives a single-valued attribute exactly one
+        // change (#2182), so an export carrying two is a fault in JIM rather than a configuration gap, and is said so.
+        if (result.SingleValuedContradictionRefusedCount > 0)
+        {
+            Log.Error("ExecuteExportsAsync: Single-valued attribute summary for {SystemName}: {RefusedCount} export(s) refused because each carries more " +
+                "than one change for a single-valued attribute, which is a fault in JIM rather than in its configuration. Each names the attributes on its " +
+                "own Pending Export, and none was sent, so no Connected System Object was changed by it.",
+                connectedSystem.Name, result.SingleValuedContradictionRefusedCount);
         }
 
         // Report completion
@@ -754,17 +765,20 @@ public class ExportExecutionServer
                         });
 
                         // Mark batch as executing
+                        IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting;
                         using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
                             .SetTag("batchSize", immediateExports.Count))
                         {
-                            await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
+                            statesBeforeExecuting = await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
                         }
 
                         try
                         {
-                            // Which of the batch's Creates an Initial Password will follow, decided once for the batch
-                            // and read again when the passwords are staged below (#2039).
-                            var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(immediateExports, SyncRepo, connectedSystem.Name);
+                            // Which of the batch's exports a password will follow, decided once for the batch: Creates from
+                            // the rule, read again when the passwords are staged below (#2039), and Updates from what is
+                            // still owed to the account (#2158).
+                            var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(immediateExports, SyncRepo, connectedSystem,
+                                connector is IConnectorPasswordManagement);
 
                             // Execute batch via connector
                             List<ConnectedSystemExportResult> exportResults;
@@ -774,44 +788,33 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                (exportResults, var immediateRefused) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
-                                result.ClassMembershipRefusedCount += immediateRefused;
+                                (exportResults, var immediateClassRefused, var immediateContradictions) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                result.ClassMembershipRefusedCount += immediateClassRefused;
+                                result.SingleValuedContradictionRefusedCount += immediateContradictions;
                             }
 
                             // Process results
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, statesBeforeExecuting, cancellationToken, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
                             }
                         }
-                        catch (OperationCanceledException)
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                         {
+                            // The run was cancelled while the Connector held the batch, and it gave no results (#2083).
+                            await ReleaseBatchAfterCancellationAsync(immediateExports, statesBeforeExecuting, SyncRepo, connectedSystem.Name);
                             throw;
                         }
-                        catch (Exception ex)
+                        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                         {
+                            // Any other failure, including an OperationCanceledException nobody asked for (an HTTP client's
+                            // timeout), is a failed attempt at the batch rather than the run being cancelled (#2083).
                             Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Batch failed for {SystemName}", connectedSystem.Name);
 
                             // Create ProcessedExportItems so the RPEI pipeline can record the failures.
                             // Without this, the activity would silently report Status: Complete.
-                            foreach (var export in immediateExports)
-                            {
-                                MarkExportFailed(export, ex.Message);
-                                result.FailedCount++;
-                                result.ProcessedExportItems.Add(new ProcessedExportItem
-                                {
-                                    ChangeType = export.ChangeType,
-                                    ConnectedSystemObject = export.ConnectedSystemObject,
-                                    AttributeChangeCount = export.AttributeValueChanges.Count,
-                                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                                    Succeeded = false,
-                                    ErrorMessage = $"Batch export failed: {ex.Message}",
-                                    ErrorCount = export.ErrorCount,
-                                    ErrorType = ConnectedSystemExportErrorType.General
-                                }.WithCauseFrom(export));
-                            }
-                            await SyncRepo.UpdatePendingExportsAsync(immediateExports);
+                            await RecordBatchFailureAsync(immediateExports, statesBeforeExecuting, ex, result, SyncRepo, connectedSystem.Name);
 
                             // Stop processing further batches — the connector is likely broken
                             break;
@@ -826,8 +829,9 @@ public class ExportExecutionServer
                         // the entire run. At 100K exports this prevents ~125 MB of retained entity data.
                         if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
                         {
-                            await batchCompletedCallback(result.ProcessedExportItems);
+                            var batchItems = result.ProcessedExportItems;
                             result.ProcessedExportItems = [];
+                            await batchCompletedCallback(batchItems);
                         }
 
                         // Clear the change tracker between batches to prevent O(n²) degradation.
@@ -899,8 +903,9 @@ public class ExportExecutionServer
                     // Drain any remaining deferred export items via callback
                     if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
                     {
-                        await batchCompletedCallback(result.ProcessedExportItems);
+                        var deferredItems = result.ProcessedExportItems;
                         result.ProcessedExportItems = [];
+                        await batchCompletedCallback(deferredItems);
                     }
                 }
 
@@ -953,18 +958,48 @@ public class ExportExecutionServer
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             Log.Information("ExecuteUsingCallsWithBatchingAsync: Export cancelled for {SystemName}", connectedSystem.Name);
+            await HandOnProcessedExportItemsAsync(result, batchCompletedCallback, connectedSystem.Name);
             throw;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Failed to execute exports for {SystemName}", connectedSystem.Name);
+            await HandOnProcessedExportItemsAsync(result, batchCompletedCallback, connectedSystem.Name);
             // Connection-level or unexpected errors must propagate so PerformExportAsync
             // can fail the activity via FailActivityWithErrorAsync. Swallowing the exception
             // here would cause the activity to silently report Status: Complete.
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Hands on the execution items still held when the run stops early (#2083). The deferred pass's items are handed on
+    /// only once the pass ends, so a run cancelled or failing part-way through it would otherwise never record the items
+    /// of the batches it had already written, though their Pending Exports were. Never throws, so it cannot mask the
+    /// exception that is unwinding.
+    /// </summary>
+    private static async Task HandOnProcessedExportItemsAsync(
+        ExportExecutionResult result,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback,
+        string connectedSystemName)
+    {
+        if (batchCompletedCallback == null || result.ProcessedExportItems.Count == 0)
+            return;
+
+        // Taken off the result first, so a callback that fails part-way is never handed the same items again.
+        var items = result.ProcessedExportItems;
+        result.ProcessedExportItems = [];
+        try
+        {
+            await batchCompletedCallback(items);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "HandOnProcessedExportItemsAsync: Could not record the execution items of the {Count} change(s) already exported to {ConnectedSystemName} " +
+                "before the run stopped", items.Count, connectedSystemName);
         }
     }
 
@@ -1345,27 +1380,47 @@ public class ExportExecutionServer
                 Message = "Exporting deferred"
             });
 
+            IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting;
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
                 .SetTag("batchSize", batch.Count))
             {
-                await MarkBatchAsExecutingAsync(batch, SyncRepo);
+                statesBeforeExecuting = await MarkBatchAsExecutingAsync(batch, SyncRepo);
             }
 
-            // A deferred Create is followed by an Initial Password exactly as one sent on the first pass is (#2039).
-            var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, SyncRepo, connectedSystem.Name);
-
-            List<ConnectedSystemExportResult> exportResults;
-            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
-                .SetTag("batchSize", batch.Count))
+            try
             {
-                (exportResults, var deferredRefused) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
-                result.ClassMembershipRefusedCount += deferredRefused;
+                // A deferred export is followed by a password exactly as one sent on the first pass is (#2039, #2158).
+                var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, SyncRepo, connectedSystem,
+                    connector is IConnectorPasswordManagement);
+
+                List<ConnectedSystemExportResult> exportResults;
+                using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
+                    .SetTag("batchSize", batch.Count))
+                {
+                    (exportResults, var deferredClassRefused, var deferredContradictions) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    result.ClassMembershipRefusedCount += deferredClassRefused;
+                    result.SingleValuedContradictionRefusedCount += deferredContradictions;
+                }
+
+                using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
+                    .SetTag("batchSize", batch.Count))
+                {
+                    await ProcessBatchSuccessAsync(batch, exportResults, statesBeforeExecuting, cancellationToken, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                }
             }
-
-            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
-                .SetTag("batchSize", batch.Count))
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                // As on the first pass (#2083): the batch goes back as it was, and the run stops.
+                await ReleaseBatchAfterCancellationAsync(batch, statesBeforeExecuting, SyncRepo, connectedSystem.Name);
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                // As on the first pass (#2083): a failed attempt at the batch, and the rest of the pass waits for the next run,
+                // its batches never marked.
+                Log.Error(ex, "ProcessDeferredBatchesSequentiallyAsync: Deferred batch failed for {SystemName}", connectedSystem.Name);
+                await RecordBatchFailureAsync(batch, statesBeforeExecuting, ex, result, SyncRepo, connectedSystem.Name);
+                break;
             }
 
             processedCount += batch.Count;
@@ -1427,6 +1482,10 @@ public class ExportExecutionServer
         var batchTasks = batchIdLists.Select((batchIds, batchIndex) => Task.Run(async () =>
         {
             await throttle.WaitAsync(cancellationToken);
+
+            // Set once this batch's outcome, success or failure, is in the shared result, so a failure closing its Connector
+            // afterwards is not counted as the batch failing a second time (#2083).
+            var batchOutcomeRecorded = false;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1473,6 +1532,13 @@ public class ExportExecutionServer
                 // replace/mask a batch failure that is already unwinding through the same finally.
                 var batchExportSucceeded = false;
 
+                // Declared outside the try so the catches below, which record an interrupted batch through this batch's own
+                // repository while its scope is still alive, know what the batch was before it was sent (#2083). Null until
+                // the batch is marked: one whose Connector could not be opened was never touched.
+                IReadOnlyDictionary<Guid, PendingExportRetryState>? statesBeforeExecuting = null;
+                var batchResult = new ExportExecutionResult();
+                var batchResultMerged = false;
+
                 try
                 {
                     // A batch connector of its own is prepared and opened inside the try, so one that fails
@@ -1485,20 +1551,22 @@ public class ExportExecutionServer
                     }
 
                     // Mark batch as executing (raw SQL - context-independent)
-                    await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
+                    statesBeforeExecuting = await MarkBatchAsExecutingAsync(batch, batchRepo);
 
                     // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
-                    // set on the primary's copies would never reach this batch's connector (#2039).
-                    var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, batchRepo, connectedSystem.Name);
+                    // set on the primary's copies would never reach this batch's connector (#2039, #2158).
+                    var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
+                        batchConnector is IConnectorPasswordManagement);
 
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
                     // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var (exportResults, batchRefused) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    var (exportResults, batchClassRefused, batchContradictions) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
-                    var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                    batchResult.ClassMembershipRefusedCount = batchClassRefused;
+                    batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
+                    await ProcessBatchSuccessAsync(batch, exportResults, statesBeforeExecuting, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1509,30 +1577,16 @@ public class ExportExecutionServer
                     }
 
                     // Aggregate results into shared result (thread-safe)
-                    // Aggregate scalar results into shared result (thread-safe)
                     lock (resultLock)
                     {
-                        result.SuccessCount += batchResult.SuccessCount;
-                        result.FailedCount += batchResult.FailedCount;
-                        result.DeferredCount += batchResult.DeferredCount;
-                        result.PartiallyExportedCount += batchResult.PartiallyExportedCount;
-                        result.OptimisticApplyAppliedCount += batchResult.OptimisticApplyAppliedCount;
-                        result.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
-                        result.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
-                        result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
-                        result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
-                        result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
-                        result.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
-                        result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
-                        result.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
-                        result.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
-                        if (batchCompletedCallback == null)
-                            result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
+                        AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
                         if (batchContainerIds != null)
                         {
                             result.CreatedContainerExternalIds.AddRange(batchContainerIds);
                         }
                     }
+                    batchResultMerged = true;
+                    batchOutcomeRecorded = true;
 
                     // Stream processed items per-batch (outside lock — callback may do async I/O)
                     if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
@@ -1567,6 +1621,40 @@ public class ExportExecutionServer
                     // Reached only if nothing above threw; used by the finally block below to tell a
                     // genuine batch failure apart from a clean run.
                     batchExportSucceeded = true;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
+                    if (statesBeforeExecuting != null)
+                        await ReleaseBatchAfterCancellationAsync(batch, statesBeforeExecuting, batchRepo, connectedSystem.Name);
+                    throw;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope is
+                    // alive: its Pending Exports still Executing get one failed attempt each, with an execution item naming
+                    // their object. Results this batch already merged stand; the failure is reported on a result of its own.
+                    Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+                    var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
+                    await RecordBatchFailureAsync(batch, statesBeforeExecuting, ex, failureResult, batchRepo, connectedSystem.Name);
+
+                    lock (resultLock)
+                    {
+                        AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
+                    }
+                    batchOutcomeRecorded = true;
+
+                    if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
+                    {
+                        try
+                        {
+                            await batchCompletedCallback(failureResult.ProcessedExportItems);
+                        }
+                        catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
+                        {
+                            Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
+                        }
+                    }
                 }
                 finally
                 {
@@ -1611,25 +1699,49 @@ public class ExportExecutionServer
                 // Let cancellation propagate
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (batchOutcomeRecorded)
             {
+                // The batch's outcome is already recorded, and only closing its Connector failed afterwards (#2083): reported
+                // once, as an item of its own, rather than as the batch failing again.
+                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex}'s results were recorded, but closing its connection failed", batchIndex);
+                lock (resultLock)
+                {
+                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    {
+                        ChangeType = PendingExportChangeType.Update,
+                        Succeeded = false,
+                        ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
+                        ErrorType = ConnectedSystemExportErrorType.General
+                    });
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                // Reached when the batch could not even be loaded (its repository scope or the reload failed), so no Pending
+                // Export of it was touched and none can be named; a batch that was loaded records its own failure above. Its
+                // exports are left for the next run.
                 Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
 
-                // Mark this batch's exports as failed and create ProcessedExportItems
-                // so the RPEI pipeline can record the failures. Without ProcessedExportItems,
-                // the activity would silently report Status: Complete with no error RPEIs.
+                // Create ProcessedExportItems so the RPEI pipeline can record the failures. Without ProcessedExportItems,
+                // the activity would silently report Status: Complete with no error RPEIs. Each names its change from the
+                // caller's copy of the batch, since this batch's own reload is what failed.
                 lock (resultLock)
                 {
                     result.FailedCount += batchIds.Count;
-                    for (var i = 0; i < batchIds.Count; i++)
+                    foreach (var export in batches[batchIndex])
                     {
                         result.ProcessedExportItems.Add(new ProcessedExportItem
                         {
-                            ChangeType = PendingExportChangeType.Update,
+                            ChangeType = export.ChangeType,
+                            ConnectedSystemObject = export.ConnectedSystemObject,
+                            PendingExportId = export.Id,
+                            AttributeChangeCount = export.AttributeValueChanges.Count,
+                            AttributeValueChanges = export.AttributeValueChanges.ToList(),
                             Succeeded = false,
                             ErrorMessage = $"Batch export failed: {ex.Message}",
-                            ErrorCount = 1
-                        });
+                            ErrorCount = export.ErrorCount,
+                            ErrorType = ConnectedSystemExportErrorType.General
+                        }.WithCauseFrom(export));
                     }
                 }
             }
@@ -1643,24 +1755,198 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Adds one parallel batch's counts, and its execution items when they are not streamed, to the run's result. The
+    /// caller holds the result's lock.
+    /// </summary>
+    private static void AccumulateBatchResult(ExportExecutionResult into, ExportExecutionResult batchResult, bool includeItems)
+    {
+        into.SuccessCount += batchResult.SuccessCount;
+        into.FailedCount += batchResult.FailedCount;
+        into.DeferredCount += batchResult.DeferredCount;
+        into.PartiallyExportedCount += batchResult.PartiallyExportedCount;
+        into.OptimisticApplyAppliedCount += batchResult.OptimisticApplyAppliedCount;
+        into.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
+        into.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
+        into.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
+        into.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
+        into.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
+        into.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
+        into.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
+        into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
+        into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
+        into.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
+        if (includeItems)
+            into.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
+    }
+
+    /// <summary>
     /// Marks a batch of exports as executing using raw SQL for efficiency.
     /// Bypasses EF Core change tracking since this is a simple status update.
     /// </summary>
-    private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
+    /// <returns>
+    /// Each export's retry state as it stood just before the mark (#2083): what an export the run never got to is put back
+    /// to, and what a failed attempt is counted from.
+    /// </returns>
+    private static async Task<IReadOnlyDictionary<Guid, PendingExportRetryState>> MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
+        var before = batch.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
         await repository.MarkPendingExportsAsExecutingAsync(batch);
+        return before;
+    }
+
+    /// <summary>
+    /// Puts a batch interrupted by the run being cancelled back as it was before it was sent (#2083), so the next run
+    /// carries on without a Worker restart. Only rows still Executing are written: a result already recorded stands. No
+    /// attempt is counted, because the Connector gave no results to count.
+    /// <para>
+    /// Never throws: a failure here is logged and the rows are left for the Worker's startup recovery, so it cannot mask
+    /// the cancellation that is unwinding.
+    /// </para>
+    /// </summary>
+    private static async Task ReleaseBatchAfterCancellationAsync(
+        List<PendingExport> batch,
+        IReadOnlyDictionary<Guid, PendingExportRetryState> before,
+        ISyncRepository repository,
+        string connectedSystemName)
+    {
+        try
+        {
+            var released = await repository.ReleaseExecutingPendingExportsAsync(before.Values.ToList());
+            foreach (var export in batch.Where(pe => released.Contains(pe.Id)))
+                before[export.Id].ApplyTo(export);
+
+            if (released.Count > 0)
+            {
+                // A Connector that stops on cancellation reports what it wrote and marks the rest not attempted; one that
+                // throws instead gives JIM no results at all, so anything it had already written is not recorded and may be
+                // refused as already present when the next run sends it again.
+                Log.Warning("ReleaseBatchAfterCancellationAsync: The export run to {ConnectedSystemName} was cancelled while the Connector held a batch, " +
+                    "and the Connector returned no results for it. {Count} Pending Export(s) were put back as they were, to be sent by the next run: {PendingExportIds}. " +
+                    "Anything the Connector had already written for them may be refused as already present.",
+                    connectedSystemName, released.Count, DescribeIds(released));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "ReleaseBatchAfterCancellationAsync: Could not put back the {Count} Pending Export(s) of the cancelled batch to {ConnectedSystemName}; " +
+                "they stay Executing until the Worker next starts: {PendingExportIds}",
+                before.Count, connectedSystemName, DescribeIds(before.Keys));
+        }
+    }
+
+    /// <summary>
+    /// Records a batch that failed as a whole (the Connector threw, or processing its results did) as one failed attempt
+    /// at each of its changes still Executing (#2083), with an execution item naming each change's object. A change whose
+    /// result was already recorded keeps it, so a Create whose success was recorded is never put back to be sent again;
+    /// when every result was recorded and only JIM's own bookkeeping failed afterwards, one batch-level item reports the
+    /// error. Results processing that fails before the batch's results are persisted loses them: the whole batch is then
+    /// recorded as failed, so a Create the Connector had written is sent again.
+    /// <para>
+    /// <paramref name="before"/> is null when the batch failed before it was marked Executing (its Connector could not be
+    /// opened): its rows were never touched and are left for the next run, and each change still gets an item.
+    /// </para>
+    /// <para>
+    /// A failure after part of the batch's results were counted, but before they were persisted, can leave this run's
+    /// success counters high; the execution items stay exact, one per Pending Export, because an earlier item for a
+    /// change written here as failed is replaced.
+    /// </para>
+    /// </summary>
+    private static async Task RecordBatchFailureAsync(
+        List<PendingExport> batch,
+        IReadOnlyDictionary<Guid, PendingExportRetryState>? before,
+        Exception exception,
+        ExportExecutionResult result,
+        ISyncRepository repository,
+        string connectedSystemName)
+    {
+        var itemMessage = $"Batch export failed: {exception.Message}";
+
+        IReadOnlySet<Guid>? failed = null;
+        if (before != null)
+        {
+            var failedAttempts = batch
+                .Where(pe => before.ContainsKey(pe.Id))
+                .ToDictionary(pe => pe.Id, pe => AfterFailedAttempt(before[pe.Id], pe.MaxRetries, exception.Message));
+            try
+            {
+                failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList());
+                foreach (var export in batch.Where(pe => failed.Contains(pe.Id)))
+                {
+                    failedAttempts[export.Id].ApplyTo(export);
+                    LogFailedAttempt(failedAttempts[export.Id], export.MaxRetries);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Error(ex, "RecordBatchFailureAsync: Could not record the failed attempt on the {Count} Pending Export(s) of the failed batch to {ConnectedSystemName}; " +
+                    "they stay Executing until the Worker next starts: {PendingExportIds}",
+                    batch.Count, connectedSystemName, DescribeIds(batch.Select(pe => pe.Id)));
+            }
+        }
+
+        // The changes to report as failed: those just written as a failed attempt, or, when nothing could be written (never
+        // marked, or the write itself failed), every change in the batch, so the failure is never silent.
+        var reported = failed == null ? batch : batch.Where(pe => failed.Contains(pe.Id)).ToList();
+        var reportedIds = reported.Select(pe => pe.Id).ToHashSet();
+        result.ProcessedExportItems.RemoveAll(item => item.PendingExportId is { } id && reportedIds.Contains(id));
+
+        foreach (var export in reported)
+        {
+            result.FailedCount++;
+            result.ProcessedExportItems.Add(new ProcessedExportItem
+            {
+                ChangeType = export.ChangeType,
+                ConnectedSystemObject = export.ConnectedSystemObject,
+                PendingExportId = export.Id,
+                AttributeChangeCount = export.AttributeValueChanges.Count,
+                AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                Succeeded = false,
+                ErrorMessage = itemMessage,
+                ErrorCount = export.ErrorCount,
+                ErrorType = ConnectedSystemExportErrorType.General
+            }.WithCauseFrom(export));
+        }
+
+        if (reported.Count == 0)
+        {
+            result.ProcessedExportItems.Add(new ProcessedExportItem
+            {
+                ChangeType = PendingExportChangeType.Update,
+                Succeeded = false,
+                ErrorMessage = $"The batch's results were recorded, but JIM failed while finishing them: {exception.Message}",
+                ErrorType = ConnectedSystemExportErrorType.General
+            });
+        }
+
+        Log.Error("RecordBatchFailureAsync: A batch of {BatchCount} export(s) to {ConnectedSystemName} failed: {Error}. {FailedCount} recorded as a failed attempt, " +
+            "{RecordedCount} already had their results recorded",
+            batch.Count, connectedSystemName, LogSanitiser.Sanitise(exception.Message), reported.Count, failed == null ? 0 : batch.Count - failed.Count);
+    }
+
+    /// <summary>
+    /// Up to ten ids, for a log line naming the Pending Exports an interrupted batch left behind.
+    /// </summary>
+    private static string DescribeIds(IEnumerable<Guid> ids)
+    {
+        var list = ids.ToList();
+        var shown = string.Join(", ", list.Take(10));
+        return list.Count > 10 ? $"{shown} and {list.Count - 10} more" : shown;
     }
 
     /// <summary>
     /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
-    /// System and failing it with the attributes named. Results come back in the batch's own order either way.
+    /// System, or that carries more than one change for a single-valued attribute, and failing it with the attributes
+    /// named. Results come back in the batch's own order either way, with the two kinds of refusal counted apart.
     /// </summary>
     /// <remarks>
     /// Refusing here rather than letting the Connected System reject the change gives an administrator something
     /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
-    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
+    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector. An export contradicting
+    /// itself over a single-valued attribute (#2182) is refused for a different reason: it is a fault in JIM, and a
+    /// Connector could apply it in an order that clears the value and report success. The two are counted apart
+    /// because they point at different remedies: a class membership refusal at configuration, a contradiction at JIM.
     /// </remarks>
-    internal static async Task<(List<ConnectedSystemExportResult> Results, int Refused)> ExportBatchAsync(
+    internal static async Task<(List<ConnectedSystemExportResult> Results, int ClassMembershipRefused, int ContradictionsRefused)> ExportBatchAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
         List<PendingExport> batch,
@@ -1669,30 +1955,69 @@ public class ExportExecutionServer
     {
         var refusals = new Dictionary<int, ConnectedSystemExportResult>();
         var sendable = new List<PendingExport>();
+        var contradictions = 0;
 
         for (var i = 0; i < batch.Count; i++)
         {
-            var refusal = ClassMembershipValidator.Check(batch[i], connectedSystem);
+            // An export that contradicts itself over a single-valued attribute is refused first (#2182): it is a fault
+            // in JIM rather than configuration, and no class check is meaningful over changes that cannot all apply.
+            var contradiction = SingleValuedAttributeChangeValidator.Check(ForConnector(batch[i]));
+            var refusal = contradiction ?? ClassMembershipValidator.Check(batch[i], connectedSystem);
             if (refusal == null)
+            {
                 sendable.Add(batch[i]);
-            else
-                refusals[i] = refusal;
+                continue;
+            }
+
+            refusals[i] = refusal;
+            if (contradiction != null)
+                contradictions++;
         }
 
         if (refusals.Count == 0)
-            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0);
+            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0, 0);
 
-        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
-            refusals.Count, batch.Count, connectedSystem.Name);
+        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' before sending them: " +
+            "{ContradictionCount} carrying more than one change for a single-valued attribute, {ClassMembershipCount} adding a class whose required " +
+            "attributes have no value. The reason is recorded against each object.",
+            refusals.Count, batch.Count, connectedSystem.Name, contradictions, refusals.Count - contradictions);
 
         var sentResults = sendable.Count > 0
             ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
             : [];
 
-        // Rebuild in the batch's order, because the caller pairs results with exports by index.
-        var results = new List<ConnectedSystemExportResult>(batch.Count);
+        return (InBatchOrder(batch.Count, refusals, sentResults), refusals.Count - contradictions, contradictions);
+    }
+
+    /// <summary>
+    /// The refusals that keep each export carrying more than one change for a single-valued attribute (#2182) back from
+    /// the Connector, keyed by the export's position in <paramref name="exports"/>.
+    /// </summary>
+    private static Dictionary<int, ConnectedSystemExportResult> RefuseSelfContradictingExports(IList<PendingExport> exports)
+    {
+        var refusals = new Dictionary<int, ConnectedSystemExportResult>();
+        for (var i = 0; i < exports.Count; i++)
+        {
+            var refusal = SingleValuedAttributeChangeValidator.Check(exports[i]);
+            if (refusal != null)
+                refusals[i] = refusal;
+        }
+
+        return refusals;
+    }
+
+    /// <summary>
+    /// One result per export of a batch, in the batch's own order, from the refusals held back and the results of the
+    /// exports that were sent. The caller pairs results with exports by index.
+    /// </summary>
+    private static List<ConnectedSystemExportResult> InBatchOrder(
+        int batchCount,
+        Dictionary<int, ConnectedSystemExportResult> refusals,
+        IList<ConnectedSystemExportResult> sentResults)
+    {
+        var results = new List<ConnectedSystemExportResult>(batchCount);
         var sentIndex = 0;
-        for (var i = 0; i < batch.Count; i++)
+        for (var i = 0; i < batchCount; i++)
         {
             if (refusals.TryGetValue(i, out var refusal))
                 results.Add(refusal);
@@ -1700,7 +2025,7 @@ public class ExportExecutionServer
                 results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
         }
 
-        return (results, refusals.Count);
+        return results;
     }
 
     /// <summary>
@@ -1790,8 +2115,12 @@ public class ExportExecutionServer
     /// </param>
     /// <param name="initialPasswordRuleIds">
     /// The batch's provisioning Synchronisation Rules that ask for an Initial Password, as
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> read them before the batch was sent (#2039), so the
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/> read them before the batch was sent (#2039), so the
     /// passwords staged here are the ones the Connector was told would follow. Null when that lookup failed.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The run's cancellation, read only to tell a not-attempted result (#2083) the run's cancellation explains from one
+    /// it does not: a Connector reporting a change not attempted while the run carries on is failing to export it.
     /// </param>
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
@@ -1803,6 +2132,8 @@ public class ExportExecutionServer
     private async Task ProcessBatchSuccessAsync(
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
+        IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting,
+        CancellationToken cancellationToken,
         ExportExecutionResult result,
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
@@ -1815,6 +2146,8 @@ public class ExportExecutionServer
         var successfulNonDeleteExports = new List<PendingExport>();
         var provisionedAccounts = new List<PendingExport>();
         var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
+        var notAttempted = new List<PendingExport>();
+        var notAttemptedWithoutCancellation = 0;
 
         // The accounts whose enabled state an export in this batch wrote (#2064), as the Connector reported it: a
         // Create's staged first password is marked from it below, so delivering it leaves the enabled state to the
@@ -1857,6 +2190,23 @@ public class ExportExecutionServer
             var writtenChanges = WritableChanges(export);
             var stillUnresolvedCount = export.AttributeValueChanges.Count(IsUnresolvedReference);
             var wasCreate = export.ChangeType == PendingExportChangeType.Create;
+
+            // Never started, because the run was cancelled (#2083): put back below exactly as it was, uncounted and with no
+            // execution item, since nothing was sent and nothing failed.
+            if (exportResult.IsNotAttempted && cancellationToken.IsCancellationRequested)
+            {
+                notAttempted.Add(export);
+                continue;
+            }
+
+            // A Connector that reports a change not attempted while the run carries on is not exporting it, and putting it
+            // back silently would repeat that every run unseen: it is a failed attempt like any other.
+            if (exportResult.IsNotAttempted)
+            {
+                exportResult = ConnectedSystemExportResult.Failed(
+                    "The Connector reported this change as not attempted, although the export run was not cancelled.");
+                notAttemptedWithoutCancellation++;
+            }
 
             if (!exportResult.Success)
             {
@@ -2011,6 +2361,24 @@ public class ExportExecutionServer
                 provisionedAccounts.Add(export);
         }
 
+        // The changes never started are put back first, so nothing that fails while the rest are persisted can count an
+        // attempt against them (#2083).
+        if (notAttempted.Count > 0)
+        {
+            var notAttemptedStates = notAttempted.ToDictionary(pe => pe.Id, pe => statesBeforeExecuting[pe.Id]);
+            var released = await repository.ReleaseExecutingPendingExportsAsync(notAttemptedStates.Values.ToList());
+            foreach (var export in notAttempted.Where(pe => released.Contains(pe.Id)))
+                notAttemptedStates[export.Id].ApplyTo(export);
+            Log.Information("ProcessBatchSuccessAsync: {Count} change(s) to {ConnectedSystemName} were not attempted because the run was cancelled; " +
+                "they are put back as they were, for the next run", released.Count, connectedSystemName);
+        }
+
+        if (notAttemptedWithoutCancellation > 0)
+        {
+            Log.Error("ProcessBatchSuccessAsync: The Connector for {ConnectedSystemName} reported {Count} change(s) as not attempted although the run was not cancelled; " +
+                "each is counted as a failed attempt", connectedSystemName, notAttemptedWithoutCancellation);
+        }
+
         // Batch update all Pending Exports
         if (exportsToUpdate.Count > 0)
         {
@@ -2115,25 +2483,38 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Works out, once for the batch about to be sent, which of its Creates an Initial Password will follow, and says
-    /// so on each of them (<see cref="PendingExport.InitialPasswordFollows"/>), so a Connector whose target refuses an
-    /// enabled account with no password can create it disabled instead (#2039). Returns the batch's provisioning
-    /// Synchronisation Rules that ask for an Initial Password, for <see cref="StageInitialPasswordsForBatchAsync"/> to
-    /// stage the passwords from the same answer: the lookup moved ahead of the Connector call rather than being repeated.
+    /// Works out, once for the batch about to be sent, which of its exports a password will follow, and says so on each
+    /// of them (<see cref="PendingExport.InitialPasswordFollows"/>), so a Connector whose target refuses to enable an
+    /// account that has no password can hold the enable back for the delivery to complete. Returns the batch's
+    /// provisioning Synchronisation Rules that ask for an Initial Password, for <see cref="StageInitialPasswordsForBatchAsync"/>
+    /// to stage the passwords from the same answer: the lookup moved ahead of the Connector call rather than being repeated.
+    /// <list type="bullet">
+    /// <item>A Create is flagged when its provisioning Synchronisation Rule asks for an Initial Password (#2039): the
+    /// account is created disabled and enabled once the password is set.</item>
+    /// <item>An Update is flagged when its account's person is still owed a password on this Connected System (#2158),
+    /// whatever its origin: queued, retrying or parked, the confirming import's own hold test
+    /// (<see cref="ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync"/>), so the flag and the hold never disagree.
+    /// A Connector then holds an enable its target refuses for want of a password, and the delivery completes it.</item>
+    /// <item>Every other export is not flagged.</item>
+    /// </list>
     /// <para>
     /// Every export in the batch is decided, the ones no password follows included, so the flag always reflects this
-    /// batch's answer. A batch with no Create from a provisioning rule reads nothing.
+    /// batch's answer. Each lookup is made at most once per batch, and only when it can matter: the rule lookup when the
+    /// batch holds a Create from a provisioning rule, and the owed lookup when it holds an Update to an account joined to a
+    /// Metaverse Object and the Connector can set passwords (one that cannot has no password queued to complete anything).
     /// </para>
     /// <para>
-    /// A failed lookup is contained, as it was when staging made it: no Create is flagged, so each is sent as its
-    /// Attribute Flows say, and null is returned so staging reports every account it creates as owed a password
-    /// nobody recorded. Failing the batch instead would stop an export over a question about passwords.
+    /// A failed lookup is contained, as it was when staging made it. A failed rule lookup flags no Create, so each is sent
+    /// as its Attribute Flows say, and null is returned so staging reports every account it creates as owed a password
+    /// nobody recorded. A failed owed lookup flags no Update, so a refused enable is reported on the export as it would be
+    /// without the flag. Failing the batch instead would stop an export over a question about passwords.
     /// </para>
     /// </summary>
-    private static async Task<IReadOnlySet<int>?> FlagCreatesFollowedByAnInitialPasswordAsync(
+    private static async Task<IReadOnlySet<int>?> FlagExportsFollowedByAPasswordAsync(
         List<PendingExport> batch,
         ISyncRepository repository,
-        string connectedSystemName)
+        ConnectedSystem connectedSystem,
+        bool connectorSetsPasswords)
     {
         var provisioningRuleIds = batch
             .Where(IsProvisioningCreate)
@@ -2143,14 +2524,33 @@ public class ExportExecutionServer
 
         var rulesAskingForAPassword = provisioningRuleIds.Count == 0
             ? new HashSet<int>()
-            : await TryReadRulesAskingForAPasswordAsync(provisioningRuleIds, repository, connectedSystemName);
+            : await TryReadRulesAskingForAPasswordAsync(provisioningRuleIds, repository, connectedSystem.Name);
+
+        var updatedPeople = connectorSetsPasswords
+            ? batch
+                .Where(pe => pe.ChangeType == PendingExportChangeType.Update)
+                .Select(pe => pe.ConnectedSystemObject?.MetaverseObjectId)
+                .OfType<Guid>()
+                .Distinct()
+                .ToList()
+            : [];
+
+        var peopleOwedAPassword = updatedPeople.Count == 0
+            ? new HashSet<Guid>()
+            : await TryReadPeopleOwedAPasswordAsync(updatedPeople, repository, connectedSystem);
 
         foreach (var pendingExport in batch)
         {
-            pendingExport.InitialPasswordFollows = rulesAskingForAPassword != null
-                && pendingExport.ChangeType == PendingExportChangeType.Create
-                && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
-                && rulesAskingForAPassword.Contains(provisioningRuleId);
+            pendingExport.InitialPasswordFollows = pendingExport.ChangeType switch
+            {
+                PendingExportChangeType.Create => rulesAskingForAPassword != null
+                    && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
+                    && rulesAskingForAPassword.Contains(provisioningRuleId),
+                PendingExportChangeType.Update => peopleOwedAPassword != null
+                    && pendingExport.ConnectedSystemObject?.MetaverseObjectId is { } metaverseObjectId
+                    && peopleOwedAPassword.Contains(metaverseObjectId),
+                _ => false
+            };
         }
 
         return rulesAskingForAPassword;
@@ -2158,7 +2558,7 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Which of the given Synchronisation Rules ask for an Initial Password, or null when that could not be read; see
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> for why a failure is contained.
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/> for why a failure is contained.
     /// </summary>
     private static async Task<HashSet<int>?> TryReadRulesAskingForAPasswordAsync(
         List<int> provisioningRuleIds,
@@ -2171,9 +2571,32 @@ public class ExportExecutionServer
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Warning(ex, "FlagCreatesFollowedByAnInitialPasswordAsync: Could not read which Synchronisation Rules ask for an Initial Password " +
+            Log.Warning(ex, "FlagExportsFollowedByAPasswordAsync: Could not read which Synchronisation Rules ask for an Initial Password " +
                 "before sending a batch to {ConnectedSystem}. Its Creates are sent as their Attribute Flows say, and any account they create " +
                 "is reported as owed a password nobody recorded", LogSanitiser.Sanitise(connectedSystemName));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Which of the given Metaverse Objects are still owed a password on the Connected System, or null when that could
+    /// not be read; see <see cref="FlagExportsFollowedByAPasswordAsync"/> for why a failure is contained.
+    /// </summary>
+    private static async Task<HashSet<Guid>?> TryReadPeopleOwedAPasswordAsync(
+        List<Guid> metaverseObjectIds,
+        ISyncRepository repository,
+        ConnectedSystem connectedSystem)
+    {
+        try
+        {
+            return await repository.GetMetaverseObjectIdsOwedPasswordAsync(connectedSystem.Id, metaverseObjectIds);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "FlagExportsFollowedByAPasswordAsync: Could not read which accounts are still owed a password before sending a batch " +
+                "to {ConnectedSystem}. Its Updates are sent as their Attribute Flows say, so one enabling an account the target will not enable " +
+                "without a password is reported on its export rather than held until the password is delivered",
+                LogSanitiser.Sanitise(connectedSystem.Name));
             return null;
         }
     }
@@ -2193,10 +2616,11 @@ public class ExportExecutionServer
     /// password arrives. Every written change is decided, the unreported ones cleared: the mark describes this write,
     /// and a change marked on an earlier attempt and sent again must not keep a hold this write did not ask for.
     /// <para>
-    /// A Connector may only report this for an export JIM said an Initial Password follows
-    /// (<see cref="PendingExport.InitialPasswordFollows"/>). A report on any other export breaks that contract: it is
-    /// logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any mismatch is
-    /// reported, instead of being held for a password nobody will deliver.
+    /// A Connector may only report this for an export JIM said a password follows
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>): a Create whose provisioning rule asks for an Initial
+    /// Password, or an Update to an account still owed a password (#2158). A report on any other export breaks that
+    /// contract: it is logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any
+    /// mismatch is reported, instead of being held for a password nobody will deliver.
     /// </para>
     /// </summary>
     private static void MarkChangesAwaitingInitialPassword(
@@ -2209,7 +2633,7 @@ public class ExportExecutionServer
         if (reported.Count > 0 && !export.InitialPasswordFollows)
         {
             Log.Error("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
-                "on Pending Export {ExportId}, but JIM did not say an Initial Password follows it. The changes are not marked, and are reconciled " +
+                "on Pending Export {ExportId}, but JIM did not say a password follows it. The changes are not marked, and are reconciled " +
                 "as ordinary changes; this is a defect in the Connector",
                 LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", reported)), export.Id);
         }
@@ -2249,7 +2673,7 @@ public class ExportExecutionServer
     /// </para>
     /// <para>
     /// Which rules ask for a password is read for the batch just before it is sent (see
-    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/>), rather than stamped onto the export when it was
+    /// <see cref="FlagExportsFollowedByAPasswordAsync"/>), rather than stamped onto the export when it was
     /// staged, so that switching the feature on reaches work already queued, and so that a deployment not using it
     /// writes no rows at all. Staging reuses that one lookup, so the accounts given a password are exactly the ones the
     /// Connector was told one would follow (#2039). A live user-set or propagated password for the same person and
@@ -2479,11 +2903,12 @@ public class ExportExecutionServer
     /// Pending Export updates, or the Activity (D7).
     /// </summary>
     /// <returns>
-    /// True when the values were recorded (or there was nothing to record); false when recording failed. The calls
-    /// path does not need the answer, because its confirming import self-heals; an auto-confirmed file export does
-    /// (#1936), because nothing ever imports from its target.
+    /// The exports whose values were not all recorded: every one of them when recording failed, otherwise those carrying a
+    /// change whose value is held in another data type's column than its attribute's (#2183). The calls path does not
+    /// need the answer, because its confirming import self-heals; an auto-confirmed file export does (#1936), because
+    /// nothing ever imports from its target.
     /// </returns>
-    private async Task<bool> ApplyOptimisticExportUpdatesAsync(
+    private async Task<List<PendingExport>> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
         ISyncRepository repository)
@@ -2506,6 +2931,9 @@ public class ExportExecutionServer
             // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(
                 successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
+
+            if (delta.UnrecordedChanges.Count > 0)
+                LogUnrecordedChanges(delta.UnrecordedChanges, successfulNonDeleteExports[0].ConnectedSystemId);
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -2562,7 +2990,8 @@ public class ExportExecutionServer
                     successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
             }
 
-            return true;
+            var unrecordedExportIds = delta.UnrecordedChanges.Select(c => c.PendingExportId).ToHashSet();
+            return successfulNonDeleteExports.Where(pe => unrecordedExportIds.Contains(pe.Id)).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2570,8 +2999,28 @@ public class ExportExecutionServer
             Log.Warning(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply failed for Connected System {ConnectedSystemId} " +
                 "({Count} Pending Exports); a confirming import will self-heal, and auto-confirmed exports are left to be sent again",
                 successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
-            return false;
+            return successfulNonDeleteExports;
         }
+    }
+
+    /// <summary>
+    /// Logs, once per batch, the exported changes optimistic apply could not record (#2183): each was written with its
+    /// value in another data type's column than its attribute's, which only a fault elsewhere produces, since export
+    /// staging converts expression results to the attribute's type (#2179). A Warning, because the target now holds a
+    /// value JIM has no record of; the Activity of an auto-confirmed export says so too, and names this log as where
+    /// the cause is.
+    /// </summary>
+    private static void LogUnrecordedChanges(IReadOnlyCollection<OptimisticExportUnrecordedChange> unrecordedChanges, int connectedSystemId)
+    {
+        var attributes = string.Join(", ", unrecordedChanges
+            .Select(c => $"{LogSanitiser.Sanitise(c.AttributeName)} ({c.AttributeType}, given {c.HeldDataType?.ToString() ?? "nothing"})")
+            .Distinct());
+        Log.Warning("ApplyOptimisticExportUpdatesAsync: {Count} exported changes to Connected System {ConnectedSystemId} could not be " +
+            "recorded, because each gave its attribute a value of another data type (an export Attribute Flow expression " +
+            "returning another type does this): {Attributes}. A confirming import records what the target holds; an " +
+            "auto-confirmed export is left unconfirmed. Connected System Objects: {ConnectedSystemObjectIds}",
+            unrecordedChanges.Count, connectedSystemId, attributes,
+            DescribeConnectedSystemObjectIds(unrecordedChanges.Select(c => c.ConnectedSystemObjectId).Distinct()));
     }
 
     /// <summary>
@@ -2767,25 +3216,43 @@ public class ExportExecutionServer
     /// </summary>
     private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
     {
-        export.ErrorCount++;
-        export.LastErrorMessage = errorMessage;
-        export.LastErrorStackTrace = stackTrace;
-        export.LastAttemptedAt = DateTime.UtcNow;
-        export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
+        var failed = AfterFailedAttempt(PendingExportRetryState.Of(export), export.MaxRetries, errorMessage, stackTrace);
+        failed.ApplyTo(export);
+        LogFailedAttempt(failed, export.MaxRetries);
+    }
 
-        // If max retries exceeded, mark as Failed (Q6 decision - requires manual intervention)
-        if (export.ErrorCount >= export.MaxRetries)
+    /// <summary>
+    /// The retry state after one more failed attempt from <paramref name="before"/> (Q6 decision): Pending with an
+    /// exponential back-off while retries remain, Failed (requiring manual intervention) once they have run out.
+    /// </summary>
+    private static PendingExportRetryState AfterFailedAttempt(PendingExportRetryState before, int maxRetries, string errorMessage, string? stackTrace = null)
+    {
+        var errorCount = before.ErrorCount + 1;
+        return before with
         {
-            export.Status = PendingExportStatus.Failed;
+            Status = errorCount >= maxRetries ? PendingExportStatus.Failed : PendingExportStatus.Pending,
+            ErrorCount = errorCount,
+            LastErrorMessage = errorMessage,
+            LastErrorStackTrace = stackTrace,
+            LastAttemptedAt = DateTime.UtcNow,
+            NextRetryAt = CalculateNextRetryTime(errorCount)
+        };
+    }
+
+    /// <summary>
+    /// Logs a failed attempt once it has been applied: as needing manual intervention once its retries have run out.
+    /// </summary>
+    private static void LogFailedAttempt(PendingExportRetryState failed, int maxRetries)
+    {
+        if (failed.Status == PendingExportStatus.Failed)
+        {
             Log.Warning("MarkExportFailed: Export {ExportId} has exceeded max retries ({MaxRetries}). Requires manual intervention.",
-                export.Id, export.MaxRetries);
+                failed.PendingExportId, maxRetries);
         }
         else
         {
-            // Keep as Pending while we're still retrying
-            export.Status = PendingExportStatus.Pending;
             Log.Warning("MarkExportFailed: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
-                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, LogSanitiser.Sanitise(errorMessage));
+                failed.PendingExportId, failed.ErrorCount, maxRetries, failed.NextRetryAt, LogSanitiser.Sanitise(failed.LastErrorMessage ?? string.Empty));
         }
     }
 
@@ -2796,18 +3263,21 @@ public class ExportExecutionServer
     /// <c>IsReadyForExecution</c> treats as "send again" for a Create and an Update alike. The next export run then
     /// writes the same row again (the File Connector merges into the existing file, so a repeat is harmless) and
     /// retries the recording. Confirming it regardless would leave JIM's view of the target missing those values,
-    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target.
+    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target. An
+    /// export carrying a value held as another data type than its attribute's (#2183) is left the same way; its recording
+    /// fails again on every retry until the Attribute Flow stages the attribute's own type, so the warning repeats on each
+    /// run instead of the export being confirmed with nothing recorded.
     /// </summary>
-    /// <param name="successfulNonDeleteExports">The exports whose values the failed recording covered.</param>
+    /// <param name="unrecordedExports">The exports whose values were not all recorded.</param>
     /// <param name="exportsToDelete">The auto-confirmed exports about to be deleted; those left unconfirmed are taken out.</param>
     /// <param name="result">Counts the exports left unconfirmed, for the Activity's warning.</param>
     private async Task LeaveUnrecordedExportsUnconfirmedAsync(
-        List<PendingExport> successfulNonDeleteExports,
+        List<PendingExport> unrecordedExports,
         List<PendingExport> exportsToDelete,
         ExportExecutionResult result)
     {
         var now = DateTime.UtcNow;
-        foreach (var export in successfulNonDeleteExports)
+        foreach (var export in unrecordedExports)
         {
             foreach (var change in export.AttributeValueChanges.Where(c => c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
                 change.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
@@ -2816,19 +3286,19 @@ public class ExportExecutionServer
             export.LastAttemptedAt = now;
         }
 
-        var unrecorded = successfulNonDeleteExports.ToHashSet();
+        var unrecorded = unrecordedExports.ToHashSet();
         exportsToDelete.RemoveAll(unrecorded.Contains);
 
         using (Diagnostics.Diagnostics.Database.StartSpan("UpdateUnrecordedPendingExports")
-            .SetTag("count", successfulNonDeleteExports.Count))
+            .SetTag("count", unrecordedExports.Count))
         {
-            await SyncRepo.UpdatePendingExportsAsync(successfulNonDeleteExports);
+            await SyncRepo.UpdatePendingExportsAsync(unrecordedExports);
         }
 
-        result.UnrecordedExportCount += successfulNonDeleteExports.Count;
+        result.UnrecordedExportCount += unrecordedExports.Count;
         Log.Warning("LeaveUnrecordedExportsUnconfirmedAsync: {Count} auto-confirmed exports to Connected System {ConnectedSystemId} were written, " +
             "but their values could not be recorded; they are left unconfirmed and will be sent again on the next export run",
-            successfulNonDeleteExports.Count, successfulNonDeleteExports[0].ConnectedSystemId);
+            unrecordedExports.Count, unrecordedExports[0].ConnectedSystemId);
     }
 
     /// <summary>
@@ -2989,7 +3459,28 @@ public class ExportExecutionServer
                 Message = subPhase
             });
 
-            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            // An export contradicting itself over a single-valued attribute is refused before the file is written, as
+            // ExportBatchAsync refuses one on the call-based path (#2182): the File Connector applies changes in turn, so
+            // an add followed by a removal would leave the column empty and be reported as a success.
+            var refusals = RefuseSelfContradictingExports(pendingExports);
+            List<ConnectedSystemExportResult> exportResults;
+            if (refusals.Count == 0)
+            {
+                exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            }
+            else
+            {
+                Log.Warning("ExecuteUsingFilesWithBatchingAsync: Refused {RefusedCount} of {ExportCount} export(s) on '{ConnectedSystem}' before writing them: " +
+                    "each carries more than one change for a single-valued attribute. The reason is recorded against each object.",
+                    refusals.Count, pendingExports.Count, connectedSystem.Name);
+                result.SingleValuedContradictionRefusedCount += refusals.Count;
+
+                List<PendingExport> sendable = [.. pendingExports.Where((_, index) => !refusals.ContainsKey(index))];
+                var sentResults = sendable.Count > 0
+                    ? await connector.ExportAsync(connectedSystem.SettingValues, sendable, cancellationToken, connectorProgress)
+                    : [];
+                exportResults = InBatchOrder(pendingExports.Count, refusals, sentResults);
+            }
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;
@@ -3129,12 +3620,14 @@ public class ExportExecutionServer
             // Issue #1936: record the exported values. LAST among the CSO writes, after
             // BatchUpdateCsosAfterSuccessfulExportAsync, so its external-Id additions are already reflected in each
             // CSO's AttributeValues (#1079's D9/D11 ordering), and BEFORE the auto-confirmed exports are deleted,
-            // because confirming an export whose values were not recorded would leave nothing to repair it.
-            var valuesRecorded = successfulNonDeleteExports.Count == 0 ||
-                                 await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+            // because confirming an export whose values were not recorded would leave nothing to repair it. That covers
+            // a recording that failed outright and an export carrying a value it could not record (#2183).
+            var unrecordedExports = successfulNonDeleteExports.Count == 0
+                ? []
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
 
-            if (autoConfirm && !valuesRecorded)
-                await LeaveUnrecordedExportsUnconfirmedAsync(successfulNonDeleteExports, exportsToDelete, result);
+            if (autoConfirm && unrecordedExports.Count > 0)
+                await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
 
             await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, SyncRepo);
 

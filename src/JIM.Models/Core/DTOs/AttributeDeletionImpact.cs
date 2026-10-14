@@ -11,8 +11,14 @@ namespace JIM.Models.Core.DTOs;
 /// </summary>
 public class AttributeDeletionImpact
 {
+    /// <summary>
+    /// The unique identifier of the attribute.
+    /// </summary>
     public int AttributeId { get; set; }
 
+    /// <summary>
+    /// The attribute's name.
+    /// </summary>
     public string AttributeName { get; set; } = string.Empty;
 
     /// <summary>
@@ -37,18 +43,18 @@ public class AttributeDeletionImpact
     public List<AttributeReference> References { get; set; } = [];
 
     /// <summary>
-    /// Set true by the execute method when the deletion actually happened. False on a preview, on a built-in, or when
-    /// the deletion was refused because stored values exist.
+    /// Whether the attribute was deleted: always false in a preview, and false when the deletion was refused.
     /// </summary>
     public bool Deleted { get; set; }
 
     /// <summary>
-    /// True when stored values exist: the deletion is a hard block and must not proceed until the values are cleared.
+    /// Whether stored values block the deletion. Clear them before deleting the attribute.
     /// </summary>
     public bool BlockedByValues => TotalObjectsWithValues > 0;
 
     /// <summary>
-    /// True when the deletion may proceed but would remove references, so a type-the-name confirmation is required.
+    /// Whether deleting would also remove configuration that uses the attribute, so JIM asks for the attribute's
+    /// name to confirm it.
     /// </summary>
     public bool RequiresConfirmation => !BuiltIn && !BlockedByValues && References.Count > 0;
 }

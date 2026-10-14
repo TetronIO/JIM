@@ -284,6 +284,56 @@ public class SyncEngineGeneratedMappingTests
     }
 
     [Test]
+    public void FlowInboundAttributes_ExpressionReturnsACollectionOfNumbers_RecordsGeneratedBaseNotSingleValueError()
+    {
+        // Any collection is refused (#2179), not only a list of text; otherwise the base is the type name.
+        var target = TargetAttr();
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = JoinedCso(mvo, "Ada");
+        var mapping = GeneratedMapping(target, missingInputBehaviour: MissingInputBehaviour.EvaluateAnyway);
+        var syncRule = GeneratedRule(mapping);
+
+        var mockEvaluator = new Mock<IExpressionEvaluator>();
+        mockEvaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<ExpressionContext>())).Returns(new[] { 1, 2 });
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, [CsoType()], mockEvaluator.Object);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.GeneratedBaseNotSingleValue }));
+            Assert.That(mvo.PendingGeneratedValues, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_GeneratedBaseIsABinaryValue_RecordsNotConvertibleAndGeneratesNothing()
+    {
+        // A Binary value has no text form (#2153, N1), so it cannot be the text a generated value is built from; it
+        // is reported rather than becoming the text System.Byte[].
+        var target = TargetAttr();
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 300, ByteValue = [1, 5, 0] });
+        var csoType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 300, Name = "objectSid", Type = AttributeDataType.Binary }]
+        };
+        var mapping = GeneratedMapping(target, baseExpression: "cs[\"objectSid\"]", missingInputBehaviour: MissingInputBehaviour.EvaluateAnyway);
+        var syncRule = GeneratedRule(mapping);
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, [csoType], _evaluator);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.ExpressionResultNotConvertible }));
+            Assert.That(errors.Single().TargetAttributeType, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(errors.Single().Value, Is.EqualTo("(Binary value, 3 bytes)"));
+            Assert.That(mvo.PendingGeneratedValues, Is.Empty);
+        }
+    }
+
+    [Test]
     public void FlowInboundAttributes_SecondEvaluationInSamePass_ReplacesRatherThanDuplicates()
     {
         var target = TargetAttr();

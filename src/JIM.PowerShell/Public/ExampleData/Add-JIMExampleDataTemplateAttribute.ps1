@@ -84,7 +84,11 @@ function Add-JIMExampleDataTemplateAttribute {
 
     .PARAMETER AttributeDependency
         A condition on another attribute that must hold for this attribute to be generated:
-        @{ MetaverseAttribute = <name or id>; ComparisonType = <Equals|NotEquals|LessThan|GreaterThan|GreaterThanOrEqual|LessThanOrEqual|Like>; StringValue = <value> }.
+        @{ MetaverseAttribute = <name or id>; ComparisonType = <operator>; StringValue = <value> }. The operators are
+        the ones Synchronisation Rule scoping offers for the depended-on attribute's data type, such as Equals,
+        GreaterThanOrEquals, StartsWith, MatchesPattern, HasValue and HasNoValue (which take no StringValue). Write
+        StringValue as the attribute's type reads it: numbers with a full stop, dates as 2026-07-01, Booleans as
+        true or false. Text is compared case-sensitively.
 
     .PARAMETER ChangeReason
         A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration

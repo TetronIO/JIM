@@ -60,44 +60,55 @@ public static class ScimPatchBuilder
     {
         var removing = string.Equals(change.Operation, ScimPatchOperations.Remove, StringComparison.Ordinal);
 
-        // A multi-valued reference is the one shape whose path has to name the value going away:
-        // "remove members" would take every member, where "remove members[value eq id]" takes one.
+        // A removal from a multi-valued attribute has to name the value going away: RFC 7644 section 3.5.2.2 reads
+        // "remove members" or "remove badges" as taking every value, where "remove badges[value eq "gold"]" takes the
+        // one. That holds for a reference and for a simple attribute alike, since both compare by value.
         if (attribute.Access == ScimValueAccess.ComplexReference)
             return ReferenceOperation(change, attribute, removing);
+
+        if (removing && attribute.Access == ScimValueAccess.Simple)
+            return new ScimPatchOperation { Op = ScimPatchOperations.Remove, Path = RemovalPath(change, attribute) };
 
         return new ScimPatchOperation
         {
             Op = change.Operation,
             Path = Qualify(attribute, attribute.ScimPath),
-            // RFC 7644 section 3.5.2.2: a removal is expressed by the path alone.
+            // RFC 7644 section 3.5.2.2: a removal is expressed by the path alone. A canonically-typed slot or a
+            // sub-attribute of a single-valued complex attribute is one value at its own path. A sub-attribute of a
+            // multi-valued complex attribute with no canonical types (roles.value) still reaches every entry's
+            // value, which is #2090.
             Value = removing ? null : ScimValueFormatter.ToNode(change.Value, attribute.Type)
         };
     }
 
     private static ScimPatchOperation ReferenceOperation(ScimAttributeChange change, ScimFlattenedAttribute attribute, bool removing)
     {
-        var multiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
-        var value = ScimValueFormatter.ToNode(change.Value, attribute.Type);
-
         if (removing)
-        {
-            return new ScimPatchOperation
-            {
-                Op = ScimPatchOperations.Remove,
-                Path = multiValued
-                    ? Qualify(attribute, $"{attribute.SourceAttributeName}[{ValueSubAttribute} eq \"{Escape(change.Value)}\"]")
-                    : Qualify(attribute, attribute.SourceAttributeName)
-            };
-        }
+            return new ScimPatchOperation { Op = ScimPatchOperations.Remove, Path = RemovalPath(change, attribute) };
 
+        var value = ScimValueFormatter.ToNode(change.Value, attribute.Type);
         return new ScimPatchOperation
         {
             Op = change.Operation,
             Path = Qualify(attribute, attribute.SourceAttributeName),
-            Value = multiValued
+            Value = attribute.AttributePlurality == AttributePlurality.MultiValued
                 ? new JsonArray(new JsonObject { [ValueSubAttribute] = value })
                 : new JsonObject { [ValueSubAttribute] = value }
         };
+    }
+
+    /// <summary>
+    /// The path of a removal from an attribute whose values are compared by <c>value</c>: a simple attribute's values
+    /// themselves, or a reference's <c>value</c> sub-attribute. One value of a multi-valued attribute is selected by a
+    /// value filter. A removal naming no value is a clear, so its path names no value either: a filter on an empty
+    /// value would match nothing and remove nothing.
+    /// </summary>
+    private static string RemovalPath(ScimAttributeChange change, ScimFlattenedAttribute attribute)
+    {
+        if (attribute.AttributePlurality != AttributePlurality.MultiValued || change.Value == null)
+            return Qualify(attribute, attribute.SourceAttributeName);
+
+        return Qualify(attribute, $"{attribute.SourceAttributeName}[{ValueSubAttribute} eq {ScimFilterLiteral.For(change.Value, attribute.Type)}]");
     }
 
     /// <summary>
@@ -111,14 +122,5 @@ public static class ScimPatchBuilder
             return path;
 
         return $"{attribute.ExtensionUrn}:{path}";
-    }
-
-    /// <summary>
-    /// Escapes a value going into a path filter. A quote in an identifier would otherwise close the
-    /// filter's string early and change what the operation targets.
-    /// </summary>
-    private static string Escape(object? value)
-    {
-        return (value?.ToString() ?? string.Empty).Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 }

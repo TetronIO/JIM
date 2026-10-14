@@ -799,6 +799,34 @@ Describe 'Start-JIMSchedule' {
                 Should -Invoke Start-Sleep -Times 0 -Exactly
             }
         }
+
+        It 'Returns the execution as it stood at the last poll when the timeout is reached' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $executionId = [guid]::NewGuid()
+                $script:getCount = 0
+
+                Mock Start-Sleep { }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ executionId = $executionId }
+                    }
+
+                    # The first GET is the execution just queued; every poll after it finds the run under way.
+                    $script:getCount++
+                    if ($script:getCount -eq 1) {
+                        return [PSCustomObject]@{ id = $executionId; status = 'Queued'; currentStepIndex = 0; totalSteps = 3 }
+                    }
+                    [PSCustomObject]@{ id = $executionId; status = 'InProgress'; currentStepIndex = 1; totalSteps = 3 }
+                }
+
+                # A zero timeout expires at the first poll, after it has seen the run under way.
+                $result = Start-JIMSchedule -Id ([guid]::NewGuid()) -Wait -Timeout ([TimeSpan]::Zero) -Confirm:$false -WarningAction SilentlyContinue
+
+                $result.status | Should -Be 'InProgress'
+                $result.currentStepIndex | Should -Be 1
+            }
+        }
     }
 
     Context 'Help Documentation' {

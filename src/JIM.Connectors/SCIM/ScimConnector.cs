@@ -42,6 +42,12 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     // whether to try the provider's Bulk endpoint at all.
     private ScimBulkEndpointState? _bulkEndpointState;
 
+    /// <summary>
+    /// How long a request already under way may run on once the export run is cancelled, before JIM stops waiting for it
+    /// (#2083). Settable so a test can make it run out at once.
+    /// </summary>
+    internal TimeSpan ExportInFlightGracePeriod { get; init; } = ScimConnectorExport.DefaultInFlightGracePeriod;
+
     // Held for the length of a synchronisation run that probes this provider for generated values (#1941), apart
     // from the import and export clients so a probe session never disturbs either.
     private ScimHttpClient? _probeClient;
@@ -465,7 +471,8 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportDiscovery ??= await WithCertificateDiagnosisAsync(_exportSettings ?? [], Log.Logger,
             () => new ScimConnectorSchema(_exportClient, Log.Logger).DiscoverAsync(cancellationToken));
 
-        return await new ScimConnectorExport(_exportClient, _exportDiscovery, Log.Logger, _bulkEndpointState).ExecuteAsync(pendingExports, cancellationToken);
+        return await new ScimConnectorExport(_exportClient, _exportDiscovery, Log.Logger, _bulkEndpointState, ExportInFlightGracePeriod)
+            .ExecuteAsync(pendingExports, cancellationToken);
     }
 
     /// <returns>Always null: this connector has no close-time state to persist.</returns>

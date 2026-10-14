@@ -194,6 +194,16 @@ Each failure becomes a Run Profile Execution Item on the Activity, so the admini
 
 Succeed with feedback too: `ConnectedSystemExportResult.Succeeded(externalId, secondaryExternalId)` is how a system-assigned identifier (an `objectGUID`, an autonumber primary key) gets back into JIM's Connected System Object, so it can confirm the export on the next import.
 
+### Stopping when the run is cancelled
+
+JIM records a batch's results only once `ExportAsync` returns them, and reads a missing result as a success. So observe the cancellation token **only between Pending Exports** (#2083):
+
+- Once you start writing a Pending Export, finish it, and do not hand the run's token to that write: a write cut off part-way leaves JIM no result for something the target may already hold. Do bound the wait: the built-in Connectors give a write under way 30 seconds after the cancellation (`InFlightCancellation`), then abandon it and report it `Failed`, never as written.
+- Report every Pending Export you did not start as `ConnectedSystemExportResult.NotAttempted()`, and still return exactly one result per Pending Export. JIM records the results of the ones you wrote, puts the not-attempted ones back as they were (no attempt counted, no Run Profile Execution Item), and stops the run before the next batch.
+- Throw `OperationCanceledException` only before anything in the batch has been written. JIM then puts the whole batch back, so anything you had written is sent again by the next run, and a Create is refused as already existing.
+
+Finishing the whole batch regardless of the token is also compliant; it only makes a cancellation slower. The SQL and SCIM Connectors stop between objects; the LDAP Connector finishes the batch.
+
 ### Reporting a single object that failed to import
 
 Set `ErrorType` and `ErrorMessage` on the `ConnectedSystemImportObject` and return it in the result as normal. Each flagged object becomes a Run Profile Execution Item carrying your message, and the Activity completes with a warning (or fails, if every object was flagged).

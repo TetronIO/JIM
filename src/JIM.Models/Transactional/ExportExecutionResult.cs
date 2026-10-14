@@ -98,6 +98,17 @@ public class ExportExecutionResult
     public int ClassMembershipRefusedCount { get; set; }
 
     /// <summary>
+    /// Number of Pending Exports refused before being sent, because each carried more than one change for a
+    /// single-valued attribute (#2182).
+    /// </summary>
+    /// <remarks>
+    /// Counted apart from <see cref="ClassMembershipRefusedCount"/> because it points at a fault in JIM rather than at
+    /// configuration: export staging gives a single-valued attribute exactly one change, so an export carrying two
+    /// means staging or merging went wrong. Nothing an administrator configures should ever make it non-zero.
+    /// </remarks>
+    public int SingleValuedContradictionRefusedCount { get; set; }
+
+    /// <summary>
     /// Queued attribute changes withdrawn before the export ran because nothing authorised them any more: their export
     /// Synchronisation Rule was deleted or disabled, its Attribute Flow for the attribute was removed or disabled, or the
     /// account was no longer joined (it left the rule's scope with the Disconnect action).

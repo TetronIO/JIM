@@ -4,24 +4,27 @@
 function Get-JIMMatchingRule {
     <#
     .SYNOPSIS
-        Gets Object Matching Rules from JIM.
+        Gets the Object Matching Rules on a Connected System Object Type (simple mode).
 
     .DESCRIPTION
-        Retrieves Object Matching Rules for a Connected System Object Type from JIM.
-        Object Matching Rules define how objects from a Connected System are correlated
-        with Metaverse Objects during import (join) and export (provisioning) operations.
+        Gets the Object Matching Rules on a Connected System Object Type, which apply in simple mode: every rule on
+        the type, in the order JIM tries them, or one rule by ID.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type to get Matching Rules for.
+        The ID of the Connected System Object Type whose rules to get.
 
     .PARAMETER Id
-        The unique identifier of a specific Matching Rule to retrieve.
+        The ID of the rule to get.
 
     .OUTPUTS
-        PSCustomObject representing Matching Rule(s).
+        The rules, in the order JIM tries them, or the one rule.
+
+        JIM.ObjectTypeMatchingRule
+        ConnectedSystemId (int): The ID of the Connected System the rule belongs to, so the rule can be piped to
+            Set-JIMMatchingRule and Remove-JIMMatchingRule.
 
     .EXAMPLE
         Get-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10
@@ -39,7 +42,7 @@ function Get-JIMMatchingRule {
         Remove-JIMMatchingRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'ByObjectType')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ObjectTypeMatchingRule')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

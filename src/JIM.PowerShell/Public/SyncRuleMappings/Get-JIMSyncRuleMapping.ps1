@@ -4,31 +4,21 @@
 function Get-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Gets Synchronisation Rule Mappings (attribute flow rules) from JIM.
+        Gets a Synchronisation Rule's Attribute Flows.
 
     .DESCRIPTION
-        Retrieves attribute flow mappings for a Synchronisation Rule. These mappings define
-        how data flows between Connected System attributes and Metaverse attributes.
+        Gets the Attribute Flows (mappings) on a Synchronisation Rule: every one, or one by ID. Each says what it
+        reads, what it writes, and how.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
-        Also accepts pipeline input via the Id property.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER MappingId
-        Optional. The unique identifier of a specific mapping to retrieve.
-        If not specified, all mappings for the Synchronisation Rule are returned.
+        The ID of the mapping to get. Without it, every mapping on the rule comes back.
 
     .OUTPUTS
-        PSCustomObject representing Synchronisation Rule Mapping(s), the same shape from the list and from
-        -MappingId. A generated mapping's Generation property carries its uniqueness token settings, and:
-        - Generation.Exclusions: the IDs of the Connected Systems excluded from the value's availability
-          checks (empty when none is).
-        - Generation.Participants: every Connected System attribute the value is exported to, ordered by
-          Connected System name then attribute name. Each has ConnectedSystemId, ConnectedSystemName,
-          ConnectorName, ConnectedSystemObjectTypeAttributeId, AttributeName, IsExcluded, CanBeExcluded,
-          Check (JimRecordsAndProbe, JimRecordsOnly or NotChecked) and Reason (None, ConnectorCannotProbe,
-          AttributeNotProbed, NotTextValue, ExportedThroughExpression, CombinedWithOtherSources or Excluded).
-        Generation is null for every other mapping.
+        The rule's mappings, or the one mapping. On a generated mapping, Generation.Participants says where its
+        value is checked for availability, and how; Generation.Exclusions lists the Connected Systems left out.
 
     .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1
@@ -53,7 +43,7 @@ function Get-JIMSyncRuleMapping {
         Get-JIMSyncRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleMappingDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'List')]
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ById')]

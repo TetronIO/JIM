@@ -28,9 +28,19 @@ public class OptimisticExportApplyDelta
 
     /// <summary>
     /// Number of Pending Export attribute changes that resulted in no work (the value already
-    /// matched the Connected System Object's current state, or the change carried no value payload).
+    /// matched the Connected System Object's current state, the change carried no value payload, or
+    /// its attribute's data type is not one optimistic apply maps). A change that could not be
+    /// recorded is not counted here; see <see cref="UnrecordedChanges"/>.
     /// </summary>
     public int SkippedChangeCount { get; set; }
+
+    /// <summary>
+    /// The exported changes that could not be recorded, because each holds its value in another data
+    /// type's column than its attribute's (#2183). The target holds a value JIM has no record of, so a
+    /// Pending Export carrying one is not complete: a confirming import records what the target holds,
+    /// and an auto-confirmed export is left unconfirmed rather than confirmed.
+    /// </summary>
+    public List<OptimisticExportUnrecordedChange> UnrecordedChanges { get; set; } = [];
 
     /// <summary>
     /// Number of Reference attribute changes that were applied with <c>UnresolvedReferenceValue</c>

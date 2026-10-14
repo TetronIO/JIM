@@ -24,16 +24,16 @@ function Set-JIMConnectedSystemContainerScopeText {
         disconnects them. Preview what it would cost first with New-JIMConfigurationChangePreview.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER Text
         The Container Scope to apply. Empty text clears every selection and exclusion.
 
     .PARAMETER PassThru
-        If specified, returns the canonical text for the scope now in force.
+        Returns the Container Scope now in force, as canonical text.
 
     .OUTPUTS
-        If -PassThru is specified, returns the canonical Container Scope text as a string.
+        With -PassThru, the Container Scope now in force, one statement per line; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 1 -Text @"

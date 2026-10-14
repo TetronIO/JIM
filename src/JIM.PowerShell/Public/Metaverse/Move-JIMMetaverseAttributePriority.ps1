@@ -14,25 +14,26 @@ function Move-JIMMetaverseAttributePriority {
         duplicate-free. Optionally also updates the mapping's "Null is a value" flag.
 
     .PARAMETER AttributeId
-        The unique identifier of the Metaverse Attribute.
+        The ID of the Metaverse Attribute.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Metaverse Object Type that scopes the priority list.
+        The ID of the Metaverse Object Type the priority order applies to.
 
     .PARAMETER MappingId
-        The contributing Synchronisation Rule Mapping to move.
+        The ID of the contributing Attribute Flow mapping to move.
 
     .PARAMETER Position
-        The desired 1-based priority position (1 = highest priority).
+        The position to move it to, counting from 1 for the highest priority.
 
     .PARAMETER NullIsValue
-        When specified, also sets the moved mapping's "Null is a value" flag.
+        Sets the moved mapping's "Null is a value" flag; -NullIsValue:$false clears it. Omit it to leave the flag as
+        it is.
 
     .PARAMETER PassThru
-        If specified, returns the resulting priority order.
+        Returns the resulting priority order.
 
     .OUTPUTS
-        If -PassThru is specified, returns the resulting priority order.
+        With -PassThru, the resulting priority order; otherwise nothing.
 
     .EXAMPLE
         Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1
@@ -49,7 +50,7 @@ function Move-JIMMetaverseAttributePriority {
         Set-JIMMetaverseAttributePriority
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AttributePriorityOrderDto')]
     param(
         [Parameter(Mandatory)]
         [int]$AttributeId,

@@ -2434,13 +2434,22 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// How many times <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> has been called, so a test can prove the
-    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039).
+    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039), and the export run
+    /// only when a batch holds an Update a password could follow (#2158).
     /// </summary>
     public int GetMetaverseObjectIdsOwedPasswordCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> throws it (after counting the call), so a test can
+    /// prove a failed lookup is contained rather than failing the export batch (#2158).
+    /// </summary>
+    public Exception? FailOwedPasswordLookupWith { get; set; }
 
     public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
     {
         GetMetaverseObjectIdsOwedPasswordCallCount++;
+        if (FailOwedPasswordLookupWith != null)
+            throw FailOwedPasswordLookupWith;
 
         var asked = metaverseObjectIds.ToHashSet();
         var owed = _pendingPasswordChanges.Values
@@ -3107,6 +3116,23 @@ public class SyncRepository : ISyncRepository
             _pendingExports[pe.Id] = pe;
         }
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    {
+        // Only rows still Executing are written, as the database's guarded UPDATE does. This store shares instances with
+        // the caller, so a result the caller set in memory and has not persisted reads here as already recorded; the
+        // guard's real semantics are proven against PostgreSQL.
+        var released = new HashSet<Guid>();
+        foreach (var state in states)
+        {
+            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing)
+                continue;
+
+            state.ApplyTo(pe);
+            released.Add(pe.Id);
+        }
+        return Task.FromResult<IReadOnlySet<Guid>>(released);
     }
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()

@@ -12,20 +12,19 @@ function Add-JIMMetaverseObjectTypeAttribute {
         already bound to the Object Type is a no-op. Built-in attributes cannot be re-bound.
 
     .PARAMETER AttributeId
-        The unique identifier of the Metaverse Attribute to bind.
+        The ID of the attribute to bind.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Metaverse Object Type to bind the attribute to.
+        The ID of the Metaverse Object Type to bind it to.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the attribute's Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Attribute object.
+        Returns the updated attribute.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Attribute object.
+        With -PassThru, the updated attribute in full; otherwise nothing.
 
     .EXAMPLE
         Add-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1
@@ -43,7 +42,7 @@ function Add-JIMMetaverseObjectTypeAttribute {
         New-JIMMetaverseAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseAttributeDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

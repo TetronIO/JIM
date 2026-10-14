@@ -154,17 +154,20 @@ public static class ScimResourceWriter
 
     /// <summary>
     /// Takes one value away. Which value matters: removing the attribute where only one entry was meant
-    /// to go would take every group membership with it.
+    /// to go would take every group membership with it. A removal naming no value is a clear, and takes
+    /// every value, as a path-only PATCH remove does (RFC 7644 section 3.5.2.2).
     /// </summary>
     private static void Remove(JsonObject container, ScimFlattenedAttribute attribute, object? value)
     {
+        var naming = value != null;
+
         switch (attribute.Access)
         {
-            case ScimValueAccess.Simple when attribute.AttributePlurality == AttributePlurality.MultiValued:
+            case ScimValueAccess.Simple when naming && attribute.AttributePlurality == AttributePlurality.MultiValued:
                 RemoveMatching(container[attribute.SourceAttributeName] as JsonArray, entry => Matches(entry, value));
                 break;
 
-            case ScimValueAccess.ComplexReference when attribute.AttributePlurality == AttributePlurality.MultiValued:
+            case ScimValueAccess.ComplexReference when naming && attribute.AttributePlurality == AttributePlurality.MultiValued:
                 RemoveMatching(container[attribute.SourceAttributeName] as JsonArray,
                     entry => entry is JsonObject reference && Matches(reference[ValueSubAttribute], value));
                 break;

@@ -22,18 +22,17 @@ function Remove-JIMMetaverseAttribute {
         Built-in attributes cannot be deleted.
 
     .PARAMETER Id
-        The unique identifier of the Attribute to delete.
+        The ID of the attribute to delete.
 
     .PARAMETER InputObject
-        Attribute object to delete (from pipeline).
+        An attribute from the pipeline, for example from Get-JIMMetaverseAttribute.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the deletion, recorded in the attribute's Configuration Change History.
 
     .PARAMETER Force
-        Skips the confirmation prompt. The server-side type-the-name safeguard is still satisfied
-        by the cmdlet; -Force only suppresses the interactive PowerShell prompt.
+        Suppresses the confirmation prompt. The cmdlet still gives the name confirmation JIM requires before it
+        removes configuration that uses the attribute.
 
     .OUTPUTS
         None.
@@ -60,6 +59,7 @@ function Remove-JIMMetaverseAttribute {
         Set-JIMMetaverseAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

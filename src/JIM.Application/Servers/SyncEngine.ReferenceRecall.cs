@@ -18,10 +18,11 @@ namespace JIM.Application.Servers;
 public partial class SyncEngine
 {
     /// <summary>
-    /// Decides the removal change a recall stages for one matched target row: a multi-valued source
-    /// synthesises a Remove carrying the resolved value (the connector must be told which value to remove),
-    /// a single-valued source synthesises a null-clearing Update (the same shape full evaluation produces),
-    /// and a multi-valued removal with no resolvable value stages nothing, because a Remove that names no
+    /// Decides the removal change a recall stages for one matched target row. Its shape follows the target
+    /// attribute's plurality, as full evaluation's does (#2182): where both the source and the target are
+    /// multi-valued, a Remove carrying the resolved value (the connector must be told which value to remove);
+    /// everywhere else a null-clearing Update, since a single-valued target is told what it holds rather than which
+    /// value left it. A multi-valued removal with no resolvable value stages nothing, because a Remove that names no
     /// value cannot be exported. The orchestrator counts a null as a dropped change.
     /// </summary>
     /// <param name="flow">The direct reference flow whose target attribute still holds the deleted value.</param>
@@ -31,7 +32,8 @@ public partial class SyncEngine
         ReferenceRecallDirectFlow flow,
         string? resolvedRemovalValue)
     {
-        if (flow.SourcePlurality == AttributePlurality.MultiValued)
+        if (flow.SourcePlurality == AttributePlurality.MultiValued &&
+            flow.TargetAttribute.AttributePlurality == AttributePlurality.MultiValued)
         {
             if (resolvedRemovalValue == null)
                 return null;
@@ -48,8 +50,8 @@ public partial class SyncEngine
             };
         }
 
-        // Single-valued reference removal: an all-null clearing Update. Staged only because the target still
-        // holds the deleted reference (the orchestrator's existence query matched it).
+        // Any other removal is an all-null clearing Update. Staged only because the target still holds the deleted
+        // reference (the orchestrator's existence query matched it).
         return new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),

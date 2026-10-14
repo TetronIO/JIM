@@ -19,7 +19,9 @@ function Set-JIMConnectedSystemObjectPassword {
         Activity. A system that was unreachable is retried on JIM's own clock; one that refused the password parks
         it, with its own words in the target's Message, for you to look at. A Parked target is reported as a
         non-terminating error as well, so a script that stops on errors stops on a refusal; the result is written
-        to the pipeline first either way.
+        to the pipeline first either way. A system that takes the password but cannot apply everything asked of it
+        (OpenLDAP and 389 Directory Server cannot require a change at the next sign-in, for example) reports the
+        target as Set with CompletedWithWarning, says in its Message what was applied, and is reported as a warning.
 
         This is the automation counterpart of the Set Password action on a Connected System Object in the
         administration portal, for the new starter about to sign in for the first time, the account whose
@@ -37,10 +39,10 @@ function Set-JIMConnectedSystemObjectPassword {
         off; you named it.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System the account lives in.
+        The ID of the Connected System the account is in.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object.
+        The ID of the Connected System Object.
 
     .PARAMETER Password
         The password to set, as a SecureString. Encrypted before JIM stores it and held only until delivered;
@@ -48,9 +50,8 @@ function Set-JIMConnectedSystemObjectPassword {
 
     .PARAMETER Generate
         Has JIM generate a password satisfying the policy it discovered on the Connected System, instead of you
-        supplying one. Use this rather than inventing a password in your own script: JIM knows what the target
-        demands, and a hand-rolled generator rediscovers the passphrase trap, where three words offer two
-        character categories against a directory that wants three.
+        supplying one. Use this rather than inventing a password in your own script: JIM knows what the Connected
+        System demands.
 
         The generated password is returned on the result's GeneratedPassword property as a SecureString. That is
         the only chance to capture it.
@@ -60,11 +61,14 @@ function Set-JIMConnectedSystemObjectPassword {
         Valid values: RequireChangeAtNextSignIn, ExpiresAccordingToTargetPolicy, NeverExpires.
         Defaults to RequireChangeAtNextSignIn, which is the right default for a password somebody else chose.
         A Connected System that cannot honour the choice applies what it can and says so in the target's Message.
+        On Active Directory and Samba AD, NeverExpires sets Password never expires and the other two clear it; a
+        Synchronisation Rule that writes the account's userAccountControl with Enforce State on puts its value back at
+        the next synchronisation, and the target's Message says so.
 
     .PARAMETER EnableAccount
         Enables the account as part of setting the password, whatever its Attribute Flows say. Omit it to leave the
         account's enabled state as it is, which is what a reset on an already-enabled account should do; the one
-        exception is a new Active Directory account JIM created disabled only until it had a password, which the
+        exception is an Active Directory account whose enable JIM held back until it had a password, which the
         password enables as its Attribute Flow asks. Directories that refuse to enable an account without a
         compliant password need the password first, which is why this belongs here.
 
@@ -75,33 +79,15 @@ function Set-JIMConnectedSystemObjectPassword {
         the Activity and the person's Password tab once it lands.
 
     .PARAMETER Force
-        Skips the confirmation prompt.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
-        One PSCustomObject describing the change, in the same shape Set-JIMMetaverseObjectPassword returns:
+        One object describing the change: the Activity that records it, and where delivery to the account stands. No
+        property carries the password you supplied.
 
-        | Property          | Description                                                                          |
-        |-------------------|--------------------------------------------------------------------------------------|
-        | ActivityId        | The Activity recording the change; its child holds the account's outcome             |
-        | Origin            | Always Explicit: the account was named                                               |
-        | Settled           | Whether the account had reached an outcome you need not wait on when this returned   |
-        | Targets           | One entry, for this account's Connected System, described below                      |
-        | GeneratedPassword | The password JIM produced, as a SecureString; present only with -Generate            |
-
-        The entry under Targets:
-
-        | Property                | Description                                                                    |
-        |-------------------------|--------------------------------------------------------------------------------|
-        | ConnectedSystemId       | The Connected System                                                           |
-        | ConnectedSystemName     | Its name                                                                       |
-        | ConnectedSystemObjectId | The account                                                                    |
-        | Enabled                 | Whether the system is taking propagated passwords; this account is delivered to either way |
-        | State                   | Queued, Delivering, Set, Retrying, Parked, Expired or Cancelled                |
-        | NextAttemptAt           | When the next attempt falls due, for a Retrying target                         |
-        | Message                 | The system's own words on its most recent outcome                              |
-        | AttemptCount            | How many delivery attempts this account has had                                |
-
-        No property carries the password you supplied.
+        JIM.SetConnectedSystemObjectPasswordResult
+        GeneratedPassword (securestring): The password JIM generated, present only with -Generate. This is the only
+            chance to read it.
 
     .EXAMPLE
         $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
@@ -138,7 +124,7 @@ function Set-JIMConnectedSystemObjectPassword {
         Set-JIMSyncRuleInitialPassword
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'SuppliedPassword')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SetConnectedSystemObjectPasswordResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
@@ -249,6 +235,13 @@ function Set-JIMConnectedSystemObjectPassword {
 
         foreach ($parkedTarget in @($result.Targets | Where-Object { $_.State -eq 'Parked' })) {
             Write-Error -Message "$($parkedTarget.ConnectedSystemName) refused the password: $($parkedTarget.Message)" -TargetObject $result
+        }
+
+        # A password set where the system could not apply everything asked of it (an expiry behaviour OpenLDAP and
+        # 389 Directory Server have no equivalent for) is no refusal, so not an error. It is still something a
+        # script telling the person "you will be asked to change it" has to hear, in the words of the delivery.
+        foreach ($warnedTarget in @($result.Targets | Where-Object { $_.CompletedWithWarning })) {
+            Write-Warning "$($warnedTarget.ConnectedSystemName) set the password, with a warning: $($warnedTarget.Message)"
         }
 
         if ($null -ne $result.PSObject.Properties['Settled'] -and -not $result.Settled -and -not ($PSBoundParameters.ContainsKey('Wait') -and $Wait -eq 0)) {

@@ -674,6 +674,9 @@ public partial class SyncRepository : ISyncRepository
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
 
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+        => _repo.ConnectedSystems.ReleaseExecutingPendingExportsAsync(states);
+
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
 

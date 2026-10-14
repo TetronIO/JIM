@@ -237,30 +237,6 @@ public class DynamicExpressoEvaluatorTests
         Assert.That(result, Is.False);
     }
 
-    [Test]
-    public void Evaluate_CollectionContains_ReturnsTrueWhenFoundAsync()
-    {
-        var context = new ExpressionContext(
-            new Dictionary<string, object?>(),
-            new Dictionary<string, object?> { { "memberOf", new List<string> { "CN=Users", "CN=Admins", "CN=Developers" } } });
-
-        var result = _evaluator.Evaluate("CollectionContains(cs[\"memberOf\"], \"CN=Admins\")", context);
-
-        Assert.That(result, Is.True);
-    }
-
-    [Test]
-    public void Evaluate_CollectionContains_ReturnsFalseWhenNotFoundAsync()
-    {
-        var context = new ExpressionContext(
-            new Dictionary<string, object?>(),
-            new Dictionary<string, object?> { { "memberOf", new List<string> { "CN=Users", "CN=Developers" } } });
-
-        var result = _evaluator.Evaluate("CollectionContains(cs[\"memberOf\"], \"CN=Admins\")", context);
-
-        Assert.That(result, Is.False);
-    }
-
     #endregion
 
     #region Conditional Function Tests
@@ -482,8 +458,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"coursesCompleted\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "SOFT101", "SOFT201", "SEC101" }));
     }
@@ -497,8 +473,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"tags\"], \",\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "admin", "user", "readonly" }));
     }
@@ -512,8 +488,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
     }
 
@@ -526,8 +502,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(3));
         Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
     }
@@ -541,8 +517,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.Empty);
     }
 
@@ -555,8 +531,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Is.Empty);
     }
 
@@ -569,8 +545,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(1));
         Assert.That(array[0], Is.EqualTo("SingleValue"));
     }
@@ -584,8 +560,8 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("Split(cs[\"values\"], null)", context);
 
-        Assert.That(result, Is.InstanceOf<string[]>());
-        var array = (string[])result!;
+        Assert.That(result, Is.InstanceOf<ExpressionValues>());
+        var array = ((ExpressionValues)result!).ToArray();
         Assert.That(array, Has.Length.EqualTo(1));
         Assert.That(array[0], Is.EqualTo("A|B|C"));
     }
@@ -683,7 +659,7 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "original", "A|B|C" } });
 
         var splitResult = _evaluator.Evaluate("Split(cs[\"original\"], \"|\")", context);
-        Assert.That(splitResult, Is.InstanceOf<string[]>());
+        Assert.That(splitResult, Is.InstanceOf<ExpressionValues>());
 
         var context2 = new ExpressionContext(
             new Dictionary<string, object?>(),
@@ -894,6 +870,30 @@ public class DynamicExpressoEvaluatorTests
         var after = DateTime.UtcNow;
         Assert.That(result, Is.InstanceOf<DateTime>());
         Assert.That((DateTime)result!, Is.InRange(before, after));
+    }
+
+    [Test]
+    public void Evaluate_NowWithContextClock_ReturnsTheContextsInstant()
+    {
+        var asOf = new DateTime(2027, 2, 14, 9, 30, 0, DateTimeKind.Utc);
+        var context = new ExpressionContext { NowUtc = asOf };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_evaluator.Evaluate("Now()", context), Is.EqualTo(asOf));
+            Assert.That(_evaluator.Evaluate("Today()", context), Is.EqualTo(asOf.Date));
+        }
+    }
+
+    [Test]
+    public void Evaluate_NowAfterAContextClock_ReturnsTheRealTimeAgain()
+    {
+        _evaluator.Evaluate("Now()", new ExpressionContext { NowUtc = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+        var before = DateTime.UtcNow;
+
+        var result = _evaluator.Evaluate("Now()", new ExpressionContext());
+
+        Assert.That((DateTime)result!, Is.GreaterThanOrEqualTo(before));
     }
 
     [Test]
@@ -1334,10 +1334,12 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "AccountExpires", 12345 } },  // int, not a date type
             new Dictionary<string, object?>());
 
-        var ex = Assert.Throws<ArgumentException>(() =>
+        // Every failure an expression causes is the one expression error (#2153, N5), keeping the function's message.
+        var ex = Assert.Throws<ExpressionEvaluationException>(() =>
             _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context));
 
-        Assert.That(ex?.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
+        Assert.That(ex!.InnerException, Is.TypeOf<ArgumentException>());
+        Assert.That(ex!.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
     }
 
     [Test]
@@ -1390,10 +1392,11 @@ public class DynamicExpressoEvaluatorTests
             new Dictionary<string, object?> { { "FileTime", DateTime.UtcNow } },  // DateTime, not a numeric type
             new Dictionary<string, object?>());
 
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ExpressionEvaluationException>(() =>
             _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context));
 
-        Assert.That(ex?.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
+        Assert.That(ex!.InnerException, Is.TypeOf<ArgumentException>());
+        Assert.That(ex!.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
     }
 
     [Test]
@@ -1469,12 +1472,14 @@ public class DynamicExpressoEvaluatorTests
     #region Expression Length Ceiling Tests (OWASP #500 guardrail)
 
     [Test]
-    public void Evaluate_ExpressionExceedsMaxLength_ThrowsArgumentException()
+    public void Evaluate_ExpressionExceedsMaxLength_ThrowsExpressionEvaluationException()
     {
         var context = new ExpressionContext();
         var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength + 1);
 
-        var ex = Assert.Throws<ArgumentException>(() => _evaluator.Evaluate(expression, context));
+        // An over-long expression is the administrator's configuration failing, so it is the one expression error
+        // (#2153, N5) every consumer reports, never an unhandled error.
+        var ex = Assert.Throws<ExpressionEvaluationException>(() => _evaluator.Evaluate(expression, context));
 
         Assert.That(ex?.Message, Does.Contain(DynamicExpressoEvaluator.MaxExpressionLength.ToString("N0")));
     }

@@ -352,6 +352,45 @@ public class ScimBulkExportTests
     }
     #endregion
 
+    #region cancellation
+    /// <summary>
+    /// #2083: a run cancelled while a bulk request is under way lets it finish and records what it applied, and reports
+    /// the operations of the bulk requests never sent as not attempted.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RunCancelledDuringABulkRequest_RecordsWhatItAppliedAndReportsTheUnsentOperationsNotAttemptedAsync()
+    {
+        var provider = BulkProvider();
+        provider.Options.BulkMaxOperations = 2;
+        using var run = new CancellationTokenSource();
+        using var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/Bulk", StringComparison.Ordinal))
+                run.Cancel();
+            return provider.Respond(request);
+        });
+        var connector = new StubbedTransportScimConnector(handler);
+        connector.OpenExportConnection(BulkEnabled(), persistedConnectorData: null);
+
+        List<ConnectedSystemExportResult> results;
+        try
+        {
+            results = await connector.ExportAsync([NewUser("ada"), NewUser("grace"), NewUser("katherine")], run.Token, new RecordingConnectorProgress());
+        }
+        finally
+        {
+            connector.CloseExportConnection();
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(BulkRequests(handler), Has.Count.EqualTo(1));
+            Assert.That(results.Take(2).Select(r => r.Success), Is.All.True, "the bulk request under way finishes and its outcomes are recorded");
+            Assert.That(results[2].IsNotAttempted, Is.True);
+        }
+    }
+    #endregion
+
     #region when the bulk request itself fails
     [Test]
     public async Task ExportAsync_Bulk_WhenTheProviderNeverImplementedTheEndpoint_FallsBackToPerObjectRequestsAsync()

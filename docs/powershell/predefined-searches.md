@@ -361,7 +361,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Metav
 | `GroupId` | `int` | Yes |  | The ID of the criteria group to add the criterion to. Accepts pipeline input by property name. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
+| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. Every type also takes HasValue and HasNoValue, which test whether the attribute holds a value at all and take no value. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue` or `HasNoValue`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
@@ -424,7 +424,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 
 ## Set-JIMPredefinedSearchCriterion
 
-Replaces a criterion's attribute, operator and value. It is a full update, taking the same parameters as [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion).
+Replaces a criterion's attribute, operator and value. It is a full update, taking the same parameters as [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion). Its case sensitivity is the exception: without `-CaseSensitive`, the criterion keeps its current setting.
 
 <!-- BEGIN GENERATED: Set-JIMPredefinedSearchCriterion -->
 ### Syntax
@@ -446,7 +446,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 | `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name, `CriterionId` or `Id`. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
+| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. Every type also takes HasValue and HasNoValue, which test whether the attribute holds a value at all and take no value. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue` or `HasNoValue`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
@@ -454,7 +454,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 | `DateTimeValue` | `datetime` | No |  | The value to compare a DateTime attribute with, read as UTC. |
 | `BoolValue` | `bool` | No |  | The value to compare a Boolean attribute with. |
 | `GuidValue` | `guid` | No |  | The value to compare a Guid attribute with. |
-| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case. `$false` ignores case; it does when omitted. |
+| `CaseSensitive` | `bool` | No |  | Whether a Text comparison respects case: `$false` ignores it. When omitted, the criterion keeps its current setting. |
 | `ValueMode` | `string` | No |  | For a DateTime attribute: Absolute compares with `-DateTimeValue`, and is the default; Relative compares with a date worked out from now, given by `-RelativeCount`, `-RelativeUnit` and `-RelativeDirection`, and cannot be combined with `-DateTimeValue`. One of `Absolute` or `Relative`. |
 | `RelativeCount` | `int` | No |  | How many units from now, for a Relative comparison; zero or more. |
 | `RelativeUnit` | `string` | No |  | The unit of `-RelativeCount`. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
@@ -515,6 +515,6 @@ Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -Criterion
 
 ## See also
 
-- [Search-JIMMetaverseObject](metaverse.md): run a Predefined Search to return matching objects
-- [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects and schema
+- [Search-JIMMetaverseObject](metaverse.md#search-jimmetaverseobject): run a Predefined Search to return matching objects
+- [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects
 - [History](history.md): retrieve a Predefined Search's Configuration Change History with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch`

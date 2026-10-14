@@ -14,31 +14,97 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class PendingExportDetailDto
 {
+    /// <summary>
+    /// The ID of the Pending Export.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System the change is for.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The name of that Connected System.
+    /// </summary>
     public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the Pending Export creates, updates or deletes the object.
+    /// </summary>
     public PendingExportChangeType ChangeType { get; set; }
+
+    /// <summary>
+    /// Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import),
+    /// ExportNotConfirmed (to be retried), Failed (out of retries), or Parked (waiting on a decision about a
+    /// generated value).
+    /// </summary>
     public PendingExportStatus Status { get; set; }
+
+    /// <summary>
+    /// When the Pending Export was created (UTC).
+    /// </summary>
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// How many export attempts have failed.
+    /// </summary>
     public int ErrorCount { get; set; }
+
+    /// <summary>
+    /// How many failed attempts are allowed before the Pending Export is marked Failed.
+    /// </summary>
     public int MaxRetries { get; set; }
+
+    /// <summary>
+    /// When the last export attempt was made (UTC); null before the first.
+    /// </summary>
     public DateTime? LastAttemptedAt { get; set; }
+
+    /// <summary>
+    /// When the next export attempt is due (UTC); null when none is.
+    /// </summary>
     public DateTime? NextRetryAt { get; set; }
+
+    /// <summary>
+    /// The error from the last failed attempt; null when none has failed.
+    /// </summary>
     public string? LastErrorMessage { get; set; }
+
+    /// <summary>
+    /// Whether any reference change cannot be written yet, because its target has no object in the Connected
+    /// System.
+    /// </summary>
     public bool HasUnresolvedReferences { get; set; }
 
     /// <summary>
     /// The target Connected System Object, if one exists.
     /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// The target Connected System Object's display name; null when there is no target yet, or it has none.
+    /// </summary>
     public string? ConnectedSystemObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The name of the target Connected System Object's Object Type.
+    /// </summary>
     public string? ConnectedSystemObjectTypeName { get; set; }
 
     /// <summary>
     /// The source Metaverse Object that triggered this export.
     /// </summary>
     public Guid? SourceMetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The source Metaverse Object's display name; null when there is none.
+    /// </summary>
     public string? SourceMetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The name of the source Metaverse Object's Metaverse Object Type.
+    /// </summary>
     public string? SourceMetaverseObjectTypeName { get; set; }
 
     /// <summary>
@@ -53,17 +119,18 @@ public class PendingExportDetailDto
     public List<AttributeChangeSummaryDto>? AttributeChangeSummaries { get; set; }
 
     /// <summary>
-    /// The reference changes (among <see cref="AttributeChanges"/>) that have not been written yet, each with
-    /// the reason, computed against the target's current state when the detail is read. Empty when the
-    /// Pending Export has no unresolved references.
+    /// The reference changes not written yet, each with the reason, worked out against the Connected System as it
+    /// stands when the Pending Export is read. Empty when there are none.
     /// </summary>
     public List<PendingExportUnresolvedReferenceDto> UnresolvedReferences { get; set; } = new();
 
     /// <summary>
-    /// Where the value queued for each Connected System attribute originated (#399's "Value from" column), one
-    /// entry per attribute whose export mapping could be resolved. Empty when the Pending Export has no source
-    /// Metaverse Object (a delete).
+    /// Where the value queued for each Connected System attribute came from, one entry per attribute whose export
+    /// mapping can be resolved. Empty for a delete, which has no source Metaverse Object.
     /// </summary>
+    /// <remarks>
+    /// #399's "Value from" column.
+    /// </remarks>
     public List<PendingExportValueSourceDto> ValueSources { get; set; } = new();
 
     public static PendingExportDetailDto FromDetailResult(PendingExportDetailResult result)
@@ -183,15 +250,55 @@ public class AttributeChangeSummaryDto
 /// </summary>
 public class PendingExportAttributeValueChangeDto
 {
+    /// <summary>
+    /// The ID of the change.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System attribute the change writes.
+    /// </summary>
     public int AttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that attribute.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// What the change does to the attribute: Add a value, Update it, Remove a value, or RemoveAll values.
+    /// </summary>
     public PendingExportAttributeChangeType ChangeType { get; set; }
+
+    /// <summary>
+    /// Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import),
+    /// ExportedNotConfirmed (to be retried), or Failed.
+    /// </summary>
     public PendingExportAttributeChangeStatus Status { get; set; }
+
+    /// <summary>
+    /// The value of a Text attribute; null otherwise.
+    /// </summary>
     public string? StringValue { get; set; }
+
+    /// <summary>
+    /// The value of a DateTime attribute (UTC); null otherwise.
+    /// </summary>
     public DateTime? DateTimeValue { get; set; }
+
+    /// <summary>
+    /// The value of a Number attribute; null otherwise.
+    /// </summary>
     public int? IntValue { get; set; }
+
+    /// <summary>
+    /// The value of a LongNumber attribute; null otherwise.
+    /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The value of a Decimal attribute; null otherwise.
+    /// </summary>
     public decimal? DecimalValue { get; set; }
 
     /// <summary>
@@ -200,14 +307,29 @@ public class PendingExportAttributeValueChangeDto
     /// </summary>
     public byte[]? ByteValue { get; set; }
 
+    /// <summary>
+    /// The value of a Guid attribute; null otherwise.
+    /// </summary>
     public Guid? GuidValue { get; set; }
+
+    /// <summary>
+    /// The value of a Boolean attribute; null otherwise.
+    /// </summary>
     public bool? BoolValue { get; set; }
+
+    /// <summary>
+    /// For a reference, the Connected System's identifier for the object it refers to, as text; null otherwise.
+    /// </summary>
     public string? UnresolvedReferenceValue { get; set; }
+
+    /// <summary>
+    /// How many times the change has been exported.
+    /// </summary>
     public int ExportAttemptCount { get; set; }
 
     /// <summary>
-    /// The export Synchronisation Rule whose mapping produced this value. Null when the contributing rule
-    /// has since been deleted; <see cref="SyncRuleName"/> is the denormalised record that survives it.
+    /// The ID of the export Synchronisation Rule whose mapping produced the change; null when that rule has since
+    /// been deleted. SyncRuleName survives it.
     /// </summary>
     public int? SyncRuleId { get; set; }
 
@@ -242,8 +364,7 @@ public class PendingExportAttributeValueChangeDto
 }
 
 /// <summary>
-/// API representation of where the value queued for one Connected System attribute on a Pending Export
-/// originated (#399's "Value from" column).
+/// Where the value queued for one Connected System attribute on a Pending Export came from.
 /// </summary>
 public class PendingExportValueSourceDto
 {

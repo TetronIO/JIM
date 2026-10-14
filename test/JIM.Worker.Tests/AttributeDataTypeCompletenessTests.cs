@@ -3,7 +3,6 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
-using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Search;
@@ -179,17 +178,6 @@ public class AttributeDataTypeCompletenessTests
     }
 
     [TestCaseSource(nameof(ValueBearingTypes))]
-    public void DriftDetectionService_BuildAttributeDictionary_ValueBearingType_ExposesValue(AttributeDataType type)
-    {
-        // Act
-        var dictionary = DriftDetectionService.BuildAttributeDictionary(BuildMvoWithValue(type));
-
-        // Assert
-        Assert.That(dictionary["attr"], Is.Not.Null,
-            $"{type} must be exposed to Drift Detection expression evaluation; a null here means a missing dispatch arm.");
-    }
-
-    [TestCaseSource(nameof(ValueBearingTypes))]
     public void SyncEngine_ValueExistsOnCso_MatchingValue_ReturnsTrue(AttributeDataType type)
     {
         // Arrange
@@ -255,7 +243,7 @@ public class AttributeDataTypeCompletenessTests
     [TestCaseSource(nameof(CriteriaSupportedTypes))]
     public void SearchComparisonOperators_ValidOperatorsFor_CriteriaSupportedType_ReturnsOperators(AttributeDataType type)
     {
-        Assert.That(SearchComparisonOperators.ValidOperatorsFor(type), Is.Not.Empty,
+        Assert.That(SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.Scoping), Is.Not.Empty,
             $"{type} must offer search/scoping comparison operators.");
     }
 
@@ -266,7 +254,7 @@ public class AttributeDataTypeCompletenessTests
         // so a future member landing in the wrong bucket is a conscious choice, not an accident
         var unsupported = Enum.GetValues<AttributeDataType>().Except(CriteriaSupportedTypes);
         foreach (var type in unsupported)
-            Assert.That(SearchComparisonOperators.ValidOperatorsFor(type), Is.Empty,
+            Assert.That(SearchComparisonOperators.ValidOperatorsFor(type, CriterionContext.Scoping), Is.Empty,
                 $"{type} unexpectedly offers criteria operators; if deliberate, move it to CriteriaSupportedTypes.");
     }
 }

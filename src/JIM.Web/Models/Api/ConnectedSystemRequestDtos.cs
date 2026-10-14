@@ -232,6 +232,17 @@ public class UpdateConnectedSystemAttributeRequest
     /// values, because changing the type would reinterpret data already imported under the old one.
     /// </remarks>
     public AttributeDataType? Type { get; set; }
+
+    /// <summary>
+    /// Declares whether this attribute's values are case-exact: true when values differing only in case identify
+    /// different things, false when they identify the same thing. Omitted or null leaves the declaration
+    /// unchanged. Only Text attributes can be declared case-exact.
+    /// </summary>
+    /// <remarks>
+    /// Setting it records the declaration as the administrator's, so a schema refresh no longer restates it from
+    /// the Connected System's schema (#2051). Accepted on every Connector.
+    /// </remarks>
+    public bool? CaseExact { get; set; }
 }
 
 /// <summary>

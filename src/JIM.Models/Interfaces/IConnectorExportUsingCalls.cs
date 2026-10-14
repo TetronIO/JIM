@@ -20,7 +20,14 @@ public interface IConnectorExportUsingCalls
     /// For Create operations, the ConnectedSystemExportResult should include the system-assigned ExternalId (e.g., objectGUID).
     /// </summary>
     /// <param name="pendingExports">The list of Pending Exports to process.</param>
-    /// <param name="cancellationToken">Cancellation token to cancel the export operation.</param>
+    /// <param name="cancellationToken">
+    /// The run's cancellation (#2083). Observe it only between Pending Exports: once you start writing one, finish it and
+    /// do not hand the token to that write. Report every Pending Export you did not start as
+    /// <see cref="ConnectedSystemExportResult.NotAttempted"/>, and always return exactly one result per Pending Export:
+    /// JIM reads a missing result as a success. Throw <see cref="OperationCanceledException"/> only before anything in the
+    /// batch has been written, because JIM records nothing from a batch that throws, so anything it had written is sent
+    /// again by the next run. Finishing the whole batch regardless of the token is also compliant.
+    /// </param>
     /// <param name="progress">Narrates what you are doing, and moves between the phases you declared through <see cref="IConnectorPhases"/> (i.e. "Creating parent containers..."). Never null. JIM already reports per-item progress around this call, so reserve this for pre-flight or bulk work that per-item counts do not cover. The vocabulary is yours; emit on phase boundaries rather than per item.</param>
     /// <returns>A list of ConnectedSystemExportResult objects corresponding to each Pending Export.</returns>
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress);

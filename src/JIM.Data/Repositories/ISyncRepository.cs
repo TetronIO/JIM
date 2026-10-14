@@ -1254,6 +1254,12 @@ public interface ISyncRepository
     /// held, one whose account is not is released. Expired and Cancelled changes are never delivered, so they owe
     /// nothing.
     /// </para>
+    /// <para>
+    /// Asked too by the export run, once per batch holding an Update to an account joined to a Metaverse Object, sent
+    /// through a Connector that can set passwords (#2158): an Update to an account still owed one is flagged
+    /// (<c>PendingExport.InitialPasswordFollows</c>), so an enable the target refuses for want of a password is held
+    /// for the delivery to complete. The same test as the hold, so the flag and the hold never disagree.
+    /// </para>
     /// </summary>
     Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
 
@@ -1626,6 +1632,17 @@ public interface ISyncRepository
     /// Uses raw SQL in production for efficiency.
     /// </summary>
     Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Writes each retry state onto its Pending Export, but only while that row is still Executing, and returns the ids
+    /// it wrote (#2083). The inverse of <see cref="MarkPendingExportsAsExecutingAsync"/>, used when a batch is cancelled
+    /// or fails: an export the run never got to goes back as it was before the batch was sent, and one that failed gets
+    /// one failed attempt. A row whose result was already recorded has left Executing, so it is never overwritten, and a
+    /// Create whose success was recorded is never put back to be sent again. Only the Pending Export's own retry columns
+    /// are written; its attribute changes are left as they are.
+    /// </summary>
+    /// <returns>The ids of the Pending Exports written.</returns>
+    Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states);
 
     /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in

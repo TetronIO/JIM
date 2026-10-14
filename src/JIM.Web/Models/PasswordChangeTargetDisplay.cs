@@ -32,6 +32,24 @@ public static class PasswordChangeTargetDisplay
     public static bool IsInFlight(PasswordChangeTargetState state) =>
         state is PasswordChangeTargetState.Queued or PasswordChangeTargetState.Delivering;
 
+    /// <summary>
+    /// Whether the target took the password but could not apply everything asked of it (#2159): set, with a warning.
+    /// </summary>
+    public static bool IsSetWithWarning(PasswordChangeTargetOutcome outcome) =>
+        outcome.State == PasswordChangeTargetState.Set && outcome.CompletedWithWarning;
+
+    /// <summary>
+    /// The icon beside a target, which for a password set with a warning is the warning's rather than the tick.
+    /// </summary>
+    public static string Icon(PasswordChangeTargetOutcome outcome) =>
+        IsSetWithWarning(outcome) ? Icons.Material.Filled.WarningAmber : Icon(outcome.State);
+
+    /// <summary>
+    /// The colour beside a target, which for a password set with a warning is amber rather than green.
+    /// </summary>
+    public static Color Colour(PasswordChangeTargetOutcome outcome) =>
+        IsSetWithWarning(outcome) ? Color.Warning : Colour(outcome.State);
+
     public static string Icon(PasswordChangeTargetState state) => state switch
     {
         PasswordChangeTargetState.Set => Icons.Material.Filled.Check,
@@ -65,7 +83,11 @@ public static class PasswordChangeTargetDisplay
         switch (outcome.State)
         {
             case PasswordChangeTargetState.Set:
-                return "Password set";
+                // Set with a warning speaks in its Activity's words, which say what the system applied in place of
+                // what was asked (#2159); the plain sentence would claim more than happened.
+                return outcome.CompletedWithWarning && !string.IsNullOrWhiteSpace(outcome.Message)
+                    ? outcome.Message.Trim()
+                    : "Password set";
 
             case PasswordChangeTargetState.Delivering:
                 return "Delivering now";

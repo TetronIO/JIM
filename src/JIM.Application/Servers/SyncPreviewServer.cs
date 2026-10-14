@@ -1047,22 +1047,7 @@ public class SyncPreviewServer
 
         foreach (var (syncRuleId, syncRuleName, flowError) in flowErrors)
         {
-            // The ternary here used to collapse ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique
-            // Value Generation, #242) into the same "a required input has no value" message; the latter is a
-            // different failure (the base Expression evaluated fine but returned more than one value), so it
-            // gets its own accurate message, matching the worker's own wording (DescribeAttributeFlowError).
-            var (code, detail) = flowError.Kind switch
-            {
-                AttributeFlowErrorKind.MultiValuedToSingleValued => (
-                    SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                    $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
-                AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
-                    SyncPreviewMessageCode.ExpressionEvaluationError,
-                    $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
-                _ => (
-                    SyncPreviewMessageCode.ExpressionEvaluationError,
-                    $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
-            };
+            var (code, detail) = DescribeFlowError(flowError);
 
             // Only the derived pass stamps the error with its hosting rule (#1750); named as the worker names it.
             if (flowError.SyncRuleName != null)
@@ -1252,6 +1237,40 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// Opens the message of an error that stops Drift Detection checking an object (#2180), as the run's error does.
+    /// </summary>
+    private const string DriftNotCheckedPreviewPrefix = "Drift Detection could not check this object, so no correction would be staged. ";
+
+    /// <summary>
+    /// How the preview words an Attribute Flow error, matching the worker's own wording (DescribeAttributeFlowError). A
+    /// ternary here once collapsed ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique Value Generation, #242)
+    /// into the same "a required input has no value" message; the latter is a different failure (the base Expression
+    /// evaluated fine but returned more than one value), so it has its own accurate message.
+    /// </summary>
+    private static (SyncPreviewMessageCode Code, string Detail) DescribeFlowError(AttributeFlowError flowError) =>
+        flowError.Kind switch
+        {
+            AttributeFlowErrorKind.MultiValuedToSingleValued => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
+            AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultNotConvertible => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The Expression targeting '{flowError.TargetAttributeName}' returned '{flowError.Value}', which a {flowError.TargetAttributeType} attribute cannot hold, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"'{flowError.SourceAttributeName}' has {flowError.ValueCount} values but '{flowError.TargetAttributeName}' is single-valued, so the attribute would not flow and would keep its current value. Use Where, Join, Count, Min or Max in the Expression to say which value it should have: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultMultiValued => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+            _ => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
+        };
+
+    /// <summary>
     /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
     /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
     /// correction for an object the export evaluation already proposes an update for is folded into that update, as
@@ -1268,8 +1287,50 @@ public class SyncPreviewServer
         if (context.DriftExportRules.Count == 0)
             return 0;
 
-        var drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-            context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+        DriftDetectionResult drift;
+        try
+        {
+            drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+        }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // The run records this against the object and stages no correction for it (#2180), so the preview reports it
+            // the same way rather than letting the exception escape the preview.
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                Detail = $"{DriftNotCheckedPreviewPrefix}An Expression failed to evaluate: {expressionEx.Message}",
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = expressionEx.TargetAttributeName
+            });
+            return 0;
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                Detail = DriftNotCheckedPreviewPrefix + missingInputEx.DescribeForAdministrator(),
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = missingInputEx.TargetAttributeName
+            });
+            return 0;
+        }
+
+        // A mapping-level error leaves its attribute uncorrected, and the run records it against the object (#2180).
+        result.Errors.AddRange(drift.AttributeFlowErrors.Select(flowError =>
+        {
+            var (code, detail) = DescribeFlowError(flowError);
+            return new SyncPreviewMessage
+            {
+                Code = code,
+                Detail = detail,
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = flowError.TargetAttributeName
+            };
+        }));
+
         if (!drift.HasDrift)
             return 0;
 

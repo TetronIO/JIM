@@ -530,8 +530,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetAttributesAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested metaverse attributes (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-        var headers = attributes?.Select(MetaverseAttributeHeader.FromEntity).AsQueryable();
+        // The header projection reads each attribute's Object Type bindings; mapping the entities instead would
+        // leave them empty, because the untracked entity load does not include the navigation.
+        var headers = (await _application.Metaverse.GetMetaverseAttributeHeadersAsync())?.AsQueryable();
 
         var result = headers != null
             ? headers.ApplySortAndFilter(pagination).ToPaginatedResponse(pagination)
@@ -1269,7 +1270,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
     /// <param name="attributes">Optional list of Attribute names to include in the response. Use "*" for all Attributes. DisplayName is always included.</param>
-    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by, ignoring case (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paginated list of Metaverse Object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]
@@ -1424,7 +1425,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     ///   off (held until switched on) and systems where the account does not exist yet (delivered once it does).
     ///   This is the event case: the person's password changed somewhere, and the rest should hold it. By default
     ///   expiry is left to each system's own policy, since a password the person chose should not demand they
-    ///   choose another, and the call returns as soon as the change is recorded.
+    ///   choose another, and the call returns as soon as the change is recorded. "Password never expires" is left
+    ///   as each account has it, so `expiryBehaviour` `NeverExpires` is accepted with named accounts only.
     ///
     /// Either way the change is queued, one entry per Connected System, and the Password Delivery Service makes
     /// the first attempt within about a second, whatever the synchronisation engine is doing. A system that is
@@ -1455,7 +1457,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="waiter">Waits on the change's outcomes when the request asks for it.</param>
     /// <response code="200">The change was recorded and, where a wait applied, every target has settled. The body names the Connected Systems it was queued for and where each stands.</response>
     /// <response code="202">A wait applied and ran out with a target still Queued or Delivering. The body carries what is known; delivery continues.</response>
-    /// <response code="400">No password was supplied; `wait` is outside 0 to 30; `enableAccount` was supplied without named accounts; or a named account is not this person's, is in a system whose Connector cannot set passwords, shares a Connected System with another, or the list is empty.</response>
+    /// <response code="400">No password was supplied; `wait` is outside 0 to 30; `enableAccount`, or `expiryBehaviour` `NeverExpires`, was supplied without named accounts; or a named account is not this person's, is in a system whose Connector cannot set passwords, shares a Connected System with another, or the list is empty.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
     /// <response code="404">No such Metaverse Object.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -1515,7 +1517,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // The defaults follow who chose the password. Named accounts mean somebody set it for the person, and a
         // password somebody else chose should be replaced at next sign-in. No accounts named means the person's
         // password changed and JIM is carrying it; demanding they choose another one immediately would defeat the
-        // point of propagating the one they just set.
+        // point of propagating the one they just set. Never expires without named accounts is refused by the core
+        // (#2159): such a password leaves "Password never expires" as each account has it.
         var expiryBehaviour = request.ExpiryBehaviour
             ?? (namedAccounts ? PasswordExpiryBehaviour.RequireChangeAtNextSignIn : PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
 
@@ -1541,9 +1544,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         }
         catch (ArgumentException ex)
         {
-            // The core's validation of named accounts: an empty list, an account that is not this person's or
-            // whose Connector cannot set passwords, or two accounts in one system. Nothing was recorded, and the
-            // message is written for the caller rather than about JIM's own method signature.
+            // The core's validation: an empty list, an account that is not this person's or whose Connector cannot
+            // set passwords, two accounts in one system, a disable (#2162), or Never expires without named accounts
+            // (#2159). Nothing was recorded, and the message is written for the caller rather than about JIM's own
+            // method signature.
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
 

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -9,104 +10,130 @@ using JIM.Models.Logic.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of a SyncRuleMapping.
+/// An Attribute Flow on a Synchronisation Rule: what it reads, what it writes, and how.
 /// </summary>
 public class SyncRuleMappingDto
 {
+    /// <summary>
+    /// The ID of the mapping.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// When the mapping was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// The ID of the Metaverse attribute an import mapping writes; null on an export mapping.
+    /// </summary>
     public int? TargetMetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that Metaverse attribute; null on an export mapping.
+    /// </summary>
     public string? TargetMetaverseAttributeName { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System attribute an export mapping writes; null on an import mapping.
+    /// </summary>
     public int? TargetConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that Connected System attribute; null on an import mapping.
+    /// </summary>
     public string? TargetConnectedSystemAttributeName { get; set; }
+
+    /// <summary>
+    /// What the mapping reads: AttributeMapping for attributes, ExpressionMapping for an expression,
+    /// AdvancedMapping for a mix of the two, GeneratedMapping for a generated value, or NotSet when it has no
+    /// source.
+    /// </summary>
     public string SourceType { get; set; } = null!;
 
     /// <summary>
-    /// Inbound (import) text value-processing transforms applied to the value as it flows to the target
-    /// Metaverse attribute. Only meaningful for import mappings targeting text attributes. Serialised as a
-    /// comma-separated set of flag names.
+    /// The text processing an import mapping applies on the way into the Metaverse, as a comma-separated set of
+    /// flags such as TreatWhitespaceAsNoValue and TrimWhitespace. Only meaningful on an import mapping to a Text
+    /// attribute.
     /// </summary>
     public InboundValueProcessing InboundValueProcessing { get; set; }
 
     /// <summary>
-    /// Inbound (import) case normalisation applied to the text value. Only meaningful for import mappings
-    /// targeting text attributes.
+    /// The case an import mapping converts a text value to. Only meaningful on an
+    /// import mapping to a Text attribute.
     /// </summary>
     public InboundCaseNormalisation CaseNormalisation { get; set; }
 
     /// <summary>
-    /// Attribute priority for this import contribution (#91). Lower numbers win (1 is highest); int.MaxValue is
-    /// the safe-addition sentinel meaning "not yet ordered, never wins". Only meaningful for import mappings.
+    /// The mapping's place in its attribute's Attribute Priority order: the lowest number with a value wins.
+    /// 2147483647 marks a mapping not yet put in order, which never wins. Only meaningful on an import mapping.
     /// </summary>
     public int Priority { get; set; }
 
     /// <summary>
-    /// When true, a connected, in-scope contribution of null/absent for this attribute asserts "no value" and
-    /// stops resolution falling through to lower-priority contributions ("Null is a value", #91). Only meaningful
-    /// for import mappings.
+    /// Whether an import mapping that applies to a joined, in-scope object but has no value clears the Metaverse
+    /// attribute, rather than letting a lower-priority mapping supply one. Only meaningful on an import mapping.
     /// </summary>
     public bool NullIsValue { get; set; }
 
     /// <summary>
-    /// When true, this mapping only flows during the initial provisioning (Create) export; afterwards the
-    /// target attribute is unmanaged by JIM on that Connected System Object (#223). Only meaningful for
-    /// export mappings.
+    /// Whether an export mapping writes only when it creates the Connected System Object; after that JIM leaves the
+    /// attribute alone, and Drift Correction does not put it back. Only meaningful on an export mapping.
     /// </summary>
     public bool InitialExportOnly { get; set; }
 
     /// <summary>
-    /// Whether the mapping is evaluated at all (#1485). A disabled mapping is skipped by synchronisation in
-    /// both directions until it is re-enabled. Applies to import and export mappings alike.
+    /// Whether the mapping takes part in synchronisation; a disabled mapping is skipped in both directions.
     /// </summary>
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Why the mapping is disabled, when something disabled it on the administrator's behalf. Null when the
-    /// mapping is enabled, and null when an administrator disabled it themselves.
+    /// Why JIM disabled the mapping, when it did so itself; null when the mapping is enabled, or an administrator
+    /// disabled it.
     /// </summary>
     public string? DisabledReason { get; set; }
 
     /// <summary>
-    /// The "Keep unique with ..." switch (Generated Value Forms, #2023): for an Expression mapping whose value is built from
-    /// a generated value, whether a target's refusal of that value is corrected by correcting the generated value. Defaults
-    /// to true; has no effect on a mapping not built from exactly one generated value (see
-    /// <see cref="BuiltFromGeneratedValue"/>).
+    /// On an Expression mapping whose value is built from one generated value, whether a target refusing the value
+    /// as already in use is fixed by correcting the generated value. True by default; no effect on any other
+    /// mapping.
     /// </summary>
     public bool KeepUnique { get; set; }
 
     /// <summary>
-    /// Present when this Expression mapping's value is built from a generated value (Generated Value Forms, #2023): which
-    /// one, through which attributes, and how JIM treats it. Null for every other mapping.
+    /// On an Expression mapping whose value is built from a generated value: which one, through which attributes,
+    /// and how JIM treats it. Null on every other mapping.
     /// </summary>
     public GeneratedValueBuiltValueDto? BuiltFromGeneratedValue { get; set; }
 
+    /// <summary>
+    /// What the mapping reads: the attributes or expression its value comes from. Empty on a generated mapping with
+    /// no base expression.
+    /// </summary>
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     /// <summary>
-    /// The mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3). Null unless
-    /// <see cref="SourceType"/> is <c>GeneratedMapping</c>.
+    /// The settings of a generated mapping: its token, how it is checked for availability, and what is built from
+    /// it. Null unless SourceType is GeneratedMapping.
     /// </summary>
     public SyncRuleMappingGenerationDto? Generation { get; set; }
 
     /// <summary>
-    /// Non-blocking warnings the create or update call that returned this mapping raised about it, for example that
-    /// an Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is
-    /// evaluated. The save went ahead regardless. Always present; empty on every ordinary read.
+    /// Warnings the create or update raised about the mapping without stopping it, such as a derived Attribute Flow
+    /// calling a function that returns a different value each time. Empty on a read.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 
     /// <summary>
-    /// Present when this is a Metaverse-Derived Attribute Flow (an import Expression reading <c>mv["..."]</c>): the
-    /// Metaverse attributes it reads and where it sits in the evaluation order, as "step N of M". Null for every other
-    /// mapping.
+    /// On a Metaverse-Derived Attribute Flow (an import expression reading mv["..."]): the Metaverse attributes it
+    /// reads and its step in the evaluation order. Null on every other mapping.
     /// </summary>
     public DerivedFlowInfoDto? Derived { get; set; }
 
     /// <summary>
-    /// On the response to an update that disabled this mapping, rewrote its Expression or changed what it writes: the
-    /// Metaverse-Derived Attribute Flows the change left with a missing input, because an attribute they read lost its
-    /// last enabled contributor. The update went ahead regardless; each flow's Missing Input Behaviour now decides
-    /// what it contributes. Always present; empty on every read.
+    /// On the response to an update that disabled the mapping, rewrote its expression or changed what it writes:
+    /// the Metaverse-Derived Attribute Flows the change left with a missing input. The update went ahead; each
+    /// flow's Missing Input Behaviour decides what it contributes. Empty on a read.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
@@ -138,65 +165,109 @@ public class SyncRuleMappingDto
 }
 
 /// <summary>
-/// API representation of a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3), its
-/// exclusions, the Connected Systems its value is checked for availability in (release 3), and whether Collision
-/// Remediation corrects a value a target rejects as already in use (release 4).
+/// A generated mapping's settings: the token it appends, where its value is checked for availability, whether a
+/// rejected value is corrected, and what is built from it.
 /// </summary>
 public class SyncRuleMappingGenerationDto
 {
+    /// <summary>
+    /// The token appended to the base value: OnlyIfTaken adds a suffix only when the base value is taken, Sequence
+    /// adds the next number from the attribute's counter, and Random adds a random token.
+    /// </summary>
     public GeneratedValueTokenKind TokenKind { get; set; }
+
+    /// <summary>
+    /// For OnlyIfTaken, whether the suffix is a Number or a Letter.
+    /// </summary>
     public GeneratedValueSuffixStyle SuffixStyle { get; set; }
+
+    /// <summary>
+    /// For OnlyIfTaken, the first suffix tried once the base value is taken.
+    /// </summary>
     public int SuffixStart { get; set; }
+
+    /// <summary>
+    /// For Sequence, the lowest number the mapping issues.
+    /// </summary>
     public long SequenceStart { get; set; }
+
+    /// <summary>
+    /// For Sequence, how far the counter moves for each number issued.
+    /// </summary>
     public int SequenceIncrement { get; set; }
+
+    /// <summary>
+    /// For Sequence, how many digits the number is zero-padded to; null for no padding.
+    /// </summary>
     public int? FixedWidth { get; set; }
+
+    /// <summary>
+    /// For Sequence with a FixedWidth, what happens when a number no longer fits: StopAndReport stops the object
+    /// with an error, and AllowLonger issues the longer number.
+    /// </summary>
     public GeneratedValueWidthOverflowBehaviour OnWidthExceeded { get; set; }
+
+    /// <summary>
+    /// For Random, the shape of the token: Guid, Hex or Digits.
+    /// </summary>
     public GeneratedValueRandomFormat RandomFormat { get; set; }
+
+    /// <summary>
+    /// For Random with Hex or Digits, the length of the token in characters; null for Guid.
+    /// </summary>
     public int? RandomLength { get; set; }
+
+    /// <summary>
+    /// What goes between the base value and the token, when both are present; null for nothing.
+    /// </summary>
     public string? Separator { get; set; }
+
+    /// <summary>
+    /// How many candidates are tried for one object in one synchronisation run before generation fails for it.
+    /// </summary>
     public int AttemptLimit { get; set; }
+
+    /// <summary>
+    /// Whether a value is retired, and never issued again, once the object holding it no longer does. Always true
+    /// for Sequence.
+    /// </summary>
     public bool NeverReuse { get; set; }
 
     /// <summary>
-    /// Whether JIM corrects a value a target rejects as already in use (Collision Remediation, release 4): while no other
-    /// Connected System holds the value, JIM chooses the next free one and exports it again; once another does, the export
-    /// is held for an administrator's decision instead. Acts only on a rejection from a Connected System whose Connector
-    /// reports collisions (<see cref="GeneratedValueParticipantDto.ReportsCollisions"/>); elsewhere a collision is an
+    /// Whether JIM corrects a value a target rejects as already in use. While no other Connected System holds the
+    /// value, JIM chooses the next free one and exports it again; once another does, the export is held for a
+    /// decision. It acts only on a Connected System whose Connector reports collisions; elsewhere a collision is an
     /// ordinary export error.
     /// </summary>
     public bool CollisionRemediation { get; set; }
 
     /// <summary>
-    /// Present only on the response to a create or settings-update call that raised the target attribute's
-    /// sequence counter because <see cref="SequenceStart"/> stood above its current position (plan decision 3).
-    /// Null on every ordinary read.
+    /// On the response to a create or update that moved the attribute's counter forward to SequenceStart: where it
+    /// moved from and to. Null on a read.
     /// </summary>
     public SequenceSkippedAheadDto? SequenceSkippedAhead { get; set; }
 
     /// <summary>
-    /// How many values the target attribute's retired values register holds (#242, Phase 6): values JIM will never
-    /// issue again for the attribute, whichever generated mapping produces it. Present on the list and get reads;
+    /// How many retired values the attribute holds: values JIM will never issue for it again. Present on a read;
     /// null on the response to a create or update.
     /// </summary>
     public int? RetiredValueCount { get; set; }
 
     /// <summary>
-    /// The ids of the Connected Systems excluded from the value's availability checks (release 3): values already in
-    /// use there do not stop JIM choosing them. Ascending; empty when none is excluded.
+    /// The IDs of the Connected Systems left out of the availability checks, in ascending order: a value already in
+    /// use there does not stop JIM choosing it. Empty when none is.
     /// </summary>
     public List<int> Exclusions { get; set; } = new();
 
     /// <summary>
-    /// Every Connected System attribute the value is exported to, and how its availability is checked there (release
-    /// 3), ordered by Connected System name then attribute name. Present on the list, get, create and update
-    /// responses.
+    /// Every Connected System attribute the value is exported to, and how its availability is checked there,
+    /// ordered by Connected System name, then attribute name.
     /// </summary>
     public List<GeneratedValueParticipantDto>? Participants { get; set; }
 
     /// <summary>
-    /// Every value built from this generated value (Generated Value Forms, #2023): the Derived Attribute Flows and export
-    /// expressions that read it, on any Synchronisation Rule. Each changes when the generated value does. Present on the
-    /// list, get, create and update responses of an import-mode generated mapping.
+    /// Every value built from this generated value: the derived Attribute Flows and export expressions that read
+    /// it, on any Synchronisation Rule. Present on an import mapping.
     /// </summary>
     public List<GeneratedValueBuiltValueDto>? BuiltValues { get; set; }
 
@@ -223,11 +294,18 @@ public class SyncRuleMappingGenerationDto
 }
 
 /// <summary>
-/// Reports that a save moved a generated Sequence mapping's target attribute counter forward (plan decision 3).
+/// How far a save moved a Sequence mapping's counter forward.
 /// </summary>
 public class SequenceSkippedAheadDto
 {
+    /// <summary>
+    /// The next number before the save.
+    /// </summary>
     public long From { get; set; }
+
+    /// <summary>
+    /// The next number after the save: the Sequence Start.
+    /// </summary>
     public long To { get; set; }
 }
 
@@ -445,28 +523,50 @@ public class UpdateSyncRuleMappingRequest
 }
 
 /// <summary>
-/// API representation of a SyncRuleMappingSource.
+/// One source an Attribute Flow reads: an attribute or an expression.
 /// </summary>
 public class SyncRuleMappingSourceDto
 {
+    /// <summary>
+    /// The ID of the source.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The source's position among the mapping's sources.
+    /// </summary>
     public int Order { get; set; }
+
+    /// <summary>
+    /// The ID of the Metaverse attribute an export mapping reads; null otherwise.
+    /// </summary>
     public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that Metaverse attribute; null otherwise.
+    /// </summary>
     public string? MetaverseAttributeName { get; set; }
+
+    /// <summary>
+    /// The ID of the Connected System attribute an import mapping reads; null otherwise.
+    /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// The name of that Connected System attribute; null otherwise.
+    /// </summary>
     public string? ConnectedSystemAttributeName { get; set; }
 
     /// <summary>
-    /// The expression to evaluate for this source.
-    /// Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
+    /// The expression the source evaluates, reading attributes as mv["Name"] and cs["Name"]; null for an attribute
+    /// source.
     /// </summary>
     public string? Expression { get; set; }
 
     /// <summary>
-    /// For expression sources: what happens when an attribute the expression reads has no value on the object
-    /// being synchronised. EvaluateAnyway (the default) runs the expression regardless, ContributeNoValue skips it
-    /// without reporting anything, FailMapping skips it and records an error, and FailObject leaves the whole
-    /// object untouched.
+    /// What an expression source does when an attribute it reads has no value: EvaluateAnyway runs it regardless,
+    /// ContributeNoValue skips it and contributes nothing, FailMapping skips it and records an error, and
+    /// FailObject leaves the whole object untouched.
     /// </summary>
     public MissingInputBehaviour MissingInputBehaviour { get; set; }
 
@@ -620,7 +720,97 @@ public class TestExpressionRequest
     /// Sample Connected System attribute values to use during evaluation.
     /// Keys are attribute names, values are the attribute values.
     /// </summary>
+    /// <remarks>
+    /// With an Attribute Flow (<c>SyncRuleId</c> and <c>MappingId</c>), each value is converted to its attribute's type
+    /// as the object would hold it: text, a number, a Boolean, null for no value (distinct from empty text), or an array
+    /// of these for a multi-valued attribute. The same applies to <c>MvAttributes</c>.
+    /// </remarks>
     public Dictionary<string, object?>? CsAttributes { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose Attribute Flow to test the expression as, given with <c>MappingId</c>. The test then
+    /// runs what synchronisation runs: each sample converted to its attribute's type, the Attribute Flow's Missing Input
+    /// Behaviour and value processing, and conversion to its target attribute's type. Omit both to evaluate the
+    /// expression alone.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow on the Synchronisation Rule to test the expression as, given with <c>SyncRuleId</c>. The
+    /// expression tested is <c>Expression</c>, so an edit can be tried before it is saved.
+    /// </summary>
+    public int? MappingId { get; set; }
+
+    /// <summary>
+    /// A Connected System Object of the Synchronisation Rule's Connected System whose values to test with, for an import
+    /// Attribute Flow. Its values for the attributes the expression reads are the inputs; a sample in
+    /// <c>CsAttributes</c> replaces the object's value for that attribute. An expression that also reads <c>mv[...]</c>
+    /// takes those inputs from the Metaverse Object the Connected System Object is joined to.
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// A Metaverse Object whose values to test with, for an export Attribute Flow. A sample in <c>MvAttributes</c>
+    /// replaces the object's value for that attribute.
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The instant to test as of, in UTC: what <c>Now()</c> and <c>Today()</c> read. Omit it for the current time.
+    /// </summary>
+    public DateTime? AsOf { get; set; }
+}
+
+/// <summary>
+/// One input an expression read when it was tested as an Attribute Flow.
+/// </summary>
+public class TestExpressionInputDto
+{
+    /// <summary>
+    /// The input as the expression writes it, such as <c>cs["hireDate"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// The attribute's type, or null when the object being synchronised cannot hold a value for it.
+    /// </summary>
+    public AttributeDataType? Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or several; null when <c>Type</c> is null.
+    /// </summary>
+    public AttributePlurality? Plurality { get; set; }
+
+    /// <summary>
+    /// The values the input was given, one line per value in JIM's text form. Empty when it had no value.
+    /// </summary>
+    public IReadOnlyList<string> ValueLines { get; set; } = [];
+}
+
+/// <summary>
+/// What an Attribute Flow would do if one of its inputs had no value.
+/// </summary>
+public class TestExpressionAbsentInputDto
+{
+    /// <summary>
+    /// The input made absent, such as <c>cs["sn"]</c>.
+    /// </summary>
+    public string Input { get; set; } = null!;
+
+    /// <summary>
+    /// What the target attribute would then be given.
+    /// </summary>
+    public AttributeFlowOutcome Outcome { get; set; }
+
+    /// <summary>
+    /// Why that outcome is an error; null when it is not.
+    /// </summary>
+    public AttributeFlowErrorReason? ErrorReason { get; set; }
+
+    /// <summary>
+    /// What synchronisation would then do, in one sentence.
+    /// </summary>
+    public string OutcomeDescription { get; set; } = null!;
 }
 
 /// <summary>
@@ -639,6 +829,13 @@ public class TestExpressionResponse
     public object? Result { get; set; }
 
     /// <summary>
+    /// The result as the portal's expression tester shows it: one line per value, each written as JIM writes the value
+    /// as text (a date as 2026-03-15 10:30:00Z, a Binary value described by its size). Empty when the expression
+    /// produced no value. Not set when it failed; <c>ErrorMessage</c> says why.
+    /// </summary>
+    public IReadOnlyList<string>? ResultLines { get; set; }
+
+    /// <summary>
     /// The type of the result (e.g., "String", "Int32", "Boolean").
     /// </summary>
     public string? ResultType { get; set; }
@@ -652,4 +849,71 @@ public class TestExpressionResponse
     /// Position in the expression where an error occurred (if applicable).
     /// </summary>
     public int? ErrorPosition { get; set; }
+
+    /// <summary>
+    /// What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an
+    /// Attribute Flow was given and its sample values could be used.
+    /// </summary>
+    public AttributeFlowOutcome? Outcome { get; set; }
+
+    /// <summary>
+    /// Why the outcome is an error. Set only when <c>Outcome</c> is Error.
+    /// </summary>
+    public AttributeFlowErrorReason? ErrorReason { get; set; }
+
+    /// <summary>
+    /// What synchronisation would do, in one sentence. Set only when an Attribute Flow was given.
+    /// </summary>
+    public string? OutcomeDescription { get; set; }
+
+    /// <summary>
+    /// The values the target attribute would hold after value processing and conversion to its type, one line per value
+    /// in JIM's text form. Set only when <c>Outcome</c> is Values.
+    /// </summary>
+    public IReadOnlyList<string>? ValueLines { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow's target attribute. Set only when an Attribute Flow was given.
+    /// </summary>
+    public string? TargetAttributeName { get; set; }
+
+    /// <summary>
+    /// The target attribute's type, which the values are converted to. Set only when an Attribute Flow was given.
+    /// </summary>
+    public AttributeDataType? TargetAttributeType { get; set; }
+
+    /// <summary>
+    /// The inputs the expression reads that have no value, such as <c>cs["sn"]</c>, when the Attribute Flow's Missing
+    /// Input Behaviour stopped it being evaluated.
+    /// </summary>
+    public IReadOnlyList<string>? MissingInputs { get; set; }
+
+    /// <summary>
+    /// Why the sample values could not be used, one message each, such as text that is not a date for a date and time
+    /// attribute. When present the expression was not evaluated.
+    /// </summary>
+    public IReadOnlyList<string>? InputErrors { get; set; }
+
+    /// <summary>
+    /// The inputs the expression read, with the values they were given: the samples, and any loaded from an object.
+    /// Set only when an Attribute Flow was given.
+    /// </summary>
+    public IReadOnlyList<TestExpressionInputDto>? Inputs { get; set; }
+
+    /// <summary>
+    /// The value processing the Attribute Flow applies to the expression's result, in the order it applies them. Set
+    /// only for an import Attribute Flow to a Text attribute whose expression returned a result; empty when none is set.
+    /// </summary>
+    public IReadOnlyList<AttributeFlowValueProcessingStep>? ValueProcessingSteps { get; set; }
+
+    /// <summary>
+    /// Whether value processing changed the expression's result. Set with <c>ValueProcessingSteps</c>.
+    /// </summary>
+    public bool? ValueProcessingChanged { get; set; }
+
+    /// <summary>
+    /// For each input given a value, what the Attribute Flow would do with that input absent. Set only when an Attribute
+    /// Flow was given and its sample values could be used.
+    /// </summary>
+    public IReadOnlyList<TestExpressionAbsentInputDto>? IfInputHasNoValue { get; set; }
 }

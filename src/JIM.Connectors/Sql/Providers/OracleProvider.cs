@@ -500,6 +500,12 @@ internal class OracleProvider : SqlProviderBase
         "FROM ALL_VIEWS " +
         "ORDER BY OWNER, VIEW_NAME";
 
+    /// <summary>
+    /// Oracle Database compares text binary unless a column's collation says otherwise, so a column whose
+    /// collation is not known (a statement's) is case-exact (#2051).
+    /// </summary>
+    public override bool TextComparesExactlyByDefault => true;
+
     public override string ColumnsCommandText =>
         $"SELECT COLUMN_NAME AS {SqlCatalogueColumns.ColumnName}, " +
         $"DATA_TYPE AS {SqlCatalogueColumns.DataTypeName}, " +
@@ -508,7 +514,12 @@ internal class OracleProvider : SqlProviderBase
         $"DATA_SCALE AS {SqlCatalogueColumns.NumericScale}, " +
         // Normalised to the SQL standard's spelling so the consumer never learns Oracle's 'Y'/'N'.
         $"CASE WHEN NULLABLE = 'Y' THEN 'YES' ELSE 'NO' END AS {SqlCatalogueColumns.IsNullable}, " +
-        $"COLUMN_ID AS {SqlCatalogueColumns.OrdinalPosition} " +
+        $"COLUMN_ID AS {SqlCatalogueColumns.OrdinalPosition}, " +
+        // Oracle compares binary unless a column's collation (12.2 and later) is case- or accent-insensitive:
+        // BINARY_CI, BINARY_AI and the linguistic _CI and _AI collations. A column with none is not text (#2051).
+        "CASE WHEN COLLATION IS NULL THEN NULL " +
+        "WHEN COLLATION LIKE '%\\_CI' ESCAPE '\\' OR COLLATION LIKE '%\\_AI' ESCAPE '\\' THEN 'NO' " +
+        $"ELSE 'YES' END AS {SqlCatalogueColumns.CaseExact} " +
         "FROM ALL_TAB_COLUMNS " +
         $"WHERE OWNER = :{SqlCatalogueParameters.SchemaName} AND TABLE_NAME = :{SqlCatalogueParameters.ObjectName} " +
         "ORDER BY COLUMN_ID";

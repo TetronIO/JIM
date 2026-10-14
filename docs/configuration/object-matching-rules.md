@@ -60,15 +60,12 @@ How the expression is read:
 - **Its result is converted to the Metaverse attribute's type**, as an Attribute Flow's would be. A result that will
   not convert (text where a number is expected) stops the object with an **Object Matching Rule Failed** error rather
   than letting it match nothing. Correct the expression or the source value, then synchronise again.
-- **A list of text values is matched value by value**, as every value of a multi-valued attribute is.
+- **A list of values is matched value by value**, as every value of a multi-valued attribute is.
 - **No value** (missing, empty or only whitespace) passes the object to the next rule.
 
 A rule compares for equality, and only equality. "Starts with" or "contains" could match many identities, so JIM does
 not offer them. Put the normalising in the expression instead, so the value it computes is exactly the value the
 Metaverse holds.
-
-**Try it**, under the editor, shows what the rule would match on for an object holding values you type, worked out
-exactly as a synchronisation would. Leave a value empty to see what happens to an object that has none.
 
 JIM refuses to save an expression that does not parse, reads `mv["..."]`, reads no `cs["..."]` attribute, reads an
 attribute the Object Type does not have, or calls a function that returns a different value each time it runs
@@ -79,6 +76,21 @@ When JIM checks, before provisioning, whether a matching account already exists,
 unjoined Connected System Object of that type. If it cannot do so for some of them, a Metaverse Object that finds no
 match stops with an **Object Matching Rule Failed** error naming one of those objects, rather than provisioning an
 account that may already exist. Correct that object's value, or the expression, then synchronise again.
+
+## Testing a rule
+
+**Try it**, under the rule editor, shows what the rule would do for one object before you save it, worked out with the same code a synchronisation runs.
+
+- **Values**<br /> Each attribute the rule reads gets an editor for its type, with several values for a multi-valued attribute. An attribute left untouched, or with **No value** ticked, holds no value. **From an object** loads a real Connected System Object's values instead, which you can then edit to try a variation.
+- **Match values**<br /> The values the rule would compare, in the Metaverse attribute's type. Or that it has no value, so the next rule would be tried, or the **Object Matching Rule Failed** error a synchronisation would stop the object with.
+- **In the Metaverse**<br /> With **Also find the Metaverse Object a synchronisation would join** ticked, the values are looked up as an import join looks them up, and nothing is written. The answer is one of these:
+    - **Would join** a named Metaverse Object;
+    - **Already joined**, when the loaded object is already joined to it;
+    - **Joined to another**, when another object from this Connected System holds the join, so a synchronisation would record that this one could not join;
+    - **No match**;
+    - **Ambiguous**, listing the Metaverse Objects the values identify.
+
+Automation gets the same test of a saved rule through [`Test-JIMMatchingRule`](../powershell/object-matching-rules.md#test-jimmatchingrule) and the REST API's `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-rules/{ruleId}/test` and `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{ruleId}/test` endpoints.
 
 ## Simple vs advanced matching mode
 
@@ -112,7 +124,7 @@ Switching the mode warns about anything it strands:
   own rules are discarded rather than migrated.
 
 The warnings appear in the portal after the switch, in the REST response's `warnings` list, and on the PowerShell
-warning stream from `Switch-JIMMatchingMode`.
+warning stream from [`Switch-JIMMatchingMode`](../powershell/object-matching-rules.md#switch-jimmatchingmode).
 
 ## Previewing a behaviour change
 
