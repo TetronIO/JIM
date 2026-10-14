@@ -627,7 +627,8 @@
           "JIM.Utilities": "[0.16.0, )",
           "Microsoft.Data.SqlClient": "[7.1.1, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
-          "System.DirectoryServices.Protocols": "[10.0.13, )"
+          "System.DirectoryServices.Protocols": "[10.0.13, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, )"
         }
       },
       "jim.data": {
