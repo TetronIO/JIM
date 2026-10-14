@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -29,7 +31,21 @@ public enum AttributeFlowErrorKind
     /// multi-valued result. A generated value's base must be a single text value, since a uniqueness token is
     /// appended to exactly one candidate; nothing is recorded for the attribute this pass.
     /// </summary>
-    GeneratedBaseNotSingleValue
+    GeneratedBaseNotSingleValue,
+
+    /// <summary>
+    /// An Expression's result held a value the target attribute's type cannot hold, such as text that is not a
+    /// number for a Number attribute (#2179). Nothing flows, so the target keeps its value rather than being cleared.
+    /// Recorded as an <c>ExpressionEvaluationError</c>.
+    /// </summary>
+    ExpressionResultNotConvertible,
+
+    /// <summary>
+    /// An Expression's result held more than one distinct value for a single-valued target attribute (#2179). JIM
+    /// will not pick one, so nothing flows and the target keeps its value. Recorded as
+    /// <c>MultiValuedToSingleValued</c>, the type of the same fault from an attribute source.
+    /// </summary>
+    ExpressionResultMultiValued
 }
 
 /// <summary>
@@ -47,7 +63,8 @@ public class AttributeFlowError
 
     /// <summary>
     /// The name of the source attribute (the Connected System attribute on import, the Metaverse attribute on
-    /// export). Null where the source is an Expression rather than an attribute.
+    /// export). For <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/>, the attribute whose values the
+    /// Expression returned, where they all came from one (#2053); otherwise null where the source is an Expression.
     /// </summary>
     public string? SourceAttributeName { get; set; }
 
@@ -59,17 +76,32 @@ public class AttributeFlowError
 
     /// <summary>
     /// The number of distinct values present on the source attribute (after inbound value processing and
-    /// de-duplication for text values). Only meaningful for
-    /// <see cref="AttributeFlowErrorKind.MultiValuedToSingleValued"/>.
+    /// de-duplication for text values), or in the Expression's result. Only meaningful for
+    /// <see cref="AttributeFlowErrorKind.MultiValuedToSingleValued"/> and
+    /// <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/>.
     /// </summary>
     public int ValueCount { get; set; }
 
     /// <summary>
-    /// The Expression that was not evaluated, or (for <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/>)
-    /// that produced more than one value. Only populated for <see cref="AttributeFlowErrorKind.ExpressionMissingInput"/>
-    /// and <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/>.
+    /// The Expression that was not evaluated, or whose result could not flow: it produced more than one value
+    /// (<see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/>,
+    /// <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/>) or a value the target cannot hold
+    /// (<see cref="AttributeFlowErrorKind.ExpressionResultNotConvertible"/>). Null for
+    /// <see cref="AttributeFlowErrorKind.MultiValuedToSingleValued"/>, whose source is an attribute.
     /// </summary>
     public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type of the target attribute, which the Expression's result could not be converted to. Only populated for
+    /// <see cref="AttributeFlowErrorKind.ExpressionResultNotConvertible"/>.
+    /// </summary>
+    public AttributeDataType? TargetAttributeType { get; set; }
+
+    /// <summary>
+    /// The value the Expression's result held that the target attribute's type cannot hold, as text. Only populated
+    /// for <see cref="AttributeFlowErrorKind.ExpressionResultNotConvertible"/>.
+    /// </summary>
+    public string? Value { get; set; }
 
     /// <summary>
     /// The inputs the object had no value for, as the Expression addresses them (for example

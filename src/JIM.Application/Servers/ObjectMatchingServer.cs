@@ -39,63 +39,187 @@ public class ObjectMatchingServer
     #region public methods
 
     /// <summary>
-    /// What <paramref name="rule"/> would compare for an object of <paramref name="objectType"/> holding
-    /// <paramref name="sampleValues"/>: the portal's Try it (#2052). Worked out by the resolver synchronisation uses,
-    /// so the answer in the editor cannot differ from the answer a run gives.
+    /// The attributes <paramref name="rule"/> reads from an object of <paramref name="objectType"/>, each once: its
+    /// source attribute, or each attribute of the type its Expression reads. The inputs an Object Matching test takes
+    /// (#2055).
     /// </summary>
-    /// <param name="rule">The rule as composed, with its Target Metaverse Attribute and source set.</param>
-    /// <param name="objectType">The Object Type the rule reads, with its attributes.</param>
-    /// <param name="sampleValues">A value per attribute, by attribute name, as typed; each is read as its attribute's
-    /// type, exactly as an imported value would be. An empty value is an attribute the object has no value for.</param>
-    public MatchValueResolution ResolveSampleMatchValues(
-        ObjectMatchingRule rule,
-        ConnectedSystemObjectType objectType,
-        IReadOnlyDictionary<string, string?> sampleValues)
+    public IReadOnlyList<AttributeSampleDescriptor> DescribeTestInputs(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(objectType);
-        ArgumentNullException.ThrowIfNull(sampleValues);
-
-        // An empty sample is an attribute the object has no value for; a sample naming no attribute of the type is
-        // left out, because the validator already says so and the resolver would read nothing for it either way.
-        var inputs = sampleValues
-            .Where(sample => !string.IsNullOrEmpty(sample.Value))
-            .Select(sample => (Sample: sample.Value!, Attribute: objectType.Attributes.FirstOrDefault(
-                attribute => string.Equals(attribute.Name, sample.Key, StringComparison.OrdinalIgnoreCase))))
-            .Where(input => input.Attribute != null);
-
-        var attributeValues = new List<ConnectedSystemObjectAttributeValue>();
-        foreach (var (sample, attribute) in inputs)
-        {
-            if (!ExpressionResultConverter.TryConvert(sample, attribute!.Type, out var typed) || typed == null)
-                return MatchValueResolution.Failed(
-                    $"The sample value '{sample}' for cs[\"{attribute.Name}\"] is not a {attribute.Type} value, the type of that attribute.",
-                    rule.TargetMetaverseAttribute?.Type ?? AttributeDataType.NotSet,
-                    rule.Sources.Count == 1 ? rule.Sources[0].Expression : null);
-
-            attributeValues.Add(ToAttributeValue(attribute, typed));
-        }
-
-        return _matchValueResolver.Resolve(rule, attributeValues, objectType);
+        return ReadAttributes(rule, objectType)
+            .Select(attribute => new AttributeSampleDescriptor(attribute.Name, attribute.Type, attribute.AttributePlurality))
+            .ToList();
     }
 
-    /// <summary>A sample value held as an imported value of <paramref name="attribute"/> would be.</summary>
-    private static ConnectedSystemObjectAttributeValue ToAttributeValue(ConnectedSystemObjectTypeAttribute attribute, object value)
+    /// <summary>
+    /// The values <paramref name="connectedSystemObject"/> holds for each attribute <paramref name="rule"/> reads,
+    /// every value of a multi-valued attribute included, so a real object can be tested and then edited (#2055).
+    /// </summary>
+    public IReadOnlyList<AttributeSample> TestInputsFromConnectedSystemObject(
+        ConnectedSystemObject connectedSystemObject,
+        ObjectMatchingRule rule,
+        ConnectedSystemObjectType objectType)
     {
-        var attributeValue = new ConnectedSystemObjectAttributeValue { Attribute = attribute, AttributeId = attribute.Id };
-        switch (value)
+        ArgumentNullException.ThrowIfNull(connectedSystemObject);
+        return ReadAttributes(rule, objectType)
+            .Select(attribute => new AttributeSample(attribute.Name, connectedSystemObject.AttributeValues
+                .Where(value => value.AttributeId == attribute.Id)
+                .Select(value => TestSampleValues.FromConnectedSystemValue(value, attribute.Type))
+                .Where(value => value != null)
+                .Select(value => value!)
+                .ToList()))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The Object Matching tester (#2055): what <paramref name="rule"/> would compare for an object of
+    /// <paramref name="objectType"/> holding the sample <paramref name="inputs"/>, worked out by the resolver
+    /// synchronisation uses, and, with <paramref name="lookUp"/>, what those values find in the Metaverse, by the
+    /// lookup an import join runs through a repository that cannot write.
+    /// </summary>
+    /// <param name="rule">The rule as composed, saved or not, with its Target Metaverse Attribute and source set. For a
+    /// lookup it carries the Metaverse Object Type it matches against (in Synchronisation Rule mode, the rule's).</param>
+    /// <param name="objectType">The Object Type the rule reads, with its attributes and Connected System.</param>
+    /// <param name="inputs">The samples, by attribute name; an attribute not given holds no value.</param>
+    /// <param name="lookUp">Whether to look the values up in the Metaverse.</param>
+    /// <param name="testedObject">The real object the samples were loaded from, if any, so a lookup that finds the
+    /// Metaverse Object it is already joined to says so.</param>
+    public async Task<ObjectMatchingTestResult> TestAsync(
+        ObjectMatchingRule rule,
+        ConnectedSystemObjectType objectType,
+        IReadOnlyList<AttributeSample> inputs,
+        bool lookUp,
+        ConnectedSystemObject? testedObject = null)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(objectType);
+        ArgumentNullException.ThrowIfNull(inputs);
+
+        var errors = new List<string>();
+        var attributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        foreach (var input in inputs.Where(input => input.Values.Count > 0))
         {
-            case string text: attributeValue.StringValue = text; break;
-            case int number: attributeValue.IntValue = number; break;
-            case long longNumber: attributeValue.LongValue = longNumber; break;
-            case decimal decimalNumber: attributeValue.DecimalValue = decimalNumber; break;
-            case Guid guid: attributeValue.GuidValue = guid; break;
-            case DateTime dateTime: attributeValue.DateTimeValue = dateTime; break;
-            case bool flag: attributeValue.BoolValue = flag; break;
-            case byte[] bytes: attributeValue.ByteValue = bytes; break;
+            var attribute = objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase));
+            if (attribute == null)
+            {
+                errors.Add($"cs[\"{input.AttributeName}\"] has a value, but '{objectType.Name}' has no attribute of that name, so the rule would never see one.");
+                continue;
+            }
+
+            attributeValues.AddRange(TestSampleValues.Typed($"cs[\"{attribute.Name}\"]", input.Values, attribute.Type, attribute.AttributePlurality, errors)
+                .Select(typed => TestSampleValues.ToConnectedSystemValue(attribute, typed)));
         }
 
-        return attributeValue;
+        if (errors.Count > 0)
+            return new ObjectMatchingTestResult { InputErrors = errors };
+
+        var resolution = _matchValueResolver.Resolve(rule, attributeValues, objectType);
+        if (!lookUp || resolution.Kind != MatchValueResolutionKind.Values)
+            return new ObjectMatchingTestResult { Resolution = resolution };
+
+        if (rule.MetaverseObjectType == null)
+            throw new ArgumentException("A lookup needs the rule's Metaverse Object Type.", nameof(rule));
+
+        var connectedSystemObject = new ConnectedSystemObject
+        {
+            Id = testedObject?.Id ?? Guid.Empty,
+            TypeId = objectType.Id,
+            Type = objectType,
+            ConnectedSystemId = objectType.ConnectedSystemId
+        };
+        connectedSystemObject.AttributeValues.AddRange(attributeValues);
+
+        return new ObjectMatchingTestResult
+        {
+            Resolution = resolution,
+            Lookup = await LookUpAsync(connectedSystemObject, rule, objectType.ConnectedSystemId, testedObject)
+        };
+    }
+
+    /// <summary>
+    /// What an import join would find for <paramref name="connectedSystemObject"/> with <paramref name="rule"/> alone,
+    /// including the join's own refusal of a Metaverse Object already joined from this Connected System. Read only.
+    /// </summary>
+    private async Task<ObjectMatchingLookup> LookUpAsync(ConnectedSystemObject connectedSystemObject, ObjectMatchingRule rule,
+        int connectedSystemId, ConnectedSystemObject? testedObject)
+    {
+        var repository = new ReadOnlySyncRepositoryGuard(Application.SyncRepo);
+        ImportMatch? match;
+        try
+        {
+            match = await FindMatchingMetaverseObjectAsync(repository, connectedSystemObject, [rule]);
+        }
+        catch (MultipleMatchesException ambiguity)
+        {
+            return new ObjectMatchingLookup
+            {
+                Outcome = ObjectMatchingLookupOutcome.Ambiguous,
+                Candidates = ambiguity.Candidates,
+                Description = DescribeAmbiguity(ambiguity, previewing: true)
+            };
+        }
+
+        if (match == null)
+        {
+            return new ObjectMatchingLookup
+            {
+                Outcome = ObjectMatchingLookupOutcome.NoMatch,
+                Description = "No Metaverse Object holds these values, so a synchronisation would try the next Object Matching Rule, " +
+                              "and project the object if no rule matches and its Synchronisation Rule projects."
+            };
+        }
+
+        var identity = match.MetaverseObject;
+        var name = identity.Name ?? identity.Id.ToString();
+        var outcome = testedObject?.MetaverseObjectId == identity.Id
+            ? ObjectMatchingLookupOutcome.AlreadyJoined
+            : await repository.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, identity.Id) > 0
+                ? ObjectMatchingLookupOutcome.JoinedToAnother
+                : ObjectMatchingLookupOutcome.WouldJoin;
+
+        return new ObjectMatchingLookup
+        {
+            Outcome = outcome,
+            MetaverseObjectId = identity.Id,
+            MetaverseObjectName = identity.Name,
+            MetaverseObjectTypeName = identity.Type?.Name,
+            Description = outcome switch
+            {
+                ObjectMatchingLookupOutcome.AlreadyJoined =>
+                    $"This object is already joined to {name}, the Metaverse Object it matches on {match.MatchedValue}.",
+                ObjectMatchingLookupOutcome.JoinedToAnother =>
+                    $"The values match {name} on {match.MatchedValue}, but another Connected System Object from this Connected System " +
+                    "is already joined to it, so a synchronisation would record that this object could not join.",
+                _ => $"A synchronisation would join this object to {name}, matched on {match.MatchedValue}."
+            }
+        };
+    }
+
+    /// <summary>The attributes of <paramref name="objectType"/> <paramref name="rule"/> reads, each once.</summary>
+    private static List<ConnectedSystemObjectTypeAttribute> ReadAttributes(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(objectType);
+
+        var source = rule.Sources.Count == 1 ? rule.Sources[0] : null;
+        if (source == null)
+            return [];
+
+        if (string.IsNullOrWhiteSpace(source.Expression))
+        {
+            var attribute = source.ConnectedSystemAttribute
+                ?? objectType.Attributes.FirstOrDefault(a => a.Id == source.ConnectedSystemAttributeId);
+            return attribute == null ? [] : [objectType.Attributes.FirstOrDefault(a => a.Id == attribute.Id) ?? attribute];
+        }
+
+        return ExpressionInputResolver.Resolve(source.Expression)
+            .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+            .Select(input => objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase)))
+            .Where(attribute => attribute != null)
+            .Select(attribute => attribute!)
+            .DistinctBy(attribute => attribute.Id)
+            .ToList();
     }
 
     /// <summary>

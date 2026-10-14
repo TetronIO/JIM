@@ -43,11 +43,10 @@ public class ObjectMatchingSampleTests
     public void TearDown() => _jim?.Dispose();
 
     [Test]
-    public void ResolveSampleMatchValues_ExpressionOverATypedValue_ReturnsTheComputedValueInTheMetaverseType()
+    public async Task TestAsync_ExpressionOverATypedValue_ReturnsTheComputedValueInTheMetaverseTypeAsync()
     {
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(
-            ExpressionRule("\"E\" + Trim(cs[\"employeeId\"])", AttributeDataType.Text), _objectType,
-            new Dictionary<string, string?> { ["employeeId"] = " 1007 " });
+        var resolution = (await _jim.ObjectMatching.TestAsync(ExpressionRule("\"E\" + Trim(cs[\"employeeId\"])", AttributeDataType.Text), _objectType,
+            [new AttributeSample("employeeId", [" 1007 "])], lookUp: false)).Resolution!;
 
         using (Assert.EnterMultipleScope())
         {
@@ -58,18 +57,17 @@ public class ObjectMatchingSampleTests
     }
 
     [Test]
-    public void ResolveSampleMatchValues_NumberInputConvertedToLongNumber_ComparesAsALongNumber()
+    public async Task TestAsync_NumberInputConvertedToLongNumber_ComparesAsALongNumberAsync()
     {
         // The sample is typed as text and read as the attribute's own type, exactly as an imported value would be.
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(
-            ExpressionRule("cs[\"employeeNumber\"]", AttributeDataType.LongNumber), _objectType,
-            new Dictionary<string, string?> { ["employeeNumber"] = "1007" });
+        var resolution = (await _jim.ObjectMatching.TestAsync(ExpressionRule("cs[\"employeeNumber\"]", AttributeDataType.LongNumber), _objectType,
+            [new AttributeSample("employeeNumber", ["1007"])], lookUp: false)).Resolution!;
 
         Assert.That(resolution.Values, Is.EqualTo(new object[] { 1007L }));
     }
 
     [Test]
-    public void ResolveSampleMatchValues_AttributeRule_ComparesTheSampleItself()
+    public async Task TestAsync_AttributeRule_ComparesTheSampleItselfAsync()
     {
         var rule = new ObjectMatchingRule
         {
@@ -77,42 +75,40 @@ public class ObjectMatchingSampleTests
             Sources = [new ObjectMatchingRuleSource { ConnectedSystemAttributeId = 101 }]
         };
 
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(rule, _objectType,
-            new Dictionary<string, string?> { ["employeeId"] = "E1007" });
+        var resolution = (await _jim.ObjectMatching.TestAsync(rule, _objectType,
+            [new AttributeSample("employeeId", ["E1007"])], lookUp: false)).Resolution!;
 
         Assert.That(resolution.Values, Is.EqualTo(new object[] { "E1007" }));
     }
 
     [Test]
-    public void ResolveSampleMatchValues_NoSampleForTheInput_IsNoValueSoTheNextRuleWouldBeTried()
+    public async Task TestAsync_NoSampleForTheInput_IsNoValueSoTheNextRuleWouldBeTriedAsync()
     {
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(
-            ExpressionRule("cs[\"employeeId\"]", AttributeDataType.Text), _objectType,
-            new Dictionary<string, string?> { ["employeeId"] = "" });
+        var resolution = (await _jim.ObjectMatching.TestAsync(ExpressionRule("cs[\"employeeId\"]", AttributeDataType.Text), _objectType,
+            [new AttributeSample("employeeId", [])], lookUp: false)).Resolution!;
 
         Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.NoValue));
     }
 
     [Test]
-    public void ResolveSampleMatchValues_SampleThatIsNotItsAttributesType_FailsNamingTheInput()
+    public async Task TestAsync_SampleThatIsNotItsAttributesType_IsAnInputErrorNamingTheInputAsync()
     {
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(
+        var result = await _jim.ObjectMatching.TestAsync(
             ExpressionRule("cs[\"employeeNumber\"]", AttributeDataType.Number), _objectType,
-            new Dictionary<string, string?> { ["employeeNumber"] = "E1007" });
+            [new AttributeSample("employeeNumber", ["E1007"])], lookUp: false);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
-            Assert.That(resolution.FailureMessage, Does.Contain("cs[\"employeeNumber\"]").And.Contain("Number"));
+            Assert.That(result.Resolution, Is.Null);
+            Assert.That(result.InputErrors.Single(), Does.Contain("cs[\"employeeNumber\"]").And.Contain("Number"));
         }
     }
 
     [Test]
-    public void ResolveSampleMatchValues_ResultThatCannotBecomeTheMetaverseType_FailsAsARunWould()
+    public async Task TestAsync_ResultThatCannotBecomeTheMetaverseType_FailsAsARunWouldAsync()
     {
-        var resolution = _jim.ObjectMatching.ResolveSampleMatchValues(
-            ExpressionRule("\"E\" + cs[\"employeeId\"]", AttributeDataType.Number), _objectType,
-            new Dictionary<string, string?> { ["employeeId"] = "1007" });
+        var resolution = (await _jim.ObjectMatching.TestAsync(ExpressionRule("\"E\" + cs[\"employeeId\"]", AttributeDataType.Number), _objectType,
+            [new AttributeSample("employeeId", ["1007"])], lookUp: false)).Resolution!;
 
         Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
     }

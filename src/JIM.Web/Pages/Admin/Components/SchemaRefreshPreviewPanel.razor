@@ -56,7 +56,7 @@
 
         @if (HasAdditions)
         {
-            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">Additions: safe to apply</MudText>
+            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">@(HasRenames ? "Additions and renames: safe to apply" : "Additions: safe to apply")</MudText>
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Additions" />
         }
 
@@ -355,8 +355,14 @@
     private bool HasAdditions =>
         Result.AddedObjectTypes.Count > 0 ||
         Result.UpdatedObjectTypes.Count > 0 ||
+        Result.RenamedObjectTypes.Count > 0 ||
+        Result.RenamedAttributes.Values.Sum(v => v.Count) > 0 ||
         Result.ObjectTypesWithClassificationUpdates.Count > 0 ||
         Result.AddedAttributes.Values.Sum(v => v.Count) > 0;
+
+    private bool HasRenames =>
+        Result.RenamedObjectTypes.Count > 0 ||
+        Result.RenamedAttributes.Values.Sum(v => v.Count) > 0;
 
     private static string SyncRuleUrl(int syncRuleId) => $"/admin/sync-rules/{syncRuleId}";
 

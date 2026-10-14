@@ -465,12 +465,12 @@ public class ExampleDataTemplateAttributeDependencyDto
     public string MetaverseAttributeName { get; set; } = null!;
 
     /// <summary>
-    /// The comparison operator, e.g. "Equals".
+    /// The comparison operator's name, such as "Equals" or "HasValue".
     /// </summary>
     public string ComparisonType { get; set; } = null!;
 
     /// <summary>
-    /// The value the evaluated attribute must hold.
+    /// The value the evaluated attribute is compared against, as text; empty for HasValue and HasNoValue.
     /// </summary>
     public string StringValue { get; set; } = null!;
 }

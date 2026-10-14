@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
+- ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
+- ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
+- ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
+- ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
 - ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
 - ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
 - ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
 - ✨ The Connected System page shows how many references are unresolved and opens the Connector Space filtered to the objects holding them, under "Where they point": the changes that would fix them. Also via REST and `Get-JIMConnectedSystemUnresolvedReferenceSummary`. (#959)
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
+- ✨ The Attribute Flow tester now runs the flow as a synchronisation does: typed inputs, value processing, Missing Input Behaviour and conversion to the target. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
+- ✨ The Attribute Flow tester takes typed and multi-valued inputs, an explicit No value, and values loaded from a real object, and traces each step and what each input's absence would do. Also via REST and `Test-JIMExpression -ConnectedSystemObjectId`. (#2055)
+- ✨ Test a Synchronisation Rule's scope before it runs: sample values or a real object, criterion by criterion, as of any date, and when the object would enter or leave scope. Also via REST and `Test-JIMScope`; the Attribute Flow tester can run as of a date too. (#2055)
+- ✨ Object Matching Rules' Try it now takes typed and multi-valued values or a real object, and can show which Metaverse Object a synchronisation would join, or why it would not. Also via REST and `Test-JIMMatchingRule`. (#2055)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
@@ -51,16 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 - ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
 - ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
+- ✨ A new `ParseDate(text, format)` expression function reads a date written in any form, such as `ParseDate(cs["startDate"], "dd/MM/yyyy")`. Text that does not match the format is an error, so a source sending an unexpected form never clears the attribute. (#2153)
+- ✨ `Test-JIMExpression` and the REST expression tester now return `ResultLines`, the result exactly as the portal's tester shows it: one value per line, with dates as JIM writes them. (#2179)
 
 ### Changed
 
+- 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
+- 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
+- 🔄 Example Data dependencies now use scoping's operators and names, and every one works, comparing values as the attribute's own type. `GreaterThanOrEqual`, `LessThanOrEqual` and `Like` become `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains`. (#2053)
+- 🔄 A criterion compared with an empty value is no longer accepted; use **has no value** or **has a value**, which existing criteria that relied on an empty value have been converted to. (#2053)
 - 🔄 **Initiated By** reads the same on every page: a run a Schedule started names the Schedule and links its execution, and System has its own icon instead of the Schedule's clock. An execution item's **Operation** shows what was done to the object even when it failed. (#2066)
 - 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
 - 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
-- 🔄 Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged. (#2051)
+- 🔄 Object Matching Rules created through the REST API or PowerShell now take the portal's default: they ignore case unless a source attribute is case-exact. Existing rules are unchanged. (#2051)
 - 🔄 An object whose values match different Metaverse Objects, such as two email addresses held by two people, is now an **Ambiguous Match** instead of joining whichever value happened to be checked first. (#2052)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
@@ -73,14 +88,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
+- 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
+- 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
+- 🔄 Expression `StartsWith` and `EndsWith` now compare character by character, as `Eq` does, so a hidden character such as a soft hyphen, or an accented letter stored a different way, no longer counts as a match. (#2051)
+- 🔄 Names you give JIM ignore case across the REST API and PowerShell: an attribute name in a filter, a Connected System or Run Profile in an Activity filter, a Predefined Search URI and an Example Data `{Attribute}` all find their match whatever the case. (#2051)
 
 ### Removed
 
+- 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
 ### Fixed
 
+- 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
+- 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
+- 🐛 The portal now refuses to save an Attribute Flow whose expression does not parse, naming the problem under the field (and suggesting the right case for a mistyped function name), instead of failing at synchronisation. (#2053)
+- 🐛 On Active Directory, an account your Attribute Flow enables while its Initial Password is queued, retrying or parked, like a pre-hire starting before it lands, waits disabled for it instead of failing the export; once it expires (7 days by default), it fails as before. (#2158)
+- 🐛 Removing one value from a multi-valued SCIM attribute, such as a list of strings in a schema extension, now removes only that value; the service provider used to delete every other value with it, including any added in the same export. (#2181)
+- 🐛 A schema refresh that finds an Object Type or attribute renamed only in case, such as `Mail` for `mail`, now keeps it and every Attribute Flow and Object Matching Rule using it, and takes the new name, instead of reporting it removed and added. (#2051)
+- 🐛 Drift Detection no longer corrects a value its own Connected System supplied when an export expression names the attribute in a different case. (#2051)
+- 🐛 `Set-JIMScopingCriterion` and `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive`, and their REST updates, now keep a criterion's case setting instead of resetting it to case-sensitive. (#2051)
+- 🐛 A DN, External ID or member reference a directory stores in its own case (`DC=PANOPLY` for JIM's `DC=panoply`) is now confirmed, no longer re-exported every run, and no longer reported as drift. Identifiers declared case-exact still compare exactly. (#2195)
+- 🐛 `==` in an expression now compares an attribute's text by its characters, so `mv["Status"] == "Active"` is true when it should be rather than always false. (#2053)
+- 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box now match themselves, so "starts with svc_" no longer also finds "svcX…" and a search agrees with a scoping criterion holding the same value. (#2053)
+- 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
+- 🐛 An unchanged true or false or GUID value is no longer exported again each time its object's exports are evaluated, and removing a value from a multi-valued GUID attribute is now exported rather than skipped. (#2183)
+- 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
+- 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
+- 🐛 An attribute now exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, a target is no longer cleared in error or left with stray values, and a SQL related table no longer accumulates rows. (#2182)
+- 🐛 Drift Detection now corrects expression-fed attributes as export writes them: a multi-valued target keeps the value export wrote, and a failing expression, missing input or several values for a single-valued target is reported on the object instead of clearing it. (#2180)
 - 🐛 Sync Preview now shows that an object with no import Synchronisation Rule would join through its Object Type's Object Matching Rules in simple mode, and no longer predicts such joins in advanced mode, where the synchronisation ignores those rules. (#2176)
 - 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
 - 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)
@@ -91,6 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
 - 🐛 PowerShell's Sync Preview cmdlets now return the generated values a synchronisation would check (`GeneratedValueProbes`), which the REST API already reported. (#1083)
 - 🐛 `Invoke-JIMExampleDataTemplate -Wait -PassThru` reports how the generation finished, rather than `Queued`. (#1083)
+- 🐛 `Start-JIMSchedule -Wait` that times out now returns the Schedule Execution as it stood at the last check, rather than as it was when it started. (#1083)
+- 🐛 Listing Metaverse Attributes, through REST or `Get-JIMMetaverseAttribute`, now returns the Object Types each one is bound to (`metaverseObjectTypes`); the list always returned them empty. (#1083)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
 - 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 An import's Activity message counts as updated only the objects that changed: objects compared and found unchanged count as unchanged, deletes as deleted, and objects a Full Import no longer found are reported apart from those it read. (#2129)
@@ -177,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
 

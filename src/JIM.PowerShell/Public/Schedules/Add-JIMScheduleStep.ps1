@@ -14,44 +14,46 @@ function Add-JIMScheduleStep {
         The unique identifier (GUID) of the Schedule to add the step to.
 
     .PARAMETER StepType
-        The type of step:
-        - RunProfile: Execute a Connected System Run Profile
+        The type of step. RunProfile, which runs a Connected System's Run
+        Profile, is the only type.
 
     .PARAMETER ConnectedSystemId
-        For RunProfile steps: The ID of the Connected System.
+        For a RunProfile step, the id of the Connected System.
 
     .PARAMETER ConnectedSystemName
-        For RunProfile steps: The name of the Connected System.
+        For a RunProfile step, the name of the Connected System.
 
     .PARAMETER RunProfileId
-        For RunProfile steps: The ID of the Run Profile to execute.
+        For a RunProfile step, the id of the Run Profile to run.
 
     .PARAMETER RunProfileName
-        For RunProfile steps: The name of the Run Profile to execute.
+        For a RunProfile step, the name of the Run Profile to run.
 
     .PARAMETER Parallel
-        If specified, runs this step in parallel with the previous step.
-        Otherwise, waits for the previous step to complete.
+        Runs this step at the same time as the step before it, in one step
+        group. Without it, the step waits for the step before it to finish.
 
     .PARAMETER OnFailure
-        What the step does to the Schedule when it fails:
-        - FollowSchedule (the default): whatever the Schedule is set to do (its OnStepFailure)
-        - Stop: stop the Schedule, even if the Schedule is set to continue
-        - Continue: carry on with the remaining steps, even if the Schedule is set to stop
+        What the Schedule does when this step fails. FollowSchedule (the
+        default) does whatever the Schedule is set to do (its OnStepFailure).
+        Stop stops the Schedule, even one set to continue. Continue carries on
+        with the remaining steps, even when the Schedule is set to stop.
         Cannot be used with -ContinueOnFailure.
 
     .PARAMETER ContinueOnFailure
-        Shorthand for -OnFailure Continue: the Schedule carries on if this step fails, whatever the Schedule is set
-        to do. Cannot be used with -OnFailure.
+        Shorthand for -OnFailure Continue: the Schedule carries on if this
+        step fails, whatever the Schedule is set to do. Cannot be used with
+        -OnFailure; giving both is an error, and nothing is changed.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated Schedule object.
+        Returns the updated Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Schedule object.
+        With -PassThru, the Schedule in full, with the new step; otherwise nothing. Adding a step changes no other
+        step: the existing steps are sent back with their failure settings exactly as they were.
 
     .EXAMPLE
         Add-JIMScheduleStep -ScheduleId "12345678-..." -StepType RunProfile -ConnectedSystemId 1 -RunProfileId 1
@@ -82,7 +84,7 @@ function Add-JIMScheduleStep {
         Set-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

@@ -4,35 +4,22 @@
 function Get-JIMGeneratedValueSequence {
     <#
     .SYNOPSIS
-        Gets a generated Sequence mapping's counter state (Unique Value Generation, #242).
+        Gets a generated Sequence mapping's counter: the next number it would issue.
 
     .DESCRIPTION
-        Returns the next number a generated Sequence mapping would issue, and how many it has issued so
-        far. Read-only: nothing is allocated or reserved by calling this. Useful before raising a mapping's
-        Sequence Start with Set-JIMSyncRuleMapping, to see what the save would actually move the counter to.
-
-        Only meaningful for a generated mapping whose token kind is Sequence; every other mapping (including
-        an ordinary attribute or Expression mapping, or a generated OnlyIfTaken/Random mapping) returns a
-        "not found" error.
+        Gets the counter behind a generated mapping whose token is a Sequence: the next number it would issue,
+        formatted as it would be, and how many it has issued. Nothing is allocated or reserved. Use it before
+        raising the mapping's Sequence Start with Set-JIMSyncRuleMapping, to see what the change would move the
+        counter to. Any other mapping, including a generated one whose token is OnlyIfTaken or Random, is not found.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule the mapping belongs to. Also accepts pipeline
-        input via the Id property. Alias: Id.
+        The ID of the Synchronisation Rule the mapping belongs to.
 
     .PARAMETER MappingId
-        The unique identifier of the mapping.
+        The ID of the generated mapping.
 
     .OUTPUTS
-        One PSCustomObject describing the counter:
-
-        | Property                | Description                                                          |
-        |--------------------------|------------------------------------------------------------------------|
-        | AttributeName            | The target attribute the counter belongs to                          |
-        | NextNumber               | The next number this flow would issue                                |
-        | NextNumberFormatted      | That number formatted with the mapping's Fixed Width, if any         |
-        | NextNumberWidthExceeded  | True when the next number no longer fits the configured Fixed Width  |
-        | AssignedCount            | How many numbers this flow has issued so far                         |
-        | IsSeeded                 | Whether the counter has been seeded from existing values yet         |
+        The counter's state.
 
     .EXAMPLE
         Get-JIMGeneratedValueSequence -SyncRuleId 1 -MappingId 12
@@ -51,7 +38,7 @@ function Get-JIMGeneratedValueSequence {
         Get-JIMSyncRuleMapping
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueSequenceStateDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

@@ -10,6 +10,7 @@ function Set-JIMPredefinedSearchCriterion {
         Replaces a criterion's attribute, comparison operator and value. This is a full update;
         provide the value carrier that matches the attribute's data type. The operator must be
         applicable to the attribute's data type (see New-JIMPredefinedSearchCriterion).
+        Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER PredefinedSearchId
         The ID of the Predefined Search.
@@ -30,7 +31,8 @@ function Set-JIMPredefinedSearchCriterion {
         The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith,
         NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime
         take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid
-        take Equals and NotEquals.
+        take Equals and NotEquals. Every type also takes HasValue and HasNoValue, which test whether the attribute
+        holds a value at all and take no value.
 
     .PARAMETER StringValue
         The value to compare a Text attribute with.
@@ -56,7 +58,8 @@ function Set-JIMPredefinedSearchCriterion {
         The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        Whether a Text comparison respects case. $false ignores case; it does when omitted.
+        Whether a Text comparison respects case: $false ignores it. When omitted, the criterion keeps its current
+        setting.
 
     .PARAMETER ValueMode
         For a DateTime attribute: Absolute compares with -DateTimeValue, and is the default; Relative compares with
@@ -113,7 +116,8 @@ function Set-JIMPredefinedSearchCriterion {
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
-                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals')]
+                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+                     'HasValue', 'HasNoValue')]
         [string]$ComparisonType,
 
         [Parameter()]

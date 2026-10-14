@@ -38,6 +38,8 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
         repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         _jim = new JimApplication(repo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
+        // The Attribute Flow dialog checks an expression's syntax as it is typed (#2053).
+        Services.AddSingleton<JIM.Models.Interfaces.IExpressionEvaluator>(new JIM.Application.Expressions.DynamicExpressoEvaluator());
     }
 
     [TearDown]

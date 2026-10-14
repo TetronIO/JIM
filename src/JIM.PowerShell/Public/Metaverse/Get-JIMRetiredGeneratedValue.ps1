@@ -4,7 +4,7 @@
 function Get-JIMRetiredGeneratedValue {
     <#
     .SYNOPSIS
-        Lists the retired generated values for an attribute (Unique Value Generation, #242).
+        Lists the retired generated values for an attribute.
 
     .DESCRIPTION
         Returns the retired values register for an attribute that a generated Attribute Flow produces:
@@ -22,42 +22,30 @@ function Get-JIMRetiredGeneratedValue {
         (for an export flow).
 
     .PARAMETER MetaverseAttributeId
-        The id of the Metaverse Attribute. Also accepts pipeline input via the Id property, so a
-        Metaverse Attribute from Get-JIMMetaverseAttribute can be piped straight in. Alias: Id.
+        The ID of the Metaverse Attribute, for an import Attribute Flow. A Metaverse Attribute piped from
+        Get-JIMMetaverseAttribute binds here through its Id.
 
     .PARAMETER MetaverseAttributeName
-        The name of the Metaverse Attribute, for example 'Account Name'. Resolved to its id first.
+        The name of the Metaverse Attribute, for an import Attribute Flow, such as Account Name.
 
     .PARAMETER ConnectedSystemId
-        For an export flow: the id of the Connected System whose attribute is generated.
+        For an export Attribute Flow, the ID of the Connected System whose attribute is generated.
 
     .PARAMETER ObjectTypeId
-        For an export flow: the id of the Connected System Object Type the attribute belongs to.
+        For an export Attribute Flow, the ID of the Connected System Object Type the attribute belongs to.
 
     .PARAMETER AttributeId
-        For an export flow: the id of the Connected System attribute.
+        For an export Attribute Flow, the ID of the Connected System attribute.
 
     .PARAMETER Search
-        Optional text matched case-insensitively against the value and the name of the object that
-        held it.
+        Returns only the values containing this text, or held by an object whose name contains it, ignoring case.
 
     .OUTPUTS
-        One PSCustomObject per retired value:
+        One object per retired value, newest first. Every page is read, so the whole register is returned.
 
-        | Property                             | Description                                                                 |
-        |--------------------------------------|-----------------------------------------------------------------------------|
-        | Id                                   | The register entry's own identifier                                         |
-        | MetaverseAttributeId                 | The Metaverse Attribute (import flow); null for an export flow              |
-        | ConnectedSystemObjectTypeAttributeId | The Connected System attribute (export flow); null for an import flow       |
-        | AttributeName                        | The attribute's name                                                        |
-        | Value                                | The value as it was issued                                                  |
-        | RetiredAt                            | When it was retired (UTC)                                                   |
-        | Reason                               | ObjectDeleted, Superseded, Recalled or Regenerated                          |
-        | FromObjectId                         | The object that held it (Metaverse Object or Connected System Object)       |
-        | FromObjectDisplayName                | That object's name, captured when the value was retired                     |
-        | FromObjectExists                     | Whether that object still exists                                            |
-        | ActivityId                           | The Activity during which it was retired, when one was recorded             |
-        | HeldBy                               | Who held it, for reading: the name, with "(deleted)" once the object is gone |
+        JIM.RetiredGeneratedValue
+        HeldBy (string): Who held the value, for reading: the name of the object that held it, with "(deleted)" once
+            that object no longer exists.
 
     .EXAMPLE
         Get-JIMRetiredGeneratedValue -MetaverseAttributeName 'Account Name'
@@ -87,7 +75,7 @@ function Get-JIMRetiredGeneratedValue {
         Get-JIMSyncRuleMapping
     #>
     [CmdletBinding(DefaultParameterSetName = 'ByMetaverseAttributeId')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RetiredGeneratedValue')]
     param(
         # Aliased to Id so a Metaverse Attribute can be piped straight in (Get-JIMMetaverseAttribute exposes Id). This
         # is the parent attribute's id, not a register entry's; documentation always spells out -MetaverseAttributeId

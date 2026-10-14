@@ -36,8 +36,7 @@
 
     -Check writes nothing, and fails (rule ACC-5 of engineering/DOCUMENTATION_STANDARD.md) when a block
     differs from what this script would write, names a cmdlet the module does not export, or belongs to
-    a cmdlet with an undescribed parameter or undescribed output. Exported cmdlets with no block yet are
-    listed as a warning while the pages migrate.
+    a cmdlet with an undescribed parameter or undescribed output, and when an exported cmdlet has no block.
 
 .PARAMETER ModulePath
     The module manifest to document. Defaults to src/JIM.PowerShell/JIM.psd1.
@@ -78,10 +77,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# What a cmdlet returns, shared with Lint-DocExamples.ps1 so the two cannot disagree.
+Import-Module (Join-Path $PSScriptRoot 'PowerShellReference.psm1') -Force
+
 $script:Culture = [System.Globalization.CultureInfo]::GetCultureInfo('en-GB')
 $script:AllSets = '__AllParameterSets'
-# One property of a type the module builds, as its .OUTPUTS help lists it.
-$script:PropertyLinePattern = '^(?<name>[A-Za-z_]\w*) \((?<type>[^)]+)\): (?<description>.+)$'
 $script:BeginPattern = '<!-- BEGIN GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 $script:EndPattern = '<!-- END GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 
@@ -117,55 +117,10 @@ function Get-FriendlyTypeName {
     $Type.Name
 }
 
-# A .OUTPUTS or .PARAMETER help text as Markdown: lines within a paragraph joined, paragraphs kept.
-function ConvertTo-Paragraphs {
-    param([AllowNull()][string]$Text)
-
-    if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
-    $normalised = $Text -replace "`r", ''
-    @(($normalised.Trim() -split "\n\s*\n") | ForEach-Object { ($_ -split '\s*\n\s*' | ForEach-Object Trim) -join ' ' } |
-        Where-Object { $_ })
-}
-
-# A cmdlet's .OUTPUTS help, split into its prose, the property lists of the types the module builds itself, and
-# the labels that say when each type comes back. A list is a paragraph whose first line names a JIM type and whose
-# other lines read "Name (type): description", a line that does not starting another being the previous description
-# running on. A label follows the type's name on that first line ("JIM.X: With -Quiet"), or stands on a line of its
-# own for a type with no list ("System.Boolean: With -Quiet").
-function Split-OutputsHelp {
-    param([string[]]$Sections)
-
-    $prose = [System.Collections.Generic.List[string]]::new()
-    $lists = @{}
-    $labels = [ordered]@{}
-    $typeLine = '^(?<type>(?:JIM|System)\.[\w.]+(?:\[\])?)(?::\s*(?<label>\S.*))?$'
-    foreach ($section in @($Sections | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
-        foreach ($paragraph in (($section -replace "`r", '').Trim() -split "\n\s*\n")) {
-            $lines = @($paragraph -split '\n' | ForEach-Object Trim | Where-Object { $_ })
-            if ($lines.Count -eq 0) { continue }
-            $type = [regex]::Match($lines[0], $typeLine)
-            if ($type.Success -and $type.Groups['label'].Success) { $labels[$type.Groups['type'].Value] = $type.Groups['label'].Value }
-            if ($type.Success -and $type.Groups['label'].Success -and $lines.Count -eq 1) { continue }
-            if ($lines.Count -ge 2 -and $type.Success -and $type.Groups['type'].Value -cmatch '^JIM\.\w+$' -and $lines[1] -cmatch $script:PropertyLinePattern) {
-                $properties = [System.Collections.Generic.List[object]]::new()
-                foreach ($line in $lines[1..($lines.Count - 1)]) {
-                    $match = [regex]::Match($line, $script:PropertyLinePattern)
-                    if ($match.Success) {
-                        $properties.Add([pscustomobject]@{ Name = $match.Groups['name'].Value; Type = $match.Groups['type'].Value; Description = $match.Groups['description'].Value })
-                    }
-                    else { $properties[$properties.Count - 1].Description += " $line" }
-                }
-                $lists[$type.Groups['type'].Value] = $properties
-            }
-            else { $prose.Add($lines -join ' ') }
-        }
-    }
-    [pscustomobject]@{ Prose = @($prose); Lists = $lists; Labels = $labels }
-}
-
 # Text from help or a DTO comment, made fit for the page: a cmdlet with its parameters, a parameter, and $true,
 # $false and $null in code, which Get-Help cannot show and so the help leaves plain; and "empty" for null, a word
-# from the source the page does not use (VOI-1). Text already in code is left as it is.
+# from the source the page does not use (VOI-1). Text already in code is left as it is, and so is a quoted label,
+# which is the product's own wording ("Null is a value").
 function ConvertTo-PageText {
     param([AllowNull()][string]$Text)
 
@@ -173,7 +128,10 @@ function ConvertTo-PageText {
     $code = '(?<![\w-])[A-Z][a-z]+-JIM[A-Za-z0-9]*(?:\s+-[A-Z][A-Za-z0-9]*(?::\$\w+)?)*|(?<![\w-])-[A-Z][A-Za-z0-9]*(?::\$\w+)?(?![\w-])|(?<!\w)\$(?:true|false|null)\b'
     $parts = foreach ($part in [regex]::Split($Text, '(`[^`]*`)')) {
         if ($part.StartsWith('`')) { $part; continue }
-        $part = $part -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        $part = @(foreach ($piece in [regex]::Split($part, '("[^"]*")')) {
+            if ($piece.StartsWith('"')) { $piece; continue }
+            $piece -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        }) -join ''
         [regex]::Replace($part, $code, { param($match) '`' + $match.Value + '`' })
     }
     $parts -join ''
@@ -258,71 +216,6 @@ function Get-AttributeSentences {
         }
     }
     $sentences
-}
-
-# Everything the block needs to know about one cmdlet, read from the loaded module.
-function Get-CmdletReference {
-    param([Parameter(Mandatory)][System.Management.Automation.CommandInfo]$Command)
-
-    $ast = $Command.ScriptBlock.Ast
-    $help = $ast.GetHelpContent()
-    $paramBlock = $ast.Body.ParamBlock
-
-    # Sets in the order the reader meets them: the default first, then as declared.
-    $sets = @($Command.ParameterSets | Sort-Object { -not $_.IsDefault })
-    $named = @($sets | Where-Object Name -ne $script:AllSets)
-
-    $parameters = foreach ($parameterAst in @(if ($paramBlock) { $paramBlock.Parameters })) {
-        $name = $parameterAst.Name.VariablePath.UserPath
-        $metadata = $Command.Parameters[$name]
-        $inSets = @($sets | Where-Object { @($_.Parameters | ForEach-Object Name) -contains $name })
-        $setMetadata = @($inSets | ForEach-Object { $_.Parameters | Where-Object Name -eq $name })
-        $description = if ($help -and $help.Parameters.ContainsKey($name.ToUpperInvariant())) { $help.Parameters[$name.ToUpperInvariant()] }
-        $default = if ($parameterAst.DefaultValue -and $metadata.ParameterType -ne [switch]) { $parameterAst.DefaultValue.Extent.Text -replace '\s+', ' ' }
-
-        [pscustomobject]@{
-            Name        = $name
-            Type        = $metadata.ParameterType
-            IsSwitch    = $metadata.ParameterType -eq [switch]
-            Sets        = $inSets
-            SetMetadata = $setMetadata
-            Metadata    = $metadata
-            Description = (ConvertTo-Paragraphs $description) -join ' '
-            Default     = $default
-        }
-    }
-
-    $declaresPositions = $null -ne $paramBlock -and $null -ne $paramBlock.Find({
-            param($node)
-            $node -is [System.Management.Automation.Language.NamedAttributeArgumentAst] -and $node.ArgumentName -eq 'Position' -and
-                $node.Parent.TypeName.Name -in 'Parameter', 'System.Management.Automation.Parameter', 'ParameterAttribute'
-        }, $true)
-
-    $outputsHelp = Split-OutputsHelp -Sections @(if ($help) { $help.Outputs })
-
-    $outputTypes = [ordered]@{}
-    foreach ($attribute in @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
-        foreach ($type in $attribute.Type) {
-            if (-not $outputTypes.Contains($type.Name)) { $outputTypes[$type.Name] = [System.Collections.Generic.List[string]]::new() }
-            foreach ($set in @($attribute.ParameterSetName)) {
-                if (-not $outputTypes[$type.Name].Contains($set)) { $outputTypes[$type.Name].Add($set) }
-            }
-        }
-    }
-
-    [pscustomobject]@{
-        Name        = $Command.Name
-        Sets        = $sets
-        NamedSets   = $named
-        Parameters  = @($parameters)
-        DeclaresPositions = $declaresPositions
-        SupportsShouldProcess = $Command.Parameters.ContainsKey('WhatIf')
-        ConfirmImpact = @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } | ForEach-Object ConfirmImpact | Select-Object -First 1)
-        Outputs     = $outputsHelp.Prose
-        OutputProperties = $outputsHelp.Lists
-        OutputLabels = $outputsHelp.Labels
-        OutputTypes = $outputTypes
-    }
 }
 
 function Format-Syntax {
@@ -474,30 +367,6 @@ function Resolve-ListedProperty {
     $shape = if ($Property.Type.EndsWith('[]')) { Get-SchemaShape -Property @{ type = 'array'; items = $reference } -Schemas $Schemas }
     else { Get-SchemaShape -Property $reference -Schemas $Schemas }
     [pscustomobject]@{ Name = $Property.Name; Type = $shape.Type; Description = (@($Property.Description, $shape.Note) | Where-Object { $_ }) -join ' ' }
-}
-
-# A schema's property name in the PascalCase the module returns.
-function ConvertTo-PropertyName {
-    param([string]$Name)
-    $Name.Substring(0, 1).ToUpperInvariant() + $Name.Substring(1)
-}
-
-# The names of a schema's properties, those it takes through allOf first.
-function Get-SchemaPropertyNames {
-    param($Schemas, [string]$Name, [System.Collections.Generic.HashSet[string]]$Seen)
-
-    if (-not $Seen) { $Seen = [System.Collections.Generic.HashSet[string]]::new() }
-    if (-not $Seen.Add($Name) -or -not $Schemas.Contains($Name)) { return @() }
-    $schema = $Schemas[$Name]
-    $names = [System.Collections.Generic.List[string]]::new()
-    if ($schema.Contains('allOf')) {
-        foreach ($part in $schema['allOf']) {
-            if ($part.Contains('$ref')) { foreach ($inherited in (Get-SchemaPropertyNames -Schemas $Schemas -Name ($part['$ref'] -replace '^#/components/schemas/', '') -Seen $Seen)) { $names.Add($inherited) } }
-            elseif ($part.Contains('properties')) { foreach ($key in $part['properties'].Keys) { $names.Add((ConvertTo-PropertyName $key)) } }
-        }
-    }
-    if ($schema.Contains('properties')) { foreach ($key in $schema['properties'].Keys) { $names.Add((ConvertTo-PropertyName $key)) } }
-    @($names | Select-Object -Unique)
 }
 
 # A DTO's XML comment, which is written for the code, as a public page may carry it: on one line, without the
@@ -691,15 +560,11 @@ function Format-Output {
         $schemaName = $null
         if ($typeName -like 'JIM.*') {
             $display = $typeName.Substring(4)
-            # A name the module gives the API's object: tabled with that object's properties.
-            if ($OutputTypeSchemas.ContainsKey($typeName)) {
-                if ($Schemas.Contains($OutputTypeSchemas[$typeName])) { $schemaName = $OutputTypeSchemas[$typeName] }
-                else { $Problems.Add("OutputTypeSchemas maps $typeName to $($OutputTypeSchemas[$typeName]), which is not a schema in the OpenAPI document; correct the schema's name") }
-            }
-            elseif ($Schemas.Contains($display)) { $schemaName = $display }
-            elseif (-not $NonApiOutputTypes.ContainsKey($typeName)) {
-                $Problems.Add("$($Reference.Name) declares output type $typeName, which is not a schema in the OpenAPI document; correct the name, or list it in NonApiOutputTypes with the reason")
-            }
+            # The API's object (by its own name, or the name the module gives it), or a type the module builds.
+            $source = Resolve-OutputTypeSource -TypeName $typeName -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -OutputTypeSchemas $OutputTypeSchemas
+            if ($source.Kind -eq 'Schema') { $schemaName = $source.SchemaName }
+            elseif ($source.Problem -like 'OutputTypeSchemas *') { $Problems.Add($source.Problem) }
+            elseif ($source.Problem) { $Problems.Add("$($Reference.Name) $($source.Problem)") }
         }
         else {
             $resolved = $typeName -as [type]
@@ -805,9 +670,9 @@ function Write-Finding {
 # --- Inputs ---------------------------------------------------------------------------------------------
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$config = if (Test-Path -LiteralPath $ConfigPath) { Import-PowerShellDataFile -LiteralPath $ConfigPath } else { @{} }
-$nonApi = if ($config.ContainsKey('NonApiOutputTypes') -and $config.NonApiOutputTypes) { $config.NonApiOutputTypes } else { @{} }
-$schemaFor = if ($config.ContainsKey('OutputTypeSchemas') -and $config.OutputTypeSchemas) { $config.OutputTypeSchemas } else { @{} }
+$outputConfig = Import-OutputTypeConfiguration -Path $ConfigPath
+$nonApi = $outputConfig.NonApiOutputTypes
+$schemaFor = $outputConfig.OutputTypeSchemas
 
 if (-not $OpenApiPath) {
     $OpenApiPath = Join-Path ([System.IO.Path]::GetTempPath()) "jim-openapi-$([guid]::NewGuid().ToString('N')).json"
@@ -815,8 +680,7 @@ if (-not $OpenApiPath) {
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Generate-OpenApiDoc.ps1') -OutputPath $OpenApiPath
     if ($LASTEXITCODE -ne 0) { throw 'Generate-OpenApiDoc.ps1 failed; pass -OpenApiPath to use a document generated earlier.' }
 }
-$openApi = Get-Content -LiteralPath $OpenApiPath -Raw | ConvertFrom-Json -AsHashtable
-$schemas = if ($openApi.Contains('components') -and $openApi['components'].Contains('schemas')) { $openApi['components']['schemas'] } else { @{} }
+$schemas = Import-OpenApiSchemas -Path $OpenApiPath
 
 $module = Import-Module -Name (Resolve-Path -LiteralPath $ModulePath).Path -Force -PassThru -DisableNameChecking
 $exported = @{}
@@ -941,15 +805,16 @@ foreach ($typeName in $schemaFor.Keys) {
     }
 }
 
-# Exported cmdlets with no block anywhere: the migration still to do (#1083). Counted from the module, not
-# from the pages' headings, so a cmdlet the pages give no section at all is listed too.
-$notGenerated = @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | ForEach-Object {
-        $page = if ($sectionPage.ContainsKey($_)) { $sectionPage[$_] } else { '(no section)' }
-        "${page}: $_"
-    } | Sort-Object)
-if ($notGenerated.Count -gt 0) {
-    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlets have no generated block yet:"
-    foreach ($entry in $notGenerated) { Write-Host "  $entry" }
+# Every exported cmdlet has a block. Counted from the module, not from the pages' headings, so a cmdlet the
+# pages give no section at all fails too.
+foreach ($name in @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | Sort-Object)) {
+    if ($sectionPage.ContainsKey($name)) {
+        Write-Finding $sectionPage[$name] 1 "$name has no generated block; put '<!-- BEGIN GENERATED: $name -->' and '<!-- END GENERATED: $name -->' in its section, where its Syntax, Parameters and Output go, and run scripts/Update-PowerShellReference.ps1"
+    }
+    else {
+        Write-Finding '' 0 "$name has no generated block, and no section on any page; give it a '## $name' section on its docs/powershell/ page, with the markers, and run scripts/Update-PowerShellReference.ps1"
+    }
+    $failures++
 }
 
 if ($Check) {

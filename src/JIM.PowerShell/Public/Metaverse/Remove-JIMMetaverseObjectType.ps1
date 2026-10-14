@@ -23,18 +23,17 @@ function Remove-JIMMetaverseObjectType {
           Activities.
 
     .PARAMETER Id
-        The unique identifier of the Metaverse Object Type to delete.
+        The ID of the Object Type to delete.
 
     .PARAMETER Name
-        The name of the Metaverse Object Type to delete (resolved to an ID).
+        The name of the Object Type to delete.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the deletion, recorded in the Object Type's Configuration Change History.
 
     .PARAMETER Force
-        Skips the confirmation prompt. The server-side type-the-name safeguard is still satisfied by
-        the cmdlet; -Force only suppresses the interactive PowerShell prompt.
+        Suppresses the confirmation prompt. The cmdlet still gives the name confirmation JIM requires before it
+        removes the configuration that goes with the Object Type.
 
     .OUTPUTS
         None.
@@ -56,6 +55,7 @@ function Remove-JIMMetaverseObjectType {
         Set-JIMMetaverseObjectType
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

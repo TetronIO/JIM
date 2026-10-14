@@ -292,7 +292,7 @@ function Get-JIMWidgetNote {
 
     .PARAMETER Kind
         Pipe it from Get-JIMWidget -Name "x", or give it with -Kind; $true keeps it. Null when the Widget has none,
-        which `Clear-Thing -Now` sets, as $null does.
+        which `Clear-Thing -Now` sets, as $null does. Its "Null is a value" setting is a label, and stays as written.
 
     .OUTPUTS
         Each note, or null where there is none; see Get-JIMWidget -Id.
@@ -791,6 +791,7 @@ function Disconnect-JIMWidget {
         $block | Should -Match 'Pipe it from `Get-JIMWidget -Name` "x", or give it with `-Kind`; `\$true` keeps it\.'
         $block | Should -Match 'Empty when the Widget has none, which `Clear-Thing -Now` sets, as `\$null` does\.'
         $block | Should -Match 'Each note, or empty where there is none; see `Get-JIMWidget -Id`\.'
+        $block | Should -Match 'Its "Null is a value" setting is a label' -Because 'a quoted label is the product''s own wording'
         $block | Should -Not -Match '(?<!`)``(?!`)' -Because 'text already in code is left as it is'
     }
 
@@ -1152,17 +1153,17 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'END'
     }
 
-    It 'warns about a cmdlet section with no block, without failing' {
+    It 'fails on a cmdlet section with no block, naming the page and the cmdlet, and leaves the section alone' {
         $page = "# Widgets`n`n" + (New-Section 'Get-JIMWidget') + "`n## Remove-JIMWidget`n`nHand-written, not generated yet.`n"
         $fixture = New-Fixture -Pages @{ 'widgets.md' = $page }
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
-        $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Match 'Remove-JIMWidget'
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'widgets\.md.*Remove-JIMWidget has no generated block'
         Get-Page $fixture | Should -Match 'Hand-written, not generated yet\.'
     }
 
-    It 'warns about every exported cmdlet with no block, whether or not it has a section, whatever its name' {
+    It 'fails on every exported cmdlet with no block, whether or not it has a section, whatever its name' {
         # Connect-JIM has nothing after "JIM", which a heading pattern can miss; Remove-JIMWidget is only
         # mentioned in a table, so there is no heading to find at all.
         $connect = @'
@@ -1180,10 +1181,9 @@ function Connect-JIM {
         $fixture = New-Fixture -Functions @($script:GetWidget, $script:RemoveWidget, $connect) -Pages @{ 'widgets.md' = $page }
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
-        $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Match 'widgets\.md: Connect-JIM\b'
-        $result.Output | Should -Match '\(no section\): Remove-JIMWidget'
-        $result.Output | Should -Match '2 cmdlets have no generated block'
-        $result.Output | Should -Not -Match ': Get-JIMWidget'
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'widgets\.md.*Connect-JIM has no generated block'
+        $result.Output | Should -Match 'Remove-JIMWidget has no generated block, and no section on any page'
+        $result.Output | Should -Not -Match 'Get-JIMWidget has no generated block'
     }
 }

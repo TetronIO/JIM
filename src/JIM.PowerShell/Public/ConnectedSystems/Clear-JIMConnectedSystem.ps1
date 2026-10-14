@@ -4,54 +4,38 @@
 function Clear-JIMConnectedSystem {
     <#
     .SYNOPSIS
-        Clears all objects from a Connected System's connector space.
+        Empties a Connected System's Connector Space.
 
     .DESCRIPTION
-        Removes all Connected System Objects (CSOs) and their related data from a
-        Connected System's connector space. This is typically used before re-importing
-        data from the source system.
+        Deletes every Connected System Object in a Connected System's Connector Space, with their attribute values,
+        Pending Exports and deferred references, usually before importing everything again. Metaverse Objects are
+        kept; only their joins to the deleted objects are broken.
 
-        The operation deletes CSOs, attribute values, pending exports, and deferred
-        references. Metaverse Objects are not deleted — only the link between the CSO
-        and MVO is severed.
-
-        By default, change history is also deleted (recommended for re-import scenarios).
-        Use -KeepChangeHistory to preserve the audit trail.
-
-        The clear runs as a queued background task, tracked by an Activity, exactly like
-        the portal: the cmdlet returns as soon as the task is queued, and the clear itself
-        happens asynchronously. Use -Wait to block until it has finished.
+        Change history is deleted too, unless -KeepChangeHistory is given. The clear runs as a worker task, tracked
+        by an Activity: the command returns once it is queued, or with -Wait once it has finished.
 
     .PARAMETER Id
-        The unique identifier of the Connected System to clear.
+        The ID of the Connected System to clear.
 
     .PARAMETER InputObject
-        A Connected System object to clear. Accepts pipeline input.
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER KeepChangeHistory
-        If specified, preserves change history records. The CSO foreign key on change
-        records is nulled rather than the records being deleted.
-
-        By default (without this switch), change history is deleted along with the CSOs.
+        Keeps the deleted objects' change history, no longer linked to them.
 
     .PARAMETER Wait
-        Waits for the queued clear to finish before returning. Without it the cmdlet
-        returns as soon as the clear is queued, and a caller that immediately re-imports,
-        or reads the Connector Space back, races the clear task.
+        Waits for the clear to finish before returning. Without it, an import run straight afterwards races the
+        clear.
 
     .PARAMETER Timeout
-        Maximum seconds to wait when -Wait is supplied. Omit to wait indefinitely. A clear
-        that has not finished by the timeout is reported as an error; it continues on the
-        server regardless.
+        How many seconds -Wait waits before reporting an error; the clear carries on regardless. Without it, -Wait
+        waits until the clear finishes.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
-        A PSCustomObject tracking the queued clear:
-        - ActivityId: the clear Activity's id (a GUID); monitor it with Get-JIMActivity
-        - TaskId: the queued Worker Task's id (a GUID)
-        - Message: a human-readable confirmation naming the Connected System
+        The IDs of the Activity and worker task carrying out the clear.
 
     .EXAMPLE
         Clear-JIMConnectedSystem -Id 1
@@ -92,7 +76,7 @@ function Clear-JIMConnectedSystem {
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectorSpaceClearResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

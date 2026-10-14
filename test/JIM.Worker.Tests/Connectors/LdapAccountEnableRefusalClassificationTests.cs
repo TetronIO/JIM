@@ -87,6 +87,60 @@ public class LdapAccountEnableRefusalClassificationTests
         var results = await Export(executor, LdapDirectoryType.ActiveDirectory).ExecuteAsync([UserUpdate("userAccountControl", intValue: 512)], CancellationToken.None);
 
         Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount));
+
+        // No password is owed to the account (the export is not flagged), so holding the enable back would leave it
+        // disabled for good: the refusal is reported, with its remedies, and the modify is never sent again (#2158).
+        executor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A flagged Update is sent again disabled only when Active Directory refused it for want of a password (#2158). The
+    /// same code on another refusal, or any refusal outside the Active Directory family, is reported as it always was,
+    /// and the modify is sent once.
+    /// </summary>
+    [Test]
+    public async Task ExecuteAsync_FlaggedUpdateRefusedForAnotherReason_IsNotResentAndStaysAGeneralFailureAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<ModifyResponse>(ResultCode.UnwillingToPerform,
+                "00002035: SvcErr: DSID-03152E29, problem 5003 (WILL_NOT_PERFORM), data 0\n")));
+
+        var results = await Export(executor, LdapDirectoryType.ActiveDirectory)
+            .ExecuteAsync([UserUpdate("userAccountControl", intValue: 512, initialPasswordFollows: true)], CancellationToken.None);
+
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        executor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_FlaggedUpdateRefusedOutsideTheActiveDirectoryFamily_IsNotResentAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<ModifyResponse>(ResultCode.UnwillingToPerform, ActiveDirectoryRefusal)));
+
+        var results = await Export(executor, LdapDirectoryType.OpenLDAP)
+            .ExecuteAsync([UserUpdate("userAccountControl", intValue: 512, initialPasswordFollows: true)], CancellationToken.None);
+
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        executor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The refusal's message names every remedy, including the one for an account that already exists: set a password
+    /// on it with the set-password action, enabling it there.
+    /// </summary>
+    [Test]
+    public async Task ExecuteAsync_UpdateRefused_NamesSettingAPasswordWithTheSetPasswordActionAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<ModifyResponse>(ResultCode.UnwillingToPerform, ActiveDirectoryRefusal)));
+
+        var results = await Export(executor, LdapDirectoryType.ActiveDirectory).ExecuteAsync([UserUpdate("userAccountControl", intValue: 512)], CancellationToken.None);
+
+        Assert.That(results[0].ErrorMessage, Does.Contain("set-password action"));
     }
 
     [Test]
@@ -189,7 +243,7 @@ public class LdapAccountEnableRefusalClassificationTests
         };
     }
 
-    private static PendingExport UserUpdate(string attributeName, int? intValue = null, string? stringValue = null)
+    private static PendingExport UserUpdate(string attributeName, int? intValue = null, string? stringValue = null, bool initialPasswordFollows = false)
     {
         var type = new ConnectedSystemObjectType { Name = "user" };
         var dnAttribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "distinguishedName", ConnectedSystemObjectType = type };
@@ -197,6 +251,7 @@ public class LdapAccountEnableRefusalClassificationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
+            InitialPasswordFollows = initialPasswordFollows,
             ConnectedSystemObject = new ConnectedSystemObject
             {
                 Id = Guid.NewGuid(),

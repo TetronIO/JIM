@@ -16,11 +16,8 @@ function Reset-JIMGeneratedValueDecision {
         Whatever it covers, this is one request: a pipeline of held values is collected and sent together. Each
         value released is recorded as its own Activity, so every object's history says who released it.
 
-        The command is named Reset- rather than Retry- because Retry is not a PowerShell approved verb; Reset
-        returns the value from its held state to the ordinary one.
-
     .PARAMETER Id
-        The ids of the values to try again. Accepts held values from Get-JIMGeneratedValueDecision through the
+        The IDs of the values to try again. Accepts held values from Get-JIMGeneratedValueDecision through the
         pipeline. Combines with the other criteria rather than replacing them.
 
     .PARAMETER ConnectedSystemId
@@ -40,7 +37,8 @@ function Reset-JIMGeneratedValueDecision {
         Skips the confirmation prompt.
 
     .OUTPUTS
-        PSCustomObject with an AffectedCount property: how many values were released.
+        How many values were released. Zero is a valid outcome: a value already released, or whose rename has been
+        allowed, no longer matches.
 
     .EXAMPLE
         Reset-JIMGeneratedValueDecision -SyncRuleId 2
@@ -62,7 +60,7 @@ function Reset-JIMGeneratedValueDecision {
         Approve-JIMGeneratedValueRename
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueDecisionActionResponse')]
     param(
         [Parameter(ValueFromPipelineByPropertyName)]
         [guid[]]$Id,

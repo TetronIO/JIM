@@ -96,7 +96,7 @@ public static class PasswordHistoryTimelineModel
     /// <param name="Name">The Connected System's name, which is the chip's text.</param>
     /// <param name="State">The derived state.</param>
     /// <param name="PillModifier">The status-pill class suffix (ok, warn, err, neutral) that paints the chip.</param>
-    /// <param name="ChipSuffix">The word after the name on the chip ("retrying", "parked"), or null for a plain success.</param>
+    /// <param name="ChipSuffix">The word after the name on the chip ("retrying", "parked", "warning"), or null for a plain success.</param>
     /// <param name="Tooltip">The target's own words and when they were recorded, one sentence each.</param>
     /// <param name="Detail">The line beneath the chips, or null where the chip says everything.</param>
     /// <param name="CanRetry">Whether the line offers Retry (a parked change).</param>
@@ -206,8 +206,8 @@ public static class PasswordHistoryTimelineModel
 
     /// <summary>
     /// The dot answers "is this change finished, and how did it go": red if any system is parked, expired, cancelled
-    /// or failed; amber if any is retrying or held; grey while any is still queued or delivering, or when nothing
-    /// was attempted at all; green only when every system took it.
+    /// or failed; amber if any is retrying or held, or took the password with a warning; grey while any is still queued
+    /// or delivering, or when nothing was attempted at all; green only when every system took it as asked.
     /// </summary>
     private static Color WorstColour(IReadOnlyList<Target> targets)
     {
@@ -273,8 +273,15 @@ public static class PasswordHistoryTimelineModel
             null => TargetState.Delivering
         };
 
+        // A success completed with a warning set the password but could not apply everything asked of it, such as a
+        // change at the next sign-in on a directory with no equivalent (#2159). It is still Set, but in amber, and its
+        // Activity's words are the line beneath: a plain green chip is what told the helpdesk otherwise.
+        var setWithWarning = state == TargetState.Set && outcome.CompletedWithWarning;
+
         string? detail = state switch
         {
+            TargetState.Set when setWithWarning =>
+                Sentence(FirstNonBlank(outcome.Message) ?? "set, but not everything asked for could be applied"),
             TargetState.Set when outcome.OccurredAt - requestedAt > UnremarkableLag =>
                 $"delivered {outcome.OccurredAt.ToLocalTime().ToFriendlyTime()}, {(outcome.OccurredAt - requestedAt).ToAbbreviatedString(1)} after the request.",
             TargetState.Failed => Sentence(FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? "did not take the password"),
@@ -294,8 +301,8 @@ public static class PasswordHistoryTimelineModel
             outcome.ConnectedSystemId,
             outcome.ConnectedSystemName,
             state,
-            Modifier(state),
-            Suffix(state),
+            setWithWarning ? "warn" : Modifier(state),
+            setWithWarning ? "warning" : Suffix(state),
             $"{Sentence(words)} Recorded {outcome.OccurredAt.ToLocalTime().ToFriendlyDate()}.",
             detail,
             CanRetry: false,

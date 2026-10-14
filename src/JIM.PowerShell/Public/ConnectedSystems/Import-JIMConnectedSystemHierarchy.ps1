@@ -4,29 +4,29 @@
 function Import-JIMConnectedSystemHierarchy {
     <#
     .SYNOPSIS
-        Imports the hierarchy (partitions and containers) from a Connected System.
+        Imports a Connected System's partitions and containers.
 
     .DESCRIPTION
-        Connects to the external system and retrieves its partition and container hierarchy.
-        For LDAP connectors, this retrieves naming contexts and organisational units.
+        Reads a Connected System's partitions and containers into JIM, or refreshes those imported before: on an
+        LDAP directory, its naming contexts and organisational units. Choose which to import from with
+        Set-JIMConnectedSystemPartition and Set-JIMConnectedSystemContainer.
 
-        After importing the hierarchy, you can select which partitions and containers to include
-        in import operations using Set-JIMConnectedSystemPartition and Set-JIMConnectedSystemContainer.
-
-        Note: This operation is destructive - it will replace any existing partition/container configuration.
-        Any partition/container selections will be lost.
+        A refresh keeps your selections. Partitions and containers are matched by the Connected System's own
+        immutable identifier where it has one, so one that was renamed or moved keeps its selection. A selected
+        partition or container the Connected System no longer reports is removed, and the result's
+        HasSelectedItemsRemoved says so.
 
     .PARAMETER Id
-        The unique identifier of the Connected System to import hierarchy for.
+        The ID of the Connected System to import the hierarchy of.
 
     .PARAMETER InputObject
-        Connected System object to import hierarchy for (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER PassThru
-        If specified, returns the updated Connected System object with imported hierarchy.
+        Returns what the refresh changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Connected System object.
+        With -PassThru, what the refresh added, removed, renamed and moved; otherwise nothing.
 
     .EXAMPLE
         Import-JIMConnectedSystemHierarchy -Id 1
@@ -58,7 +58,7 @@ function Import-JIMConnectedSystemHierarchy {
         Set-JIMConnectedSystemContainer
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.HierarchyRefreshResultDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

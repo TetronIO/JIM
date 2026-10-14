@@ -4,28 +4,35 @@
 function Set-JIMScopingCriteriaGroup {
     <#
     .SYNOPSIS
-        Updates a scoping criteria group.
+        Changes a scoping criteria group.
 
     .DESCRIPTION
-        Updates the type (All/Any) or position of an existing scoping criteria group.
+        Changes how a scoping criteria group combines what it contains, or where it sits among the groups beside it.
+        Give -Type, -Position or both; what you leave out stays as it is.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group to update.
+        The ID of the group to change.
 
     .PARAMETER Type
-        Optional. The new logical operator for this group: 'All' (AND) or 'Any' (OR).
+        How the group combines what it contains: All is met when every criterion and child group in it is met, Any
+        when at least one is.
 
     .PARAMETER Position
-        Optional. The new position/order for this group.
+        Where the group sits among the groups beside it, used to order them. It does not change which objects are in
+        scope.
 
     .PARAMETER PassThru
-        If specified, returns the updated group object.
+        Returns the group as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated scoping criteria group.
+        With -PassThru, the group as changed, with what it contains; otherwise nothing.
+
+        JIM.ScopingCriteriaGroup
+        SyncRuleId (int): The ID of the Synchronisation Rule the group belongs to, so the group can be piped to the
+            other scoping criteria cmdlets.
 
     .EXAMPLE
         Set-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 10 -Type Any
@@ -43,7 +50,7 @@ function Set-JIMScopingCriteriaGroup {
         Remove-JIMScopingCriteriaGroup
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScopingCriteriaGroup')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,

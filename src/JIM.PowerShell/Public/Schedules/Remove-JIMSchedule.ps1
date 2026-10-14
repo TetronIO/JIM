@@ -17,7 +17,7 @@ function Remove-JIMSchedule {
         An optional reason for the deletion, recorded against the change history.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -42,6 +42,7 @@ function Remove-JIMSchedule {
         New-JIMSchedule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]

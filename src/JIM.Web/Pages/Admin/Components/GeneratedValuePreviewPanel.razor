@@ -320,7 +320,7 @@
             {
                 var testResult = ExpressionEvaluator.Test(expression, new ExpressionContext(context.Metaverse, context.ConnectedSystem));
                 if (testResult.IsValid)
-                    sampleBaseValue = testResult.Result?.ToString();
+                    sampleBaseValue = ExpressionText.TryFormat(testResult.Result, out var formatted) ? formatted : null;
                 else
                     _evaluationError = testResult.ErrorMessage;
             }

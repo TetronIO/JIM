@@ -4,35 +4,33 @@
 function Set-JIMSyncRuleInitialPassword {
     <#
     .SYNOPSIS
-        Configures the initial password a Synchronisation Rule sets on the accounts it provisions.
+        Changes a Synchronisation Rule's initial password settings.
 
     .DESCRIPTION
-        A newly provisioned account has no password and cannot be signed in to. Turning this on has JIM set one
-        through the Connected System's password channel, straight after the account is created. By default JIM
-        generates a different password for each account at the moment it is set, and stores none of them.
+        A newly provisioned Connected System Object has no password and cannot be signed in to. Turning this on has
+        JIM set one through the Connected System's password channel, straight after it is created. By default JIM
+        generates a different password for each, at the moment it is set, and stores none of them.
 
-        -Source Static is the exception: it sets one password you choose on every account the rule provisions,
-        so you can tell a new starter what it is. This option is not recommended: every account the rule
-        provisions shares that password until each person changes it, so anybody who learns of this can sign in
-        as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again,
-        by this or any other surface, and it is the only password JIM stores. #1252 will deliver a generated
-        password to somebody who should have it instead.
+        -Source Static is the exception: it sets one password you choose on every Connected System Object the rule
+        provisions, so you can tell a new starter what it is. It is not recommended: they all share that password
+        until each person changes it, so anybody who learns it can sign in as any new starter who has not. The
+        password is stored encrypted, cannot be shown again on any surface, and is the only password JIM stores.
 
-        Only the parameters provided are changed; everything else keeps its stored value. The exception is the
-        generator settings, which are replaced as a set: supplying any of the -Style, -Length, -Minimum*,
-        -Word*, -Appended*, -PermittedSymbols or -ExcludeAmbiguousCharacters parameters sends the whole policy,
-        because those settings only make sense together. Read the current values with
-        Get-JIMSyncRuleInitialPassword first if you are changing one of them in isolation.
+        Only the parameters you give change; everything else keeps its stored value. The exception is the generator
+        settings, which are replaced as a set: giving any of -Style, -Length, -Minimum*, -Word*, -Appended*,
+        -PermittedSymbols or -ExcludeAmbiguousCharacters sends the whole policy, because those settings only make
+        sense together. Read the current values with Get-JIMSyncRuleInitialPassword first when changing one of them
+        on its own.
 
-        Turning this on requires an Export Synchronisation Rule that provisions to the Connected System: only
-        an account JIM has just created has never had a password. Settings that cannot produce a password are
-        refused here rather than parking every account they touch.
+        Turning this on needs an export Synchronisation Rule that provisions to the Connected System: only a
+        Connected System Object JIM has just created has never had a password. Settings that cannot produce a
+        password are refused here, rather than parking every Connected System Object they touch.
 
     .PARAMETER Id
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER InputObject
-        Synchronisation Rule object to update (from pipeline).
+        A Synchronisation Rule from Get-JIMSyncRule, through the pipeline.
 
     .PARAMETER Enable
         Sets an initial password on the accounts this Synchronisation Rule provisions.
@@ -41,24 +39,20 @@ function Set-JIMSyncRuleInitialPassword {
         Stops setting an initial password. The settings are kept, so re-enabling restores them.
 
     .PARAMETER Source
-        Where the password comes from.
-        Valid values:
-          - Discovered: generate one per account, deriving the settings from the password policy JIM discovered
-            on the Connected System, and re-deriving whenever that policy is read again.
-          - Custom: generate one per account using exactly the settings saved on this rule.
-          - Static: set the one password supplied with -StaticPassword on every account. Not recommended; see
-            the description.
+        Where the password comes from. Discovered generates one per Connected System Object from the password policy
+        JIM discovered on the Connected System, re-deriving the settings whenever the policy is read again. Custom
+        generates one per Connected System Object from the settings saved on this rule. Static sets the one password
+        given with -StaticPassword on every Connected System Object; it is not recommended.
 
     .PARAMETER StaticPassword
-        The one password to set on every account this Synchronisation Rule provisions, used when -Source is
-        Static. Supply it as a SecureString so it does not sit in the session's command history in clear text.
-
-        Write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
-        is what makes changing another setting safe. A password the Connected System would refuse is rejected
-        here rather than parking every account the rule provisions.
+        The one password to set on every Connected System Object this Synchronisation Rule provisions, used when
+        -Source is Static. Give it as a SecureString, so it does not sit in the session's command history in clear
+        text. Write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
+        is what makes changing another setting safe. A password the Connected System would refuse is rejected here,
+        rather than parking every Connected System Object the rule provisions.
 
     .PARAMETER Style
-        How the password is composed. Valid values: RandomCharacters, Words, Pronounceable.
+        How the password is composed.
 
     .PARAMETER Length
         How many characters to produce. Ignored by the Words style, whose length follows from the words drawn.
@@ -83,11 +77,9 @@ function Set-JIMSyncRuleInitialPassword {
 
     .PARAMETER WordSeparator
         What goes between the words (Words style).
-        Valid values: None, Hyphen, FullStop, Underscore, Digit, RandomSymbol.
 
     .PARAMETER WordCapitalisation
         How the words are capitalised (Words style).
-        Valid values: Lowercase, EachWord, Uppercase, FirstWordOnly, RandomWord.
 
     .PARAMETER AppendedDigitCount
         How many digits to append (Words and Pronounceable styles). Usually how a passphrase reaches the three
@@ -100,23 +92,24 @@ function Set-JIMSyncRuleInitialPassword {
         Whether to leave out characters that are easily confused when a password is read out or copied by hand.
 
     .PARAMETER ExpiryBehaviour
-        What happens to the password once it is set.
-        Valid values: RequireChangeAtNextSignIn, ExpiresAccordingToTargetPolicy, NeverExpires.
-        A Connector that cannot honour the choice records what it applied instead, per account.
+        What happens to the password once it is set. A Connector that cannot honour the choice records what it
+        applied instead, for each Connected System Object. On Active Directory and Samba AD, Password never expires
+        follows this only where no export has written the account's userAccountControl by the time the password is
+        delivered; where one has, the Attribute Flow decides it. Requiring a change at the next sign-in always applies.
 
     .PARAMETER EnableAccount
-        Whether the account is enabled once the password is set. Applies only where no export has written the
-        account's enabled state (such as userAccountControl) by the time the password is delivered; where one has,
-        the Attribute Flow decides. $false leaves the account as it was created.
+        Whether the Connected System Object is enabled once the password is set. It applies only where no export has
+        written the object's enabled state (such as userAccountControl) by the time the password is delivered; where
+        one has, the Attribute Flow decides. $false leaves it as it was created.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated initial password configuration.
+        Returns the settings as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated initial password configuration.
+        With -PassThru, the settings as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMSyncRuleInitialPassword -Id 5 -Enable
@@ -160,7 +153,7 @@ function Set-JIMSyncRuleInitialPassword {
         Set-JIMSyncRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleInitialPasswordResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

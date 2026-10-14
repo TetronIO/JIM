@@ -4,82 +4,92 @@
 function Set-JIMScopingCriterion {
     <#
     .SYNOPSIS
-        Updates a criterion in a scoping criteria group (full replacement).
+        Replaces a criterion in a scoping criteria group.
 
     .DESCRIPTION
-        Replaces a scoping criterion's attribute, comparison operator and value. For export Synchronisation Rules
-        provide a Metaverse attribute; for import Synchronisation Rules a Connected System attribute. For DateTime
-        attributes set -ValueMode Relative and supply -RelativeCount/-RelativeUnit/-RelativeDirection to
-        compare against a date resolved relative to now (re-evaluated on each sync run).
+        Replaces a criterion: its attribute, comparison and value are all set from what you give, as
+        New-JIMScopingCriterion would set them. Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group containing the criterion.
+        The ID of the group the criterion is in.
 
     .PARAMETER CriterionId
-        The unique identifier of the criterion to update.
+        The ID of the criterion to replace.
 
     .PARAMETER MetaverseAttributeId
-        The unique identifier of the Metaverse attribute to evaluate (for export Synchronisation Rules).
+        The ID of the Metaverse attribute to test. An export Synchronisation Rule's criteria test Metaverse
+        attributes.
 
     .PARAMETER MetaverseAttributeName
-        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export Synchronisation Rules).
+        The name of the Metaverse attribute to test, instead of its ID.
 
     .PARAMETER ConnectedSystemAttributeId
-        The unique identifier of the Connected System attribute to evaluate (for import Synchronisation Rules).
+        The ID of the Connected System attribute to test. An import Synchronisation Rule's criteria test Connected
+        System attributes.
 
     .PARAMETER ConnectedSystemAttributeName
-        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import Synchronisation Rules).
+        The name of the Connected System attribute to test, instead of its ID.
 
     .PARAMETER ComparisonType
-        The comparison operator.
+        How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
+        none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a
+        value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in
+        -StringValue, for Text attributes.
 
     .PARAMETER StringValue
-        The string value to compare against (for text attributes).
+        The value to compare a Text attribute with, or the regular expression for MatchesPattern and
+        NotMatchesPattern.
 
     .PARAMETER IntValue
-        The integer value to compare against (for number attributes).
+        The value to compare a Number attribute with.
 
     .PARAMETER LongValue
-        The 64-bit integer value to compare against (for long number attributes).
+        The value to compare a LongNumber attribute with.
 
     .PARAMETER DecimalValue
-        The decimal value to compare against (for decimal attributes). For high-precision values use
-        PowerShell's decimal literal suffix (for example 123.456789012345678d) or a quoted string,
-        because a bare numeric literal is parsed as a double first and can lose precision.
+        The value to compare a Decimal attribute with. For a high-precision value, use the d suffix
+        (123.456789012345678d) or a quoted string: a bare number is read as a double first, and can lose precision.
 
     .PARAMETER DateTimeValue
-        The date/time value to compare against (for absolute datetime criteria).
+        The date and time to compare a DateTime attribute with, when -ValueMode is Absolute.
 
     .PARAMETER BoolValue
-        The boolean value to compare against (for boolean attributes).
+        The value to compare a Boolean attribute with.
 
     .PARAMETER GuidValue
-        The GUID value to compare against (for GUID attributes).
+        The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        When provided as $false, text comparisons ignore case differences. Only meaningful for Text attributes.
+        Whether a Text comparison respects case: $false ignores it. When omitted, the criterion keeps its current
+        setting.
 
     .PARAMETER ValueMode
-        For DateTime attributes, 'Absolute' (compare against -DateTimeValue, the default) or 'Relative'.
-        Relative requires -RelativeCount, -RelativeUnit and -RelativeDirection, and is mutually exclusive with -DateTimeValue.
+        For a DateTime attribute: Absolute compares with -DateTimeValue, and Relative with a date worked out from
+        now each time the rule is evaluated, set by -RelativeCount, -RelativeUnit and -RelativeDirection. Relative
+        cannot be used with -DateTimeValue. Absolute when omitted.
 
     .PARAMETER RelativeCount
-        The relative offset count (zero or positive).
+        How many units from now the date is, zero or more. Used with -ValueMode Relative.
 
     .PARAMETER RelativeUnit
-        The relative offset unit: Hours, Days, Weeks, Months or Years.
+        The unit -RelativeCount counts. Used with -ValueMode Relative.
 
     .PARAMETER RelativeDirection
-        The relative offset direction: Ago (past) or FromNow (future).
+        Whether the date is in the past (Ago) or the future (FromNow). Used with -ValueMode Relative.
 
     .PARAMETER PassThru
-        If specified, returns the updated criterion object.
+        Returns the criterion as replaced.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated criterion.
+        With -PassThru, the criterion as replaced; otherwise nothing.
+
+        JIM.ScopingCriterion
+        SyncRuleId (int): The ID of the Synchronisation Rule the criterion belongs to.
+        GroupId (int): The ID of the group the criterion is in. With SyncRuleId and Id, it lets the criterion be
+            piped to Set-JIMScopingCriterion and Remove-JIMScopingCriterion.
 
     .EXAMPLE
         Set-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15 -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThanOrEquals -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
@@ -92,7 +102,7 @@ function Set-JIMScopingCriterion {
         Remove-JIMScopingCriterion
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ByMvId')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScopingCriterion')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
@@ -118,7 +128,8 @@ function Set-JIMScopingCriterion {
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
-                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals')]
+                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+                     'HasValue', 'HasNoValue', 'MatchesPattern', 'NotMatchesPattern')]
         [string]$ComparisonType,
 
         [Parameter()]

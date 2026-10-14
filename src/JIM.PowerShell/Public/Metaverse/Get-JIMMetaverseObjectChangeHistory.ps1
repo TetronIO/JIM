@@ -19,25 +19,23 @@ function Get-JIMMetaverseObjectChangeHistory {
         fetch every page.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Metaverse Object whose change history is being retrieved.
+        The ID of the Metaverse Object.
 
     .PARAMETER All
-        Automatically paginate through all results and return every change record.
-        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
-        warning; use -Force to fetch beyond the cap.
+        Returns every page of changes rather than one. It stops after 1,000 pages, about 50,000 changes at the
+        default page size, with a warning; -Force reads on. Cannot be used with -Page.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of
-        how large the change history is. Only valid with -All.
+        With -All, reads every page, past the 1,000-page limit.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Cannot be used with -All.
+        The page of changes to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 50. Maximum is 100.
+        How many changes each page holds.
 
     .OUTPUTS
-        PSCustomObject representing change-history record(s).
+        One object per change, newest first.
 
     .EXAMPLE
         Get-JIMMetaverseObjectChangeHistory -Id "12345678-1234-1234-1234-123456789abc"
@@ -72,7 +70,7 @@ function Get-JIMMetaverseObjectChangeHistory {
         Get-JIMMetaverseObjectType
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MvoChangeHistoryDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

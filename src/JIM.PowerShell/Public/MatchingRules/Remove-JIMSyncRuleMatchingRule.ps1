@@ -4,20 +4,19 @@
 function Remove-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Removes an Object Matching Rule from a Synchronisation Rule (advanced mode).
+        Deletes an Object Matching Rule from a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
         Deletes an Object Matching Rule from a Synchronisation Rule.
-        This operation cannot be undone.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER Id
-        The unique identifier of the Matching Rule to delete.
+        The ID of the rule to delete.
 
     .PARAMETER Force
-        Skips the confirmation prompt.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -43,6 +42,7 @@ function Remove-JIMSyncRuleMatchingRule {
         Set-JIMSyncRuleMatchingRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,

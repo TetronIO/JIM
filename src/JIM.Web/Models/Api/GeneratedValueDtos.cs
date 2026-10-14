@@ -12,15 +12,57 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class GeneratedValueAssignmentHeaderDto
 {
+    /// <summary>
+    /// The unique identifier of the assignment.
+    /// </summary>
     public Guid AssignmentId { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Metaverse Attribute the value was generated for.
+    /// </summary>
     public int MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// That attribute's name.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The generated value.
+    /// </summary>
     public string Value { get; set; } = null!;
+
+    /// <summary>
+    /// How the value was made unique: a number added only if the value is taken, the next number in a sequence, or
+    /// a random token.
+    /// </summary>
     public GeneratedValueTokenKind TokenKind { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Synchronisation Rule whose Attribute Flow generated the value.
+    /// </summary>
     public int SyncRuleId { get; set; }
+
+    /// <summary>
+    /// That Synchronisation Rule's name.
+    /// </summary>
     public string? SyncRuleName { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Attribute Flow that generated the value.
+    /// </summary>
     public int SyncRuleMappingId { get; set; }
+
+    /// <summary>
+    /// Where the value stands: Committed once saved onto the object, Remediated after JIM revised it when a target
+    /// refused it, or NeedsDecision when it could not be revised automatically and waits for an administrator.
+    /// Proposed values are never saved, so never appear here.
+    /// </summary>
     public GeneratedValueAssignmentState State { get; set; }
+
+    /// <summary>
+    /// When the value was assigned (UTC).
+    /// </summary>
     public DateTime AssignedDate { get; set; }
 
     public static GeneratedValueAssignmentHeaderDto FromModel(GeneratedValueAssignmentHeader model) => new()
@@ -39,16 +81,43 @@ public class GeneratedValueAssignmentHeaderDto
 }
 
 /// <summary>
-/// API representation of a generated Sequence mapping's counter state (Unique Value Generation, #242, Phase 3).
-/// See <see cref="GeneratedValueSequenceState"/> for the source model.
+/// A generated Sequence mapping's counter: the next number it would issue, without reserving it.
 /// </summary>
 public class GeneratedValueSequenceStateDto
 {
+    /// <summary>
+    /// The attribute the counter issues values for.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The next number the counter would issue: the higher of its current position and the mapping's Sequence
+    /// Start. Before the counter is seeded, the higher of the Sequence Start and one step past the attribute's
+    /// highest existing number.
+    /// </summary>
     public long NextNumber { get; set; }
+
+    /// <summary>
+    /// The next number as it would be issued, padded to the mapping's Fixed Width when it has one.
+    /// </summary>
     public string NextNumberFormatted { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the next number no longer fits the mapping's Fixed Width on a mapping that stops rather than issue a
+    /// longer number: the next value cannot be generated until the width or the counter is changed. False on a
+    /// mapping that allows a longer number.
+    /// </summary>
     public bool NextNumberWidthExceeded { get; set; }
+
+    /// <summary>
+    /// How many numbers the counter has issued; 0 before it is seeded.
+    /// </summary>
     public long AssignedCount { get; set; }
+
+    /// <summary>
+    /// Whether the counter has been seeded. Until it is, the first value seeds it from the higher of the Sequence
+    /// Start and the attribute's highest existing number.
+    /// </summary>
     public bool IsSeeded { get; set; }
 
     public static GeneratedValueSequenceStateDto FromModel(GeneratedValueSequenceState model) => new()
@@ -63,13 +132,25 @@ public class GeneratedValueSequenceStateDto
 }
 
 /// <summary>
-/// API representation of a "Start again" outcome (Unique Value Generation, #242, Phase 3). See
-/// <see cref="GeneratedValueRestartResult"/> for the source model.
+/// What starting a generated mapping again did.
 /// </summary>
 public class GeneratedValueRestartResultDto
 {
+    /// <summary>
+    /// How many of the attribute's retired values were forgotten, and so can be issued again; 0 for a mapping whose
+    /// token is not a Sequence.
+    /// </summary>
     public int RetiredValuesForgotten { get; set; }
+
+    /// <summary>
+    /// The next number before the restart; null when the counter had never been seeded, or the token is not a
+    /// Sequence.
+    /// </summary>
     public long? CounterFrom { get; set; }
+
+    /// <summary>
+    /// The next number after the restart, which is the mapping's Sequence Start; null when CounterFrom is.
+    /// </summary>
     public long? CounterTo { get; set; }
 
     public static GeneratedValueRestartResultDto FromModel(GeneratedValueRestartResult model) => new()

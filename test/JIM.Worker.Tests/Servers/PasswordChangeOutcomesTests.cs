@@ -72,6 +72,7 @@ public class PasswordChangeOutcomesTests
             _ => Task.CompletedTask,
             _ => Task.CompletedTask,
             (_, _) => Task.CompletedTask,
+            _ => Task.CompletedTask,
             new PasswordGeneratorService(),
             () => new TestCredentialProtection());
     }
@@ -368,6 +369,29 @@ public class PasswordChangeOutcomesTests
             Assert.That(target.Message, Is.EqualTo("Password set on Corporate AD."));
             Assert.That(target.OccurredAt, Is.EqualTo(setAt));
             Assert.That(target.AttemptCount, Is.EqualTo(1));
+            Assert.That(target.CompletedWithWarning, Is.False, "a plain completion carries no warning");
+            Assert.That(outcomes.IsSettled, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A delivery the Connected System could not apply exactly as asked (#2159) is completed with a warning. The
+    /// password is set, so it reads Set and settles; the flag and the Activity's words say what differed.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_NoRowAndAnOutcomeCompletedWithAWarning_IsSetWithTheWarningAsync()
+    {
+        const string message = "Password set on Corporate AD. Not everything asked for could be applied: the password ages according to Corporate AD's own policy.";
+        Outcome(CorporateAdId, "Corporate AD", ActivityStatus.CompleteWithWarning, message, null, Created.AddSeconds(1));
+
+        var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
+
+        var target = outcomes!.Targets.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Set));
+            Assert.That(target.CompletedWithWarning, Is.True);
+            Assert.That(target.Message, Is.EqualTo(message));
             Assert.That(outcomes.IsSettled, Is.True);
         }
     }

@@ -115,7 +115,7 @@ public class ImportReferenceMatchingTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.OrdinalIgnoreCase));
         var groupToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_4_ID);
         var member1 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         var member2 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_2_ID);
@@ -172,7 +172,7 @@ public class ImportReferenceMatchingTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.OrdinalIgnoreCase));
         var groupToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_4_ID);
         var member1 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         var member2 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_2_ID);
@@ -284,8 +284,8 @@ public class ImportReferenceMatchingTests
     {
         ConnectedSystemObjectsData.Clear();
 
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
-        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.OrdinalIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.OrdinalIgnoreCase));
 
         // user 1
         var cso1 = new ConnectedSystemObject

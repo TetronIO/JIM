@@ -17,24 +17,33 @@ namespace JIM.Models.Staging;
 /// downgrade on the <see cref="PasswordSetResult"/> when the target cannot honour the requested state, rather
 /// than silently ignoring it.
 /// </para>
+/// <para>
+/// On Active Directory, DONT_EXPIRE_PASSWORD belongs to whatever owns userAccountControl, so a delivery sets or clears
+/// it only where it decides the flag (an administrator's explicit set, or an Initial Password where no export writes
+/// userAccountControl); elsewhere it stays as the account has it (#2159). pwdLastSet = 0 belongs to the password and is
+/// always written for <see cref="RequireChangeAtNextSignIn"/>.
+/// </para>
 /// </summary>
 public enum PasswordExpiryBehaviour
 {
     /// <summary>
     /// The user must choose a new password the first time they sign in.
-    /// In Active Directory this is pwdLastSet = 0, with DONT_EXPIRE_PASSWORD cleared.
+    /// In Active Directory this is pwdLastSet = 0, with DONT_EXPIRE_PASSWORD cleared where the delivery decides that
+    /// flag. Active Directory ignores pwdLastSet = 0 while DONT_EXPIRE_PASSWORD is set.
     /// </summary>
     RequireChangeAtNextSignIn = 0,
 
     /// <summary>
     /// The password ages according to whatever password policy the target applies to the account.
-    /// In Active Directory this is pwdLastSet left at the time of the set, with DONT_EXPIRE_PASSWORD cleared.
+    /// In Active Directory this is pwdLastSet left at the time of the set, with DONT_EXPIRE_PASSWORD cleared where the
+    /// delivery decides that flag.
     /// </summary>
     ExpiresAccordingToTargetPolicy = 1,
 
     /// <summary>
     /// The password stays valid until someone changes it.
-    /// In Active Directory this is the DONT_EXPIRE_PASSWORD flag in userAccountControl.
+    /// In Active Directory this is the DONT_EXPIRE_PASSWORD flag in userAccountControl, set where the delivery decides
+    /// that flag.
     /// </summary>
     NeverExpires = 2
 }

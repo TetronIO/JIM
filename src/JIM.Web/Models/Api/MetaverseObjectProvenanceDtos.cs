@@ -6,12 +6,19 @@ using JIM.Models.Core.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of the origin of every attribute value on a Metaverse Object (#399).
+/// Where a Metaverse Object's attribute values came from, attribute by attribute.
 /// </summary>
 public class MetaverseObjectProvenanceDto
 {
+    /// <summary>
+    /// The unique identifier of the Metaverse Object.
+    /// </summary>
     public Guid MetaverseObjectId { get; set; }
 
+    /// <summary>
+    /// One entry per attribute that holds a value, each with the distinct origins of its values, the most common
+    /// first.
+    /// </summary>
     public List<MetaverseAttributeOriginSummaryDto> Attributes { get; set; } = new();
 
     public static MetaverseObjectProvenanceDto FromModel(MetaverseObjectProvenance model)

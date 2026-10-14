@@ -416,6 +416,7 @@ internal class LdapConnectorExport
 
         // Execute each chunked modify request sequentially
         var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
+        IReadOnlyList<string>? attributesAwaitingInitialPassword = null;
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -429,13 +430,20 @@ internal class LdapConnectorExport
             {
                 SendModify(request, workingDn, singleValuedAttributes);
             }
+            catch (DirectoryOperationException ex) when (CanWithholdEnablementAfterRefusal(pendingExport, request, ex))
+            {
+                // A refusal of the resend propagates and fails the export exactly as this refusal would have.
+                var (withheld, attributeName) = WithEnablementWithheld(request, workingDn);
+                SendModify(withheld, workingDn, singleValuedAttributes);
+                attributesAwaitingInitialPassword = [attributeName];
+            }
             catch (DirectoryOperationException ex) when (hasPlaceholderModifications && IsPlaceholderConstraintViolation(ex))
             {
                 return HandlePlaceholderRejection(workingDn, ex);
             }
         }
 
-        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests);
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests, attributesAwaitingInitialPassword);
     }
 
     /// <summary>
@@ -884,6 +892,7 @@ internal class LdapConnectorExport
 
         // Execute each chunked modify request sequentially
         var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
+        IReadOnlyList<string>? attributesAwaitingInitialPassword = null;
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -893,10 +902,20 @@ internal class LdapConnectorExport
                     i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
-            await SendModifyAsync(request, workingDn, singleValuedAttributes);
+            try
+            {
+                await SendModifyAsync(request, workingDn, singleValuedAttributes);
+            }
+            catch (DirectoryOperationException ex) when (CanWithholdEnablementAfterRefusal(pendingExport, request, ex))
+            {
+                // A refusal of the resend propagates and fails the export exactly as this refusal would have.
+                var (withheld, attributeName) = WithEnablementWithheld(request, workingDn);
+                await SendModifyAsync(withheld, workingDn, singleValuedAttributes);
+                attributesAwaitingInitialPassword = [attributeName];
+            }
         }
 
-        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests);
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests, attributesAwaitingInitialPassword);
     }
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
@@ -1254,10 +1273,15 @@ internal class LdapConnectorExport
     /// account with no password, so it keeps the value it was given.</item>
     /// <item>The change is a Create, and JIM said an Initial Password follows it
     /// (<see cref="PendingExport.InitialPasswordFollows"/>).</item>
-    /// <item><c>userAccountControl</c> is present as a single integer value without ACCOUNTDISABLE. An account the
-    /// Attribute Flow already creates disabled needs nothing, and JIM never invents a value it was not given: absent,
-    /// Active Directory creates the account disabled on its own.</item>
+    /// <item><c>userAccountControl</c> is present as a single integer value without ACCOUNTDISABLE
+    /// (<see cref="TryWithholdEnablement"/>). An account the Attribute Flow already creates disabled needs nothing, and
+    /// JIM never invents a value it was not given: absent, Active Directory creates the account disabled on its own.</item>
     /// </list>
+    /// <para>
+    /// This rewrite is proactive, and for a Create only, because an account being created never has a password yet. An
+    /// Update writes to an account that may well have one, so it is sent as the Attribute Flow asks, and withheld only
+    /// once Active Directory has refused it for want of a password (<see cref="CanWithholdEnablementAfterRefusal"/>, #2158).
+    /// </para>
     /// <para>
     /// Only <paramref name="attributeGroups"/>, the values built for this request, is changed. The Pending Export and its
     /// changes keep the Synchronisation Rule's value, which is what the confirming import is judged against, and
@@ -1274,13 +1298,9 @@ internal class LdapConnectorExport
         if (!attributeGroups.TryGetValue(LdapConnectorConstants.UserAccountControlAttributeName, out var values) || values.Count != 1)
             return null;
 
-        if (values[0] is not string flowText || !int.TryParse(flowText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var flowValue))
+        if (!TryWithholdEnablement(values[0], out var flowValue, out var interimValue))
             return null;
 
-        if ((flowValue & LdapConnectorConstants.UAC_ACCOUNTDISABLE) != 0)
-            return null;
-
-        var interimValue = flowValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
         values[0] = interimValue.ToString(CultureInfo.InvariantCulture);
 
         // Named as the Pending Export spells it; the dictionary matches the name whatever its case.
@@ -1292,6 +1312,102 @@ internal class LdapConnectorExport
             LogSanitiser.Sanitise(dn), LogSanitiser.Sanitise(attributeName), flowValue, interimValue);
 
         return [attributeName];
+    }
+
+    /// <summary>
+    /// Whether an Update the directory refused can be sent again with its enable withheld until a password is delivered
+    /// (#2158). Active Directory will not enable an account that has no password, so an Attribute Flow enabling one whose
+    /// password is still queued (a pre-hire whose start date arrives before the Initial Password is delivered, say) is
+    /// refused. Where JIM said a password follows the Update, the account is held disabled instead, exactly as a Create
+    /// is (#2039), and the delivery enables it once the password is set. Every one of these must hold:
+    /// <list type="bullet">
+    /// <item>The change is an Update, and JIM said a password follows it (<see cref="PendingExport.InitialPasswordFollows"/>):
+    /// one is still owed to the account's person on this Connected System.</item>
+    /// <item>The directory refused it as one that will not enable an account with no password
+    /// (<see cref="LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal"/>, confined to the Active Directory family).
+    /// Reactive rather than proactive, so an account that already has a password is enabled at once, and a directory
+    /// that never refuses (Samba AD, today) is never held.</item>
+    /// <item>The refused request carries exactly one <c>userAccountControl</c> modification, a Replace of one integer
+    /// value without ACCOUNTDISABLE (<see cref="TryWithholdEnablement"/>). Anything else is not an enable JIM can hold,
+    /// and is reported as the refusal it was.</item>
+    /// </list>
+    /// <para>
+    /// The refused modify applied nothing (an LDAP modify is atomic), so every change it carried is sent again with it.
+    /// Should the refusal have come from one step of the fallback in parts (<see cref="SendModify"/>), sending the whole
+    /// request again replays the steps that were applied; that is safe, because every step is a Replace, or a value
+    /// change the directory accepts as already in place under Permissive Modify or answers with the same fallback.
+    /// </para>
+    /// </summary>
+    private bool CanWithholdEnablementAfterRefusal(PendingExport pendingExport, ModifyRequest request, DirectoryOperationException refusal) =>
+        pendingExport.ChangeType == PendingExportChangeType.Update
+        && pendingExport.InitialPasswordFollows
+        && FindEnablingUserAccountControl(request) != null
+        && LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(refusal, pendingExport, _directoryType);
+
+    /// <summary>
+    /// The same modifications for the same entry, with ACCOUNTDISABLE added to the enabling <c>userAccountControl</c>
+    /// value, and the attribute named as the request spells it. Only the modifications are copied: the request is sent
+    /// as any other, so Permissive Modify and the fallback in parts apply to it as they did to the one refused.
+    /// </summary>
+    private (ModifyRequest Request, string AttributeName) WithEnablementWithheld(ModifyRequest refused, string dn)
+    {
+        var (enabling, flowValue, interimValue) = FindEnablingUserAccountControl(refused)
+            ?? throw new InvalidOperationException("The refused modify carries no enabling userAccountControl to withhold.");
+
+        var withheld = new DirectoryAttributeModification { Name = enabling.Name, Operation = DirectoryAttributeOperation.Replace };
+        withheld.Add(interimValue.ToString(CultureInfo.InvariantCulture));
+
+        var request = new ModifyRequest(refused.DistinguishedName);
+        request.Modifications.AddRange(refused.Modifications.Cast<DirectoryAttributeModification>()
+            .Select(modification => ReferenceEquals(modification, enabling) ? withheld : modification)
+            .ToArray());
+
+        _logger.Information("LdapConnectorExport: Active Directory will not enable '{Dn}' until it has a password, and one is owed to it, " +
+            "so {Attribute} {FlowValue} is sent as {InterimValue}; the account is enabled once the password is set",
+            LogSanitiser.Sanitise(dn), LogSanitiser.Sanitise(enabling.Name), flowValue, interimValue);
+
+        return (request, enabling.Name);
+    }
+
+    /// <summary>
+    /// The request's one <c>userAccountControl</c> modification, when it is a Replace of a single value that enables
+    /// the account, with that value and the value disabling it; null otherwise, including when the attribute is modified
+    /// more than once.
+    /// </summary>
+    private static (DirectoryAttributeModification Modification, int FlowValue, int InterimValue)? FindEnablingUserAccountControl(ModifyRequest request)
+    {
+        var userAccountControl = request.Modifications.Cast<DirectoryAttributeModification>()
+            .Where(modification => modification.Name.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (userAccountControl is not [{ Operation: DirectoryAttributeOperation.Replace, Count: 1 } modification])
+            return null;
+
+        return TryWithholdEnablement(modification[0], out var flowValue, out var interimValue)
+            ? (modification, flowValue, interimValue)
+            : null;
+    }
+
+    /// <summary>
+    /// Reads a <c>userAccountControl</c> value an Attribute Flow sent as one that enables the account: an integer
+    /// without ACCOUNTDISABLE (0x2), with the same value disabling it, which is what Active Directory holds until the
+    /// account has a password. False for anything else: a value that already disables the account needs nothing, and
+    /// one that is not an integer is never guessed at. Shared by the Create rewrite (#2039) and the Update resend (#2158).
+    /// </summary>
+    private static bool TryWithholdEnablement(object? value, out int flowValue, out int interimValue)
+    {
+        interimValue = 0;
+        if (value is not string text || !int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out flowValue))
+        {
+            flowValue = 0;
+            return false;
+        }
+
+        if ((flowValue & LdapConnectorConstants.UAC_ACCOUNTDISABLE) != 0)
+            return false;
+
+        interimValue = flowValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
+        return true;
     }
 
     /// <summary>
@@ -1788,14 +1904,17 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// The result of an update whose modify requests have all reached the state they asked for. A renamed object
-    /// reports its new Distinguished Name, so JIM records where the object now lives.
+    /// reports its new Distinguished Name, so JIM records where the object now lives; an enable withheld until a password
+    /// is delivered (#2158) is reported as awaiting it. Whether the update wrote the enabled state is judged from the
+    /// requests as built, so an attribute reported awaiting a password is always one that wrote it.
     /// </summary>
-    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, List<ModifyRequest> modifyRequests)
+    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, List<ModifyRequest> modifyRequests,
+        IReadOnlyList<string>? attributesAwaitingInitialPassword)
     {
         _logger.Debug("LdapConnectorExport: Successfully updated object at '{Dn}' with {Count} modify requests",
             LogSanitiser.Sanitise(workingDn), modifyRequests.Count);
 
-        var result = wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
+        var result = ConnectedSystemExportResult.Succeeded(null, wasRenamed ? workingDn : null, attributesAwaitingInitialPassword);
         result.SetsAccountEnabledState = WritesAccountEnabledState(modifyRequests
             .SelectMany(request => request.Modifications.Cast<DirectoryAttributeModification>())
             .Select(modification => modification.Name));
