@@ -13,6 +13,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Search;
+using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Utility;
 // Activity is ambiguous between JIM.Models.Activities.Activity and System.Diagnostics.Activity (used for Stopwatch);
@@ -950,22 +951,159 @@ public class ExampleDataServer
         ExampleDataTemplateAttribute templateAttribute)
     {
         var attributeName = templateAttribute.MetaverseAttribute!.Name;
-        var context = BuildExpressionContext(metaverseObject);
+        var evaluation = EvaluateAttributeExpressionOutcome(expressionEvaluator, metaverseObject, templateAttribute.Expression!);
+        return evaluation.ErrorReason switch
+        {
+            null => evaluation.Value,
+            ExampleDataExpressionErrorReason.EvaluationFailed => throw new InvalidDataException(
+                $"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {evaluation.EvaluationError}"),
+            ExampleDataExpressionErrorReason.SeveralValues => throw new InvalidDataException(
+                $"ExampleDataServer: the generation expression for attribute '{attributeName}' returned several values; " +
+                "an Example Data Template attribute's expression must return one value."),
+            ExampleDataExpressionErrorReason.NoTextForm => throw new InvalidDataException(
+                $"ExampleDataServer: the generation expression for attribute '{attributeName}' returned a Binary value, which has no text form."),
+            _ => throw new InvalidOperationException($"Unknown Example Data expression error reason '{evaluation.ErrorReason}'.")
+        };
+    }
 
-        // Test() evaluates and captures any failure as a result rather than throwing, so we attribute the error here.
-        var result = expressionEvaluator.Test(templateAttribute.Expression!, context);
+    /// <summary>
+    /// The one evaluation of a template attribute's expression (#2055), which generation and the tester both run:
+    /// against the Metaverse Object's already-generated values, to a value in JIM's text form, no value, or an error.
+    /// Nothing here throws for the expression's own fault.
+    /// </summary>
+    private static ExampleDataExpressionEvaluation EvaluateAttributeExpressionOutcome(
+        IExpressionEvaluator expressionEvaluator,
+        MetaverseObject metaverseObject,
+        string expression)
+    {
+        // Test() evaluates and captures any failure as a result rather than throwing.
+        var result = expressionEvaluator.Test(expression, BuildExpressionContext(metaverseObject));
         if (!result.IsValid)
-            throw new InvalidDataException($"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {result.ErrorMessage}");
+            return Error(ExampleDataExpressionErrorReason.EvaluationFailed, result.ErrorMessage);
 
         if (ExpressionResultValues.IsCollection(result.Result))
-            throw new InvalidDataException($"ExampleDataServer: the generation expression for attribute '{attributeName}' returned several values; " +
-                "an Example Data Template attribute's expression must return one value.");
+            return Error(ExampleDataExpressionErrorReason.SeveralValues, null, result.Result);
 
         if (!ExpressionText.TryFormat(result.Result, out var text))
-            throw new InvalidDataException($"ExampleDataServer: the generation expression for attribute '{attributeName}' returned a Binary value, " +
-                "which has no text form.");
+            return Error(ExampleDataExpressionErrorReason.NoTextForm, null, result.Result);
 
-        return text;
+        return text == null
+            ? new ExampleDataExpressionEvaluation { Outcome = ExampleDataExpressionOutcome.NoValue }
+            : new ExampleDataExpressionEvaluation { Outcome = ExampleDataExpressionOutcome.Value, Value = text, Result = result.Result };
+
+        static ExampleDataExpressionEvaluation Error(ExampleDataExpressionErrorReason reason, string? evaluationError, object? value = null) => new()
+        {
+            Outcome = ExampleDataExpressionOutcome.Error, ErrorReason = reason, EvaluationError = evaluationError, Result = value
+        };
+    }
+
+    /// <summary>
+    /// Tests a template attribute's expression (#2055) against sample values for the attributes it reads, by the
+    /// evaluation generating objects runs. Each sample is converted to the type of the template attribute that generates
+    /// it on the same object and held on a transient Metaverse Object, so it reaches the expression as a generated value
+    /// would. An input the template does not generate on the object never has a value.
+    /// </summary>
+    /// <param name="objectType">The template's object type the attribute belongs to, whose template attributes are what
+    /// the expression can read.</param>
+    /// <param name="attribute">The template attribute under test.</param>
+    /// <param name="expression">The expression to test: the attribute's own, or an unsaved edit of it.</param>
+    public static ExampleDataExpressionTestResult TestAttributeExpression(
+        ExampleDataObjectType objectType,
+        ExampleDataTemplateAttribute attribute,
+        string expression,
+        IReadOnlyList<AttributeSample> samples,
+        IExpressionEvaluator expressionEvaluator)
+    {
+        ArgumentNullException.ThrowIfNull(objectType);
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentNullException.ThrowIfNull(samples);
+        ArgumentNullException.ThrowIfNull(expressionEvaluator);
+
+        // What the expression can read: the attributes the template generates on this object, other than this one.
+        var generated = objectType.TemplateAttributes
+            .Where(other => other.MetaverseAttribute != null && !ReferenceEquals(other, attribute))
+            .Select(other => other.MetaverseAttribute!)
+            .ToList();
+
+        var read = ExpressionInputResolver.Resolve(expression)
+            .Where(input => input.Source == ExpressionInputSource.Metaverse)
+            .Select(input => input.AttributeName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var inputs = read
+            .Select(name => generated.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .Where(found => found != null)
+            .Select(found => new AttributeSampleDescriptor(found!.Name, found.Type, found.AttributePlurality))
+            .ToList();
+        var notGenerated = read
+            .Where(name => !generated.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var errors = new List<string>();
+        var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
+        foreach (var sample in samples.Where(sample => sample.Values.Count > 0))
+        {
+            var accessor = $"mv[\"{sample.AttributeName}\"]";
+            var target = generated.FirstOrDefault(a => string.Equals(a.Name, sample.AttributeName, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                errors.Add($"{accessor} has a value, but this template does not generate '{sample.AttributeName}' on the object, so the expression would never see one.");
+                continue;
+            }
+
+            foreach (var typed in TestSampleValues.Typed(accessor, sample.Values, target.Type, target.AttributePlurality, errors))
+            {
+                var value = TestSampleValues.ToMetaverseValue(target, typed);
+                value.MetaverseObject = metaverseObject;
+                metaverseObject.AttributeValues.Add(value);
+            }
+        }
+
+        if (errors.Count > 0)
+            return new ExampleDataExpressionTestResult { Inputs = inputs, InputsNotGenerated = notGenerated, InputErrors = errors };
+
+        return new ExampleDataExpressionTestResult
+        {
+            Inputs = inputs,
+            InputsNotGenerated = notGenerated,
+            Evaluation = EvaluateAttributeExpressionOutcome(expressionEvaluator, metaverseObject, expression)
+        };
+    }
+
+    /// <summary>
+    /// Tests a template attribute's expression (#2055) with the evaluator generation uses. See the static overload.
+    /// </summary>
+    public ExampleDataExpressionTestResult TestAttributeExpression(
+        ExampleDataObjectType objectType,
+        ExampleDataTemplateAttribute attribute,
+        string expression,
+        IReadOnlyList<AttributeSample> samples) =>
+        TestAttributeExpression(objectType, attribute, expression, samples, _expressionEvaluator);
+
+    /// <summary>
+    /// What generating objects would do with an expression's outcome, in one sentence an administrator reads beside the
+    /// result. The REST API and PowerShell word it the same way.
+    /// </summary>
+    public static string DescribeExpressionOutcome(ExampleDataExpressionEvaluation evaluation, string attributeName)
+    {
+        ArgumentNullException.ThrowIfNull(evaluation);
+
+        var target = $"'{attributeName}'";
+        const string fails = "generating objects from the template fails";
+        return evaluation.Outcome switch
+        {
+            ExampleDataExpressionOutcome.Value => $"{target} would be generated as this value.",
+            ExampleDataExpressionOutcome.NoValue => $"The expression produced no value, so objects are generated without {target}.",
+            _ => evaluation.ErrorReason switch
+            {
+                ExampleDataExpressionErrorReason.EvaluationFailed => $"The expression for {target} failed, so {fails}: {evaluation.EvaluationError}",
+                ExampleDataExpressionErrorReason.SeveralValues =>
+                    $"The expression for {target} returned several values, but it must return one, so {fails}.",
+                ExampleDataExpressionErrorReason.NoTextForm =>
+                    $"The expression for {target} returned a value with no text form, such as a Binary value, so {fails}.",
+                _ => throw new InvalidOperationException($"Unknown Example Data expression error reason '{evaluation.ErrorReason}'.")
+            }
+        };
     }
 
     /// <summary>

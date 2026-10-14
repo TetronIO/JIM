@@ -222,6 +222,7 @@
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
+        'Test-JIMExampleDataExpression',
         'New-JIMExampleDataSet',
         'New-JIMExampleDataTemplate',
         'Remove-JIMExampleDataSet',
