@@ -1,8 +1,8 @@
 # Expression Value Sources in Scoping Criteria
 
-- **Status:** Planned
+- **Status:** Doing (PR 1 in progress)
 - **Issue:** [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3 of [#207](https://github.com/TetronIO/JIM/issues/207))
-- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 3: Expression value sources in scoping criteria", Scenario 10, Open Question 3)
+- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 3: Expression value sources in scoping criteria", Scenario 10, Open Question 3)
 
 ## Overview
 

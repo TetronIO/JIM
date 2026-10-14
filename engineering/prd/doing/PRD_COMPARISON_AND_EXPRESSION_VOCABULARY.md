@@ -5,7 +5,7 @@
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#207](https://github.com/TetronIO/JIM/issues/207) (parent), with sub-issues [#2051](https://github.com/TetronIO/JIM/issues/2051) (case-sensitivity policy), [#2052](https://github.com/TetronIO/JIM/issues/2052) (Phase 1), [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2), [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3), [#2055](https://github.com/TetronIO/JIM/issues/2055) (configuration test harness)
 - **UI mocks:** [Matching Expressions (#207)](https://claude.ai/artifact/U7urHxpx49uGm4EBi5Ckme) (Claude artifact, private to the product owner)
-- **Plans:** [CASE_SENSITIVITY_POLICY.md](../../plans/doing/CASE_SENSITIVITY_POLICY.md) (#2051), [OBJECT_MATCHING_EXPRESSIONS.md](../../plans/done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052), [OPERATOR_CATALOGUE_AND_FUNCTION_LIBRARY.md](../../plans/done/OPERATOR_CATALOGUE_AND_FUNCTION_LIBRARY.md) (#2053), [SCOPING_EXPRESSION_CRITERIA.md](../../plans/SCOPING_EXPRESSION_CRITERIA.md) (#2054)
+- **Plans:** [CASE_SENSITIVITY_POLICY.md](../../plans/doing/CASE_SENSITIVITY_POLICY.md) (#2051), [OBJECT_MATCHING_EXPRESSIONS.md](../../plans/done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052), [OPERATOR_CATALOGUE_AND_FUNCTION_LIBRARY.md](../../plans/done/OPERATOR_CATALOGUE_AND_FUNCTION_LIBRARY.md) (#2053), [SCOPING_EXPRESSION_CRITERIA.md](../../plans/doing/SCOPING_EXPRESSION_CRITERIA.md) (#2054)
 
 ## Problem Statement
 

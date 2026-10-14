@@ -25,6 +25,19 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
     public int? ConnectedSystemAttributeId { get; set; }
 
+    /// <summary>
+    /// An expression whose computed value the criterion compares, in place of an attribute (#2054). It reads
+    /// <c>cs["..."]</c> on an import rule and <c>mv["..."]</c> on an export rule. Null for an attribute criterion.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type an expression criterion's computed value is compared as, which decides the operators it may use and
+    /// how its value is read. Chosen by the administrator rather than inferred, since an expression can compute no value
+    /// for the object it is tried against. Null for an attribute criterion, whose attribute's own type applies.
+    /// </summary>
+    public AttributeDataType? CompareAs { get; set; }
+
     public SearchComparisonType ComparisonType { get; set; } = SearchComparisonType.NotSet;
 
     public string? StringValue { get; set; }
@@ -70,10 +83,31 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public RelativeDateDirection? RelativeDirection { get; set; }
 
     /// <summary>
-    /// Gets the data type of the attribute being evaluated (from either MV or CS attribute).
+    /// Whether the criterion compares an expression's computed value rather than an attribute.
+    /// </summary>
+    public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);
+
+    /// <summary>
+    /// Whether the criterion has exactly one left-hand side: an attribute (either side), or an expression with a type to
+    /// compare it as. An attribute criterion takes its type from the attribute, so it carries no compare-as type.
+    /// </summary>
+    public bool IsValid()
+    {
+        var hasAttribute = MetaverseAttributeId.HasValue || MetaverseAttribute != null ||
+                           ConnectedSystemAttributeId.HasValue || ConnectedSystemAttribute != null;
+
+        return IsExpression
+            ? !hasAttribute && CompareAs.HasValue
+            : hasAttribute && !CompareAs.HasValue;
+    }
+
+    /// <summary>
+    /// Gets the data type the criterion compares: the type an expression is compared as, or the attribute's own type.
     /// </summary>
     public AttributeDataType? GetAttributeDataType()
     {
+        if (IsExpression)
+            return CompareAs;
         if (MetaverseAttribute != null)
             return MetaverseAttribute.Type;
         if (ConnectedSystemAttribute != null)
@@ -82,10 +116,12 @@ public class SyncRuleScopingCriteria : ICriterionValues
     }
 
     /// <summary>
-    /// Gets the name of the attribute being evaluated (from either MV or CS attribute).
+    /// Gets what the criterion compares, for display: the expression, or the attribute's name.
     /// </summary>
     public string? GetAttributeName()
     {
+        if (IsExpression)
+            return Expression;
         if (MetaverseAttribute != null)
             return MetaverseAttribute.Name;
         if (ConnectedSystemAttribute != null)
