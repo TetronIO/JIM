@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
