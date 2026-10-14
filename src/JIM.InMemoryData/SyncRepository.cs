@@ -134,6 +134,14 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Metaverse Objects, keyed by MVO ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
 
+    /// <summary>
+    /// The Connected System Object change records persisted without an execution item (quiet deletions), which the
+    /// RPEIs therefore cannot carry.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemObjectChange> StandaloneCsoChanges => _standaloneCsoChanges;
+
+    private readonly List<ConnectedSystemObjectChange> _standaloneCsoChanges = [];
+
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
@@ -2393,6 +2401,12 @@ public class SyncRepository : ISyncRepository
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         // No-op — CSO changes are already in memory on the RPEI objects
+        return Task.CompletedTask;
+    }
+
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    {
+        _standaloneCsoChanges.AddRange(changes);
         return Task.CompletedTask;
     }
 
