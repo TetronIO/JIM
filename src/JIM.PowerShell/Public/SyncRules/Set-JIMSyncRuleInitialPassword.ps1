@@ -93,7 +93,9 @@ function Set-JIMSyncRuleInitialPassword {
 
     .PARAMETER ExpiryBehaviour
         What happens to the password once it is set. A Connector that cannot honour the choice records what it
-        applied instead, for each Connected System Object.
+        applied instead, for each Connected System Object. On Active Directory and Samba AD, Password never expires
+        follows this only where no export has written the account's userAccountControl by the time the password is
+        delivered; where one has, the Attribute Flow decides it. Requiring a change at the next sign-in always applies.
 
     .PARAMETER EnableAccount
         Whether the Connected System Object is enabled once the password is set. It applies only where no export has

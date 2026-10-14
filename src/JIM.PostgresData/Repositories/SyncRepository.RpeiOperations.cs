@@ -288,13 +288,19 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         var changes = rpeis
             .Where(r => r.ConnectedSystemObjectChange != null)
             .Select(r => r.ConnectedSystemObjectChange!)
             .ToList();
 
+        return PersistCsoChangesAsync(changes);
+    }
+
+    /// <inheritdoc />
+    public async Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    {
         if (changes.Count == 0)
             return;
 

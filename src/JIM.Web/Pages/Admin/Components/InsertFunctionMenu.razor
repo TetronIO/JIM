@@ -1,0 +1,132 @@
+@using JIM.Application.Expressions
+@using JIM.Models.Expressions
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Insert function" beside Insert attribute (#2053, PRD Phase 2 requirement 9): every function the expression language
+   has, from the function catalogue, grouped as the docs' function reference groups them, each with its signature and
+   what it does. Choosing one hands "Name(" to OnInsert, which the host passes to ExpressionEditor.InsertAtCursorAsync,
+   so the signature help takes over from there. Built and driven by the keyboard exactly as InsertAttributeMenu is. *@
+
+<div class="d-inline-block">
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Functions"
+               EndIcon="@Icons.Material.Filled.ArrowDropDown" Disabled="@Disabled" OnClick="ToggleAsync"
+               aria-haspopup="true" aria-expanded="@(_open ? "true" : "false")"
+               data-testid="jim-insert-function-button">Insert function</MudButton>
+    <MudPopover Open="@_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Paper="true" Elevation="8">
+        @if (_open)
+        {
+            <div @ref="_list" @onkeydown="OnKeyDown" class="jim-insert-attribute-menu jim-insert-function-menu" data-testid="jim-insert-function-menu">
+                <div class="px-3 pt-2 pb-2">
+                    <SearchField @ref="_search" @bind-Value="_filter" Placeholder="Filter functions" Margin="Margin.Dense" />
+                </div>
+                <div class="jim-insert-attribute-list">
+                    @foreach (var group in Filtered().GroupBy(function => function.Category).OrderBy(group => group.Key))
+                    {
+                        <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-function-group">@ExpressionFunctionCatalogue.CategoryName(group.Key)</MudText>
+                        @foreach (var function in group)
+                        {
+                            <button @key="function.Name" type="button" class="jim-insert-attribute-item" data-insert-item
+                                    @onclick="@(() => ChooseAsync(function))">
+                                <code class="jim-insert-function-signature" data-testid="jim-insert-function-name">@function.Signature</code>
+                                <span class="jim-insert-function-description">@ExpressionAssist.PlainText(function.Description)</span>
+                            </button>
+                        }
+                    }
+                    @if (!Filtered().Any())
+                    {
+                        <MudText Class="px-4 py-2 mud-text-secondary" data-testid="jim-insert-function-none">No functions match "@_filter".</MudText>
+                    }
+                </div>
+            </div>
+        }
+    </MudPopover>
+    @if (_open)
+    {
+        @* Closes the menu on a click anywhere else. Above the dialog the menu sits in, below the menu itself. *@
+        <MudOverlay Visible="true" OnClick="CloseAsync" DarkBackground="false" LightBackground="false" ZIndex="@OverlayZIndex" />
+    }
+</div>
+
+@code {
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Raised with the chosen function's name and opening parenthesis, for example <c>IsMatch(</c>.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnInsert { get; set; }
+
+    private string? _filter;
+    private SearchField? _search;
+    private ElementReference _list;
+    private bool _open;
+
+    /// <summary>
+    /// As InsertAttributeMenu: above a dialog's layer (1400), below the popover MudBlazor lifts above it.
+    /// </summary>
+    private const int OverlayZIndex = 1401;
+
+    /// <summary>
+    /// How long to let the popover's content render before focusing the filter: it renders through the popover
+    /// provider, after this component's own render.
+    /// </summary>
+    private static readonly TimeSpan FocusAfterOpenDelay = TimeSpan.FromMilliseconds(100);
+
+    private IEnumerable<ExpressionFunction> Filtered() =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? ExpressionFunctionCatalogue.All
+            : ExpressionFunctionCatalogue.All.Where(function => function.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private async Task ToggleAsync()
+    {
+        if (_open)
+        {
+            await CloseAsync();
+            return;
+        }
+
+        _open = true;
+        StateHasChanged();
+        await Task.Delay(FocusAfterOpenDelay);
+        if (_search == null)
+            return;
+
+        try
+        {
+            await _search.FocusAsync();
+            await JS.InvokeVoidAsync("jimInterop.listKeyboard", _list, "[data-insert-item]");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nothing to focus.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available (prerendering, or a test renderer); the menu works by pointer alone.
+        }
+    }
+
+    private Task CloseAsync()
+    {
+        _open = false;
+        _filter = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task ChooseAsync(ExpressionFunction function)
+    {
+        await CloseAsync();
+        await OnInsert.InvokeAsync(function.Name + "(");
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+            await CloseAsync();
+    }
+}
