@@ -108,7 +108,9 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
 
-**What it means.** A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values, so JIM could not tell whether the object is in the rule's scope. It took no action for the object: nothing was brought into scope or taken out, and any join it already had is kept. The message names the rule, the attribute and the pattern. Every other object in the run carried on.
+**What it means.** A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values, so JIM could not tell whether the object is in the rule's scope. It took no action for the object: nothing was brought into scope or taken out, nothing was provisioned, exported or deprovisioned for it, and any join it already had is kept. The message names the rule, the attribute and the pattern. Every other object in the run carried on.
+
+While a Connected System is deleted, an object whose surviving contributor's scope cannot be decided is left exactly as it was, together with its Metaverse Object, and every other object is deprovisioned. The deletion then stops with the Connected System still in place, because an object of it remains. Fix the pattern, then delete the Connected System again: the run starts over and finishes the held-back objects.
 
 **How to fix.** Simplify the pattern in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` or `(.*)*` is the usual cause: on a long value that does not match, the expression tries an enormous number of ways before giving up. Anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
 

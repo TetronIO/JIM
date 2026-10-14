@@ -613,6 +613,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
         => throw new PreviewWriteAttemptedException(nameof(PersistRpeiCsoChangesAsync));
 
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+        => throw new PreviewWriteAttemptedException(nameof(PersistCsoChangesAsync));
+
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemAsync));
 

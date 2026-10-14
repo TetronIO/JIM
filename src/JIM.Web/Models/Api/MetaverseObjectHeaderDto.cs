@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Utilities;
 
 namespace JIM.Web.Models.Api;
 
@@ -91,7 +92,7 @@ public class MetaverseObjectHeaderDto
             return av.StringValue;
 
         if (av.DateTimeValue.HasValue)
-            return av.DateTimeValue.Value;
+            return DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value);
 
         if (av.IntValue.HasValue)
             return av.IntValue.Value;

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -53,6 +55,25 @@ public class ReferenceRecallResult
     /// reporting (RPEIs and PendingExportCreated outcomes). Bounded by removals per flush.
     /// </summary>
     public List<PendingExport> StagedPendingExports { get; } = [];
+
+    /// <summary>
+    /// Referencing objects whose scope for an export rule could not be decided, so nothing was staged for them. The
+    /// caller records each as that object's error; the rest of the recall is unaffected.
+    /// </summary>
+    public List<ReferenceRecallScopingFailure> ScopingFailures { get; } = [];
+
+    /// <summary>
+    /// One error execution item per <see cref="ScopingFailures"/> entry, for callers that collect items to persist
+    /// themselves rather than preparing them on an Activity.
+    /// </summary>
+    public IEnumerable<ActivityRunProfileExecutionItem> ScopingFailureExecutionItems() =>
+        ScopingFailures.Select(failure => new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
+            ErrorMessage = failure.DescribeForAdministrator(),
+            DisplayNameSnapshot = ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId)
+        });
 
     /// <summary>
     /// Referencing Metaverse Object display names keyed by MVO id, for Activity reporting

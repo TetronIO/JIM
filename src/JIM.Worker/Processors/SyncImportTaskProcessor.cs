@@ -140,6 +140,12 @@ public class SyncImportTaskProcessor
     private int _verificationBenignMismatchCount;
 
     /// <summary>
+    /// #2153: how many imported dates this run were put into the form JIM holds them (a sub-microsecond part dropped,
+    /// or a Kind other than UTC converted), for the end-of-import summary.
+    /// </summary>
+    private int _datesCanonicalisedCount;
+
+    /// <summary>
     /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
     /// directory object is still there, so deletion detection must not retire it just because the import did not
     /// return it under the type JIM holds it as.
@@ -1086,6 +1092,8 @@ public class SyncImportTaskProcessor
         // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
         Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
             totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
+        Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}",
+            _datesCanonicalisedCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
@@ -2387,6 +2395,12 @@ public class SyncImportTaskProcessor
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+        // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
+        // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
+        // sub-microsecond source value was "changed" on every honest diff and raised a false Verification Mode alarm.
+        foreach (var importObject in connectedSystemImportResult.ImportObjects)
+            _datesCanonicalisedCount += ImportValueNormaliser.CanonicaliseDates(importObject);
 
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
@@ -3748,7 +3762,9 @@ public class SyncImportTaskProcessor
                             // we don't have a CSO value for this attribute. set the initial value
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
                         }
-                        else if (existingCsoDateTimeAttributeValue.DateTimeValue != importedObjectAttribute.DateTimeValue)
+                        // Compared canonically (#2153): the stored value is the database's microsecond, read as Kind
+                        // Local, and the import is canonical, so a value and its re-imported self are equal.
+                        else if (!DateTimeAttributeValue.AreEqual(existingCsoDateTimeAttributeValue.DateTimeValue, importedObjectAttribute.DateTimeValue))
                         {
                             // update existing value by removing and adding
                             connectedSystemObject.PendingAttributeValueRemovals.Add(existingCsoDateTimeAttributeValue);

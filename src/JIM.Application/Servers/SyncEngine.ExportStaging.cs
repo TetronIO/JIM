@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -420,13 +421,13 @@ public partial class SyncEngine
         //   3. By value content (fallback for unsaved non-reference values)
         HashSet<Guid>? removedReferenceValueIds = null;
         HashSet<Guid>? removedEntityIds = null;
-        HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>? removedValueContents = null;
+        HashSet<(string?, int?, long?, decimal?, Guid?, bool?, long?)>? removedValueContents = null;
 
         if (removedAttributes is { Count: > 0 })
         {
             removedReferenceValueIds = new HashSet<Guid>();
             removedEntityIds = new HashSet<Guid>();
-            removedValueContents = new HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>();
+            removedValueContents = new HashSet<(string?, int?, long?, decimal?, Guid?, bool?, long?)>();
 
             foreach (var rv in removedAttributes)
             {
@@ -437,7 +438,7 @@ public partial class SyncEngine
                     removedEntityIds.Add(rv.Id);
 
                 if (!rv.ReferenceValueId.HasValue && rv.Id == Guid.Empty)
-                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.DecimalValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
+                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.DecimalValue, rv.GuidValue, rv.BoolValue, DateKey(rv.DateTimeValue)));
             }
         }
 
@@ -617,7 +618,8 @@ public partial class SyncEngine
                                 attributeChange.IntValue = mvoValue.IntValue;
                                 break;
                             case AttributeDataType.DateTime:
-                                attributeChange.DateTimeValue = mvoValue.DateTimeValue;
+                                // A Pending Export carries the date in the form JIM holds it (#2153).
+                                attributeChange.DateTimeValue = CanonicalDate(mvoValue.DateTimeValue);
                                 break;
                             case AttributeDataType.Boolean:
                                 attributeChange.BoolValue = mvoValue.BoolValue;
@@ -701,7 +703,7 @@ public partial class SyncEngine
                 (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
                 (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
                     removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
-                        mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
+                        mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, DateKey(mvoValue.DateTimeValue)))));
 
             Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
                 mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
@@ -956,7 +958,7 @@ public partial class SyncEngine
             case int number: change.IntValue = number; break;
             case long longNumber: change.LongValue = longNumber; break;
             case decimal decimalNumber: change.DecimalValue = decimalNumber; break;
-            case DateTime date: change.DateTimeValue = date; break;
+            case DateTime date: change.DateTimeValue = DateTimeAttributeValue.ToCanonical(date); break;
             case bool flag: change.BoolValue = flag; break;
             case Guid guid: change.GuidValue = guid; break;
             case byte[] bytes: change.ByteValue = bytes; break;
@@ -1281,10 +1283,10 @@ public partial class SyncEngine
             return pendingChange.DecimalValue == existingValue.DecimalValue;
         }
 
-        // DateTime comparison
+        // DateTime comparison, canonically (#2153): a value read from the database is Kind Local and to the microsecond
         if (pendingChange.DateTimeValue.HasValue || existingValue.DateTimeValue.HasValue)
         {
-            return pendingChange.DateTimeValue == existingValue.DateTimeValue;
+            return DateTimeAttributeValue.AreEqual(pendingChange.DateTimeValue, existingValue.DateTimeValue);
         }
 
         // Boolean comparison
@@ -1438,7 +1440,9 @@ public partial class SyncEngine
             // Canonical form is mandatory for decimals: a raw ToString preserves trailing zeros, so 5.0
             // and 5.00 would produce different merge keys and defeat multi-valued dedupe/merge.
             ?? (change.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(change.DecimalValue.Value) : null)
-            ?? change.DateTimeValue?.ToString("O")
+            // A date keys on its canonical ticks (#2153): a round-trip string depends on Kind, which gave a database-read
+            // Local value and an in-memory Utc value of the same instant two keys.
+            ?? (change.DateTimeValue.HasValue ? DateTimeAttributeValue.Key(change.DateTimeValue.Value).ToString(CultureInfo.InvariantCulture) : null)
             ?? change.BoolValue?.ToString()
             ?? (change.ByteValue != null ? Convert.ToBase64String(change.ByteValue) : null)
             ?? string.Empty;

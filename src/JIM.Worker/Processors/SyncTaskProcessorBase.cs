@@ -1576,6 +1576,21 @@ public abstract class SyncTaskProcessorBase
     /// (CWE-117) because it is administrator-authored but still untrusted; the inner exception message
     /// (from the expression evaluator) describes the concrete failure.
     /// </summary>
+    /// <summary>
+    /// Records an export rule's scoping criterion that could not be evaluated for a Metaverse Object as that object's
+    /// error, naming the object, so the administrator can find it and the criterion.
+    /// </summary>
+    private void RecordExportScopingFailure(MetaverseObject mvo, ScopingCriterionFailedException scopingEx)
+    {
+        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+        runProfileExecutionItem.ErrorMessage = $"{scopingEx.Message} Nothing was exported for Metaverse Object {mvo.Id}.";
+        _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+        Log.Warning("EvaluateOutboundExportsAsync: Export scope of MVO {MvoId} could not be decided: {Message}",
+            mvo.Id, LogSanitiser.Sanitise(scopingEx.Message));
+    }
+
     private static string BuildExpressionEvaluationErrorMessage(SyncExpressionEvaluationException expressionEx, Guid? metaverseObjectId = null)
     {
         var attribute = expressionEx.TargetAttributeName ?? "(unknown)";
@@ -3279,6 +3294,15 @@ public abstract class SyncTaskProcessorBase
                     mvo.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
                 return;
             }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                // An export rule's scoping criterion could not be evaluated for this object (a pattern ran past its
+                // time limit), so whether it is in scope is unknown: nothing is provisioned, updated or deprovisioned
+                // for it, and its accounts stay as they are. Before this catch the exception escaped the page's export
+                // evaluation and failed the whole Activity; now it is one object's error and every other object exports.
+                RecordExportScopingFailure(mvo, scopingEx);
+                return;
+            }
             catch (SyncExpressionMissingInputException missingInputEx)
             {
                 // An export Expression read an attribute this Metaverse Object has no value for, and the mapping's
@@ -3534,10 +3558,21 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
             var outOfScopeWorkingSet = new ExportEvaluationWorkingSet();
-            var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
-                mvo,
-                _exportEvaluationCache!,
-                outOfScopeWorkingSet);
+            List<PendingExport> deprovisionPendingExports;
+            try
+            {
+                deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
+                    mvo,
+                    _exportEvaluationCache!,
+                    outOfScopeWorkingSet);
+            }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                // As above: a scope that cannot be decided never deprovisions. The in-scope evaluation reads the same
+                // criteria and normally fails first, so this guards a rule only the out-of-scope pass evaluates.
+                RecordExportScopingFailure(mvo, scopingEx);
+                return;
+            }
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
@@ -5267,10 +5302,11 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task FlushObsoleteCsoOperationsAsync()
     {
-        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion)
+        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion): no execution item, but a
+        // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncRepo.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
+            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -5482,6 +5518,19 @@ public abstract class SyncTaskProcessorBase
                     recallResult.FallbackReferencingObjects, recallResult.PendingExportsStaged,
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
                     recallResult.SkippedDueToExistingDeletePendingExport);
+
+                // A referencing object whose export scope could not be decided received no recall: its error, never
+                // a silent skip.
+                foreach (var failure in recallResult.ScopingFailures)
+                {
+                    var failureItem = _activity.PrepareRunProfileExecutionItem();
+                    failureItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+                    failureItem.ErrorMessage = failure.DescribeForAdministrator();
+                    failureItem.DisplayNameSnapshot = recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId);
+                    _activity.RunProfileExecutionItems.Add(failureItem);
+                    Log.Warning("FlushPendingMvoDeletionsAsync: Reference recall skipped MVO {MvoId}; its export scope could not be decided: {Message}",
+                        failure.MetaverseObjectId, LogSanitiser.Sanitise(failure.Message));
+                }
 
                 // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
                 // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target

@@ -12,6 +12,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -1255,7 +1256,7 @@ public class MetaverseRepository : IMetaverseRepository
                     IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                     LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
                     DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    DateTimeValue = reader.IsDBNull(7) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(7)),
                     BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
                     GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                     NullValue = reader.GetBoolean(10)
@@ -1827,7 +1828,7 @@ public class MetaverseRepository : IMetaverseRepository
             IntValue = r.IntValue,
             LongValue = r.LongValue,
             DecimalValue = r.DecimalValue,
-            DateTimeValue = r.DateTimeValue,
+            DateTimeValue = BulkSqlHelpers.CanonicalDate(r.DateTimeValue),
             BoolValue = r.BoolValue,
             GuidValue = r.GuidValue,
             NullValue = r.NullValue
@@ -2920,7 +2921,7 @@ public class MetaverseRepository : IMetaverseRepository
                         AttributePlurality = (AttributePlurality)reader.GetInt32(6)
                     },
                     StringValue = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    DateTimeValue = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+                    DateTimeValue = reader.IsDBNull(8) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(8)),
                     IntValue = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     LongValue = reader.IsDBNull(10) ? null : reader.GetInt64(10),
                     DecimalValue = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
@@ -3917,7 +3918,7 @@ public class MetaverseRepository : IMetaverseRepository
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
                     BulkSqlHelpers.NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
-                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                    BulkSqlHelpers.NullableParam(BulkSqlHelpers.CanonicalDate(valueChange.DateTimeValue), NpgsqlTypes.NpgsqlDbType.TimestampTz),
                     BulkSqlHelpers.NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint),
                     BulkSqlHelpers.NullableParam(valueChange.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric),
