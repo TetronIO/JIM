@@ -203,13 +203,70 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
     }
 
     [Test]
-    public async Task ExecuteSynchronisedDeprovisioningAsync_ExportScopeCannotBeDecided_ErrorsTheObjectAndFinishesTheDeletionAsync()
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ExportScopeUndecidableBeforeRecall_HoldsTheObjectBackAsync()
     {
-        // Description is re-elected to Training's value, on which the export rule's pattern runs past its time limit.
+        // The export rule's pattern runs past its time limit on the Metaverse Object's Description as it stands. Deleting
+        // the system is a one-shot run: an object whose export scope it cannot decide would keep stale values downstream
+        // with nothing to revisit it, so it is held back, untouched, exactly as an undecidable survivor is.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)!.StringValue = new string('a', 5000) + "!";
+        ScopeExportRuleOnDescription(ctx, "^(a+)+$");
+        var hrCsoId = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id).Id;
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        Assert.ThrowsAsync<SynchronisedDeprovisioningIncompleteException>(
+            () => Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task));
+
+        mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var errors = DbContext.ActivityRunProfileExecutionItems
+            .Where(rpei => rpei.ActivityId == activity.Id && rpei.ErrorType == ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId), Is.Not.Null, "the Metaverse Object is left as it was");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(hrCsoId), Is.True, "the held-back object is kept");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Not.Null, "the Connected System is not deleted");
+            Assert.That(errors.Select(e => e.ErrorMessage), Has.One.Contains("AD Export").And.Contain("time limit"));
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ExportScopeUndecidableOnlyAfterRecall_FailsTheRunWithoutPersistingTheBatchAsync()
+    {
+        // The pre-flight sees HR's short Description and passes; recall then re-elects Training's value, on which the
+        // export rule's pattern runs past its time limit. Nothing in the batch has been persisted at that point, so the
+        // run fails there and leaves the stored state as it was: the system fenced, for a retry once the pattern is fixed.
         var ctx = await SetUpTwoContributorsWithExportTargetAsync(trainingDescription: new string('a', 5000) + "!");
         await RunFullSyncAsync(ctx.Hr);
         await RunFullSyncAsync(ctx.Training!);
         var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        ScopeExportRuleOnDescription(ctx, "^(a+)+$");
+        var hrCsoId = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id).Id;
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+
+        // Had the run reached the batch's persistence step, this would throw instead of the scoping failure. The in-memory
+        // repository shares instances, so the Metaverse Object's values cannot show what was persisted; this can.
+        FailingSyncRepo.ThrowOnUpdateMetaverseObjects = true;
+        Assert.ThrowsAsync<ScopingCriterionFailedException>(() => Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task),
+            "the run fails at the object, before the batch is persisted");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(task.CheckpointPhase, Is.Null, "no checkpoint is recorded for the batch");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(hrCsoId), Is.True, "the batch's objects are not deleted");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Not.Null, "the Connected System is not deleted");
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.Empty,
+                "nothing is exported for an object whose export scope is unknown");
+        }
+    }
+
+    private void ScopeExportRuleOnDescription(DeprovisioningContext ctx, string pattern)
+    {
         var exportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Target.Id);
         var mvDescription = exportRule.MetaverseObjectType!.Attributes.First(a => a.Id == ctx.MvDescriptionAttributeId);
         exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
@@ -222,25 +279,10 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
                     MetaverseAttribute = mvDescription,
                     MetaverseAttributeId = mvDescription.Id,
                     ComparisonType = SearchComparisonType.MatchesPattern,
-                    StringValue = "^(a+)+$"
+                    StringValue = pattern
                 }
             ]
         });
-
-        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
-        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
-
-        var errors = DbContext.ActivityRunProfileExecutionItems
-            .Where(rpei => rpei.ActivityId == activity.Id && rpei.ErrorType == ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed)
-            .ToList();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Null, "the deletion finishes");
-            Assert.That(errors, Has.Count.EqualTo(1), "the undecidable export scope is reported as an error");
-            Assert.That(errors.Single().ErrorMessage, Does.Contain(exportRule.Name).And.Contain("Nothing was exported"));
-            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.Empty,
-                "nothing is exported for an object whose export scope is unknown");
-        }
     }
 
     [Test]

@@ -104,6 +104,13 @@ public partial class ConnectedSystemServer
                            rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))
             .ToList();
 
+        // Likewise the export rules whose scope can fail to evaluate. This run is one-shot: an object whose export scope it
+        // cannot decide would keep stale values downstream with nothing to revisit it, so it is held back too.
+        var fallibleExportRules = allSyncRules
+            .Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId && rule.Direction == SyncRuleDirection.Export &&
+                           rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))
+            .ToList();
+
         // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the system is gone: its own
         // rules' derived mappings go with it, so they neither mark it (its objects are being deleted anyway) nor carry
         // transitivity onwards. Collected per batch and flushed once the batch is persisted.
@@ -141,7 +148,7 @@ public partial class ConnectedSystemServer
                 if (page.Results.Count == 0)
                     break;
 
-                await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, fallibleImportRules, recallScope,
+                await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, fallibleImportRules, fallibleExportRules, recallScope,
                     priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
                     exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel, csoChangeTrackingEnabled,
                     connectedSystem.Name, derivedInputMarks, result);
@@ -275,6 +282,7 @@ public partial class ConnectedSystemServer
         List<ConnectedSystemObject> batch,
         List<SyncRule> systemSyncRules,
         List<SyncRule> fallibleImportRules,
+        List<SyncRule> fallibleExportRules,
         ContributorRecallScope recallScope,
         AttributePriorityContext priorityContext,
         RemainingImportSourceEvaluator remainingImportSourceEvaluator,
@@ -345,11 +353,15 @@ public partial class ConnectedSystemServer
             return (decision, policySnapshotJson);
         }
 
+        // The pre-flight's answers for the fallible import rules, by survivor and rule. Re-election reads them rather than
+        // evaluating again, so one evaluation decides: a second could run past the time limit after recall has begun.
+        var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+
         foreach (var connectedSystemObject in batch)
         {
             // Fail closed (#2053): an object whose surviving contributor's scope cannot be decided is left exactly as it
             // was, with its Metaverse Object, rather than recalled on a guess. Checked before anything is touched.
-            if (await DescribeUndecidableSurvivorScopeAsync(connectedSystemObject, fallibleImportRules) is { } undecidable)
+            if (await DescribeUndecidableScopeAsync(connectedSystemObject, fallibleImportRules, fallibleExportRules, survivorScopeAnswers) is { } undecidable)
             {
                 executionItems.Add(new ActivityRunProfileExecutionItem
                 {
@@ -379,7 +391,9 @@ public partial class ConnectedSystemServer
                 remainingImportSourceEvaluator,
                 syncEngine,
                 Application.SyncRepo,
-                (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                (survivor, rule) => survivorScopeAnswers.TryGetValue((survivor.Id, rule.Id), out var decided)
+                    ? decided
+                    : Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
                 survivorObjectTypes,
                 expressionEvaluator,
                 activity.PrepareRunProfileExecutionItem,
@@ -420,18 +434,14 @@ public partial class ConnectedSystemServer
                 }
                 catch (ScopingCriterionFailedException scopingEx)
                 {
-                    // An export rule's scope could not be decided for the object, so nothing is exported for it and it
-                    // is reported; the deletion carries on, since the system's own objects go regardless.
-                    executionItems.Add(new ActivityRunProfileExecutionItem
-                    {
-                        Id = Guid.NewGuid(),
-                        ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
-                        ErrorMessage = $"{scopingEx.Message} Nothing was exported for Metaverse Object {exportEvaluationInput.Mvo.Id}.",
-                        DisplayNameSnapshot = exportEvaluationInput.Mvo.NameOrId,
-                        ObjectTypeSnapshot = exportEvaluationInput.Mvo.Type?.Name
-                    });
-                    Log.Warning("ExecuteSynchronisedDeprovisioningAsync: Export scope of MVO {MvoId} could not be decided: {Message}",
+                    // A backstop: the pre-flight held back every object whose export scope it could not decide on its
+                    // values as they stood, but recall can change them and a pattern can then run past its time limit
+                    // here. Nothing in this batch is persisted yet, so failing the run leaves everything as it was, the
+                    // system fenced, for a retry; proceeding would leave this object's targets stale with nothing to
+                    // revisit it.
+                    Log.Error("ExecuteSynchronisedDeprovisioningAsync: Export scope of MVO {MvoId} could not be decided after recall; failing the run without persisting the batch: {Message}",
                         exportEvaluationInput.Mvo.Id, LogSanitiser.Sanitise(scopingEx.Message));
+                    throw;
                 }
             }
 
@@ -590,13 +600,35 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Why the scope of one of <paramref name="connectedSystemObject"/>'s surviving contributors cannot be decided for a
-    /// rule in <paramref name="fallibleImportRules"/>, or null when every one can (always null when the list is empty).
-    /// Reads only, so an object it names can be held back untouched.
+    /// Why <paramref name="connectedSystemObject"/> cannot be processed safely, or null when it can: a surviving
+    /// contributor's scope for a rule in <paramref name="fallibleImportRules"/>, or its Metaverse Object's scope for a rule
+    /// in <paramref name="fallibleExportRules"/>, cannot be decided. Always null when both lists are empty. Reads only, so
+    /// an object it names can be held back untouched; each survivor answer is kept in <paramref name="survivorScopeAnswers"/>
+    /// for re-election to use.
     /// </summary>
-    private async Task<string?> DescribeUndecidableSurvivorScopeAsync(ConnectedSystemObject connectedSystemObject, List<SyncRule> fallibleImportRules)
+    private async Task<string?> DescribeUndecidableScopeAsync(ConnectedSystemObject connectedSystemObject,
+        List<SyncRule> fallibleImportRules, List<SyncRule> fallibleExportRules,
+        Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers)
     {
-        if (fallibleImportRules.Count == 0 || connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
+        if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
+            return null;
+
+        if (connectedSystemObject.MetaverseObject is { } mvo)
+        {
+            foreach (var rule in fallibleExportRules.Where(rule => rule.MetaverseObjectTypeId == mvo.Type?.Id))
+            {
+                try
+                {
+                    Application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule);
+                }
+                catch (ScopingCriterionFailedException scopingEx)
+                {
+                    return scopingEx.Message;
+                }
+            }
+        }
+
+        if (fallibleImportRules.Count == 0)
             return null;
 
         var survivors = (await Application.SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
@@ -612,11 +644,11 @@ public partial class ConnectedSystemServer
 
             // Evaluated on the fully loaded object (the discovery load carries no values); evaluation only reads it.
             var hydrated = await Application.SyncRepo.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor;
-            foreach (var rule in rules)
+            foreach (var rule in rules.Where(rule => !survivorScopeAnswers.ContainsKey((survivor.Id, rule.Id))))
             {
                 try
                 {
-                    Application.ScopingEvaluation.IsCsoInScopeForImportRule(hydrated, rule);
+                    survivorScopeAnswers[(survivor.Id, rule.Id)] = Application.ScopingEvaluation.IsCsoInScopeForImportRule(hydrated, rule);
                 }
                 catch (ScopingCriterionFailedException scopingEx)
                 {
