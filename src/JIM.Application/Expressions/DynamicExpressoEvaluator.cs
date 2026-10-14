@@ -20,7 +20,7 @@ namespace JIM.Application.Expressions;
 /// Expression evaluator implementation using DynamicExpresso.
 /// Provides C#-like expression syntax with built-in functions for identity management.
 /// </summary>
-public class DynamicExpressoEvaluator : IExpressionEvaluator
+public partial class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
 
@@ -246,6 +246,20 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     /// <summary>The instant <c>Now()</c> reads: the evaluating context's, or the real time.</summary>
     private static DateTime CurrentUtc() => _contextNowUtc ?? DateTime.UtcNow;
 
+    /// <summary>
+    /// The names of every function an expression can call, as the interpreter has them registered, for the function
+    /// catalogue's agreement test (<c>ExpressionFunctionCatalogueTests</c>).
+    /// </summary>
+    internal static IReadOnlyList<string> RegisteredFunctionNames()
+    {
+        // The interpreter's other identifiers are the literals true, false and null, each a constant.
+        var evaluator = new DynamicExpressoEvaluator();
+        return evaluator._interpreter.Identifiers
+            .Where(identifier => identifier.Expression is not System.Linq.Expressions.ConstantExpression)
+            .Select(identifier => identifier.Name)
+            .ToList();
+    }
+
     private Lambda GetOrCompileExpression(string expression)
     {
         // Check for cache hit first
@@ -303,22 +317,9 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             return ExpressionValueSets.Map(o, v => AsString(v)?.Replace(oldText, newText));
         }));
 
-        // Comparisons: true when any value satisfies them, so ! means "no value does".
-        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) =>
-        {
-            var prefixText = AsString(prefix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.StartsWith(prefixText, StringComparison.Ordinal) ?? false);
-        }));
-        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) =>
-        {
-            var suffixText = AsString(suffix) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.EndsWith(suffixText, StringComparison.Ordinal) ?? false);
-        }));
-        target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) =>
-        {
-            var valueText = AsString(value) ?? "";
-            return ExpressionValueSets.Any(o, v => AsString(v)?.Contains(valueText) ?? false);
-        }));
+        // The text comparisons (StartsWith, EndsWith, Contains), HasValue and the pattern functions mirror the operator
+        // catalogue, so they are registered beside it in DynamicExpressoEvaluator.Library.cs (#2053).
+        RegisterCatalogueComparisons(target);
 
         // One-value functions.
         target.SetFunction("Length", (Func<object?, int>)(o => AsString(ExpressionValueSets.One(o))?.Length ?? 0));

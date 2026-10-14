@@ -34,4 +34,23 @@ public class PasswordDeliveryPassResultTests
             Assert.That(pass.Describe(), Does.Contain("2"));
         }
     }
+
+    /// <summary>
+    /// A delivery whose Connected System could not apply the requested expiry (#2159) is still a delivery, and the
+    /// pass's summary says how many were, so the warning reaches the pass as well as the per-change Activity.
+    /// </summary>
+    [Test]
+    public void Add_DeliveriesWhoseExpiryWasNotHonoured_AreRolledUpAndDescribed()
+    {
+        var pass = new PasswordDeliveryPassResult();
+
+        pass.Add("Corporate OpenLDAP", new PasswordDeliveryRunResult { DeliveredCount = 3, ExpiryBehaviourNotHonouredCount = 2 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pass.DeliveredCount, Is.EqualTo(3));
+            Assert.That(pass.ExpiryBehaviourNotHonouredCount, Is.EqualTo(2));
+            Assert.That(pass.Describe(), Does.Contain("3 password change(s) delivered (2 not exactly as asked"));
+        }
+    }
 }
