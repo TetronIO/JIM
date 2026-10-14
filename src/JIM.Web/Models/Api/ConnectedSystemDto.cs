@@ -6,6 +6,7 @@ using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional.DTOs;
+using JIM.Utilities;
 
 namespace JIM.Web.Models.Api;
 
@@ -921,7 +922,7 @@ public class ConnectedSystemObjectAttributeValueDto
             AttributeId = entity.Attribute?.Id ?? 0,
             AttributeName = entity.Attribute?.Name ?? string.Empty,
             StringValue = entity.StringValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = entity.DateTimeValue.HasValue ? DateTimeAttributeValue.ToCanonical(entity.DateTimeValue.Value) : null,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,

@@ -15,6 +15,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -6232,7 +6233,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             IntValue = r.IntValue,
             LongValue = r.LongValue,
             DecimalValue = r.DecimalValue,
-            DateTimeValue = r.DateTimeValue,
+            DateTimeValue = BulkSqlHelpers.CanonicalDate(r.DateTimeValue),
             BoolValue = r.BoolValue,
             GuidValue = r.GuidValue
         }).ToList();
@@ -6615,7 +6616,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
                 DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                DateTimeValue = reader.IsDBNull(7) ? null : DateTime.SpecifyKind(reader.GetDateTime(7), DateTimeKind.Utc),
+                DateTimeValue = reader.IsDBNull(7) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(7)),
                 BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
                 GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                 ByteValue = reader.IsDBNull(10) ? null : reader.GetFieldValue<byte[]>(10),
@@ -8611,7 +8612,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             else
                 await writer.WriteNullAsync();
             if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (av.IntValue.HasValue)

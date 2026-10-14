@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 
 namespace JIM.Application.Servers;
 
@@ -316,8 +317,8 @@ public static class OptimisticExportApplyCalculator
     /// <summary>
     /// Builds a <see cref="CalculatorAttributeIndex"/> for one attribute's seeded working list.
     /// Key derivation mirrors <see cref="SyncEngine.ValueExistsOnCso"/>'s switch exactly, per data
-    /// type: DateTime keys on <c>Ticks</c> (Kind-insensitive, exactly like the <c>==</c> comparison
-    /// it replaces - mirrors the reconciliation's <c>DateTimeTicksValues</c> rationale); Reference
+    /// type: DateTime keys on its canonical key (<see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind
+    /// nor a sub-microsecond part is significant - mirrors the reconciliation's <c>DateTimeTicksValues</c>); Reference
     /// keys on the CSO row's <see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>
     /// (both of a change's UnresolvedReferenceValue and StringValue probe against that one field -
     /// see <see cref="FindMatchesInIndex"/>).
@@ -385,7 +386,7 @@ public static class OptimisticExportApplyCalculator
                 AttributeType = attrType,
                 DateTimeTicksValues = existing
                     .Where(v => v.DateTimeValue.HasValue)
-                    .GroupBy(v => v.DateTimeValue!.Value.Ticks)
+                    .GroupBy(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value))
                     .ToDictionary(g => g.Key, g => g.ToList())
             },
 
@@ -421,7 +422,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) AddToKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, value.DateTimeValue.Value.Ticks, value);
+                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
                 break;
             // Binary: no index to maintain - FindMatchesInIndex scans the working list directly.
         }
@@ -467,7 +468,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) RemoveFromKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, value.DateTimeValue.Value.Ticks, value);
+                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
                 break;
             // Binary: no index to maintain.
         }
@@ -541,7 +542,7 @@ public static class OptimisticExportApplyCalculator
 
             case AttributeDataType.DateTime:
                 if (!change.DateTimeValue.HasValue) return [];
-                return index.DateTimeTicksValues!.TryGetValue(change.DateTimeValue.Value.Ticks, out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
+                return index.DateTimeTicksValues!.TryGetValue(DateTimeAttributeValue.Key(change.DateTimeValue.Value), out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
 
             case AttributeDataType.Binary:
                 // Byte arrays do not hash usefully and Binary attributes are never large
@@ -665,7 +666,7 @@ public static class OptimisticExportApplyCalculator
                 break;
 
             case AttributeDataType.DateTime:
-                value.DateTimeValue = change.DateTimeValue;
+                value.DateTimeValue = SyncEngine.CanonicalDate(change.DateTimeValue);
                 break;
 
             case AttributeDataType.Binary:

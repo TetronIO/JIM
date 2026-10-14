@@ -128,9 +128,10 @@ public partial class DynamicExpressoEvaluator : IExpressionEvaluator
         {
             var lambda = GetOrCompileExpression(expression);
 
+            // Dates reach the expression in the form JIM holds them (#2153, N4), whoever built the context.
             return ExpressionValueSets.RefuseReflection(lambda.Invoke(
-                new Parameter("mv", context.Mv),
-                new Parameter("cs", context.Cs)));
+                new Parameter("mv", typeof(AttributeAccessor), new CanonicalDateAttributeAccessor(context.Mv)),
+                new Parameter("cs", typeof(AttributeAccessor), new CanonicalDateAttributeAccessor(context.Cs))));
         }
         // The failures an Expression can cause, from parsing it to running it, each made the one expression error.
         // Anything else (an out-of-memory condition, a JIM fault) propagates unchanged, as does an
