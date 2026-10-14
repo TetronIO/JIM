@@ -103,6 +103,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
+- 🐛 File Connector imports match column headers ignoring case, and fail with an error naming a column the file lacks, instead of clearing that attribute on every object. (#2051)
+- 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when the key is written in a different case. (#2051)
 - 🐛 An External ID or reference containing the Turkish capital `İ` is now found by the lookups that compare in the database, instead of being missed and imported again as a new object. (#2051)
 - 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)

@@ -156,7 +156,7 @@ JIM's File Connector configurations would then point at:
 
 When you configure a File Connector Connected System and trigger schema discovery, JIM performs the following steps:
 
-1. **Reads the header row**<br /> Column names become attribute names in the schema.
+1. **Reads the header row**<br /> Column names become attribute names in the schema. On import a column is matched to its attribute ignoring case, so a file whose header later reads `employeeid` still fills `EmployeeId`.
 2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
 3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Long Number, Decimal, Boolean, Guid, or DateTime, in that order (narrowest numeric type first). Whole numbers within 32-bit range infer Number, larger whole numbers infer Long Number, and fractional or exponent-notation values (for example `1.5` or `1.5E3`) infer Decimal. If none of these match, the attribute defaults to Text.
 4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
@@ -253,6 +253,15 @@ The error `Object type column 'Type' not found in file headers` means the column
 
 - Check the spelling and case of the column name; the match is case-insensitive, but the column must exist in the header row.
 - If the file does not have an object type column, use the Object Type setting instead.
+
+### Column missing from the file
+
+An import fails with an error naming the columns when the file's header lacks a column that a selected Object Type reads: a selected attribute, or its External ID or Secondary External ID. JIM stops rather than reading the column as empty, which would clear that attribute on every object.
+
+- Check the header row; the match ignores case, but the column must be there.
+- If the column was removed on purpose, deselect the attribute on the Connected System's Schema tab, or refresh the schema.
+
+The same error is raised when two columns' names differ only in case, such as `Name` and `name`, because JIM cannot tell which one an attribute means. Rename or remove one of them.
 
 ### Encoding issues
 

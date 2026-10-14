@@ -192,7 +192,7 @@ Create [Run Profiles](../configuration/run-profiles.md) for the operations you n
 
 ### Full Import
 
-A Full Import reads every row of each selected Object Type, a page at a time (the Run Profile's Page Size), and reads the related tables for each page in one query rather than one per row. The first page of each Object Type reports the row count, so the Activity shows a real percentage and time remaining.
+A Full Import reads every row of each selected Object Type, a page at a time (the Run Profile's Page Size), and reads the related tables for each page in one query rather than one per row. A related table's rows, and a change log's, are matched to their object as the database compares the anchor column: ignoring case, unless its collation is case-sensitive. The first page of each Object Type reports the row count, so the Activity shows a real percentage and time remaining.
 
 Most problems affect one row and are reported against that one object, leaving the rest of the import to continue: a value that cannot be converted to the attribute's type, for example, or a fractional value in a column you have recorded as a whole number (JIM reports it rather than rounding it). Every such value is reported with what the column held, the row's other columns are still read, and JIM leaves the attribute as it already held it; see [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read). A problem that would affect every row fails the run with a message saying what to change: a table the account cannot see, a `NULL` in an anchor column, or a number too wide for JIM to hold exactly.
 
