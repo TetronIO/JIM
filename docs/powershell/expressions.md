@@ -21,14 +21,14 @@ Tests an expression with sample Metaverse and Connected System attribute values.
 Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-AsOf <datetime>]
 
 # AttributeFlow
-Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-MetaverseObjectId <guid>] [-AsOf <datetime>]
+Test-JIMExpression [[-Expression] <string>] -SyncRuleId <int> -MappingId <int> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>] [-ConnectedSystemObjectId <guid>] [-MetaverseObjectId <guid>] [-AsOf <datetime>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Expression` | `string` | Yes |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. Can be given by position, as the first argument. |
+| `Expression` | `string` | Yes (Expression); No (AttributeFlow) |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. It can be left out only for a Generated Value with no base expression, which generates its value from a sequence or random token alone. Can be given by position, as the first argument. |
 | `MvAttributes` | `hashtable` | No |  | A hashtable of sample Metaverse attribute values. Keys are attribute names, values are the attribute values. `$null` is no value and an array gives the attribute several values; with an Attribute Flow, empty text is a value distinct from `$null`. |
 | `CsAttributes` | `hashtable` | No |  | A hashtable of sample Connected System attribute values. Keys are attribute names, values are the attribute values. `$null` is no value and an array gives the attribute several values; with an Attribute Flow, empty text is a value distinct from `$null`. |
 | `SyncRuleId` | `int` | Yes (AttributeFlow) |  | The ID of the Synchronisation Rule whose Attribute Flow to test the expression as. Give it with MappingId. |
@@ -39,7 +39,7 @@ Test-JIMExpression [-Expression] <string> -SyncRuleId <int> -MappingId <int> [-M
 
 ### Output
 
-The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what a synchronisation would give the target attribute, Inputs lists the values each input was given, and IfInputHasNoValue says what each input's absence would do.
+The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what a synchronisation would give the target attribute, Inputs lists the values each input was given, and IfInputHasNoValue says what each input's absence would do. For a Generated Value, BaseOutcome and BaseValue take the place of Outcome and ValueLines.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -50,7 +50,7 @@ The result of evaluating the expression against the sample values. ResultLines g
 | `ErrorMessage` | `string` | Error message if the expression is invalid or evaluation failed. |
 | `ErrorPosition` | `int` | Position in the expression where an error occurred (if applicable). |
 | `Outcome` | `string` | What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an Attribute Flow was given and its sample values could be used. One of `Values`, `NoValue` or `Error`. |
-| `ErrorReason` | `string` | Why the outcome is an error. Set only when `Outcome` is Error. One of `MissingInputFailedMapping`, `MissingInputFailedObject`, `EvaluationFailed`, `ResultNotConvertible` or `ResultMultiValued`. |
+| `ErrorReason` | `string` | Why the outcome is an error. Set only when `Outcome` is Error. One of `MissingInputFailedMapping`, `MissingInputFailedObject`, `EvaluationFailed`, `ResultNotConvertible`, `ResultMultiValued` or `GeneratedBaseNotSingleValue`. |
 | `OutcomeDescription` | `string` | What synchronisation would do, in one sentence. Set only when an Attribute Flow was given. |
 | `ValueLines` | `string[]` | The values the target attribute would hold after value processing and conversion to its type, one line per value in JIM's text form. Set only when `Outcome` is Values. |
 | `TargetAttributeName` | `string` | The Attribute Flow's target attribute. Set only when an Attribute Flow was given. |
@@ -60,7 +60,10 @@ The result of evaluating the expression against the sample values. ResultLines g
 | `Inputs` | `object[]` | The inputs the expression read, with the values they were given: the samples, and any loaded from an object. Set only when an Attribute Flow was given. Each has `Input`, `Type`, `Plurality` and `ValueLines`. |
 | `ValueProcessingSteps` | `string[]` | The value processing the Attribute Flow applies to the expression's result, in the order it applies them. Set only for an import Attribute Flow to a Text attribute whose expression returned a result; empty when none is set. Each is one of `TrimWhitespace`, `CollapseInternalWhitespace`, `UpperCase`, `LowerCase`, `TitleCase` or `TreatWhitespaceAsNoValue`. |
 | `ValueProcessingChanged` | `bool` | Whether value processing changed the expression's result. Set with `ValueProcessingSteps`. |
-| `IfInputHasNoValue` | `object[]` | For each input given a value, what the Attribute Flow would do with that input absent. Set only when an Attribute Flow was given and its sample values could be used. Each has `Input`, `Outcome`, `ErrorReason` and `OutcomeDescription`. |
+| `IfInputHasNoValue` | `object[]` | For each input given a value, what the Attribute Flow would do with that input absent. Set only when an Attribute Flow was given and its sample values could be used. Each has `Input`, `Outcome`, `BaseOutcome`, `ErrorReason` and `OutcomeDescription`. |
+| `GeneratedValue` | `bool` | True when the Attribute Flow generates its value (a Generated Value). The test then stops before generation, as synchronisation does: `BaseOutcome` and `BaseValue` say what generation would be given, and `Outcome` is not set. Set only when an Attribute Flow was given. |
+| `BaseOutcome` | `string` | For a Generated Value, what its base expression gives generation: a base, a wait (no value yet), no base expression (the token alone is generated), or an error. One of `Base`, `Waits`, `NoBaseExpression` or `Error`. |
+| `BaseValue` | `string` | For a Generated Value, the base the uniqueness token would be added to, after value processing. Set only when `BaseOutcome` is Base. Which candidate is free is decided when synchronisation runs. |
 <!-- END GENERATED: Test-JIMExpression -->
 
 ### Examples
