@@ -78,10 +78,17 @@
     this on for Scenario 001 on the Active Directory and Samba AD labs: Samba AD accepts an enabled account with no
     password, but is where #2064 reproduced. OpenLDAP and 389 Directory Server have no userAccountControl.
 
-    The password expires according to the directory's own policy (ExpiresAccordingToTargetPolicy). NeverExpires
-    is deliberately not used: its delivery adds DONT_EXPIRE_PASSWORD (0x10000), leaving 66048 where the flow
-    asserts 512, so the delivery and the flow would disagree about the account, and Tests 2d and 2e match 514
-    and 512 exactly. Without this switch nothing changes.
+    The password's expiry is -InitialPasswordExpiry, ExpiresAccordingToTargetPolicy unless told otherwise.
+    Any of the three works with the flow kept (#2159): because an export wrote the account's userAccountControl,
+    the delivery leaves "Password never expires" (0x10000) to the flow, so the account holds exactly what the flow
+    asserts (512, or 514 for an Archived joiner) whatever the expiry, the confirming import confirms it, and Tests
+    2d and 2e still match 514 and 512 exactly. Run it with NeverExpires to prove that the delivery no longer
+    writes 66048 over the flow's 512. Without this switch nothing changes.
+
+.PARAMETER InitialPasswordExpiry
+    The Initial Password's expiry behaviour, used only with -InitialPassword. Defaults to
+    ExpiresAccordingToTargetPolicy. See -InitialPassword for why every choice leaves the flow's
+    userAccountControl as it asserts it.
 
 .NOTES
     This script requires the JIM PowerShell module and assumes:
@@ -117,7 +124,11 @@ param(
     [switch]$DeriveFromAccountName,
 
     [Parameter(Mandatory=$false)]
-    [switch]$InitialPassword
+    [switch]$InitialPassword,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("RequireChangeAtNextSignIn", "ExpiresAccordingToTargetPolicy", "NeverExpires")]
+    [string]$InitialPasswordExpiry = "ExpiresAccordingToTargetPolicy"
 )
 
 Set-StrictMode -Version Latest
@@ -1019,9 +1030,12 @@ try {
             @(
                 @{
                     # DN uses Department to place users in department OUs under OU=Users,OU=Corp
-                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
+                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL
+                    # The domain components are deliberately upper case against the lab's lower-case domain: the
+                    # directory reports a DN in the case it stored, and JIM must still confirm the export, not stage
+                    # it again, and not see the stored case as drift (#2195). The real AD lab's domain is upper case.
                     LdapAttr = "distinguishedName"
-                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL"'
                 }
                 @{
                     # userAccountControl: Conditional expression based on Status
@@ -1611,13 +1625,13 @@ catch {
 # Step 6e: Give the provisioning Synchronisation Rule an Initial Password (-InitialPassword only, #2039)
 #
 # The userAccountControl Attribute Flow configured in Step 6c stays: on real Active Directory JIM creates the account
-# disabled because this Initial Password follows it, and the password's delivery enables it (EnableAccount). See the
-# -InitialPassword help above for why the expiry is ExpiresAccordingToTargetPolicy rather than NeverExpires.
+# disabled because this Initial Password follows it, and the password's delivery enables it (EnableAccount). The
+# delivery leaves "Password never expires" to that flow whatever -InitialPasswordExpiry says; see -InitialPassword above.
 #
 # The password is the one Setup-Scenario-017.ps1 uses, for the reasons given there: it satisfies a stock Active
 # Directory complexity rule on its own merits, and shares no token with the account names the HR template
 # generates, which Active Directory would refuse. It is a throwaway credential for a throwaway lab directory.
-$initialPasswordExpiry = "ExpiresAccordingToTargetPolicy"
+$initialPasswordExpiry = $InitialPasswordExpiry
 if ($InitialPassword) {
     Write-TestStep "Step 6e" "Enabling the Initial Password on the Export Synchronisation Rule"
 

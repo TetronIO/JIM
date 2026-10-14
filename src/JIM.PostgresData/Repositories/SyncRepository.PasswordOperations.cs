@@ -883,10 +883,10 @@ public partial class SyncRepository
 
         if (!string.IsNullOrWhiteSpace(filter.SearchText))
         {
-            var search = filter.SearchText.Trim();
+            var searchPattern = LikePattern.Contains(filter.SearchText.Trim());
             query = query.Where(h =>
-                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, $"%{search}%"))
-                || EF.Functions.ILike(h.ConnectedSystemName, $"%{search}%"));
+                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, searchPattern))
+                || EF.Functions.ILike(h.ConnectedSystemName, searchPattern));
         }
 
         return query;
@@ -902,7 +902,7 @@ public partial class SyncRepository
             return [];
 
         // Raw SQL per the worker hot-path rule: asked once per confirming-import page that holds a change awaiting an
-        // Initial Password (#2039). The unique (MetaverseObjectId, ConnectedSystemId) index serves the lookup, and a
+        // Initial Password (#2039), and once per export batch that holds an Update a password could follow (#2158). The unique (MetaverseObjectId, ConnectedSystemId) index serves the lookup, and a
         // read-side projection is exempt from the bulk column list rule.
         const string sql = """
             SELECT DISTINCT "MetaverseObjectId"

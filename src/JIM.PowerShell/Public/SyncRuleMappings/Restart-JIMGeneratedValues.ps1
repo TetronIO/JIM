@@ -4,42 +4,23 @@
 function Restart-JIMGeneratedValues {
     <#
     .SYNOPSIS
-        "Start again": moves a generated Sequence mapping's counter back to its configured Sequence Start
-        (Unique Value Generation, #242).
+        Starts a generated Sequence mapping again from its Sequence Start.
 
     .DESCRIPTION
-        For a generated Sequence mapping, this command moves the target attribute's counter back to the
-        mapping's configured Sequence Start (the move can go either direction; "back" is the common case,
-        but a lower configured start is honoured too), and forgets the attribute's retired values.
-
-        It changes NOTHING else. No existing generated value on any object is changed. Nothing is
-        exported, and no synchronisation runs as a result of this command. For every other token kind
-        (OnlyIfTaken, Random) this is a documented no-op that still succeeds.
-
-        The retired values forgotten are the numbers JIM had stopped issuing because the object that held
-        them was deleted, or JIM stopped managing them (see Get-JIMRetiredGeneratedValue); once forgotten
-        they can be issued again. RetiredValuesForgotten on the result says how many. A number still held
-        by a Metaverse Object is simply skipped over the next time the counter reaches it, exactly as it
-        always is; nothing about that changes.
+        Starts a generated Sequence mapping again: moves its attribute's counter to the mapping's Sequence Start,
+        back or forward. The attribute's retired values are forgotten, so they can be issued again. Nothing else
+        changes: no existing generated value changes, nothing is exported, and no synchronisation runs. A number a
+        Metaverse Object still holds is skipped when the counter reaches it, as always. For a mapping whose token is
+        OnlyIfTaken or Random, nothing happens and the command still succeeds.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule the mapping belongs to. Also accepts pipeline
-        input via the Id property. Alias: Id.
+        The ID of the Synchronisation Rule the mapping belongs to.
 
     .PARAMETER MappingId
-        The unique identifier of the mapping.
+        The ID of the generated mapping.
 
     .OUTPUTS
-        One PSCustomObject describing what moved:
-
-        | Property                | Description                                                          |
-        |--------------------------|------------------------------------------------------------------------|
-        | RetiredValuesForgotten   | How many retired values were forgotten and can be issued again       |
-        | CounterFrom              | The counter's position before this call, for a Sequence mapping      |
-        | CounterTo                | The counter's position after this call (the mapping's Sequence Start) |
-
-        CounterFrom and CounterTo are both $null for a mapping whose token kind is not Sequence, since
-        there is nothing to move.
+        What moved, and how many retired values were forgotten.
 
     .EXAMPLE
         Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12
@@ -59,7 +40,7 @@ function Restart-JIMGeneratedValues {
         Get-JIMSyncRuleMapping
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.GeneratedValueRestartResultDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

@@ -4,34 +4,32 @@
 function Switch-JIMMatchingMode {
     <#
     .SYNOPSIS
-        Switches the object matching rule mode for a Connected System.
+        Switches a Connected System between simple and advanced Object Matching Rule mode.
 
     .DESCRIPTION
-        Switches between simple mode (matching rules on object types) and advanced mode
-        (matching rules on Synchronisation Rules) for a Connected System.
+        Switches where a Connected System's Object Matching Rules live: on its Object Types (ConnectedSystem, simple
+        mode), shared by every Synchronisation Rule for the type, or on each import and export Synchronisation Rule
+        (SyncRule, advanced mode).
 
-        When switching to advanced mode, matching rules are copied from object types to import
-        Synchronisation Rules. The object types' own rules are retained but no longer consulted,
-        and export Synchronisation Rules receive nothing, so export matching stops until rules
-        are added to them; the switch warns about both.
-        When switching to simple mode, matching rules are migrated from Synchronisation Rules to
-        object types. Where an object type already has rules, those take precedence and the
-        Synchronisation Rules' own rules are discarded; the switch warns when that happens.
-        All warnings are surfaced on the PowerShell warning stream.
+        Switching to advanced mode copies each Object Type's rules onto its import Synchronisation Rules that have
+        none of their own. The Object Types' own rules are kept but no longer consulted, and export Synchronisation
+        Rules receive nothing, so export matching stops until rules are added to them. Switching to simple mode
+        moves the Synchronisation Rules' rules onto their Object Types; where an Object Type already has rules,
+        those stay and the Synchronisation Rules' rules are discarded. Each of these is reported as a warning.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER Mode
-        The new object matching rule mode.
-        Valid values: 'ConnectedSystem' (simple mode) or 'SyncRule' (advanced mode).
+        The mode to switch to: ConnectedSystem (simple mode) keeps the rules on Object Types, and SyncRule (advanced
+        mode) on each Synchronisation Rule.
 
     .PARAMETER PassThru
-        If specified, returns the mode switch result object.
+        Returns what the switch did.
 
     .OUTPUTS
-        If -PassThru is specified, returns the mode switch result object containing
-        details about what was migrated.
+        With -PassThru, what the switch did; otherwise nothing. Its warnings are written to the warning stream
+        either way.
 
     .EXAMPLE
         Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode SyncRule
@@ -48,7 +46,7 @@ function Switch-JIMMatchingMode {
         Get-JIMSyncRuleMatchingRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ObjectMatchingModeSwitchResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

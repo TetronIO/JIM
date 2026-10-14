@@ -206,4 +206,4 @@ Everything above sets a password on one Connected System Object, at the moment y
 | Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) |
 | Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector-passwords.md#setting-passwords) |
 | See what is queued, and retry or cancel it | [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) |
-| Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-systems.md#set-jimconnectedsystemobjectpassword), [Metaverse](../powershell/metaverse.md#set-jimmetaverseobjectpassword), [Synchronisation Rules](../powershell/synchronisation-rules.md#initial-password) |
+| Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-system-objects.md#set-jimconnectedsystemobjectpassword), [Password Synchronisation](../powershell/password-synchronisation.md#set-jimmetaverseobjectpassword), [Initial Password](../powershell/initial-password.md) |

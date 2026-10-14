@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -65,7 +65,7 @@ RUN mkdir -p /data/keys /var/log/jim /connector-files \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage
@@ -124,7 +124,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 # takes seconds (COPY 1.8 s and generation 2.0 s on a CI runner, #1798), and the skip only
 # meant a local build proved less than a release build. jim-openapi-generate still refreshes
 # the static document on disk when the API surface changes.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
 # DOTNET_gcServer=0 for the same reason scripts/Generate-OpenApiDoc.ps1 sets it: generation

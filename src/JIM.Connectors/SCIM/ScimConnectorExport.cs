@@ -382,8 +382,17 @@ internal sealed class ScimConnectorExport
     /// on a multi-valued attribute (append versus replace the lot) and are the same on a single-valued
     /// one, which is why the distinction is kept rather than collapsed.
     /// </summary>
+    /// <remarks>
+    /// A change carrying no value is a clear: an all-null Update, which is how export staging tells a
+    /// single-valued attribute it holds nothing (#2182), or a RemoveAll. RFC 7644 section 3.5.2.3 requires
+    /// a replace to carry a value, and a null one is left out of the request altogether, so a clear is sent
+    /// as a remove naming the attribute alone, which section 3.5.2.2 reads as removing every value it holds.
+    /// </remarks>
     private static string PatchOperation(PendingExportAttributeValueChange change)
     {
+        if (ValueOf(change) == null)
+            return ScimPatchOperations.Remove;
+
         return change.ChangeType switch
         {
             PendingExportAttributeChangeType.Add => ScimPatchOperations.Add,

@@ -26,6 +26,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
+using JIM.Models.Search;
 using JIM.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -2391,22 +2392,20 @@ public partial class ConnectedSystemServer
     /// </summary>
     private static (List<int> RemovedObjectTypeIds, List<int> RemovedAttributeIds) ResolveRemovedSchemaIds(SchemaRefreshResult previewResult)
     {
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
+        // The result names a type as the Connector now does; FindPreRefreshType follows a case-only rename back to
+        // the snapshot's name (#2051). Removed attribute names are the names JIM held, so they match exactly.
         var removedObjectTypeIds = previewResult.RemovedObjectTypes
-            .Where(preRefreshTypesByName.ContainsKey)
-            .Select(name => preRefreshTypesByName[name].Id)
+            .Select(previewResult.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
             .ToList();
 
         var removedAttributeIds = previewResult.RemovedAttributes
-            .Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key))
-            .SelectMany(kvp =>
-            {
-                var attributeNames = kvp.Value.ToHashSet();
-                return preRefreshTypesByName[kvp.Key].Attributes
-                    .Where(attribute => attributeNames.Contains(attribute.Name))
-                    .Select(attribute => attribute.Id);
-            })
+            .Select(kvp => (Type: previewResult.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value.ToHashSet(StringComparer.Ordinal)))
+            .Where(entry => entry.Type != null)
+            .SelectMany(entry => entry.Type!.Attributes
+                .Where(attribute => entry.AttributeNames.Contains(attribute.Name))
+                .Select(attribute => attribute.Id))
             .ToList();
 
         return (removedObjectTypeIds, removedAttributeIds);
@@ -2426,9 +2425,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(previewResult);
 
         var impact = new SchemaRefreshRemovalImpact();
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
-        foreach (var type in previewResult.RemovedObjectTypes.Where(preRefreshTypesByName.ContainsKey).Select(name => preRefreshTypesByName[name]))
+        foreach (var type in previewResult.RemovedObjectTypes.Select(previewResult.FindPreRefreshType).OfType<SchemaRefreshPreRefreshType>())
         {
             impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact
             {
@@ -2438,17 +2435,21 @@ public partial class ConnectedSystemServer
             });
         }
 
-        foreach (var kvp in previewResult.RemovedAttributes.Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key)))
+        foreach (var kvp in previewResult.RemovedAttributes)
         {
-            var type = preRefreshTypesByName[kvp.Key];
-            var attributeNames = kvp.Value.ToHashSet();
+            // FindPreRefreshType follows a case-only rename of the type back to the snapshot's name (#2051).
+            var type = previewResult.FindPreRefreshType(kvp.Key);
+            if (type == null)
+                continue;
+
+            var attributeNames = kvp.Value.ToHashSet(StringComparer.Ordinal);
             foreach (var attribute in type.Attributes.Where(attribute => attributeNames.Contains(attribute.Name)))
             {
                 impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact
                 {
                     AttributeId = attribute.Id,
                     AttributeName = attribute.Name,
-                    ObjectTypeName = type.Name,
+                    ObjectTypeName = kvp.Key,
                     StoredValueCount = await Application.Repository.ConnectedSystems.GetConnectedSystemAttributeValueCountAsync(connectedSystemId, attribute.Id)
                 });
             }
@@ -2697,7 +2698,8 @@ public partial class ConnectedSystemServer
             Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
             {
                 Id = attribute.Id,
-                Name = attribute.Name
+                Name = attribute.Name,
+                CaseExact = attribute.CaseExact
             }).ToList()
         }).ToList();
 
@@ -2710,8 +2712,10 @@ public partial class ConnectedSystemServer
 
         // Keep track of existing object types for merging and change tracking
         var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        // Configuration names ignore case (#2051): an Object Type the Connector now reports under a name differing
+        // only in case is the one JIM already holds, and keeps its id.
+        var existingObjectTypesBySchemaName = PairBySchemaName(schema.ObjectTypes.Select(ot => ot.Name), existingObjectTypes, ot => ot.Name);
 
         // The Object Types JIM imports entries of: a classification change can only move entries between these (#2049).
         var selectedObjectTypeNames = existingObjectTypes
@@ -2726,9 +2730,9 @@ public partial class ConnectedSystemServer
         var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
 
         // Track removed object types
-        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
+        foreach (var removedObjectType in existingObjectTypes.Except(existingObjectTypesBySchemaName.Values))
         {
-            result.RemovedObjectTypes.Add(removedObjectTypeName);
+            result.RemovedObjectTypes.Add(removedObjectType.Name);
         }
 
         foreach (var schemaObjectType in schema.ObjectTypes)
@@ -2736,17 +2740,23 @@ public partial class ConnectedSystemServer
             schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
 
             // Try to find an existing object type with the same name
-            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+            var existingObjectType = existingObjectTypesBySchemaName.GetValueOrDefault(schemaObjectType.Name);
 
             ConnectedSystemObjectType connectedSystemObjectType;
             if (existingObjectType != null)
             {
                 // Update existing object type, preserving its ID and merging attributes
+                if (existingObjectType.Name != schemaObjectType.Name)
+                {
+                    result.RenamedObjectTypes.Add(new SchemaNameChange { OldName = existingObjectType.Name, NewName = schemaObjectType.Name });
+                    existingObjectType.Name = schemaObjectType.Name;
+                }
+
                 result.UpdatedObjectTypes.Add(schemaObjectType.Name);
                 connectedSystemObjectType = existingObjectType;
                 var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+                var existingAttributesBySchemaName = PairBySchemaName(schemaObjectType.Attributes.Select(a => a.Name), existingAttributes, a => a.Name);
+                var matchedAttributes = existingAttributesBySchemaName.Values.ToHashSet();
 
                 // Attributes an administrator's selected auxiliary classes contribute are not in the discovered
                 // schema for this type, because an RFC 4512 directory attaches an auxiliary class to an entry rather
@@ -2757,9 +2767,9 @@ public partial class ConnectedSystemServer
                 connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
 
                 // Track removed attributes for this object type
-                var removedAttributeNames = existingAttributeNames
-                    .Except(newAttributeNames)
-                    .Except(contributedAttributes.Select(a => a.Name))
+                var removedAttributeNames = existingAttributes
+                    .Where(a => !matchedAttributes.Contains(a) && !contributedAttributes.Contains(a))
+                    .Select(a => a.Name)
                     .ToList();
                 if (removedAttributeNames.Count > 0)
                 {
@@ -2768,14 +2778,23 @@ public partial class ConnectedSystemServer
 
                 // Track added attributes for this object type
                 var addedAttributeNames = new List<string>();
+                var renamedAttributes = new List<SchemaNameChange>();
 
                 foreach (var schemaAttribute in schemaObjectType.Attributes)
                 {
                     // Try to find existing attribute by name
-                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                    var existingAttribute = existingAttributesBySchemaName.GetValueOrDefault(schemaAttribute.Name);
 
                     if (existingAttribute != null)
                     {
+                        // A case-only rename keeps the row, and so every mapping referring to it, and takes the
+                        // Connector's casing (#2051).
+                        if (existingAttribute.Name != schemaAttribute.Name)
+                        {
+                            renamedAttributes.Add(new SchemaNameChange { OldName = existingAttribute.Name, NewName = schemaAttribute.Name });
+                            existingAttribute.Name = schemaAttribute.Name;
+                        }
+
                         // Update existing attribute properties but preserve the ID. Definition changes (plurality
                         // and data type) are recorded on the result before being applied: they were applied
                         // silently for years, and a restated definition can invalidate an Attribute Flow mapping
@@ -2818,6 +2837,11 @@ public partial class ConnectedSystemServer
                             existingAttribute.Type = schemaAttribute.Type;
                         }
 
+                        // The case-exact declaration follows the same rule as the data type: discovered unless an
+                        // administrator decided it, and a refresh never overrules the administrator (#2051).
+                        if (!existingAttribute.CaseExactSetByAdministrator)
+                            existingAttribute.CaseExact = schemaAttribute.CaseExact;
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
@@ -2835,7 +2859,8 @@ public partial class ConnectedSystemServer
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
-                            Required = schemaAttribute.Required
+                            Required = schemaAttribute.Required,
+                            CaseExact = schemaAttribute.CaseExact
                         });
                     }
                 }
@@ -2843,12 +2868,17 @@ public partial class ConnectedSystemServer
                 // Put the auxiliary contributions back, as the rows they already were. A directory that has since
                 // declared one of them on the structural class itself wins: that attribute is now native, and the
                 // discovery pass above has already carried its row across.
-                foreach (var contributedAttribute in contributedAttributes.Where(a => !newAttributeNames.Contains(a.Name)))
+                foreach (var contributedAttribute in contributedAttributes.Where(a => !matchedAttributes.Contains(a)))
                     connectedSystemObjectType.Attributes.Add(contributedAttribute);
 
                 if (addedAttributeNames.Count > 0)
                 {
                     result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+
+                if (renamedAttributes.Count > 0)
+                {
+                    result.RenamedAttributes[schemaObjectType.Name] = renamedAttributes;
                 }
             }
             else
@@ -2866,7 +2896,8 @@ public partial class ConnectedSystemServer
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
-                        Required = a.Required
+                        Required = a.Required,
+                        CaseExact = a.CaseExact
                     }).ToList()
                 };
 
@@ -2974,6 +3005,48 @@ public partial class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// Pairs each name a Connector reported with the stored Object Type or attribute it continues. Configuration names
+    /// ignore case (#2051), so a name differing only in case continues the stored one, but exact matches are paired
+    /// first: a Connected System whose own names are case-exact can hold two that differ only in case, and each keeps
+    /// its own row. A case-insensitive match is only taken when it is unambiguous, one unpaired stored name for one
+    /// unpaired reported name; anything else would be a guess, and is left as a removal and an addition.
+    /// </summary>
+    /// <returns>The stored item each paired reported name continues, keyed by the reported name.</returns>
+    internal static Dictionary<string, T> PairBySchemaName<T>(IEnumerable<string> reportedNames, IReadOnlyCollection<T> existing, Func<T, string> nameOf)
+        where T : class
+    {
+        var reported = reportedNames.Distinct(StringComparer.Ordinal).ToList();
+        var pairs = new Dictionary<string, T>(StringComparer.Ordinal);
+        var paired = new HashSet<T>(ReferenceEqualityComparer.Instance);
+
+        foreach (var name in reported)
+        {
+            var exact = existing.FirstOrDefault(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.Ordinal));
+            if (exact == null)
+                continue;
+
+            pairs[name] = exact;
+            paired.Add(exact);
+        }
+
+        var unpairedReported = reported.Where(name => !pairs.ContainsKey(name)).ToList();
+        foreach (var name in unpairedReported)
+        {
+            var candidates = existing
+                .Where(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var rivals = unpairedReported.Count(other => string.Equals(other, name, StringComparison.OrdinalIgnoreCase));
+            if (candidates.Count != 1 || rivals != 1)
+                continue;
+
+            pairs[name] = candidates[0];
+            paired.Add(candidates[0]);
+        }
+
+        return pairs;
     }
 
     /// <summary>
@@ -3197,10 +3270,12 @@ public partial class ConnectedSystemServer
 
             // Persisted attributes stay in the incoming schema so the merge matches and preserves them; everything
             // else is dropped before it can be added.
+            // Names ignore case (#2051), so a persisted attribute the Connector now reports in another case is still
+            // persisted, and is preserved for the merge to pair rather than dropped and reported as removed.
             var persistedAttributeNames = connectedSystem.ObjectTypes?
-                .FirstOrDefault(ot => ot.Name == schemaObjectType.Name)?
+                .FirstOrDefault(ot => string.Equals(ot.Name, schemaObjectType.Name, StringComparison.OrdinalIgnoreCase))?
                 .Attributes.Select(a => a.Name)
-                .ToHashSet() ?? [];
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
             foreach (var deniedAttribute in deniedAttributes.Where(a => !persistedAttributeNames.Contains(a.Name)))
                 schemaObjectType.Attributes.Remove(deniedAttribute);
@@ -5003,6 +5078,59 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates and applies one attribute's part of a bulk update, returning why it was refused, or null once it is
+    /// applied. Shared by both bulk overloads so the user and API key paths cannot disagree on a rule.
+    /// </summary>
+    private static string? ApplyBulkAttributeUpdate(
+        ConnectedSystemObjectTypeAttribute attribute,
+        (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact) updates)
+    {
+        // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
+        if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+            (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            return $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.";
+
+        // Validate: Cannot unselect an External ID or Secondary External ID attribute
+        if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected.";
+        }
+
+        // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
+        if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
+            return $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact.";
+
+        if (updates.Selected.HasValue)
+            attribute.Selected = updates.Selected.Value;
+
+        if (updates.IsExternalId.HasValue)
+        {
+            attribute.IsExternalId = updates.IsExternalId.Value;
+            // External ID attributes must always be selected for sync operations to work
+            if (updates.IsExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.IsSecondaryExternalId.HasValue)
+        {
+            attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+            // Secondary External ID attributes must always be selected for sync operations to work
+            if (updates.IsSecondaryExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.CaseExact.HasValue)
+        {
+            attribute.CaseExact = updates.CaseExact.Value;
+            // The administrator's declaration, which a schema refresh then leaves alone.
+            attribute.CaseExactSetByAdministrator = true;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Bulk updates multiple Connected System Attributes with a single parent activity.
     /// </summary>
     /// <param name="connectedSystem">The Connected System containing the attributes.</param>
@@ -5014,7 +5142,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
@@ -5049,39 +5177,11 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
@@ -5117,7 +5217,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             ApiKey initiatedByApiKey)
     {
         if (connectedSystem == null)
@@ -5154,39 +5254,11 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
@@ -6545,6 +6617,21 @@ public partial class ConnectedSystemServer
     /// <param name="valueChangeType">The type of change, i.e. CREATE/UPDATE/DELETE.</param>
     private static void AddChangeAttributeValueObject(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue, ValueChangeType valueChangeType)
     {
+        // A value holding nothing in any column has nothing to record (#2183). Some other component stored it, so removing
+        // it records no value change and does not error the object; it is checked before the attribute change is created,
+        // so the history is not left with an attribute change that has no values. An addition holding nothing is still
+        // reported as corrupt below: nothing should be adding one.
+        if (valueChangeType == ValueChangeType.Remove && connectedSystemObjectAttributeValue.HeldDataType() == null)
+        {
+            Log.Warning("AddChangeAttributeValueObject: Connected System Object {CsoId} had a value of attribute {AttributeName} " +
+                "({AttributeType}) that held nothing; its removal records no value change. Such a value is stored only by a fault " +
+                "elsewhere.",
+                connectedSystemObjectChange.ConnectedSystemObjectId ?? connectedSystemObjectChange.DeletedConnectedSystemObjectId,
+                LogSanitiser.Sanitise(connectedSystemObjectAttributeValue.Attribute.Name),
+                connectedSystemObjectAttributeValue.Attribute.Type);
+            return;
+        }
+
         var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == connectedSystemObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
@@ -8452,10 +8539,11 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates that every scoping criterion uses a comparison operator applicable to its attribute's data type,
-    /// using the shared <see cref="SearchComparisonOperators"/> rule. Throws <see cref="ArgumentException"/> on the
-    /// first invalid combination found, so a Synchronisation Rule with, for example, "Starts With" on a DateTime
-    /// attribute can never be persisted (the evaluator could never satisfy it, silently dropping objects from scope).
+    /// Validates every scoping criterion with the shared <see cref="CriterionValidation"/> rule (#2053): an operator
+    /// applicable to its attribute's data type in scoping, the value it compares against, and a pattern JIM can run.
+    /// Throws <see cref="ArgumentException"/> on the first invalid criterion found, so a Synchronisation Rule with, for
+    /// example, "Starts With" on a DateTime attribute can never be persisted (the evaluator could never satisfy it,
+    /// silently dropping objects from scope).
     /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
     /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
     /// </summary>
@@ -8473,11 +8561,14 @@ public partial class ConnectedSystemServer
             if (attributeType == null)
                 continue;
 
-            if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, attributeType.Value))
+            // A criterion whose operator takes no value is stored without one, whatever the caller sent.
+            CriterionValidation.ClearValues(criterion);
+            var attributeName = criterion.GetAttributeName() ?? "an attribute";
+            var error = CriterionValidation.Validate(criterion, attributeType.Value, CriterionContext.Scoping, attributeName);
+            if (error != null)
             {
-                var message = $"Comparison operator '{criterion.ComparisonType}' is not valid for the {attributeType.Value} " +
-                              $"attribute '{criterion.GetAttributeName()}' on scoping criteria.";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", message);
+                var message = $"Scoping criterion on '{attributeName}' cannot be saved: {error}";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
                 throw new ArgumentException(message);
             }
         }

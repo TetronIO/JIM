@@ -23,41 +23,38 @@ function Search-JIMMetaverseObject {
         emitted so a long-running sequential fetch is not a surprise.
 
     .PARAMETER PredefinedSearchUri
-        The URI identifier of the predefined search to use (e.g. "users", "groups").
-        This determines which object type to search and which attributes to return.
+        The URI of the Predefined Search to run, such as users or groups. It decides which Object Type is searched
+        and which attributes are returned.
 
     .PARAMETER Search
-        Optional search query to filter across all string attribute values (case-insensitive,
-        partial match).
+        Text to look for in the objects' text attribute values, ignoring case; part of a value is enough.
 
     .PARAMETER HasAttribute
-        Optional Metaverse Attribute name to filter by attribute presence: only Metaverse Objects
-        that hold a value for the named Metaverse Attribute are returned. The name is matched
-        case-insensitively. An unrecognised attribute name yields no results.
+        Returns only the objects that hold a value for this Metaverse Attribute, named exactly but ignoring case. A
+        multi-valued attribute counts once. A name JIM does not recognise returns nothing.
 
     .PARAMETER SortBy
-        Optional attribute name to sort results by. Defaults to sorting by creation date.
+        The attribute to sort by. Without it, objects are sorted by when they were created.
 
     .PARAMETER SortDirection
-        Sort direction: "asc" or "desc". Defaults to "desc".
+        The sort order. desc is the default.
 
     .PARAMETER All
-        Automatically paginate through all results and return every matching object.
-        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
-        warning; use -Force to fetch beyond the cap.
+        Returns every page of results rather than one. It stops after 1,000 pages, about 100,000 objects at the
+        default page size, with a warning; -Force reads on. Cannot be used with -Page.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of
-        how large the result set is. Only valid with -All.
+        With -All, reads every page, past the 1,000-page limit.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Cannot be used with -All.
+        The page of results to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100. Maximum is 100.
+        How many objects each page holds.
 
     .OUTPUTS
-        PSCustomObject representing lightweight Metaverse Object headers.
+        One object in summary per match, with its display name, Object Type and the attributes the Predefined Search
+        lists.
 
     .EXAMPLE
         Search-JIMMetaverseObject -PredefinedSearchUri "users"
@@ -100,7 +97,7 @@ function Search-JIMMetaverseObject {
         Get-JIMMetaverseObjectType
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectHeaderDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'List')]
         [Parameter(Mandatory, ParameterSetName = 'ListAll')]

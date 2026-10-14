@@ -21,7 +21,7 @@ The Metaverse schema is administrator-defined. JIM does not impose a fixed schem
 
 ### Deletion behaviour
 
-Each object type has its own rules for when its objects should be deleted from the Metaverse, configured on the Object Type's detail page (and equally via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/)). Three Deletion Rules are available:
+Each object type has its own rules for when its objects should be deleted from the Metaverse, configured on the Object Type's detail page (and equally via [PowerShell](../powershell/metaverse-object-types.md#set-jimmetaverseobjecttype) and the [REST API](../../api/reference/)). Three Deletion Rules are available:
 
 - **Manual**<br /> Objects are never automatically deleted; an administrator must remove them.
 - **When Last Connector Disconnected**<br /> Objects are deleted once no Connected System Objects remain linked to them.
@@ -78,7 +78,7 @@ Saving after a preview states its counts on the confirmation and records the pre
 
 ### Custom object types
 
-Alongside JIM's built-in `User` and `Group` types, administrators can create their own **custom object types** to model whatever categories their organisation needs (for example `Device`, `Room`, or `Contract`). Manage them from the **Object Types** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).
+Alongside JIM's built-in `User` and `Group` types, administrators can create their own **custom object types** to model whatever categories their organisation needs (for example `Device`, `Room`, or `Contract`). Manage them from the **Object Types** tab of the Schema area, or via [PowerShell](../powershell/metaverse-object-types.md) and the [REST API](../../api/reference/).
 
 - **Naming**<br /> Names and plural names are unique and compared case-insensitively; the portal validates both as you type. Names are shown exactly as you entered them.
 - **Create with attributes**<br /> When creating a type you can optionally bind existing attributes to it there and then, or add them later from the type's **Attributes** tab.
@@ -124,7 +124,7 @@ View a built-in attribute's Standard Mappings from the view action on its row in
 
 ### Custom attributes
 
-Alongside JIM's built-in attributes (which are read-only and cannot be deleted), administrators can create their own **custom attributes** to model organisation-specific data such as `costCentre` or `buildingCode`. Manage them from the **Attributes** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).
+Alongside JIM's built-in attributes (which are read-only and cannot be deleted), administrators can create their own **custom attributes** to model organisation-specific data such as `costCentre` or `buildingCode`. Manage them from the **Attributes** tab of the Schema area, or via [PowerShell](../powershell/metaverse-attributes.md) and the [REST API](../../api/reference/).
 
 - **Naming**<br /> Attribute names are unique and compared case-insensitively, so "CostCentre" is rejected if "costCentre" already exists. The portal validates the name as you type. Names are always shown exactly as you entered them.
 - **Create and bind in one step**<br /> When creating an attribute you can optionally bind it to zero or more Object Types there and then; leave the binding empty to create it unbound and assign it later. An unbound attribute collects no data until it is bound, which the list flags as "Not assigned".
@@ -180,7 +180,7 @@ The filter is available with the same behaviour across all three interfaces:
 ## Manage the Metaverse
 
 - **JIM portal**<br /> Metaverse area of the admin UI for objects, object types, attributes, and pending deletions
-- **PowerShell**<br /> [Metaverse cmdlets](../powershell/metaverse.md) (`Get-JIMMetaverseObject`, `Get-JIMMetaverseObjectType`, `Get-JIMMetaverseAttribute`, etc.)
+- **PowerShell**<br /> [Metaverse cmdlets](../powershell/metaverse.md) for Metaverse Objects (`Get-JIMMetaverseObject`, `Search-JIMMetaverseObject` and the rest), with the [Metaverse Object Type](../powershell/metaverse-object-types.md) and [Metaverse Attribute](../powershell/metaverse-attributes.md) cmdlets for the schema
 - **REST API**<br /> Metaverse endpoints in the [interactive API reference](../../api/reference/)
 
 ## Related

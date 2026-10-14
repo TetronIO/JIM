@@ -430,7 +430,7 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
 
         var facts = await AssertPreviewEqualsExecutionAsync(ctx.Hr);
 
-        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-delete|")),
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-delete|", StringComparison.Ordinal)),
             "precondition: the scenario must actually exercise the downstream cascade");
     }
 
@@ -458,7 +458,7 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
 
         var facts = await AssertPreviewEqualsExecutionAsync(ctx.Hr, keepQueuedExports: true);
 
-        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("withdrawn|")),
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("withdrawn|", StringComparison.Ordinal)),
             "precondition: the scenario must actually withdraw the queued change");
     }
 
@@ -475,7 +475,7 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
 
         var facts = await AssertPreviewEqualsExecutionAsync(topology.Hr);
 
-        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-update|") && f.Contains("|Manager|")),
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-update|", StringComparison.Ordinal) && f.Contains("|Manager|")),
             "precondition: the scenario must actually export the recalled reference");
     }
 

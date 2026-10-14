@@ -95,6 +95,29 @@ public class MetaverseControllerAttributeTests
     #region Get
 
     [Test]
+    public async Task GetAttributesAsync_ReturnsTheObjectTypesEachAttributeIsBoundToAsync()
+    {
+        // An untracked load of the attribute entities leaves the Object Type navigation unloaded, as it does
+        // against the real database; the header projection is what reads the bindings.
+        _mv.Setup(r => r.GetMetaverseAttributesAsync(It.IsAny<bool>()))
+            .ReturnsAsync(new List<MetaverseAttribute> { new() { Id = 1, Name = "costCentre", Type = AttributeDataType.Text } });
+        _mv.Setup(r => r.GetMetaverseAttributeHeadersAsync()).ReturnsAsync(new List<MetaverseAttributeHeader>
+        {
+            new()
+            {
+                Id = 1, Name = "costCentre", Type = AttributeDataType.Text,
+                MetaverseObjectTypes = [new KeyValuePair<int, string>(1, "User"), new KeyValuePair<int, string>(2, "Group")]
+            }
+        });
+
+        var result = await _controller.GetAttributesAsync(new PaginationRequest());
+
+        var page = (PaginatedResponse<MetaverseAttributeHeader>)((OkObjectResult)result).Value!;
+        var attribute = page.Items.Single();
+        Assert.That(attribute.MetaverseObjectTypes!.Select(t => t.Value), Is.EqualTo(new[] { "User", "Group" }));
+    }
+
+    [Test]
     public async Task GetAttributeAsync_WithStandardMappings_ProjectsThemIntoTheDetailDtoAsync()
     {
         var attribute = Attr(1, "costCentre");

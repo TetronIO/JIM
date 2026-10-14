@@ -431,6 +431,101 @@ public class ConnectedSystemServerChangeTrackingTests
         Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UnhandledError));
     }
 
+    /// <summary>
+    /// A value that holds nothing in any column has nothing to record (#2183). Another component stored it (optimistic
+    /// export apply did, for an expression result of another type), so removing it must not error the object; the
+    /// history records no value change for it, and leaves no empty attribute change behind.
+    /// </summary>
+    [TestCase(AttributeDataType.DateTime)]
+    [TestCase(AttributeDataType.Boolean)]
+    [TestCase(AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Number)]
+    public void LinkUpdateChangeRecords_RemovalOfValueHoldingNothing_RecordsNoValueChangeAndDoesNotErrorTheObject(AttributeDataType type)
+    {
+        var (cso, attribute) = CsoWithAttribute(type);
+        var holdingNothing = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id };
+        cso.AttributeValues.Add(holdingNothing);
+        cso.PendingAttributeValueRemovals.Add(holdingNothing);
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+
+        _jim.ConnectedSystems.LinkUpdateChangeRecords([cso], [rpei], changeTrackingEnabled: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet).Or.Null, rpei.ErrorMessage);
+            Assert.That(rpei.ConnectedSystemObjectChange, Is.Not.Null, "The update is still recorded.");
+            Assert.That(rpei.ConnectedSystemObjectChange!.AttributeChanges, Is.Empty,
+                "Nothing was held, so nothing is recorded as removed, and no attribute change is left with no values.");
+            Assert.That(cso.AttributeValues, Does.Not.Contain(holdingNothing), "The value is still removed from the object.");
+        }
+    }
+
+    /// <summary>
+    /// The confirming import after an optimistic export apply stored a Boolean value holding nothing: the import diff
+    /// removes it and adds the value the target holds (#2183). The addition is recorded as usual beside the removal that
+    /// records nothing.
+    /// </summary>
+    [Test]
+    public void LinkUpdateChangeRecords_ValueHoldingNothingReplacedByImportedValue_RecordsOnlyTheAddition()
+    {
+        var (cso, attribute) = CsoWithAttribute(AttributeDataType.Boolean);
+        var holdingNothing = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id };
+        cso.AttributeValues.Add(holdingNothing);
+        cso.PendingAttributeValueRemovals.Add(holdingNothing);
+        cso.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id, BoolValue = true });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+
+        _jim.ConnectedSystems.LinkUpdateChangeRecords([cso], [rpei], changeTrackingEnabled: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet).Or.Null, rpei.ErrorMessage);
+            Assert.That(rpei.ConnectedSystemObjectChange?.AttributeChanges.SelectMany(c => c.ValueChanges).Select(v => (v.ValueChangeType, v.BoolValue)),
+                Is.EquivalentTo(new (ValueChangeType, bool?)[] { (ValueChangeType.Add, true) }));
+        }
+    }
+
+    /// <summary>
+    /// An object deleted while it holds a value that holds nothing (#2183): its deletion is recorded with every value it
+    /// held, and the value holding nothing is left out rather than erroring the object.
+    /// </summary>
+    [Test]
+    public void LinkDeleteChangeRecords_ObjectHoldingValueThatHoldsNothing_RecordsItsOtherValuesAndDoesNotErrorTheObject()
+    {
+        var (cso, attribute) = CsoWithAttribute(AttributeDataType.DateTime);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+
+        _jim.ConnectedSystems.LinkDeleteChangeRecords([cso], [rpei], changeTrackingEnabled: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet).Or.Null, rpei.ErrorMessage);
+            Assert.That(rpei.ConnectedSystemObjectChange?.AttributeChanges.Select(c => c.AttributeName),
+                Is.EqualTo(new[] { _externalIdAttr.Name }), "The External ID is recorded as removed; the value holding nothing is not.");
+        }
+    }
+
+    /// <summary>
+    /// The direct deletion path recovers from a value it cannot record by dropping every attribute change, so one value
+    /// holding nothing used to cost the deletion record all of the object's final values (#2183).
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemObjectsAsync_ObjectHoldingValueThatHoldsNothing_RecordsItsOtherFinalValuesAsync()
+    {
+        var (cso, attribute) = CsoWithAttribute(AttributeDataType.Boolean);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+        _mockCsRepo
+            .Setup(r => r.DeleteConnectedSystemObjectsAsync(It.IsAny<List<ConnectedSystemObject>>()))
+            .Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync([cso], [rpei]);
+
+        Assert.That(rpei.ConnectedSystemObjectChange?.AttributeChanges.Select(c => c.AttributeName),
+            Is.EqualTo(new[] { _externalIdAttr.Name }));
+    }
+
     private (ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Attribute) CsoWithAttribute(AttributeDataType type)
     {
         var attribute = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "sAMAccountType", Type = type, Selected = true };

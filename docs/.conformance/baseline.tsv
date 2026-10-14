@@ -1,27 +1,20 @@
 # Docs conformance baseline: the existing debt each Ratchet rule allows, per page. Counts only ever fall.
 # Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
 # The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.
-LANG-3	powershell/connected-systems.md	20
-LANG-3	powershell/example-data.md	3
+LANG-3	powershell/example-data.md	2
 LANG-3	powershell/expressions.md	2
 LANG-3	powershell/feature-flags.md	1
 LANG-3	powershell/history.md	2
-LANG-3	powershell/index.md	2
-LANG-3	powershell/metaverse.md	18
+LANG-3	powershell/index.md	1
 LANG-3	powershell/security.md	1
-LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
-LANG-4	powershell/connected-systems.md	3
 LANG-4	powershell/history.md	3
-LANG-4	powershell/synchronisation-rules.md	9
 LANG-7	powershell/connection.md	1
 LANG-7	powershell/index.md	1
 LANG-7	powershell/previews.md	1
 STR-2	powershell/activities.md	3
 STR-2	powershell/api-keys.md	3
-STR-2	powershell/certificates.md	3
-STR-2	powershell/connected-systems.md	3
 STR-2	powershell/connection.md	3
 STR-2	powershell/example-data.md	3
 STR-2	powershell/expressions.md	3
@@ -30,14 +23,10 @@ STR-2	powershell/file-system.md	3
 STR-2	powershell/history.md	3
 STR-2	powershell/index.md	3
 STR-2	powershell/logs.md	3
-STR-2	powershell/metaverse.md	3
-STR-2	powershell/password-synchronisation.md	3
 STR-2	powershell/predefined-searches.md	3
 STR-2	powershell/previews.md	3
 STR-2	powershell/run-profiles.md	3
-STR-2	powershell/schedules.md	3
 STR-2	powershell/security.md	3
 STR-2	powershell/service-settings.md	3
-STR-2	powershell/synchronisation-rules.md	3
 STR-2	powershell/system.md	3
 STR-2	powershell/worker-tasks.md	3

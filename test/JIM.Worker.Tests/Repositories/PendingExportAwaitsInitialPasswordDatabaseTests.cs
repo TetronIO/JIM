@@ -27,13 +27,14 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
 {
     private string _connectionString = null!;
 
-    private JimDbContext NewContext()
+    private JimDbContext NewContext(IInterceptor? interceptor = null)
     {
-        var options = new DbContextOptionsBuilder<JimDbContext>()
+        var builder = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        return new JimDbContext(options);
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+        if (interceptor != null)
+            builder.AddInterceptors(interceptor);
+        return new JimDbContext(builder.Options);
     }
 
     [OneTimeSetUp]
@@ -103,6 +104,52 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
 
         var stored = await ReadFlagsAsync(pendingExport.Id);
         Assert.That(stored.Values.Single(), Is.True);
+    }
+
+    /// <summary>
+    /// A delivery waits for an export to the account while it is in flight, and completes a held enable once it sees the
+    /// hold (#2173, #2158). So the hold must already be readable at the moment the export stops being in flight: written
+    /// after the Pending Export left Executing, it leaves a moment in which a delivery sees neither, sets the password
+    /// without the enable, and the account waits a schedule cycle for it. Probed from another connection, exactly as the
+    /// Password Delivery Service reads it, just before the Pending Export's own row is written.
+    /// </summary>
+    [Test]
+    public async Task UpdatePendingExportAsync_WritesTheHeldChangeBeforeThePendingExportLeavesExecutingAsync()
+    {
+        var s = await SeedAsync();
+        var pendingExport = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        pendingExport.Status = PendingExportStatus.Executing;
+        pendingExport.LastAttemptedAt = DateTime.UtcNow;
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([pendingExport]);
+
+        var seenAsTheExportLeftExecuting = new List<AccountEnablementFacts>();
+        var probe = new BeforeStatementInterceptor("UPDATE \"PendingExports\"", async () =>
+        {
+            await using var read = NewContext();
+            seenAsTheExportLeftExecuting.Add(await new PostgresDataRepository(read).Sync.GetAccountEnablementFactsAsync(
+                s.SystemId, Guid.NewGuid(), s.CsoIds[0], DateTime.UtcNow.AddHours(-1)));
+        });
+
+        await using (var update = NewContext(probe))
+        {
+            var tracked = await update.PendingExports.Include(pe => pe.AttributeValueChanges).SingleAsync(pe => pe.Id == pendingExport.Id);
+            var change = tracked.AttributeValueChanges.Single();
+            change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+            change.ExportAttemptCount = 1;
+            change.AwaitsInitialPassword = true;
+            tracked.Status = PendingExportStatus.Exported;
+            await new PostgresDataRepository(update).Sync.UpdatePendingExportAsync(tracked);
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(seenAsTheExportLeftExecuting, Is.Not.Empty, "precondition: the Pending Export's row was written");
+            Assert.That(seenAsTheExportLeftExecuting.Select(facts => facts.ExportInFlight), Is.All.True,
+                "precondition: probed while the export was still in flight");
+            Assert.That(seenAsTheExportLeftExecuting.Select(facts => facts.HoldsWithheldEnable), Is.All.True,
+                "the hold is readable before the export stops being in flight");
+        }
     }
 
     /// <summary>
@@ -404,6 +451,20 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
         Status = PendingExportAttributeChangeStatus.Pending,
         AwaitsInitialPassword = awaitsInitialPassword
     };
+
+    /// <summary>
+    /// Runs an action just before any statement whose text contains a given fragment, on its way to the database.
+    /// </summary>
+    private sealed class BeforeStatementInterceptor(string commandTextFragment, Func<Task> before) : DbCommandInterceptor
+    {
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains(commandTextFragment, StringComparison.Ordinal))
+                await before();
+            return await base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 
     private sealed record Seeded(int SystemId, int AttributeId, List<Guid> CsoIds, List<Guid> MvoIds);
 

@@ -4,22 +4,22 @@
 function Remove-JIMScopingCriterion {
     <#
     .SYNOPSIS
-        Removes a criterion from a scoping criteria group.
+        Deletes a criterion from a scoping criteria group.
 
     .DESCRIPTION
-        Deletes a specific criterion from within a scoping criteria group.
+        Deletes one criterion from a scoping criteria group.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group containing the criterion.
+        The ID of the group the criterion is in.
 
     .PARAMETER CriterionId
-        The unique identifier of the criterion to remove.
+        The ID of the criterion to delete.
 
     .OUTPUTS
-        None
+        None.
 
     .EXAMPLE
         Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15
@@ -31,6 +31,7 @@ function Remove-JIMScopingCriterion {
         New-JIMScopingCriterion
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,

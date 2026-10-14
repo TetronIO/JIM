@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DynamicExpresso;
 using DynamicExpresso.Exceptions;
+using Microsoft.CSharp.RuntimeBinder;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Utilities;
@@ -19,7 +20,7 @@ namespace JIM.Application.Expressions;
 /// Expression evaluator implementation using DynamicExpresso.
 /// Provides C#-like expression syntax with built-in functions for identity management.
 /// </summary>
-public class DynamicExpressoEvaluator : IExpressionEvaluator
+public partial class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
 
@@ -42,6 +43,14 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     // Static cache shared across all instances - expressions are deterministic so cache can be shared
     // This ensures expression compilation is only done once per expression string across all sync operations
     private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    /// <summary>
+    /// The evaluating context's <see cref="ExpressionContext.NowUtc"/>, for <c>Now()</c> and <c>Today()</c>. Compiled
+    /// Expressions are shared and their functions cannot see the context, so <see cref="Evaluate"/> holds it here for
+    /// the duration of the call, on the thread running it, and restores what was there before.
+    /// </summary>
+    [ThreadStatic]
+    private static DateTime? _contextNowUtc;
 
     // Static cache metrics for diagnostics (shared across instances)
     private static long _cacheHits;
@@ -71,11 +80,34 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     public DynamicExpressoEvaluator()
     {
-        _interpreter = new Interpreter();
+        _interpreter = CreateInterpreter();
         RegisterBuiltInFunctions();
     }
 
+    /// <summary>
+    /// The interpreter every expression is parsed by: DynamicExpresso's defaults, late-bound (#2053). An accessor reads
+    /// one value or several, so a transform's result is untyped; late binding is what lets <c>Upper(a) + Upper(b)</c>
+    /// parse and <c>Lower(x) == "abc"</c> compare text rather than references. Reflection is refused in depth (see
+    /// <c>engineering/EXPRESSION_SECURITY.md</c>, "Late binding"): at parse time by DynamicExpresso's own guard and by
+    /// <see cref="ReflectionRefusingVisitor"/>, which refuses any reflection-typed part of an expression, <c>GetType()</c>
+    /// and <c>typeof</c> included; and at run time by DynamicExpresso's late binder, by every function that hands a
+    /// value on (<see cref="ExpressionValueSets.RefuseReflection"/>) and by <see cref="Evaluate"/> refusing a reflection
+    /// result.
+    /// </summary>
+    private static Interpreter CreateInterpreter()
+    {
+        var interpreter = new Interpreter(InterpreterOptions.Default | InterpreterOptions.LateBindObject);
+        interpreter.Visitors.Add(new ReflectionRefusingVisitor());
+        return interpreter;
+    }
+
     /// <inheritdoc/>
+    /// <remarks>
+    /// Every evaluation runs under JIM's expression culture (<see cref="ExpressionText.Culture"/>), set here and
+    /// restored afterwards, so what the language writes as text (a date or a number joined to text with <c>+</c>)
+    /// is the same on every server whatever its <c>LANG</c> (#2153, N1). Every failure the Expression can cause is
+    /// thrown as one <see cref="ExpressionEvaluationException"/> (N5).
+    /// </remarks>
     public object? Evaluate(string expression, ExpressionContext context)
     {
         ArgumentNullException.ThrowIfNull(expression);
@@ -83,31 +115,58 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         if (expression.Length > MaxExpressionLength)
         {
-            throw new ArgumentException(
-                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).",
-                nameof(expression));
+            throw new ExpressionEvaluationException(
+                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
         }
 
+        var hostCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = ExpressionText.Culture;
+        var hostClock = _contextNowUtc;
+        _contextNowUtc = context.NowUtc;
         var sw = Stopwatch.StartNew();
         try
         {
             var lambda = GetOrCompileExpression(expression);
 
-            return lambda.Invoke(
+            return ExpressionValueSets.RefuseReflection(lambda.Invoke(
                 new Parameter("mv", context.Mv),
-                new Parameter("cs", context.Cs));
+                new Parameter("cs", context.Cs)));
         }
+        // The failures an Expression can cause, from parsing it to running it, each made the one expression error.
+        // Anything else (an out-of-memory condition, a JIM fault) propagates unchanged, as does an
+        // ExpressionEvaluationException a function raised itself.
+        catch (DynamicExpressoException ex) { throw ToExpressionError(ex); }
+        catch (ArgumentException ex) { throw ToExpressionError(ex); }
+        catch (FormatException ex) { throw ToExpressionError(ex); }
+        catch (ArithmeticException ex) { throw ToExpressionError(ex); }
+        catch (InvalidOperationException ex) { throw ToExpressionError(ex); }
+        catch (InvalidCastException ex) { throw ToExpressionError(ex); }
+        catch (KeyNotFoundException ex) { throw ToExpressionError(ex); }
+        catch (NullReferenceException ex) { throw ToExpressionError(ex); }
+        catch (IndexOutOfRangeException ex) { throw ToExpressionError(ex); }
+        // Late binding resolves a member or operator on a value while the expression runs: one the value does not have
+        // (a misspelt member, an operator its type lacks) is the expression's fault, reported like a parse error.
+        catch (RuntimeBinderException ex) { throw ToExpressionError(ex); }
         finally
         {
+            CultureInfo.CurrentCulture = hostCulture;
+            _contextNowUtc = hostClock;
             sw.Stop();
             if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
             {
                 Log.Warning("Slow expression evaluation: '{Expression}' took {ElapsedMs}ms",
-                    expression.Length > 50 ? expression[..50] + "..." : expression,
+                    LogSanitiser.Sanitise(expression.Length > 50 ? expression[..50] + "..." : expression),
                     sw.ElapsedMilliseconds);
             }
         }
     }
+
+    /// <summary>
+    /// Wraps a failure the Expression caused as the one expression error, keeping its message so the administrator
+    /// reads what went wrong exactly as before.
+    /// </summary>
+    private static ExpressionEvaluationException ToExpressionError(Exception exception) =>
+        new(exception.Message, exception);
 
     /// <summary>
     /// Gets the current expression cache metrics.
@@ -132,7 +191,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         try
         {
             // Create a test interpreter with mock parameters
-            var testInterpreter = new Interpreter();
+            var testInterpreter = CreateInterpreter();
             RegisterBuiltInFunctions(testInterpreter);
 
             testInterpreter.Parse(expression,
@@ -170,10 +229,35 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             var result = Evaluate(expression, context);
             return ExpressionTestResult.Success(result);
         }
-        catch (Exception ex)
+        catch (ExpressionEvaluationException ex)
         {
             return ExpressionTestResult.Failure(ex.Message);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Evaluate lets a failure outside the expression errors propagate (an expression can still raise one, such
+            // as "x".PadLeft(2000000000), which exceeds the maximum string length). Test has a result to carry any
+            // failure in, and the portal tester, the REST endpoint, Example Data and the generated-value previews rely
+            // on it never throwing.
+            return ExpressionTestResult.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>The instant <c>Now()</c> reads: the evaluating context's, or the real time.</summary>
+    private static DateTime CurrentUtc() => _contextNowUtc ?? DateTime.UtcNow;
+
+    /// <summary>
+    /// The names of every function an expression can call, as the interpreter has them registered, for the function
+    /// catalogue's agreement test (<c>ExpressionFunctionCatalogueTests</c>).
+    /// </summary>
+    internal static IReadOnlyList<string> RegisteredFunctionNames()
+    {
+        // The interpreter's other identifiers are the literals true, false and null, each a constant.
+        var evaluator = new DynamicExpressoEvaluator();
+        return evaluator._interpreter.Identifiers
+            .Where(identifier => identifier.Expression is not System.Linq.Expressions.ConstantExpression)
+            .Select(identifier => identifier.Name)
+            .ToList();
     }
 
     private Lambda GetOrCompileExpression(string expression)
@@ -213,60 +297,90 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     {
         var target = interpreter ?? _interpreter;
 
-        // String functions - accept object? to handle AttributeAccessor indexer returns
-        target.SetFunction("Trim", (Func<object?, string?>)(o => AsString(o)?.Trim()));
-        target.SetFunction("Upper", (Func<object?, string?>)(o => AsString(o)?.ToUpperInvariant()));
-        target.SetFunction("Lower", (Func<object?, string?>)(o => AsString(o)?.ToLowerInvariant()));
-        target.SetFunction("Capitalise", (Func<object?, string?>)(o => Capitalise(AsString(o))));
-        target.SetFunction("Left", (Func<object?, int, string?>)((o, count) => Left(AsString(o), count)));
-        target.SetFunction("Right", (Func<object?, int, string?>)((o, count) => Right(AsString(o), count)));
-        target.SetFunction("Substring", (Func<object?, int, int, string?>)((o, start, length) => SafeSubstring(AsString(o), start, length)));
-        target.SetFunction("Replace", (Func<object?, object?, object?, string?>)((o, oldVal, newVal) => AsString(o)?.Replace(AsString(oldVal) ?? "", AsString(newVal) ?? "")));
-        target.SetFunction("StartsWith", (Func<object?, object?, bool>)((o, prefix) => AsString(o)?.StartsWith(AsString(prefix) ?? "") ?? false));
-        target.SetFunction("EndsWith", (Func<object?, object?, bool>)((o, suffix) => AsString(o)?.EndsWith(AsString(suffix) ?? "") ?? false));
-        target.SetFunction("Length", (Func<object?, int>)(o => AsString(o)?.Length ?? 0));
-        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)(o => string.IsNullOrEmpty(AsString(o))));
-        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o => string.IsNullOrWhiteSpace(AsString(o))));
+        // Every function accepts object? (an accessor reads null, one value, or several values) and follows the
+        // several-values rules in ExpressionValueSets (#2053): a transform applies to each value, a comparison is true
+        // when any value satisfies it, and a one-value position refuses several values with an error naming the
+        // attribute and the count.
 
-        // Containment functions
-        target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) => AsString(o)?.Contains(AsString(value) ?? "") ?? false));
-        target.SetFunction("CollectionContains", (Func<object?, object?, bool>)((collection, value) => CollectionContains(collection, AsString(value) ?? "")));
+        // Text transforms: each value in, each result out, in the same order.
+        target.SetFunction("Trim", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.Trim())));
+        target.SetFunction("Upper", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.ToUpperInvariant())));
+        target.SetFunction("Lower", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => AsString(v)?.ToLowerInvariant())));
+        target.SetFunction("Capitalise", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => Capitalise(AsString(v)))));
+        target.SetFunction("Left", (Func<object?, int, object?>)((o, count) => ExpressionValueSets.Map(o, v => Left(AsString(v), count))));
+        target.SetFunction("Right", (Func<object?, int, object?>)((o, count) => ExpressionValueSets.Map(o, v => Right(AsString(v), count))));
+        target.SetFunction("Substring", (Func<object?, int, int, object?>)((o, start, length) => ExpressionValueSets.Map(o, v => SafeSubstring(AsString(v), start, length))));
+        target.SetFunction("Replace", (Func<object?, object?, object?, object?>)((o, oldVal, newVal) =>
+        {
+            var oldText = AsString(oldVal) ?? "";
+            var newText = AsString(newVal) ?? "";
+            return ExpressionValueSets.Map(o, v => AsString(v)?.Replace(oldText, newText));
+        }));
 
-        // Array/Collection functions - for converting delimited strings to multi-valued attributes
-        target.SetFunction("Split", (Func<object?, object?, string[]>)((o, delimiter) => Split(AsString(o), AsString(delimiter))));
+        // The text comparisons (StartsWith, EndsWith, Contains), HasValue and the pattern functions mirror the operator
+        // catalogue, so they are registered beside it in DynamicExpressoEvaluator.Library.cs (#2053).
+        RegisterCatalogueComparisons(target);
+
+        // One-value functions.
+        target.SetFunction("Length", (Func<object?, int>)(o => AsString(ExpressionValueSets.One(o))?.Length ?? 0));
+
+        // Presence: JIM's one definition of no value (null, empty text, or a list with no values). A Binary value
+        // (which has no text form) is a value unless it holds no bytes, rather than an error.
+        target.SetFunction("IsNullOrEmpty", (Func<object?, bool>)ExpressionValueSets.HasNoValue);
+        target.SetFunction("IsNullOrWhitespace", (Func<object?, bool>)(o =>
+            ExpressionValueSets.HasNoValue(o) || ExpressionValueSets.Values(o).All(v => v is not byte[] && string.IsNullOrWhiteSpace(AsString(v)))));
+
+        // Whole-set functions. Split's result is several values in the order it found them, so Join gives back what
+        // Split was given.
+        target.SetFunction("Split", (Func<object?, object?, ExpressionValues>)((o, delimiter) => new ExpressionValues(Split(AsString(ExpressionValueSets.One(o)), AsString(delimiter)), null)));
         target.SetFunction("Join", (Func<object?, object?, string?>)((collection, delimiter) => Join(collection, AsString(delimiter))));
+        target.SetFunction("Count", (Func<object?, int>)(o => ExpressionValueSets.Values(o).Count));
+        target.SetFunction("Min", (Func<object?, object?>)(o => ExpressionValueSets.Extreme(o, largest: false, "Min")));
+        target.SetFunction("Max", (Func<object?, object?>)(o => ExpressionValueSets.Extreme(o, largest: true, "Max")));
+        target.SetFunction("Where", (Func<object?, object?, object?, object?>)((values, op, value) => ExpressionWhere.Filter(values, op, value, ignoreCase: false)));
+        target.SetFunction("Where", (Func<object?, object?, object?, bool, object?>)ExpressionWhere.Filter);
 
         // Conditional functions
-        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) => a ?? b));
-        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) => condition ? trueVal : falseVal));
+        target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) =>
+            ExpressionValueSets.RefuseReflection(ExpressionValueSets.HasNoValue(a) ? b : a)));
+        target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) =>
+            ExpressionValueSets.RefuseReflection(condition ? trueVal : falseVal)));
 
-        // Equality comparison function - IMPORTANT: The == operator doesn't work correctly
-        // when comparing object? to string because it uses reference equality.
-        // Use Eq() for value-based string/object comparisons in expressions.
-        target.SetFunction("Eq", (Func<object?, object?, bool>)ValueEquals);
+        // Value equality, true when any value of one side equals any value of the other. Expressions are late-bound, so
+        // == compares values too; Eq remains the one that reads text against a typed value as that type.
+        target.SetFunction("Eq", (Func<object?, object?, bool>)((a, b) =>
+            ExpressionResultValues.IsCollection(a) || ExpressionResultValues.IsCollection(b)
+                ? ExpressionValueSets.Any(a, x => ExpressionValueSets.Any(b, y => ValueEquals(x, y)))
+                : ValueEquals(a, b)));
 
         // Date functions. Now and Today (like RandomPassword and RandomPassphrase below) return a different value on
         // each evaluation; NonRepeatableFunctionDetector lists them, so keep it in step when adding another.
-        target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
-        target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
-        target.SetFunction("FormatDate", (Func<DateTime?, string, string?>)((dt, format) => dt?.ToString(format, CultureInfo.InvariantCulture)));
-        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(o)));
-        target.SetFunction("FromFileTime", (Func<object?, DateTime?>)(o => FromFileTime(o)));
+        target.SetFunction("Now", (Func<DateTime>)(() => CurrentUtc()));
+        target.SetFunction("Today", (Func<DateTime>)(() => CurrentUtc().Date));
+        // FormatDate and ParseDate are counterparts: one writes a date as text in a given format, the other reads text
+        // in a given format as a date. Every other reading of text as a date uses the ISO 8601 rule (ExpressionDates).
+        target.SetFunction("FormatDate", (Func<object?, string, object?>)((o, format) => ExpressionValueSets.Map(o, v => FormatDate(v, format))));
+        target.SetFunction("ParseDate", (Func<object?, string, object?>)((o, format) => ExpressionValueSets.Map(o, v => ParseDate(v, format))));
+        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(ExpressionValueSets.One(o))));
+        target.SetFunction("FromFileTime", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => FromFileTime(v))));
 
         // Conversion functions
-        target.SetFunction("ToString", (Func<object?, string?>)(o => o?.ToString()));
-        target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(o), out var i) ? i : 0));
+        target.SetFunction("ToString", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, AsString)));
+        target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(ExpressionValueSets.One(o)), out var i) ? i : 0));
         // ToDecimal: exact for decimal/int/long inputs; strings parse with invariant culture and accept
         // exponent notation (e.g. "1.5E3" becomes 1500). Deliberately no double/float path: binary
         // floating point cannot represent most decimal fractions exactly.
-        target.SetFunction("ToDecimal", (Func<object?, decimal>)(o =>
-            o is decimal d ? d :
-            o is int i ? i :
-            o is long l ? l :
-            DecimalAttributeValue.TryParse(AsString(o), out var parsed) ? parsed : 0m));
+        target.SetFunction("ToDecimal", (Func<object?, decimal>)(input =>
+        {
+            var o = ExpressionValueSets.One(input);
+            return o is decimal d ? d :
+                o is int i ? i :
+                o is long l ? l :
+                DecimalAttributeValue.TryParse(AsString(o), out var parsed) ? parsed : 0m;
+        }));
 
         // DN Helper functions
-        target.SetFunction("EscapeDN", (Func<object?, string?>)(o => EscapeDN(AsString(o))));
+        target.SetFunction("EscapeDN", (Func<object?, object?>)(o => ExpressionValueSets.Map(o, v => EscapeDN(AsString(v)))));
 
         // Password generation functions
         target.SetFunction("RandomPassword", (Func<int, bool, string>)RandomPassword);
@@ -281,18 +395,30 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Converts an object to string, handling null and various types.
+    /// A function's input as text, in JIM's one text form (#2153, N1): a date as <c>2026-03-15 10:30:00Z</c>, a
+    /// number with <c>.</c> as the decimal point. A Binary value has no text form, so using one as text is an
+    /// expression error rather than the text <c>System.Byte[]</c>. Text is a one-value position (#2053): several values
+    /// are the error naming the attribute and the count.
     /// </summary>
     private static string? AsString(object? value)
     {
-        return value?.ToString();
+        value = ExpressionValueSets.One(value);
+
+        if (ExpressionText.TryFormat(value, out var text))
+            return text;
+
+        if (value is byte[])
+            throw new ExpressionEvaluationException("A Binary value has no text form, so it cannot be used as text.");
+
+        return value!.ToString();
     }
 
     /// <summary>
-    /// Converts an object to int, handling null and various types.
+    /// Converts an object to int, handling null and various types. A one-value position (#2053).
     /// </summary>
     private static int AsInt(object? value)
     {
+        value = ExpressionValueSets.One(value);
         if (value == null) return 0;
         if (value is int i) return i;
         if (value is long l) return (int)l;
@@ -360,30 +486,6 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     #endregion
 
-    #region Containment Functions
-
-    private static bool CollectionContains(object? collection, string value)
-    {
-        if (collection == null)
-            return false;
-
-        // Handle various collection types
-        if (collection is IEnumerable<string> stringEnumerable)
-        {
-            return stringEnumerable.Contains(value);
-        }
-
-        if (collection is IEnumerable<object> objectEnumerable)
-        {
-            return objectEnumerable.Any(item => string.Equals(item?.ToString(), value, StringComparison.Ordinal));
-        }
-
-        // If it's a single value, check if it matches
-        return string.Equals(collection.ToString(), value, StringComparison.Ordinal);
-    }
-
-    #endregion
-
     #region Array/Collection Functions
 
     /// <summary>
@@ -407,39 +509,19 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Joins a collection of values into a single string with a delimiter.
-    /// This is the reverse of Split - useful for converting multi-valued attributes
-    /// into a single delimited string for systems that don't support MVAs.
+    /// Joins values into one delimited text value, in the order they are read (#2053): an attribute's values in their
+    /// fixed order, or <c>Split</c>'s in the order it found them, so <c>Split</c> followed by <c>Join</c> gives back what it
+    /// was given. Values with no text (empty text) are left out; a Binary value is an error, as it has no text form.
     /// </summary>
-    /// <param name="collection">The collection to join.</param>
-    /// <param name="delimiter">The delimiter to use between values.</param>
-    /// <returns>A joined string, or null if collection is null/empty.</returns>
+    /// <returns>The joined text, or null when there are no values.</returns>
     private static string? Join(object? collection, string? delimiter)
     {
-        if (collection == null)
-            return null;
-
         delimiter ??= ",";
-
-        if (collection is IEnumerable<string> stringEnumerable)
-        {
-            var items = stringEnumerable.Where(s => !string.IsNullOrEmpty(s)).ToArray();
-            return items.Length > 0 ? string.Join(delimiter, items) : null;
-        }
-
-        if (collection is IEnumerable<object> objectEnumerable)
-        {
-            var items = objectEnumerable
-                .Where(o => o != null)
-                .Select(o => o.ToString())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .ToArray();
-            return items.Length > 0 ? string.Join(delimiter, items!) : null;
-        }
-
-        // Single value - just return it as-is
-        var singleValue = collection.ToString();
-        return string.IsNullOrEmpty(singleValue) ? null : singleValue;
+        var items = ExpressionValueSets.Values(collection)
+            .Select(AsString)
+            .Where(text => !string.IsNullOrEmpty(text))
+            .ToArray();
+        return items.Length > 0 ? string.Join(delimiter, items) : null;
     }
 
     #endregion
@@ -624,28 +706,22 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         if (value == null)
             return null;
 
-        DateTime? dateTime = value switch
+        // A date (DateTime, or DateTimeOffset from PostgreSQL) or text, read by the one date rule (#2153, N2): text
+        // only in ISO 8601, an Unspecified date taken as UTC. Unreadable text is no date, so no FILETIME.
+        if (!ExpressionDates.IsDate(value) && value is not string)
         {
-            DateTime dt => dt,
-            DateTimeOffset dto => dto.UtcDateTime,  // Handle DateTimeOffset from PostgreSQL
-            string s => ParseDateTimeOrNull(s),     // Handle string dates (may return null for invalid strings)
-            _ => throw new ArgumentException(
+            throw new ArgumentException(
                 $"ToFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                $"Expected DateTime, DateTimeOffset, or string. Value: '{value}'")
-        };
+                "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+        }
 
-        if (dateTime == null)
+        if (!ExpressionDates.TryRead(value, out var utcDateTime))
             return null;
 
         // Handle PostgreSQL's -infinity (DateTime.MinValue) and +infinity (DateTime.MaxValue)
         // These represent "no date" or "never" and should return null
-        if (dateTime.Value == DateTime.MinValue || dateTime.Value == DateTime.MaxValue)
+        if (utcDateTime == DateTime.MinValue || utcDateTime == DateTime.MaxValue)
             return null;
-
-        // Ensure we're working with UTC
-        var utcDateTime = dateTime.Value.Kind == DateTimeKind.Utc
-            ? dateTime.Value
-            : dateTime.Value.ToUniversalTime();
 
         // FILETIME can only represent dates from 1601-01-01 onwards
         // Return null for dates before this (shouldn't happen with valid data, but be safe)
@@ -656,17 +732,72 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     }
 
     /// <summary>
-    /// Attempts to parse a string as a DateTime, returning null if parsing fails.
-    /// This allows graceful handling of empty strings or unparseable date formats.
+    /// Writes a date as text in <paramref name="format"/> (a .NET date format, read with the invariant culture). The
+    /// value is a date, or text read by the one date rule (#2153, N3): ISO 8601 only, no offset meaning UTC. Null,
+    /// empty or unreadable text gives null; a value of any other type is an expression error.
     /// </summary>
-    private static DateTime? ParseDateTimeOrNull(string s)
+    private static string? FormatDate(object? value, string format)
     {
-        if (string.IsNullOrWhiteSpace(s))
+        if (value == null)
             return null;
 
-        return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed)
-            ? parsed
-            : null;
+        DateTime date;
+        switch (value)
+        {
+            // A date is formatted as it is, exactly as before FormatDate accepted text.
+            case DateTime dateTime:
+                date = dateTime;
+                break;
+            case DateTimeOffset dateWithOffset:
+                date = dateWithOffset.UtcDateTime;
+                break;
+            case string text:
+                if (!ExpressionDates.TryReadText(text, out date))
+                    return null;
+                break;
+            default:
+                throw new ArgumentException(
+                    $"FormatDate cannot format a value of type '{value.GetType().Name}'. " +
+                    "Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.");
+        }
+
+        return date.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Reads text in <paramref name="format"/> (a .NET custom date format, with the invariant culture) as a date: the
+    /// counterpart of <see cref="FormatDate"/>, and the way to read a date in any form other than ISO 8601. The text
+    /// is taken as UTC unless the format carries an offset (<c>zzz</c> or <c>K</c>); the result is the canonical
+    /// UTC date, to the microsecond. A date passed in is returned as UTC.
+    /// </summary>
+    /// <returns>Null for no value or empty text.</returns>
+    /// <exception cref="FormatException">Non-empty text that does not match the format: an expression error, so the
+    /// attribute keeps its value rather than being cleared by a null.</exception>
+    private static DateTime? ParseDate(object? value, string format)
+    {
+        switch (value)
+        {
+            case null:
+            case "":
+                return null;
+            case DateTime dateTime:
+                return DateTimeAttributeValue.ToCanonical(dateTime);
+            case DateTimeOffset dateWithOffset:
+                return DateTimeAttributeValue.ToCanonical(dateWithOffset.UtcDateTime);
+            case string text:
+                if (string.IsNullOrEmpty(format))
+                    throw new ArgumentException("ParseDate needs the format the text is in, such as \"dd/MM/yyyy\".");
+
+                // The message names the format, never the text: it reaches the worker's logs, which must not carry
+                // source data such as a date of birth; the Run Profile Execution Item identifies the object.
+                if (!DateTimeOffset.TryParseExact(text, format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+                    throw new FormatException($"ParseDate could not read the text as a date in the format '{format}'.");
+
+                return DateTimeAttributeValue.ToCanonical(parsed.UtcDateTime);
+            default:
+                throw new ArgumentException(
+                    $"ParseDate cannot read a value of type '{value.GetType().Name}'. Expected text, or a date.");
+        }
     }
 
     /// <summary>
@@ -685,7 +816,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             string s => ParseLongOrNull(s),  // Handle string values (may return null for invalid numbers)
             _ => throw new ArgumentException(
                 $"FromFileTime cannot convert value of type '{value.GetType().Name}'. " +
-                $"Expected long, int, or string. Value: '{value}'")
+                "Expected long, int, or string.")
         };
 
         if (fileTime == null || fileTime.Value <= 0)
@@ -761,6 +892,15 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         // Handle null cases
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
+
+        // Dates compare by instant (#2153, N2), and text compared with a date is read by the one date rule: ISO 8601
+        // only, so the host's own date text ("15/03/2026 10:30:00" on en-GB) is not equal on one server and unequal
+        // on the next. Text that cannot be read as a date is not equal to one.
+        if (ExpressionDates.IsDate(a) || ExpressionDates.IsDate(b))
+        {
+            return ExpressionDates.TryRead(a, out var dateA) && ExpressionDates.TryRead(b, out var dateB) &&
+                   dateA.Ticks == dateB.Ticks;
+        }
 
         // String comparison (most common case)
         if (a is string strA && b is string strB)

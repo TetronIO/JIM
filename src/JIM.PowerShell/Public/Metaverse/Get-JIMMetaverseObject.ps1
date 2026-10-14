@@ -20,46 +20,47 @@ function Get-JIMMetaverseObject {
         emitted so a long-running sequential fetch is not a surprise.
 
     .PARAMETER Id
-        The unique identifier (GUID) of a specific Metaverse Object to retrieve.
+        The ID of the Metaverse Object to get.
 
     .PARAMETER ObjectTypeId
-        Filter objects by Metaverse Object Type ID.
+        Returns only the objects of the Object Type with this ID.
 
     .PARAMETER ObjectTypeName
-        Filter objects by Metaverse Object Type name.
+        Returns only the objects of the Object Type with this name.
 
     .PARAMETER Search
-        Search query to filter objects by display name (supports wildcards).
+        Returns only the objects whose display name matches.
 
     .PARAMETER AttributeName
-        Filter by a specific attribute name. Must be used with AttributeValue.
-        This performs an exact match (case-insensitive).
+        Returns only the objects whose value for this attribute matches -AttributeValue. Give both together.
 
     .PARAMETER AttributeValue
-        Filter by a specific attribute value. Must be used with AttributeName.
-        This performs an exact match (case-insensitive).
+        The value -AttributeName must match: exactly, but ignoring case. The _ and % characters match only
+        themselves.
 
     .PARAMETER Attributes
-        List of attribute names to include in the response. Use "*" for all attributes.
-        DisplayName is always included by default.
+        The attributes to include with each object, by name; "*" includes them all. DisplayName is always included.
 
     .PARAMETER All
-        Automatically paginate through all results and return every matching object.
-        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
-        warning; use -Force to fetch beyond the cap.
+        Returns every page of results rather than one. It stops after 1,000 pages, about 100,000 objects at the
+        default page size, with a warning; -Force reads on. Cannot be used with -Page.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of
-        how large the result set is. Only valid with -All.
+        With -All, reads every page, past the 1,000-page limit.
+
+    .PARAMETER Count
+        Returns only the number of matching objects.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Cannot be used with -All.
+        The page of results to return, counting from 1.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100. Maximum is 100.
+        How many objects each page holds.
 
     .OUTPUTS
-        PSCustomObject representing Metaverse Object(s).
+        By default, one page of matching objects, each in summary. With -Id, the Metaverse Object in full: its
+        values, where each came from, and the Connected System Objects joined to it. With -Count, the number of
+        matching objects.
 
     .EXAMPLE
         Get-JIMMetaverseObject
@@ -142,7 +143,10 @@ function Get-JIMMetaverseObject {
         Get-JIMMetaverseAttribute
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectHeaderDto', ParameterSetName = 'List')]
+    [OutputType('JIM.MetaverseObjectHeaderDto', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.MetaverseObjectDto', ParameterSetName = 'ById')]
+    [OutputType([int], ParameterSetName = 'Count')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,

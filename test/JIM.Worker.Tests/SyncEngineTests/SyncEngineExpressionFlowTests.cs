@@ -62,6 +62,8 @@ public class SyncEngineExpressionFlowTests
         yield return new DivideByZeroException("divide by zero"); // ArithmeticException
         yield return new InvalidCastException("bad cast");
         yield return new KeyNotFoundException("missing key");
+        yield return new NullReferenceException("null reference");
+        yield return new IndexOutOfRangeException("index out of range");
     }
 
     [TestCaseSource(nameof(EvaluatorRuntimeExceptions))]
@@ -69,16 +71,19 @@ public class SyncEngineExpressionFlowTests
     {
         // Arrange
         var (cso, mvo, syncRule, csoType, existingValue) = BuildExpressionScenario("Upper(cs[\"num\"])");
+        // The evaluator's contract (#2153, N5): every failure an expression causes arrives as the one expression error.
+        var expressionError = new ExpressionEvaluationException(thrownByEvaluator.Message, thrownByEvaluator);
         var evaluator = new Mock<IExpressionEvaluator>();
         evaluator
             .Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<ExpressionContext>()))
-            .Throws(thrownByEvaluator);
+            .Throws(expressionError);
 
         // Act + Assert — the thrown expression surfaces as a typed sync exception, not swallowed
         var ex = Assert.Throws<SyncExpressionEvaluationException>(() =>
             _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object));
 
-        Assert.That(ex!.InnerException, Is.SameAs(thrownByEvaluator));
+        Assert.That(ex!.InnerException, Is.SameAs(expressionError));
+        Assert.That(ex!.InnerException!.InnerException, Is.SameAs(thrownByEvaluator));
         Assert.That(ex.Expression, Is.EqualTo("Upper(cs[\"num\"])"));
         Assert.That(ex.TargetAttributeName, Is.EqualTo("displayName"));
 
@@ -139,7 +144,8 @@ public class SyncEngineExpressionFlowTests
         var ex = Assert.Throws<SyncExpressionEvaluationException>(() =>
             _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator));
 
-        Assert.That(ex!.InnerException, Is.TypeOf<ArgumentException>());
+        Assert.That(ex!.InnerException, Is.TypeOf<ExpressionEvaluationException>());
+        Assert.That(ex!.InnerException!.InnerException, Is.TypeOf<ArgumentException>());
         Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
         Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
         Assert.That(mvo.AttributeValues, Contains.Item(existingValue));

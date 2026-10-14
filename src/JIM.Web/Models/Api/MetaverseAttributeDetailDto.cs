@@ -6,27 +6,53 @@ using JIM.Models.Core;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Detailed API representation of a MetaverseAttribute.
+/// A Metaverse Attribute in full.
 /// </summary>
 public class MetaverseAttributeDetailDto
 {
+    /// <summary>
+    /// The unique identifier of the attribute.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The attribute's name.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// When the attribute was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// The kind of value the attribute holds.
+    /// </summary>
     public AttributeDataType Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or many.
+    /// </summary>
     public AttributePlurality AttributePlurality { get; set; }
+
+    /// <summary>
+    /// Whether JIM provides the attribute. A built-in attribute cannot be changed or deleted.
+    /// </summary>
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// The rendering hint for multi-valued attributes (Table, ChipSet, List). Ignored for single-valued attributes.
+    /// How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute.
     /// </summary>
     public AttributeRenderingHint RenderingHint { get; set; }
 
+    /// <summary>
+    /// The Object Types the attribute is bound to.
+    /// </summary>
     public List<ObjectTypeReferenceDto> ObjectTypes { get; set; } = new();
 
     /// <summary>
-    /// Advisory Standard Mappings documenting how the attribute corresponds to attributes in wire standard
-    /// vocabularies (SCIM 2.0, LDAP/AD). Never consulted by the synchronisation engine.
+    /// The attribute's counterparts in other standards, such as SCIM 2.0 and LDAP. They are guidance only;
+    /// synchronisation never uses them.
     /// </summary>
     public List<StandardMappingDto> StandardMappings { get; set; } = new();
 
@@ -60,7 +86,14 @@ public class MetaverseAttributeDetailDto
 /// </summary>
 public class ObjectTypeReferenceDto
 {
+    /// <summary>
+    /// The unique identifier of the Object Type.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The Object Type's name.
+    /// </summary>
     public string Name { get; set; } = null!;
 }
 

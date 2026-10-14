@@ -4,32 +4,18 @@
 function Get-JIMConnectedSystemPartition {
     <#
     .SYNOPSIS
-        Gets partitions for a Connected System in JIM.
+        Gets a Connected System's partitions and containers.
 
     .DESCRIPTION
-        Retrieves partitions from a Connected System. Partitions represent logical divisions
-        within a connected system (e.g., LDAP naming contexts). Each partition contains
-        containers that can be selected for import operations.
+        Gets a Connected System's partitions, such as an LDAP directory's naming contexts, each with its containers.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject representing the partitions with their containers.
-
-        Each partition carries: id, name, externalId, selected, connectedSystemId, containers.
-
-        Each container carries: id, name, externalId, description, hidden, selected, excluded,
-        scope, partitionId, connectedSystemId, childContainers, and the object counts read from
-        the Connected System when the hierarchy was last retrieved:
-
-          objectCount        How many objects sit directly in this Container.
-          subtreeObjectCount That count plus every descendant Container's, which is what a
-                             Subtree statement over the Container reaches.
-
-        Both are $null where the Connector cannot report counts, or the hierarchy has not been
-        retrieved since counting was introduced. Zero and $null mean different things: zero is a
-        Container that was searched and found empty, $null is one nobody has counted.
+        The partitions, each with its tree of containers. Every container carries the same properties as the
+        containers Set-JIMConnectedSystemContainer returns. A container's ObjectCount of 0 means it was searched and
+        found empty; $null means nobody has counted it.
 
     .EXAMPLE
         Get-JIMConnectedSystemPartition -ConnectedSystemId 1
@@ -58,7 +44,7 @@ function Get-JIMConnectedSystemPartition {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemPartitionDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

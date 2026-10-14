@@ -4,51 +4,51 @@
 function Set-JIMMatchingRule {
     <#
     .SYNOPSIS
-        Updates an existing Object Matching Rule in JIM.
+        Changes an Object Matching Rule on a Connected System Object Type (simple mode).
 
     .DESCRIPTION
-        Updates an Object Matching Rule for a Connected System.
-        You can update the order, target Metaverse attribute, or source attributes.
+        Changes an Object Matching Rule on a Connected System Object Type. What you leave out stays as it is.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER Id
-        The unique identifier of the Matching Rule to update.
+        The ID of the rule to change.
 
     .PARAMETER Order
-        The new evaluation order for this rule (lower values are evaluated first).
+        Where the rule comes in the order JIM tries the rules, lowest first.
 
     .PARAMETER MetaverseObjectTypeId
-        The new Metaverse Object Type ID to search when evaluating this rule.
+        The ID of the Metaverse Object Type whose objects the rule searches.
 
     .PARAMETER TargetMetaverseAttributeId
-        The new Metaverse attribute ID to match against.
+        The ID of the Metaverse attribute the source is matched against.
 
     .PARAMETER SourceAttributeId
-        The new Connected System attribute ID to use as the source.
-        Note: This replaces all existing sources with a single new source. Give this or
-        -SourceExpression, not both; give neither to leave the source as it is.
+        Replaces the rule's source with this Connected System attribute. Cannot be used with -SourceExpression; give
+        neither to leave the source as it is.
 
     .PARAMETER SourceExpression
-        Replaces the rule's source with an expression computing the value to match on, for identifiers
-        that differ in format between systems: for example '"E" + Trim(cs["employeeId"])'.
-        It reads the Connected System Object only, through cs["attributeName"]; its result is converted
-        to the type of the rule's Metaverse attribute, and a list of text values is matched value by value.
-        JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or
-        one the Object Type does not have, or calls a function that returns a different value each time.
+        Replaces the rule's source with an expression computing the value to match on: for example '"E" +
+        Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result
+        is converted to the type of the rule's Metaverse attribute, and a list of text values is matched value by
+        value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one
+        the Object Type does not have, or calls a function that returns a different value each time. Cannot be used
+        with -SourceAttributeId.
 
     .PARAMETER CaseSensitive
-        Whether the matching should be case-sensitive.
-        When false, 'emp123' matches 'EMP123'.
-        When true, 'emp123' does NOT match 'EMP123'.
-        Omit it to leave the rule's current setting unchanged.
+        Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. Omit it to leave it as
+        it is.
 
     .PARAMETER PassThru
-        If specified, returns the updated Matching Rule object.
+        Returns the rule as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Matching Rule object.
+        With -PassThru, the rule as changed; otherwise nothing.
+
+        JIM.ObjectTypeMatchingRule
+        ConnectedSystemId (int): The ID of the Connected System the rule belongs to, so the rule can be piped to
+            Set-JIMMatchingRule and Remove-JIMMatchingRule.
 
     .EXAMPLE
         Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Order 0
@@ -76,7 +76,7 @@ function Set-JIMMatchingRule {
         Remove-JIMMatchingRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'NoSource')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ObjectTypeMatchingRule')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,

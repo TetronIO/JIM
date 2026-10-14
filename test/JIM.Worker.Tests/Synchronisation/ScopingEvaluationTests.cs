@@ -911,10 +911,17 @@ public class ScopingEvaluationTests
     }
 
     [Test]
-    public void IsMvoInScopeForExportRule_DecimalMissingValue_NullCriterionEquals_ReturnsTrue()
+    public void IsMvoInScopeForExportRule_DecimalMissingValue_HasNoValue_ReturnsTrue()
     {
-        // An Equals criterion with no value matches an object with no value for the attribute.
-        Assert.That(EvaluateMvoDecimalCriterion(null, null, SearchComparisonType.Equals), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(null, null, SearchComparisonType.HasNoValue), Is.True);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalMissingValue_NullCriterionEquals_ReturnsFalse()
+    {
+        // "Equals with no value" was the workaround for "has no value" until the operator existed (#2053); the stored
+        // ones are migrated to HasNoValue, and Equals now means only equals.
+        Assert.That(EvaluateMvoDecimalCriterion(null, null, SearchComparisonType.Equals), Is.False);
     }
 
     [Test]
@@ -953,9 +960,9 @@ public class ScopingEvaluationTests
     }
 
     [Test]
-    public void IsCsoInScopeForImportRule_DecimalMissingValue_NullCriterionEquals_ReturnsTrue()
+    public void IsCsoInScopeForImportRule_DecimalMissingValue_HasNoValue_ReturnsTrue()
     {
-        Assert.That(EvaluateCsoDecimalCriterion(null, null, SearchComparisonType.Equals), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(null, null, SearchComparisonType.HasNoValue), Is.True);
     }
 
     [Test]

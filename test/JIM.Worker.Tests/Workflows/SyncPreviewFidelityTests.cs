@@ -951,6 +951,96 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// An import Expression that returns several values for a single-valued attribute (#2179): the real run records a
+    /// Multi-Valued to Single-Valued item, and the preview reports the same failure under its own code for it.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ImportExpressionReturnsSeveralValuesForASingleValuedAttribute_ReportsTheWorkersErrorTypeAsync()
+    {
+        var (sourceSystem, cso) = await ArrangeImportExpressionAsync("Split(cs[\"EmployeeId\"], \";\")", "EmployeeId", "E1;E2");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+        var activity = await RunFullSyncAsync(sourceSystem);
+
+        var realErrors = activity.RunProfileExecutionItems.Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet).ToList();
+        var previewError = preview.Errors.SingleOrDefault();
+        Assert.That(previewError, Is.Not.Null, "the preview reports the failure");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(realErrors.Select(r => r.ErrorType), Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued }));
+            Assert.That(previewError!.Code, Is.EqualTo(SyncPreviewMessageCode.MultiValuedToSingleValuedFlow));
+            Assert.That(previewError!.AttributeName, Is.EqualTo("EmployeeId"));
+            Assert.That(previewError!.Detail, Does.Contain("returned 2 values"));
+        }
+    }
+
+    /// <summary>
+    /// An import Expression whose result a Number attribute cannot hold (#2179): the real run records an expression
+    /// error item and keeps the attribute's value, and the preview reports the same failure as an expression error.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ImportExpressionResultTheAttributeCannotHold_ReportsTheWorkersErrorTypeAsync()
+    {
+        var (sourceSystem, cso) = await ArrangeImportExpressionAsync("cs[\"EmployeeId\"]", "Grade", "EMP-48213", AttributeDataType.Number);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+        var activity = await RunFullSyncAsync(sourceSystem);
+
+        var realErrors = activity.RunProfileExecutionItems.Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet).ToList();
+        var previewError = preview.Errors.SingleOrDefault();
+        Assert.That(previewError, Is.Not.Null, "the preview reports the failure");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(realErrors.Select(r => r.ErrorType), Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError }));
+            Assert.That(realErrors.Single().ErrorMessage, Does.Contain("which a Number attribute cannot hold"));
+            Assert.That(previewError!.Code, Is.EqualTo(SyncPreviewMessageCode.ExpressionEvaluationError));
+            Assert.That(previewError!.AttributeName, Is.EqualTo("Grade"));
+            Assert.That(previewError!.Detail, Does.Contain("which a Number attribute cannot hold"));
+        }
+    }
+
+    /// <summary>
+    /// An HR source projecting a Person through one import Expression mapping to <paramref name="targetName"/>, which is
+    /// the built-in EmployeeId attribute, or a new single-valued attribute of <paramref name="targetType"/>; and one
+    /// Connected System Object whose EmployeeId is <paramref name="employeeId"/>.
+    /// </summary>
+    private async Task<(ConnectedSystem SourceSystem, ConnectedSystemObject Cso)> ArrangeImportExpressionAsync(
+        string expression, string targetName, string employeeId, AttributeDataType targetType = AttributeDataType.Text)
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var target = mvType.Attributes.FirstOrDefault(a => a.Name == targetName);
+        if (target == null)
+        {
+            target = new MetaverseAttribute
+            {
+                Name = targetName,
+                Type = targetType,
+                AttributePlurality = AttributePlurality.SingleValued,
+                MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+                PredefinedSearchAttributes = new List<PredefinedSearchAttribute>()
+            };
+            DbContext.MetaverseAttributes.Add(target);
+            await DbContext.SaveChangesAsync();
+            mvType.Attributes.Add(target);
+        }
+
+        var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            TargetMetaverseAttribute = target,
+            TargetMetaverseAttributeId = target.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = expression } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", employeeId: employeeId);
+        return (sourceSystem, cso);
+    }
+
     private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem)
     {
         var profile = await CreateRunProfileAsync(connectedSystem.Id, $"{connectedSystem.Name} Full Sync {Guid.NewGuid():N}", ConnectedSystemRunType.FullSynchronisation);
