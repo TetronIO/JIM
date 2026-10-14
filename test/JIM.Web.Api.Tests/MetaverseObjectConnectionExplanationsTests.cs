@@ -233,6 +233,38 @@ public class MetaverseObjectConnectionExplanationsTests
     }
 
     [Test]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_ExpressionCriteria_AreEvaluatedAgainstTheWholeObjectsAsync()
+    {
+        // An expression criterion (#2054) reads its inputs by name, which the criteria-only value loads cannot supply:
+        // the explanation must read the whole object on each side, or every expression would see no value.
+        var cso = Joined(PayrollId, "Payroll", EmployeeTypeId, "employee");
+        var fullCso = new ConnectedSystemObject
+        {
+            Id = cso.Id, ConnectedSystemId = PayrollId, TypeId = EmployeeTypeId,
+            Type = new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee", Attributes = [PayrollDepartment] }
+        };
+        fullCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = PayrollDepartment, AttributeId = PayrollDepartment.Id, StringValue = " FINANCE ", ConnectedSystemObject = fullCso });
+        _connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(PayrollId, cso.Id)).ReturnsAsync(fullCso);
+        var fullMvo = new MetaverseObject { Id = _mvoId, Type = new MetaverseObjectType { Id = PersonTypeId, Name = "Person" } };
+        fullMvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = Department, AttributeId = Department.Id, StringValue = "Finance", MetaverseObject = fullMvo });
+        _metaverse.Setup(r => r.GetMetaverseObjectAsync(_mvoId)).ReturnsAsync(fullMvo);
+        Rule("Payroll Import", SyncRuleDirection.Import, PayrollId, "Payroll", EmployeeTypeId, "employee", null, ConnectedSystemStatus.Active,
+            [All(Expression("Lower(Trim(cs[\"dept\"]))", "finance"))]);
+        ExportRule("Payroll Export", PayrollId, "Payroll", EmployeeTypeId, "employee", groups: All(Expression("Upper(mv[\"Department\"])", "FINANCE")));
+
+        var result = (await ExplainAsync())!;
+
+        Assert.That(result.Connections.Single().Scoping.Select(s => (s.SyncRuleName, s.Outcome)), Is.EqualTo(new[]
+        {
+            ("Payroll Export", ScopingRuleOutcome.InScope),
+            ("Payroll Import", ScopingRuleOutcome.InScope)
+        }));
+    }
+
+    private SyncRuleScopingCriteria Expression(string expression, string value) =>
+        new() { Id = _nextId++, Expression = expression, CompareAs = AttributeDataType.Text, ComparisonType = SearchComparisonType.Equals, StringValue = value };
+
+    [Test]
     public async Task GetMetaverseObjectConnectionExplanationsAsync_ExportRuleForAnotherTypeOnTheSameSystem_ReportsAnObjectTypeConflictAsync()
     {
         Joined(FinanceAppId, "Finance App", AccountTypeId, "account");

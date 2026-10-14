@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 
 namespace JIM.Application.Servers.Scoping;
@@ -58,4 +59,10 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject) 
         }
         return count;
     }
+
+    public ExpressionContext ExpressionContext(DateTime nowUtc) =>
+        new(metaverseAttributes: SyncEngine.BuildAttributeDictionary(metaverseObject))
+        {
+            NowUtc = nowUtc
+        };
 }

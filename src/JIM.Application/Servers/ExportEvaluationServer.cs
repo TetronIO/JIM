@@ -1933,6 +1933,15 @@ public class ExportEvaluationServer
 
             foreach (var rule in rules)
             {
+                // The fast path decides scope on a lean object holding only the scoping attributes' values by id. An
+                // expression criterion (#2054) reads its inputs by name from the whole object, so the type takes the
+                // full-evaluation fallback rather than be scoped against values the lean object does not carry.
+                if (ScopingEvaluationServer.HasExpressionCriteria(rule))
+                {
+                    routeToFallback = true;
+                    break;
+                }
+
                 // A disabled mapping (#1485) does not run, so it neither carries a direct recall flow nor
                 // routes its Object Type to the fallback path; a disabled expression mapping left in here
                 // would force whole-type fallbacks for a flow that never executes.

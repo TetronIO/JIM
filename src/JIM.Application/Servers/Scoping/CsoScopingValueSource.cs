@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -58,4 +59,10 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
         }
         return count;
     }
+
+    public ExpressionContext ExpressionContext(DateTime nowUtc) =>
+        new(connectedSystemAttributes: MatchValueResolver.BuildInputs(connectedSystemObject.AttributeValues, connectedSystemObject.Type))
+        {
+            NowUtc = nowUtc
+        };
 }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 
 namespace JIM.Application.Servers.Scoping;
@@ -28,4 +29,10 @@ internal interface IScopingValueSource
 
     /// <summary>How many values the object holds for the attribute. Explanations only; synchronisation never asks.</summary>
     int CountValues(int attributeId);
+
+    /// <summary>
+    /// The context an expression criterion is evaluated in (#2054): the object's attributes as <c>cs["..."]</c> on an
+    /// import rule or <c>mv["..."]</c> on an export rule, read exactly as Attribute Flow reads them.
+    /// </summary>
+    ExpressionContext ExpressionContext(DateTime nowUtc);
 }

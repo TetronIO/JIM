@@ -69,10 +69,19 @@ public partial class MetaverseServer
             .Where(r => r.Direction == SyncRuleDirection.Import && r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
             .ToList());
 
+        // The criteria's attributes are enough for attribute criteria; an expression criterion (#2054) reads its inputs by
+        // name from the whole object, so where one is in play the whole object is read instead.
         var metaverseObject = new MetaverseObject { Id = metaverseObjectId };
-        var metaverseAttributeIds = CriteriaAttributeIds(exportRulesToEvaluate, criterion => criterion.MetaverseAttribute?.Id);
-        if (metaverseAttributeIds.Count > 0)
-            metaverseObject.AttributeValues = await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds);
+        if (exportRulesToEvaluate.Any(ScopingEvaluationServer.HasExpressionCriteria))
+        {
+            metaverseObject = await Application.Repository.Metaverse.GetMetaverseObjectAsync(metaverseObjectId) ?? metaverseObject;
+        }
+        else
+        {
+            var metaverseAttributeIds = CriteriaAttributeIds(exportRulesToEvaluate, criterion => criterion.MetaverseAttribute?.Id);
+            if (metaverseAttributeIds.Count > 0)
+                metaverseObject.AttributeValues = await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds);
+        }
 
         var objectValues = await LoadConnectedSystemObjectScopingValuesAsync(importRulesByConnection);
 
@@ -122,11 +131,13 @@ public partial class MetaverseServer
 
             row.Join = BuildJoinRecord(cso, pendingExport, joinHistory, rules, joiningRules);
 
-            var objectForScoping = new ConnectedSystemObject
-            {
-                Id = cso.Id,
-                AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? values : []
-            };
+            var objectForScoping = importRules.Any(ScopingEvaluationServer.HasExpressionCriteria)
+                ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(cso.ConnectedSystemId, cso.Id) ?? cso
+                : new ConnectedSystemObject
+                {
+                    Id = cso.Id,
+                    AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? values : []
+                };
             row.Scoping = importRules.Select(r => scoping.ExplainCsoForImportRule(objectForScoping, r, evaluatedAt))
                 .Concat(exportRules.Where(r => r.ConnectedSystemObjectTypeId == cso.TypeId).Select(r => exportExplanations[r.Id]))
                 .OrderBy(e => e.SyncRuleName, StringComparer.OrdinalIgnoreCase)

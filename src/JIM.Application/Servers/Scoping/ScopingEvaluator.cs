@@ -3,8 +3,11 @@
 
 using System.Globalization;
 using System.Text.RegularExpressions;
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Models.Search;
@@ -41,13 +44,13 @@ internal static class ScopingEvaluator
     /// <see cref="ScopingCriterionFailedException"/> when a pattern runs past its time limit on one of the object's
     /// values (#2053), so the caller can stop that object rather than decide its scope on a guess.
     /// </summary>
-    internal static bool IsInScope<TSource>(SyncRule rule, TSource source, DateTime nowUtc)
+    internal static bool IsInScope<TSource>(SyncRule rule, TSource source, DateTime nowUtc, Lazy<IExpressionEvaluator> expressions)
         where TSource : struct, IScopingValueSource
     {
         var topLevelGroups = rule.ObjectScopingCriteriaGroups;
         for (var i = 0; i < topLevelGroups.Count; i++)
         {
-            if (EvaluateGroup(topLevelGroups[i], source, nowUtc, node: null, rule.Name) == true)
+            if (EvaluateGroup(topLevelGroups[i], source, nowUtc, node: null, rule.Name, expressions) == true)
                 return true;
         }
 
@@ -60,7 +63,7 @@ internal static class ScopingEvaluator
     /// scope otherwise.
     /// </summary>
     internal static ScopingRuleOutcome Explain<TSource>(List<SyncRuleScopingCriteriaGroup> topLevelGroups, TSource source, DateTime nowUtc,
-        List<ScopingGroupExplanation> groupNodes)
+        List<ScopingGroupExplanation> groupNodes, Lazy<IExpressionEvaluator> expressions)
         where TSource : struct, IScopingValueSource
     {
         ScopingRuleOutcome? decided = null;
@@ -71,7 +74,7 @@ internal static class ScopingEvaluator
 
             // Synchronisation stops at the first group that is met, or fails at the first that reaches an invalid
             // criterion; whichever comes first decides. Later groups are still evaluated, for the explanation only.
-            var met = EvaluateGroup(topLevelGroups[i], source, nowUtc, node, ruleName: null);
+            var met = EvaluateGroup(topLevelGroups[i], source, nowUtc, node, ruleName: null, expressions);
             if (decided == null && met != false)
                 decided = met == true ? ScopingRuleOutcome.InScope : ScopingRuleOutcome.Undetermined;
         }
@@ -84,7 +87,7 @@ internal static class ScopingEvaluator
     /// depth (synchronisation would have thrown on reaching it).
     /// </summary>
     private static bool? EvaluateGroup<TSource>(SyncRuleScopingCriteriaGroup group, TSource source, DateTime nowUtc, ScopingGroupExplanation? node,
-        string? ruleName)
+        string? ruleName, Lazy<IExpressionEvaluator> expressions)
         where TSource : struct, IScopingValueSource
     {
         var childCount = 0;
@@ -96,7 +99,9 @@ internal static class ScopingEvaluator
         {
             childCount++;
             var criterionNode = node == null ? null : ScopingTraceBuilder.AddCriterion(node, criteria[i], childCount);
-            var outcome = EvaluateCriterion(criteria[i], source, nowUtc, criterionNode, ruleName);
+            var outcome = criteria[i].IsExpression
+                ? EvaluateExpressionCriterion(criteria[i], source, nowUtc, criterionNode, ruleName, expressions.Value)
+                : EvaluateCriterion(criteria[i], source, nowUtc, criterionNode, ruleName);
             if (criterionNode != null)
                 criterionNode.Outcome = outcome;
 
@@ -111,7 +116,7 @@ internal static class ScopingEvaluator
         {
             childCount++;
             var childNode = node == null ? null : ScopingTraceBuilder.AddChildGroup(node, childGroups[i], childCount);
-            var met = EvaluateGroup(childGroups[i], source, nowUtc, childNode, ruleName);
+            var met = EvaluateGroup(childGroups[i], source, nowUtc, childNode, ruleName, expressions);
             if (met == true)
                 metCount++;
             else if (met == null)
@@ -192,6 +197,149 @@ internal static class ScopingEvaluator
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// A criterion comparing an expression's computed value (#2054): the expression is evaluated against the object, each
+    /// value it computes is read as the criterion's compare-as type, and the values are compared exactly as an attribute's
+    /// are. An expression that fails to evaluate, or computes a value that is not of that type, makes the object's scope
+    /// undecidable: synchronisation stops the object (<see cref="ScopingCriterionFailedException"/>), and an explanation
+    /// shows the criterion as one that cannot be evaluated.
+    /// </summary>
+    private static ScopingCriterionOutcome EvaluateExpressionCriterion<TSource>(SyncRuleScopingCriteria criterion, TSource source,
+        DateTime nowUtc, ScopingCriterionExplanation? node, string? ruleName, IExpressionEvaluator expressions)
+        where TSource : struct, IScopingValueSource
+    {
+        var expression = criterion.Expression!;
+        var type = criterion.CompareAs ?? AttributeDataType.NotSet;
+
+        var invalidReason = type == AttributeDataType.NotSet
+            ? "it has no type to compare the expression's value as"
+            : InvalidReason(criterion, type);
+        if (invalidReason != null)
+        {
+            if (node == null)
+                throw InvalidCriterion(invalidReason, criterion.ComparisonType, type, expression);
+
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary: null, value: null, valueCount: 0);
+            return ScopingCriterionOutcome.Invalid;
+        }
+
+        var boundary = type == AttributeDataType.DateTime ? ResolveCriterionDate(criterion, nowUtc) : null;
+        var expected = new ScopingValue(criterion.StringValue, criterion.IntValue, criterion.LongValue, criterion.DecimalValue,
+            boundary, criterion.BoolValue, criterion.GuidValue);
+
+        List<ScopingValue> computed;
+        string? failure;
+        try
+        {
+            var result = expressions.Evaluate(expression, source.ExpressionContext(nowUtc));
+            failure = TryReadComputedValues(result, type, out computed);
+        }
+        catch (ExpressionEvaluationException ex)
+        {
+            computed = [];
+            failure = $"Its expression could not be evaluated: {ex.Message}";
+        }
+
+        CriterionVerdict verdict = default;
+        if (failure == null)
+        {
+            var values = new ComputedValueCursor(computed);
+            try
+            {
+                verdict = CriterionComparer.Evaluate(ref values, type, criterion.ComparisonType, expected, criterion.CaseSensitive);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                failure = $"Its pattern '{criterion.StringValue}' ran past its time limit of {CriterionPatterns.MatchTimeout.TotalMilliseconds:0} ms " +
+                          "on one of the expression's values; simplify the pattern (nested repetition such as (a+)+ is the usual cause).";
+            }
+        }
+
+        if (failure != null)
+        {
+            if (node == null)
+            {
+                Log.Warning("Scoping evaluation: the expression criterion {Expression} in {SyncRule} could not be evaluated: {Reason}",
+                    LogSanitiser.Sanitise(expression), LogSanitiser.Sanitise(ruleName), LogSanitiser.Sanitise(failure));
+                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", expression, failure);
+            }
+
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, value: null, valueCount: 0);
+            return ScopingCriterionOutcome.Invalid;
+        }
+
+        if (node != null)
+        {
+            ScopingValue? shown = verdict.Decided || computed.Count == 1 ? verdict.LastHeld : null;
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, shown, computed.Count);
+        }
+
+        return verdict.Met
+            ? ScopingCriterionOutcome.Met
+            : verdict.HeldCount > 0 ? ScopingCriterionOutcome.NotMet : ScopingCriterionOutcome.NoValue;
+    }
+
+    /// <summary>
+    /// Reads every value an expression computed as <paramref name="type"/>, the way an expression's result is read
+    /// everywhere else: each element of a collection, with no value and blank text read as no value. Returns why one
+    /// cannot be read, naming it, or null when all can.
+    /// </summary>
+    private static string? TryReadComputedValues(object? result, AttributeDataType type, out List<ScopingValue> values)
+    {
+        values = [];
+        foreach (var element in ExpressionResultValues.Elements(result))
+        {
+            if (element == null || element is string text && string.IsNullOrWhiteSpace(text))
+                continue;
+
+            if (!ExpressionResultConverter.TryConvert(element, type, out var converted) || converted == null)
+                return $"Its expression computed '{ExpressionText.Describe(element)}', which cannot be compared as {DescribeType(type)}.";
+
+            values.Add(converted switch
+            {
+                string s => new ScopingValue(s, null, null, null, null, null, null),
+                int i => new ScopingValue(null, i, null, null, null, null, null),
+                long l => new ScopingValue(null, null, l, null, null, null, null),
+                decimal d => new ScopingValue(null, null, null, d, null, null, null),
+                DateTime dt => new ScopingValue(null, null, null, null, dt, null, null),
+                bool b => new ScopingValue(null, null, null, null, null, b, null),
+                Guid g => new ScopingValue(null, null, null, null, null, null, g),
+                _ => new ScopingValue(converted.ToString(), null, null, null, null, null, null)
+            });
+        }
+
+        return null;
+    }
+
+    private static string DescribeType(AttributeDataType type) => type switch
+    {
+        AttributeDataType.Number => "a Number",
+        AttributeDataType.LongNumber => "a Long Number",
+        AttributeDataType.Decimal => "a Decimal",
+        AttributeDataType.DateTime => "a DateTime",
+        AttributeDataType.Boolean => "a Boolean",
+        AttributeDataType.Guid => "a Guid",
+        _ => type.ToString()
+    };
+
+    /// <summary>An expression's computed values, walked as an attribute's are.</summary>
+    private struct ComputedValueCursor(List<ScopingValue> values) : IScopingValueCursor
+    {
+        private int _position;
+
+        public bool TryGetNext(out ScopingValue value)
+        {
+            if (_position < values.Count)
+            {
+                value = values[_position++];
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
     }
 
     /// <summary>

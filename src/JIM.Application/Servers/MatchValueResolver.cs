@@ -147,7 +147,7 @@ public sealed class MatchValueResolver
     /// (<see cref="SyncEngine.BuildCsoAttributeDictionary"/>). Built from each value's own attribute definition, which
     /// every loader includes, so it works where the object's type is not loaded (the previews).
     /// </summary>
-    private static Dictionary<string, object?> BuildInputs(
+    internal static Dictionary<string, object?> BuildInputs(
         IReadOnlyCollection<ConnectedSystemObjectAttributeValue> attributeValues,
         ConnectedSystemObjectType? objectType)
     {
