@@ -1,9 +1,9 @@
 # One Case-Sensitivity Policy
 
-- **Status:** Doing (PR 1 and PR 3 done)
+- **Status:** Done
 - **Issue:** [#2051](https://github.com/TetronIO/JIM/issues/2051)
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
-- **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](../done/CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
+- **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
 
 ## Overview
 
@@ -164,7 +164,7 @@ Each PR follows TDD, keeps the build and tests green, and updates the policy pag
   - A real-directory check of the AD syntax mapping in the Samba AD integration environment.
 - **Changelog:** ✨ "Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators."
 
-### PR 4: Identity comparisons follow the declaration
+### PR 4: Identity comparisons follow the declaration ✅
 
 Delivered in two parts:
 
@@ -190,16 +190,16 @@ Delivered in two parts:
   - Scenario 008 (required by `src/JIM.Application/CLAUDE.md` for export staging changes) and the LDAP scenarios.
 - **Changelog:** 🔄 "External IDs and references compare exactly for attributes their Connected System declares case-exact; everything else continues to ignore case."
 
-### PR 5: Connector fixes
+### PR 5: Connector fixes ✅
 
 - **LDAP:**
-  - Issue a ModifyDN when a DN or RDN differs only in case (`LdapConnectorExport` 369 and 818 compare ordinally for the rename decision).
-  - Keep the RDN attribute out of the ModifyRequest (1497-1516), since the rename carries it.
-  - Test against Samba AD that the directory accepts and keeps the new case.
+  - Issue a ModifyDN when the object's name changes only in case. As delivered, the rename is driven by the RDN attribute (`cn`, compared exactly), or else by the leaf of a staged DN; the full DN keeps the identity rule and compares ignoring case, because the parts above the object's name are the directory's. The new DN takes the directory's parent as it stands. (`GetCaseOnlyRenameDn`, on both the sequential and parallel export paths.)
+  - Keep the RDN attribute out of the ModifyRequest, since the rename carries it (already the case: `IsRdnAttribute`).
+  - Test against Samba AD that the directory accepts and keeps the new case (Scenario 001's Mover step).
 - **CSV:**
   - Match headers ignoring case (`PrepareHeaderForMatch`).
   - Fail the import with a clear error when a header the schema expects is missing, rather than reading it as no value (`FileConnectorImport` 131 onward).
-- **SQL:** key anchors through `IdentifierKey.For` using the discovered collation flag (`SqlConnectorImport` 403, 503-513, 1534-1587).
+- **SQL:** key anchors through `IdentifierKey.For` using the discovered collation flag (`SqlConnectorImport` 403, 503-513, 1534-1587). As delivered, each anchor part is folded unless its column is case-exact, for matching related-table and change-log rows back to their object; the anchor JIM is given stays exactly as read.
 - **Tests:** Connector unit tests, plus an integration step per Connector where the harness covers it.
 - **Changelog:** 🐛 for each fix.
 
