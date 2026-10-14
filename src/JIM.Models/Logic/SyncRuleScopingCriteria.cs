@@ -88,6 +88,23 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);
 
     /// <summary>
+    /// Whether Temporal Scope Reconciliation must evaluate every object of the scoped type for this criterion: it
+    /// compares an expression's computed date against a relative date, so no stored value can narrow the objects whose
+    /// boundary the clock has crossed.
+    /// </summary>
+    public bool NeedsFullReconciliationPass => IsExpression && ValueMode == DateCriteriaValueMode.Relative;
+
+    /// <summary>
+    /// What saving a criterion that <see cref="NeedsFullReconciliationPass"/> tells the administrator, word for word
+    /// on every surface.
+    /// </summary>
+    public const string FullReconciliationPassNotice =
+        "This criterion compares an expression against a relative date. Temporal Scope Reconciliation can only narrow a " +
+        "relative date to the objects whose date crossed it when the date is stored in an attribute, so for this rule " +
+        "every reconciliation evaluates every object of its type, in batches. On a large object type, prefer flowing the " +
+        "date into an attribute and comparing that.";
+
+    /// <summary>
     /// Whether the criterion has exactly one left-hand side: an attribute (either side), or an expression with a type to
     /// compare it as. An attribute criterion takes its type from the attribute, so it carries no compare-as type.
     /// </summary>

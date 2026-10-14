@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
@@ -130,6 +131,15 @@ public class SyncRuleScopingCriterionRequest
     /// <summary>The direction of the offset from now, when <see cref="ValueMode"/> is Relative.</summary>
     public RelativeDateDirection? RelativeDirection { get; set; }
 
+    /// <summary>
+    /// An expression whose computed value the criterion compares, in place of an attribute: cs["..."] on an import
+    /// rule, mv["..."] on an export rule. Requires CompareAs and no attribute.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>The type an expression's computed value is compared as; null for an attribute criterion.</summary>
+    public AttributeDataType? CompareAs { get; set; }
+
     internal SyncRuleScopingCriterionProposal ToProposal() =>
         new(MetaverseAttributeId,
             ConnectedSystemAttributeId,
@@ -145,5 +155,7 @@ public class SyncRuleScopingCriterionRequest
             ValueMode,
             RelativeCount,
             RelativeUnit,
-            RelativeDirection);
+            RelativeDirection,
+            Expression,
+            CompareAs);
 }
