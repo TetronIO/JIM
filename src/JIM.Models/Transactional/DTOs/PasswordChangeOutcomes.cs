@@ -90,4 +90,17 @@ public class PasswordChangeTargetOutcome
     /// How many delivery attempts this change has had against this target.
     /// </summary>
     public int AttemptCount { get; set; }
+
+    /// <summary>
+    /// Whether the password was set but the Connected System could not apply everything asked of it, such as an
+    /// expiry behaviour it has no equivalent for, or what it applied will not last, such as "Password never expires"
+    /// that an Enforce State Attribute Flow puts back. The target still reads <see cref="PasswordChangeTargetState.Set"/>,
+    /// because the password is set; <see cref="Message"/> then says what was applied instead, or why it will not last.
+    /// False in every other state.
+    /// </summary>
+    /// <remarks>
+    /// Read from the delivery Activity's status: a delivery the Connector reported as not fully honoured is
+    /// completed with a warning rather than plainly (#2159).
+    /// </remarks>
+    public bool CompletedWithWarning { get; set; }
 }

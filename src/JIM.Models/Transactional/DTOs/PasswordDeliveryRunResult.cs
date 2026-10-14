@@ -54,16 +54,33 @@ public class PasswordDeliveryRunResult
     public int EnabledStateLeftToAttributeFlowCount { get; set; }
 
     /// <summary>
-    /// Passwords whose delivery completed an enable JIM withheld until a password existed (#2039, #2064): the account
-    /// was created disabled only because Active Directory refuses an enabled account with no password, and its
-    /// Attribute Flow still asks for it enabled. Included in <see cref="DeliveredCount"/>.
+    /// Passwords delivered to an account whose flags an export wrote (#2159), leaving "Password never expires" to the
+    /// Attribute Flow that writes them rather than applying the provisioning Synchronisation Rule's expiry. Counted so
+    /// the lane's summary says how often the flow, not the rule, decided; each delivery's Activity says so where it
+    /// differs from what the rule asked. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int PasswordNeverExpiresLeftToAttributeFlowCount { get; set; }
+
+    /// <summary>
+    /// Passwords whose delivery completed an enable JIM withheld until a password existed (#2039, #2064, #2158): the
+    /// account was held disabled, at creation or when an Update enabled it, only because Active Directory refuses an
+    /// enabled account with no password, and its Attribute Flow still asks for it enabled. Included in
+    /// <see cref="DeliveredCount"/>.
     /// </summary>
     public int WithheldEnablesCompletedCount { get; set; }
 
     /// <summary>
-    /// Changes given back unattempted because delivering them would have enabled an account an export was being sent
-    /// to (#2173): that export may be disabling it, so the delivery waits for it and tries again shortly. Nothing is
-    /// counted against them, and they are neither retrying nor delivered.
+    /// Passwords delivered where the Connected System could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159): the password is set, and its Activity is completed with a warning
+    /// naming what was applied instead. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int ExpiryBehaviourNotHonouredCount { get; set; }
+
+    /// <summary>
+    /// Changes given back unattempted because an export was being sent to their account (#2173, #2158, #2159): that
+    /// export may be disabling it, writing the flags it owns, or holding back an enable the delivery would complete, so
+    /// the delivery waits for it and tries again shortly. Nothing is counted against them, and they are neither
+    /// retrying nor delivered.
     /// </summary>
     public int PostponedCount { get; set; }
 

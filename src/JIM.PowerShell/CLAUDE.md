@@ -43,34 +43,21 @@ Each cmdlet's Syntax, Parameters and Output on its `docs/powershell/` page are g
 - **Declare what each parameter set returns** with `[OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]`, naming the response schema in the OpenAPI document (the DTO's class name); one without `ParameterSetName` covers every set. The script tables that schema's properties, with each one's type and the description from the DTO's XML comment, so they cannot be written from memory; document a DTO property there, not in the cmdlet's help. `[OutputType([PSCustomObject])]` says nothing and fails the check, as does declaring nothing at all: a cmdlet that returns nothing says `[OutputType([void])]`. A cmdlet that builds its own object declares a `JIM.` name of its own, listed with its reason in `docs/.conformance/powershell-reference.psd1` (`NonApiOutputTypes`), and lists its properties in `.OUTPUTS` as a paragraph whose first line is the type's name and whose others read `Name (type): description` (a line that does not runs on from the one above; `Connect-JIM` is the example), which the script tables; one that only gives the API's object a name of its own (`Get-JIMServiceHealth`) maps that name to the schema under `OutputTypeSchemas` in the same file, and the schema's properties are tabled for it.
 - **Add to the API's object; never rebuild it.** A cmdlet that returns the API's response with something more (`Get-JIMConnectedSystemObjectSyncPreview`'s flattened `Outcomes`) adds it with `Add-Member` and returns the response. Rebuilding a new object from a list of the response's properties drops whatever the API adds later, silently: the sync preview cmdlets lost `GeneratedValueProbes` that way. Declare a name of its own, map it to the schema under `OutputTypeSchemas`, and list only the added properties in `.OUTPUTS` in the format above; the script tables them after the schema's, and fails if one duplicates a schema property.
 - **Say when each type comes back where the parameter sets cannot.** The script labels each declared type by the parameters that set its parameter sets apart ("By default", "With -Id or -Follow"). Two types from one set (`Test-JIMConnection` returns its status, or with `-Quiet` a `bool`) fail the check until `.OUTPUTS` labels each, with the type's name, a colon and when it comes back: `System.Boolean: With -Quiet` on a line of its own, or as the first line of a property list (`JIM.ConnectionStatus: By default`).
-- **`.OUTPUTS` is the prose above the generated table:** what comes back and when (`With -PassThru, ...; otherwise nothing.`), and what any property means where its name does not say.
+- **`.OUTPUTS` is the prose above the generated table:** what comes back and when (`With -PassThru, ...; otherwise nothing.`), and what any property means where its name does not say. A property the module adds is listed in the `Name (type): description` form above, never described only in prose: the table and the example check (next) read only the list.
+- **Examples read only what the cmdlet returns (ACC-6).** Every property an example reads from a JIM cmdlet's output, on a page or in `.EXAMPLE` help (`Select-Object Name`, `$_.Name`, `$widget.Name`), is checked against what that cmdlet returns for the parameter set the example binds, by `Lint-DocExamples.ps1 -OpenApiPath` in `build-and-test`. It reads the same declarations as the table, so a failure means the example is wrong or the declaration is incomplete.
 
 After changing a cmdlet with a block, regenerate (`-OpenApiPath` takes a document `Generate-OpenApiDoc.ps1` wrote earlier; without it, the script generates one, which builds the solution):
 
 ```bash
 pwsh ./scripts/Update-PowerShellReference.ps1 -OpenApiPath /tmp/openapi-v1.json
+pwsh ./scripts/Lint-DocExamples.ps1 -OpenApiPath /tmp/openapi-v1.json   # ACC-6, the examples' property reads
 ```
-
-The sections below still apply to every section that has no block yet; `-Check` lists them.
 
 ## Documenting output
 
-**Check every property name against the DTO before writing it.** An audit found eight of twenty pages in `docs/powershell/` naming properties that do not exist. The Output tables in particular had been written from memory.
+Output is not written by hand any more. Each cmdlet's Output table is generated from what it declares (above), and every property an example reads from its output is checked against those declarations (ACC-6), so a property name written from memory fails the build. When one fails, correct the example or the declaration, never the page.
 
-**Different parameter sets return different shapes, and this is the most common error.** A list or search returns a header DTO; `-Id` returns the full entity or detail DTO. They are not supersets of one another:
-
-| Cmdlet | List / search returns | `-Id` returns |
-|---|---|---|
-| `Get-JIMMetaverseObject` | `MetaverseObjectHeaderDto` (`Attributes`, a dictionary) | `MetaverseObjectDto` (`AttributeValues`, a list) |
-| `Get-JIMConnectedSystem` | `ConnectedSystemHeader` (`ConnectorId`) | `ConnectedSystemDto` (nested `Connector.Id`) |
-| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseAttributeCount`) | `PredefinedSearchDetailDto` (`Attributes`, `CriteriaGroups`) |
-| `Get-JIMExampleDataSet` | `ExampleDataSetHeader` (`ValueCount`) | the entity, with its values |
-
-State which shape an Output section describes, and never document a header's fields for the `-Id` form.
-
-**Casing is not the trap; names are.** `ConvertTo-JIMOutputObject` normalises wire camelCase to PascalCase, and member access is case-insensitive regardless, so `$x.isEnabled` and `$x.IsEnabled` both work. `$x.Enabled` does not. Do not "fix" casing differences; do verify names.
-
-**Do not blanket-replace a property name across the docs.** `SyncRuleHeader` really does name its field `Enabled`, so a global `Enabled` to `IsEnabled` sweep would have broken working examples while fixing others. Check each cmdlet's own DTO.
+A list and `-Id` usually return different shapes, a header DTO and a detail DTO, and neither is a superset of the other. Declare each parameter set's type, and the table and the check both follow it.
 
 ## Destructive examples
 

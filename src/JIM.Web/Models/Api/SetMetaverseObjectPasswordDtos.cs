@@ -46,12 +46,18 @@ public class SetMetaverseObjectPasswordRequest
     /// the right default for a password somebody else chose; without them,
     /// <see cref="PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy"/>, because a password the person chose
     /// should not demand they choose another at next sign-in.
+    /// <para>
+    /// On Active Directory and Samba AD, with named accounts, <c>NeverExpires</c> sets "Password never expires" on each
+    /// account and the other two clear it; where a Synchronisation Rule writes the account's userAccountControl with
+    /// Enforce State on, the next synchronisation puts that Attribute Flow's value back. Without named accounts,
+    /// "Password never expires" is left as each account has it, so <c>NeverExpires</c> is refused.
+    /// </para>
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
     /// <summary>
     /// Whether to enable each named account as its password is set. Omitted leaves the accounts as they are, except
-    /// for a new Active Directory account JIM created disabled only until it had a password, which the password
+    /// for an Active Directory account whose enable JIM held back until it had a password, which the password
     /// enables as its Attribute Flow asks. Accepted only with <see cref="ConnectedSystemObjectIds"/>: a propagated
     /// password enables no other account, because it reaches accounts an administrator may have disabled on purpose.
     /// False is refused with a 400: setting a password never disables an account.
@@ -154,7 +160,8 @@ public class SetMetaverseObjectPasswordResponse
                     NextAttemptAt = outcome?.NextAttemptAt,
                     Message = outcome?.Message,
                     AttemptCount = outcome?.AttemptCount ?? 0,
-                    FailureReason = outcome?.FailureReason
+                    FailureReason = outcome?.FailureReason,
+                    CompletedWithWarning = outcome?.CompletedWithWarning ?? false
                 };
             }).ToList()
         };
@@ -214,4 +221,15 @@ public class SetMetaverseObjectPasswordTarget
     /// after the queue row has gone. The portal chooses its remedy guidance from this; a script can do the same.
     /// </summary>
     public PasswordSetFailureReason? FailureReason { get; set; }
+
+    /// <summary>
+    /// True where the password was set but the Connected System could not apply everything asked of it, such as an
+    /// expiry behaviour it has no equivalent for: a request to require a change at the next sign-in, sent to a
+    /// directory that leaves expiry to its own password policy, sets the password without that requirement. Also true
+    /// where what was applied will not last: "Password never expires" changed on an account whose userAccountControl a
+    /// Synchronisation Rule writes with Enforce State on. The state is still Set, and <c>message</c> says what was
+    /// applied instead, or why it will not last. False in every other case.
+    /// </summary>
+    /// <remarks>Read from the delivery Activity, which is completed with a warning in this case (#2159).</remarks>
+    public bool CompletedWithWarning { get; set; }
 }
