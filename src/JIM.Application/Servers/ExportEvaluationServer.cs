@@ -1521,6 +1521,17 @@ public class ExportEvaluationServer
             if (!plan.DirectFlowsByTypeThenAttribute.TryGetValue(summary.TypeId, out var flowsByAttribute))
                 continue; // no export rule flows any candidate attribute for this type
 
+            // An object whose scope cannot be decided for one rule is left out of recall altogether, as export
+            // evaluation leaves it out of every export: what it should hold anywhere is unknown until it is corrected.
+            var scopedRules = byReferencingMvo[mvoId]
+                .Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId))
+                .SelectMany(c => flowsByAttribute[c.MetaverseAttributeId])
+                .Select(flow => flow.ExportRule)
+                .Where(rule => rule.ObjectScopingCriteriaGroups.Count > 0 && targetsByMvoAndSystem.ContainsKey((mvoId, rule.ConnectedSystemId)))
+                .DistinctBy(rule => rule.Id);
+            if (!RecallScopeDecidable(summary, scopedRules, scopeResults, result))
+                continue;
+
             foreach (var candidate in byReferencingMvo[mvoId].Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId)))
             {
                 var flows = flowsByAttribute[candidate.MetaverseAttributeId];
@@ -1849,11 +1860,21 @@ public class ExportEvaluationServer
                     })
                     .ToList();
 
-                var evaluation = await EvaluateExportRulesWithNoNetChangeDetectionAsync(
-                    referencingMvo, removedRows, cache, deferSave: true,
-                    removedAttributes: [.. removedRows], existingPendingExports: fallbackPendingExports,
-                    preResolvedReferences: context.ResolvedReferenceValuesBySystem,
-                    recallSemantics: true);
+                ExportEvaluationResult evaluation;
+                try
+                {
+                    evaluation = await EvaluateExportRulesWithNoNetChangeDetectionAsync(
+                        referencingMvo, removedRows, cache, deferSave: true,
+                        removedAttributes: [.. removedRows], existingPendingExports: fallbackPendingExports,
+                        preResolvedReferences: context.ResolvedReferenceValuesBySystem,
+                        recallSemantics: true);
+                }
+                catch (ScopingCriterionFailedException scopingEx)
+                {
+                    // As on the fast path: nothing is staged for an object whose scope is unknown, and it is reported.
+                    result.ScopingFailures.Add(new ReferenceRecallScopingFailure(referencingMvo.Id, scopingEx.Message));
+                    continue;
+                }
 
                 result.ReferencingObjectsEvaluated++;
                 result.FallbackReferencingObjects++;
@@ -2060,6 +2081,39 @@ public class ExportEvaluationServer
     /// Checks if an MVO is in scope for an export rule based on scoping criteria.
     /// No scoping criteria means all objects of the type are in scope.
     /// </summary>
+    /// <summary>
+    /// Decides, on the recall fast path, the scope of one referencing object for the scoped export rules that could
+    /// stage recall for it (the ones the per-flow loop would ask about), memoising each answer for that loop. False,
+    /// with the object reported on <paramref name="result"/>, when a criterion cannot be evaluated for it.
+    /// </summary>
+    private bool RecallScopeDecidable(
+        MetaverseObjectRecallSummary summary,
+        IEnumerable<SyncRule> scopedRules,
+        Dictionary<(Guid MvoId, int RuleId), bool> scopeResults,
+        ReferenceRecallResult result)
+    {
+        foreach (var exportRule in scopedRules)
+        {
+            var scopeKey = (summary.Id, exportRule.Id);
+            if (scopeResults.ContainsKey(scopeKey))
+                continue;
+
+            var scopeMvo = new MetaverseObject { Id = summary.Id };
+            scopeMvo.AttributeValues.AddRange(summary.ScopingAttributeValues);
+            try
+            {
+                scopeResults[scopeKey] = ScopingEvaluation.IsMvoInScopeForExportRule(scopeMvo, exportRule);
+            }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                result.ScopingFailures.Add(new ReferenceRecallScopingFailure(summary.Id, scopingEx.Message));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule)
     {
         return ScopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
