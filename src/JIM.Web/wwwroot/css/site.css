@@ -4931,6 +4931,13 @@ html[lang] .jim-kv-table td:first-child {
     box-shadow: inset 3px 0 0 0 var(--mud-palette-error);
 }
 
+/* A row whose system set the password but could not apply everything asked of it (#2159): the same treatment as
+   a failed row, in the warning colour, because its sentence says what the person will actually find. */
+.jim-password-result--warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 12%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--mud-palette-warning);
+}
+
 /* Primary rather than secondary: on a failed row this sentence is the thing to read, where a successful
    row's "Password set." is only confirmation. */
 .jim-password-result-reason {

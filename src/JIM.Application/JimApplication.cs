@@ -205,6 +205,7 @@ public class JimApplication : IDisposable
             activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),
             (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
+            activity => Activities.CompleteActivityWithWarningAsync(activity),
             // Resolves a Provisioned row's first password (#1697): the same generator instance and the
             // same credential protection fallback InitialPasswordServer above is built with.
             PasswordGenerator,
