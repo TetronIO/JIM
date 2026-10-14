@@ -1262,6 +1262,9 @@ public class Worker : BackgroundService
                     deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
 
+                // A referencing object whose export scope could not be decided received no recall: its error.
+                executionItems.AddRange(recallResult.ScopingFailureExecutionItems());
+
                 // Fold the staged recall exports into Activity reporting: one execution item per staged
                 // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
                 // Which deleted objects each referencing object lost, from the recall context captured before

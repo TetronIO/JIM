@@ -185,6 +185,13 @@ public interface ISyncServer
         List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Deletes CSOs quietly, without execution items: objects their Metaverse Object's deletion had already
+    /// disconnected. Each deletion is still recorded when Connected System Object change tracking is on, attributed
+    /// to <paramref name="activity"/>, so the object's history stays findable by its id once its row is gone.
+    /// </summary>
+    Task DeleteConnectedSystemObjectsQuietlyAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity);
+
+    /// <summary>
     /// Creates "Added" change tracking records for provisioned CSOs.
     /// Provisioning CSOs are created during export evaluation and don't have dedicated RPEIs;
     /// the originating RPEI is resolved via MVO ID lookup.

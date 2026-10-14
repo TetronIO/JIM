@@ -526,6 +526,49 @@ public class ConnectedSystemServerChangeTrackingTests
             Is.EqualTo(new[] { _externalIdAttr.Name }));
     }
 
+    /// <summary>
+    /// A quiet deletion has no execution item to hang its record on, so the record stands alone, attributed to the run
+    /// that deleted the object. It carries what every deletion record carries, the object's id and External ID above
+    /// all: they are what find the object's execution items once its row is gone.
+    /// </summary>
+    [Test]
+    public void BuildQuietDeletionChangeRecords_ChangeTrackingOn_RecordsEachDeletionWithoutAnExecutionItem()
+    {
+        var (cso, _) = CsoWithAttribute(AttributeDataType.Text);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = cso.Type.Attributes[1], AttributeId = 3, StringValue = "805306368" });
+        var externalId = cso.AttributeValues[0].GuidValue!.Value.ToString();
+        var activity = new Activity { Id = Guid.NewGuid(), InitiatedByType = ActivityInitiatorType.User, InitiatedById = Guid.NewGuid(), InitiatedByName = "Joe Bloggs" };
+
+        var changes = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords([cso], activity, changeTrackingEnabled: true);
+
+        var change = changes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+            Assert.That(change.DeletedConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(change.ConnectedSystemId, Is.EqualTo(cso.ConnectedSystemId));
+            Assert.That(change.DeletedObjectType, Is.SameAs(cso.Type));
+            Assert.That(change.DeletedObjectExternalId, Is.EqualTo(externalId));
+            Assert.That(change.ActivityRunProfileExecutionItem, Is.Null);
+            Assert.That(change.ActivityRunProfileExecutionItemId, Is.Null);
+            Assert.That(change.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(change.InitiatedById, Is.EqualTo(activity.InitiatedById));
+            Assert.That(change.InitiatedByName, Is.EqualTo("Joe Bloggs"));
+            Assert.That(change.AttributeChanges.Select(c => c.AttributeName), Is.EquivalentTo(new[] { _externalIdAttr.Name, "sAMAccountType" }),
+                "its final values are recorded as removed, as on every other deletion");
+        }
+    }
+
+    [Test]
+    public void BuildQuietDeletionChangeRecords_ChangeTrackingOff_RecordsNothing()
+    {
+        var (cso, _) = CsoWithAttribute(AttributeDataType.Text);
+
+        var changes = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords([cso], new Activity(), changeTrackingEnabled: false);
+
+        Assert.That(changes, Is.Empty);
+    }
+
     private (ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Attribute) CsoWithAttribute(AttributeDataType type)
     {
         var attribute = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "sAMAccountType", Type = type, Selected = true };
