@@ -1,5 +1,8 @@
 ---
 title: Feature Flags
+description: "The cmdlets that list JIM's preview features and switch them on or off."
+type: reference
+audience: automation-author
 ---
 
 # Feature Flags
@@ -108,7 +111,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature" -PassThru
 ### Notes
 
 - Attempting to enable an In Development flag without `-AllowInDevelopment` produces a non-terminating error naming the flag.
-- Each successful change creates an audit activity, in the same [configuration change history](../configuration/activities.md#configuration-change-history) as any other Service Setting change.
+- Each successful change creates an audit activity, in the same [Configuration Change History](../configuration/activities.md#configuration-change-history) as any other Service Setting change.
 
 ---
 

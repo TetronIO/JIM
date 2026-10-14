@@ -1,10 +1,13 @@
 ---
 title: System
+description: "The cmdlets that report JIM's health, version, Service Health, authentication configuration and the signed-in user, and reset JIM."
+type: reference
+audience: automation-author
 ---
 
 # System
 
-System cmdlets provide access to JIM health checks, service health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service health and user info require an active connection.
+System cmdlets provide access to JIM health checks, Service Health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service Health and user info require an active connection.
 
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
@@ -395,6 +398,6 @@ $result = Reset-JIMSystem -Force
 
 ## See also
 
-- [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, service health, factory reset)
+- [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, Service Health, factory reset)
 - [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means
 - [Connection](connection.md): establishing and managing connections to JIM

@@ -1,5 +1,8 @@
 ---
 title: Activities
+description: "The cmdlets that list and read Activities, a Run Profile execution's statistics, and the child Activities an operation spawned."
+type: reference
+audience: automation-author
 ---
 
 # Activities
