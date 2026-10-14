@@ -41,7 +41,10 @@ function Set-JIMMetaverseObjectPassword {
         Each target's State says where its password got to: Set, Retrying (with NextAttemptAt), Parked (with the
         system's own Message), Held behind a switched-off system, or Queued and Delivering while still in flight.
         A Parked target is reported as a non-terminating error as well, so a script that stops on errors stops
-        on a refusal; the result is written to the pipeline first either way.
+        on a refusal; the result is written to the pipeline first either way. A target that is Set with
+        CompletedWithWarning took the password but could not apply everything asked of it (OpenLDAP and 389
+        Directory Server cannot require a change at the next sign-in, for example); its Message says what was
+        applied, and it is reported as a warning.
 
     .PARAMETER Id
         The unique identifier (GUID) of the Metaverse Object whose password this is.
@@ -70,7 +73,11 @@ function Set-JIMMetaverseObjectPassword {
     .PARAMETER ExpiryBehaviour
         What happens to the password once each target has it. Defaults to RequireChangeAtNextSignIn with
         -ConnectedSystemId (somebody else chose this password) and to ExpiresAccordingToTargetPolicy without it (the
-        person chose it, and should not be made to choose another).
+        person chose it, and should not be made to choose another). On Active Directory and Samba AD, with
+        -ConnectedSystemId, NeverExpires sets Password never expires on each account and the other two clear it; a
+        Synchronisation Rule that writes the account's userAccountControl with Enforce State on puts its value back at
+        the next synchronisation. Without -ConnectedSystemId, Password never expires is left as each account has it,
+        so NeverExpires is refused.
 
     .PARAMETER EnableAccount
         Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
@@ -188,6 +195,13 @@ function Set-JIMMetaverseObjectPassword {
 
         $namedAccounts = $PSBoundParameters.ContainsKey('ConnectedSystemId')
 
+        # The server refuses this too. Refused here first only so that -Generate does not produce, and hand back, a
+        # password for a request that is then turned down.
+        if (-not $namedAccounts -and $ExpiryBehaviour -eq 'NeverExpires') {
+            Write-Error "-ExpiryBehaviour NeverExpires needs -ConnectedSystemId. A password set on every Connected System configured for Password Synchronisation leaves Password never expires as each account has it; name the Connected Systems to choose NeverExpires for those accounts. Nothing was set."
+            return
+        }
+
         # The person's accounts are needed to resolve named systems to the accounts the API takes, and to know
         # which systems a generated password has to satisfy. A propagated change with a supplied password needs
         # neither, and the server resolves its own targets.
@@ -303,6 +317,13 @@ function Set-JIMMetaverseObjectPassword {
 
         foreach ($parkedTarget in @($result.Targets | Where-Object { $_.State -eq 'Parked' })) {
             Write-Error -Message "$($parkedTarget.ConnectedSystemName) refused the password: $($parkedTarget.Message)" -TargetObject $result
+        }
+
+        # A password set where the system could not apply everything asked of it (an expiry behaviour OpenLDAP and
+        # 389 Directory Server have no equivalent for) is no refusal, so not an error. It is still something a
+        # script telling the person "you will be asked to change it" has to hear, in the words of the delivery.
+        foreach ($warnedTarget in @($result.Targets | Where-Object { $_.CompletedWithWarning })) {
+            Write-Warning "$($warnedTarget.ConnectedSystemName) set the password, with a warning: $($warnedTarget.Message)"
         }
 
         if ($null -ne $result.PSObject.Properties['Settled'] -and -not $result.Settled -and $PSBoundParameters.ContainsKey('Wait') -and $Wait -gt 0) {

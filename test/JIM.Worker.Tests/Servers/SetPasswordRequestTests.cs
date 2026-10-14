@@ -119,6 +119,11 @@ public class SetPasswordRequestTests
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
             },
+            activity =>
+            {
+                activity.Status = ActivityStatus.CompleteWithWarning;
+                return Task.CompletedTask;
+            },
             new PasswordGeneratorService(),
             () => _protection);
     }
@@ -164,13 +169,14 @@ public class SetPasswordRequestTests
         return account;
     }
 
-    private SetPasswordRequest Request(IReadOnlyList<Guid>? targets, bool? enableAccount = null, string password = Password, ApiKey? apiKey = null) => new()
+    private SetPasswordRequest Request(IReadOnlyList<Guid>? targets, bool? enableAccount = null, string password = Password, ApiKey? apiKey = null,
+        PasswordExpiryBehaviour expiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn) => new()
     {
         MetaverseObjectId = _metaverseObjectId,
         DisplayName = "Ada Lovelace",
         Password = password,
         Targets = targets,
-        ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        ExpiryBehaviour = expiryBehaviour,
         EnableAccount = enableAccount,
         InitiatedBy = apiKey == null ? Administrator : null,
         InitiatedByApiKey = apiKey
@@ -227,6 +233,40 @@ public class SetPasswordRequestTests
             Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
             Assert.That(_createdActivities, Is.Empty);
         }
+    }
+
+    /// <summary>
+    /// A password set on every Connected System leaves "Password never expires" as each account has it (#2159), so Never
+    /// expires there would be accepted and then do nothing. Refused in the core, beside the disable refusal, so every
+    /// caller gets the same answer before anything is queued or recorded; named accounts may still ask for it.
+    /// </summary>
+    [Test]
+    public void SetPasswordAsync_PropagatedWithNeverExpires_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        var request = Request(null, expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        var refusal = Assert.ThrowsAsync<ArgumentException>(() => _server.SetPasswordAsync(request, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal!.Message, Does.Contain("NeverExpires"));
+            Assert.That(refusal.Message, Does.Contain("Password never expires"));
+            Assert.That(refusal.ParamName, Is.Null, "the message goes to API callers as it is, so it names no parameter");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task SetPasswordAsync_NamedAccountWithNeverExpires_QueuesTheChoiceAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD", enabled: null);
+        var account = ArrangeAccount(CorporateAdId);
+        var request = Request([account.Id], expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        await _server.SetPasswordAsync(request, CancellationToken.None);
+
+        Assert.That(QueuedRow().ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
     }
 
     [Test]

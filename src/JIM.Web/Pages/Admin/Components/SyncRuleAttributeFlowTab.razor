@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using JIM.Models.Expressions
+@using JIM.Models.Interfaces
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
 @using JIM.Models.Staging
@@ -10,6 +11,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject IJimApplicationFactory JimFactory
+@inject IExpressionEvaluator ExpressionEvaluator
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -228,6 +230,17 @@
                                 {
                                     <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
+                                    </MudTooltip>
+                                }
+                                @* A row is one line in a virtualised grid, so the note is an icon here and a caption on the card. *@
+                                @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, context.Item, _passwordSynchronisationConfigured))
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent><TooltipText Text="@PasswordDeliveryNote" /></TooltipContent>
+                                        <ChildContent>
+                                            <MudIcon Icon="@Icons.Material.Outlined.Info" Color="Color.Info" Size="Size.Small" Class="ml-2"
+                                                     aria-label="@PasswordDeliveryNote" data-testid="jim-password-delivery-note" />
+                                        </ChildContent>
                                     </MudTooltip>
                                 }
                             }
@@ -483,6 +496,12 @@
                                 </MudTooltip>
                             }
                         </div>
+                        @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, attributeFlowRule, _passwordSynchronisationConfigured))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2" Style="max-width: 32rem;" data-testid="jim-password-delivery-note">
+                                @PasswordDeliveryNote
+                            </MudText>
+                        }
                     }
                 </MudPaper>
             }
@@ -566,10 +585,13 @@
                         Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
                             ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
                             : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
-                        Required="true" Class="mt-5" />
+                        Required="true" SyntaxCheck="@(expression => ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, expression))"
+                        MetaverseAttributeNames="SuggestedMetaverseAttributeNames" ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
+                        Class="mt-5" />
 
-                    @* ─── Insert attribute (#1750, mockup B): puts mv["..."] or cs["..."] at the caret ─── *@
+                    @* ─── Insert attribute (#1750, mockup B) and Insert function (#2053): put an accessor or a call at the caret ─── *@
                     <div class="mt-1">
+                        <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
                         <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                              ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                              ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -708,10 +730,13 @@
                             MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                             TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
                             StagedSyncRule="SyncRule"
+                            MetaverseAttributeNames="SuggestedMetaverseAttributeNames"
+                            ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                             OnChanged="ScheduleFlowAnalysisAsync">
                             <BaseExpressionTools Context="insertIntoBaseExpression">
                                 @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                                 <div class="mt-1">
+                                    <InsertFunctionMenu OnInsert="insertIntoBaseExpression" />
                                     <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                                          ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                                          ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -1104,6 +1129,33 @@
 
     private ExpressionEditor? _expressionEditor;
 
+    // ─── Password delivery and userAccountControl (#2159) ───
+
+    /// <summary>
+    /// What the note on a userAccountControl Attribute Flow says, wherever passwords are delivered to this rule's
+    /// accounts (<see cref="AccountControlFlowNotes.ShowsPasswordDeliveryNote"/>).
+    /// </summary>
+    private const string PasswordDeliveryNote =
+        "Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.";
+
+    /// <summary>
+    /// Whether this rule's Connected System is configured for Password Synchronisation, so that passwords reach its
+    /// accounts other than as an Initial Password. Read once per Connected System, not per row.
+    /// </summary>
+    private bool _passwordSynchronisationConfigured;
+    private int? _passwordSynchronisationReadForConnectedSystemId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystemId <= 0 ||
+            _passwordSynchronisationReadForConnectedSystemId == SyncRule.ConnectedSystemId)
+            return;
+
+        _passwordSynchronisationReadForConnectedSystemId = SyncRule.ConnectedSystemId;
+        using var jim = JimFactory.Create();
+        _passwordSynchronisationConfigured = await jim.ConnectedSystems.GetPasswordSynchronisationAsync(SyncRule.ConnectedSystemId) != null;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
@@ -1229,6 +1281,20 @@
     /// </summary>
     private IEnumerable<ConnectedSystemObjectTypeAttribute>? InsertableConnectedSystemAttributes =>
         SyncRule.Direction == SyncRuleDirection.Import ? SyncRule.ConnectedSystemObjectType?.Attributes : null;
+
+    /// <summary>
+    /// The names the expression editors suggest inside <c>mv["</c> (#2053): the attributes Insert attribute offers.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedMetaverseAttributeNames =>
+        InsertableMetaverseAttributes?.Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+
+    /// <summary>
+    /// The names the expression editors suggest inside <c>cs["</c> (#2053): as Insert attribute, never a credential
+    /// attribute, since those travel through JIM's password channel rather than Attribute Flow.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedConnectedSystemAttributeNames =>
+        InsertableConnectedSystemAttributes?.Where(candidate => !CredentialAttributes.IsCredentialAttribute(candidate.Name))
+            .Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
 
     private Task InsertIntoExpressionAsync(string accessor) =>
         _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;
@@ -1831,6 +1897,12 @@
 
         if (_attributeFlowMappingSourceType == "Expression" &&
             string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            return true;
+
+        // An expression that does not parse (a syntax error, an unknown function) is refused here, as the REST API
+        // refuses it (#2053); the editor shows why beneath the field, from the same check.
+        if (_attributeFlowMappingSourceType == "Expression" &&
+            ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, _attributeFlowMappingSource.Expression) != null)
             return true;
 
         // Validate target is configured
