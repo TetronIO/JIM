@@ -168,9 +168,9 @@ internal sealed class SqlConnectorImport
             await _progress.EnterPhaseAsync(SqlConnectorPhases.Fetch, $"Fetching {plan.Name} objects (page {page.PageNumber})...");
 
             var rows = await ReadPageAsync(plan, page);
-            var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
+            var importObjects = BuildImportObjects(plan, rows, out var anchorMatchKeys);
 
-            await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
+            await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorMatchKeys);
 
             result.ImportObjects.AddRange(importObjects);
             objectsRead += importObjects.Count;
@@ -400,12 +400,15 @@ internal sealed class SqlConnectorImport
         var anchorOrdinals = changeLog.AnchorColumns.Select(anchorColumn => IndexOfColumn(selectColumns, anchorColumn)).ToArray();
 
         var entries = new List<SqlChangeLogEntry>(rows.Count);
+        // Keyed by how the database compares the anchor (#2051): two rows naming 'ABC' and 'abc' are one object's
+        // changes where the anchor ignores case.
         var latestByAnchor = new Dictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var row in rows)
         {
             var anchorValues = anchorOrdinals.Select(ordinal => row[ordinal]).ToArray();
-            var anchorKey = ComposeChangeAnchorKey(plan, changeLog, anchorValues);
+            var anchorParts = ComposeChangeAnchorParts(plan, changeLog, anchorValues);
+            var matchKey = plan.AnchorMatchKey(anchorParts);
             var rawChangeType = row[changeTypeOrdinal];
 
             // A change type is what a row is for, so a NULL one is as unusable as an unrecognised value
@@ -413,23 +416,24 @@ internal sealed class SqlConnectorImport
             var changeTypeValue = rawChangeType == null ? null : Convert.ToString(rawChangeType, CultureInfo.InvariantCulture);
             var mapped = changeTypeValue != null && changeLog.ChangeTypes.TryGetValue(changeTypeValue, out var changeType);
 
-            latestByAnchor[anchorKey] = entries.Count;
+            latestByAnchor[matchKey] = entries.Count;
             entries.Add(new SqlChangeLogEntry(
-                anchorKey,
+                SqlImportPlan.AnchorKey(anchorParts),
+                matchKey,
                 anchorValues,
                 mapped ? changeLog.ChangeTypes[changeTypeValue!] : ObjectChangeType.NotSet,
                 mapped ? null : changeTypeValue ?? "NULL"));
         }
 
-        return [.. entries.Where((entry, index) => latestByAnchor[entry.AnchorKey] == index)];
+        return [.. entries.Where((entry, index) => latestByAnchor[entry.MatchKey] == index)];
     }
 
     /// <summary>
-    /// The changed object's anchor as one string, rendered exactly as the object type's own anchor is so
+    /// The changed object's anchor values as strings, rendered exactly as the object type's own anchor is so
     /// that the two identify the same object.
     /// </summary>
     /// <exception cref="InvalidDataException">A change-log row does not say which object it is about, which no amount of reading further can recover from.</exception>
-    private string ComposeChangeAnchorKey(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, IReadOnlyList<object?> anchorValues)
+    private string[] ComposeChangeAnchorParts(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, IReadOnlyList<object?> anchorValues)
     {
         var parts = new string[anchorValues.Count];
 
@@ -441,7 +445,7 @@ internal sealed class SqlConnectorImport
             parts[index] = SqlAnchorValue.ToTokenString(_provider, value, plan.AnchorColumns[index].Type);
         }
 
-        return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
+        return parts;
     }
 
     /// <summary>
@@ -500,18 +504,18 @@ internal sealed class SqlConnectorImport
         if (changes.Count == 0)
             return [];
 
-        var changeTypesByAnchor = changes.ToDictionary(change => change.AnchorKey, change => change.ChangeType, StringComparer.Ordinal);
+        var changeTypesByAnchor = changes.ToDictionary(change => change.MatchKey, change => change.ChangeType, StringComparer.Ordinal);
         var rows = await ReadRowsByAnchorAsync(plan, [.. changes.Select(change => change.AnchorValues)]);
 
         if (rows.Count < changes.Count)
             _logger.Debug("SqlConnectorImport: Object Type {ObjectType} has {MissingCount} change(s) whose row is no longer in the source; their deletions will arrive from the change log",
                 plan.Name, changes.Count - rows.Count);
 
-        var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
-        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
+        var importObjects = BuildImportObjects(plan, rows, out var anchorMatchKeys);
+        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorMatchKeys);
 
         for (var index = 0; index < importObjects.Count; index++)
-            importObjects[index].ChangeType = changeTypesByAnchor[anchorKeys[index]];
+            importObjects[index].ChangeType = changeTypesByAnchor[anchorMatchKeys[index]];
 
         return importObjects;
     }
@@ -623,8 +627,8 @@ internal sealed class SqlConnectorImport
 
         var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.ReadColumns, relatedChanges);
 
-        var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
-        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
+        var importObjects = BuildImportObjects(plan, rows, out var anchorMatchKeys);
+        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorMatchKeys);
 
         foreach (var importObject in importObjects)
             importObject.ChangeType = ObjectChangeType.Updated;
@@ -988,7 +992,10 @@ internal sealed class SqlConnectorImport
         var attributesByName = objectType.Attributes.ToDictionary(attribute => attribute.Name, StringComparer.OrdinalIgnoreCase);
 
         var anchorColumns = configuration.AnchorColumns
-            .Select(anchorColumn => new SqlImportColumn(anchorColumn, RequireAttributeType(configuration, attributesByName, anchorColumn, "anchor column")))
+            .Select(anchorColumn => new SqlImportColumn(
+                anchorColumn,
+                RequireAttributeType(configuration, attributesByName, anchorColumn, "anchor column"),
+                attributesByName.TryGetValue(anchorColumn, out var anchorAttribute) && anchorAttribute.CaseExact))
             .ToList();
 
         var relatedTableNames = configuration.RelatedTables
@@ -1211,10 +1218,11 @@ internal sealed class SqlConnectorImport
 
     #region Shaping objects
 
-    private List<ConnectedSystemImportObject> BuildImportObjects(SqlImportPlan plan, IReadOnlyList<object?[]> rows, out List<string> anchorKeys)
+    /// <param name="anchorMatchKeys">Each object's anchor as the database compares it, for matching related and change-log rows back to it.</param>
+    private List<ConnectedSystemImportObject> BuildImportObjects(SqlImportPlan plan, IReadOnlyList<object?[]> rows, out List<string> anchorMatchKeys)
     {
         var importObjects = new List<ConnectedSystemImportObject>(rows.Count);
-        anchorKeys = new List<string>(rows.Count);
+        anchorMatchKeys = new List<string>(rows.Count);
 
         foreach (var row in rows)
         {
@@ -1225,14 +1233,15 @@ internal sealed class SqlConnectorImport
                 ObjectType = plan.Name
             };
 
-            anchorKeys.Add(ComposeAnchorKey(plan, row));
+            var anchorParts = ComposeAnchorParts(plan, row);
+            anchorMatchKeys.Add(plan.AnchorMatchKey(anchorParts));
 
             if (plan.ComposedAnchorName != null)
                 importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
                 {
                     Name = plan.ComposedAnchorName,
                     Type = AttributeDataType.Text,
-                    StringValues = [anchorKeys[^1]]
+                    StringValues = [SqlImportPlan.AnchorKey(anchorParts)]
                 });
 
             foreach (var column in plan.Attributes)
@@ -1260,11 +1269,11 @@ internal sealed class SqlConnectorImport
     }
 
     /// <summary>
-    /// The anchor as one string: what identifies the object to JIM where the anchor is composite, and
-    /// what a related table's rows are matched back to their parent by in every case.
+    /// The anchor's values as strings: composed, what identifies the object to JIM where the anchor is composite,
+    /// and what a related table's rows are matched back to their parent by in every case.
     /// </summary>
     /// <exception cref="InvalidDataException">A row's anchor is NULL or unreadable, which makes it both unidentifiable and impossible to page past.</exception>
-    private string ComposeAnchorKey(SqlImportPlan plan, object?[] row)
+    private string[] ComposeAnchorParts(SqlImportPlan plan, object?[] row)
     {
         var parts = new string[plan.AnchorColumns.Count];
 
@@ -1288,7 +1297,7 @@ internal sealed class SqlConnectorImport
             }
         }
 
-        return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
+        return parts;
     }
 
     private void AddValue(ConnectedSystemImportObject importObject, SqlImportPlan plan, SqlImportColumn column, object value)
@@ -1542,14 +1551,14 @@ internal sealed class SqlConnectorImport
         SqlImportPlan plan,
         IReadOnlyList<object?[]> rows,
         IReadOnlyList<ConnectedSystemImportObject> importObjects,
-        IReadOnlyList<string> anchorKeys)
+        IReadOnlyList<string> anchorMatchKeys)
     {
         if (plan.RelatedTables.Count == 0 || rows.Count == 0)
             return;
 
         var importObjectsByAnchor = new Dictionary<string, ConnectedSystemImportObject>(StringComparer.Ordinal);
         for (var index = 0; index < importObjects.Count; index++)
-            importObjectsByAnchor[anchorKeys[index]] = importObjects[index];
+            importObjectsByAnchor[anchorMatchKeys[index]] = importObjects[index];
 
         await _progress.ReportAsync($"Gathering multi-valued attributes for {plan.Name}...");
 
@@ -1599,8 +1608,8 @@ internal sealed class SqlConnectorImport
             if (reader.IsDBNull(valueOrdinal))
                 continue;
 
-            var anchorKey = ComposeRelatedAnchorKey(plan, reader, values, joinOrdinals);
-            if (anchorKey == null || !importObjectsByAnchor.TryGetValue(anchorKey, out var importObject))
+            var anchorMatchKey = ComposeRelatedAnchorMatchKey(plan, reader, values, joinOrdinals);
+            if (anchorMatchKey == null || !importObjectsByAnchor.TryGetValue(anchorMatchKey, out var importObject))
                 continue;
 
             var column = new SqlImportColumn(configuration.AttributeName, relatedTable.AttributeType);
@@ -1638,10 +1647,11 @@ internal sealed class SqlConnectorImport
     }
 
     /// <summary>
-    /// The parent this related row belongs to, rendered exactly as the parent's own anchor was so the
-    /// two match. Null where a join column is NULL, which can never identify a parent.
+    /// The parent this related row belongs to, as the database compares the parent's anchor, so that a join the
+    /// database made ignoring case finds its parent (#2051). Null where a join column is NULL, which can never
+    /// identify a parent.
     /// </summary>
-    private string? ComposeRelatedAnchorKey(SqlImportPlan plan, DbDataReader reader, SqlValueReader values, int[] joinOrdinals)
+    private string? ComposeRelatedAnchorMatchKey(SqlImportPlan plan, DbDataReader reader, SqlValueReader values, int[] joinOrdinals)
     {
         var parts = new string[joinOrdinals.Length];
 
@@ -1654,7 +1664,7 @@ internal sealed class SqlConnectorImport
             parts[index] = SqlAnchorValue.ToTokenString(_provider, values.Read(joinOrdinals[index], anchorColumn.Name, anchorColumn.Type), anchorColumn.Type);
         }
 
-        return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
+        return plan.AnchorMatchKey(parts);
     }
 
     /// <summary>
@@ -1686,7 +1696,10 @@ internal sealed class SqlConnectorImport
 /// <summary>
 /// A column an import reads, and the JIM attribute type it arrives as.
 /// </summary>
-internal sealed record SqlImportColumn(string Name, AttributeDataType Type);
+/// <param name="CaseExact">
+/// Whether the column's collation compares text exactly, as discovered with the schema; only an anchor column's is read.
+/// </param>
+internal sealed record SqlImportColumn(string Name, AttributeDataType Type, bool CaseExact = false);
 
 /// <summary>
 /// A column of a result set as it is read: its name, and the JIM attribute type it maps to where JIM has
@@ -1772,6 +1785,21 @@ internal sealed class SqlImportPlan
     internal string? ComposedAnchorName { get; }
 
     internal int ColumnIndex(string columnName) => _columnIndexes[columnName];
+
+    /// <summary>
+    /// An anchor's values composed into the one string that identifies the object to JIM, exactly as read.
+    /// </summary>
+    internal static string AnchorKey(IReadOnlyList<string> anchorParts) =>
+        string.Join(SqlConnectorSchema.ComposedAnchorSeparator, anchorParts);
+
+    /// <summary>
+    /// An anchor's values composed as the database compares them (#2051): each part folded unless its column is
+    /// case-exact. What a related or change-log row is matched back to its object by, since the database joined it
+    /// by its own comparison, not by JIM's.
+    /// </summary>
+    internal string AnchorMatchKey(IReadOnlyList<string> anchorParts) =>
+        string.Join(SqlConnectorSchema.ComposedAnchorSeparator,
+            anchorParts.Select((part, index) => IdentifierKey.For(part, AnchorColumns[index].CaseExact)));
 }
 
 /// <summary>
@@ -1838,7 +1866,9 @@ internal sealed record SqlDeltaKeysetColumn(string Name, AttributeDataType? Type
 /// <summary>
 /// One change a change log records, reduced to what JIM acts on.
 /// </summary>
-internal sealed record SqlChangeLogEntry(string AnchorKey, object?[] AnchorValues, ObjectChangeType ChangeType, string? UnmappedChangeType);
+/// <param name="AnchorKey">The anchor as the change log holds it, which is what a deletion tells JIM.</param>
+/// <param name="MatchKey">The anchor as the database compares it, which is what identifies the object's changes to one another.</param>
+internal sealed record SqlChangeLogEntry(string AnchorKey, string MatchKey, object?[] AnchorValues, ObjectChangeType ChangeType, string? UnmappedChangeType);
 
 /// <summary>
 /// One related table a Watermark Column page watches for changes to its parent object, and the
