@@ -29,7 +29,10 @@
 
     @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
-        <ExpressionTester Expression="@BaseSource.Expression" SampleValuesChanged="OnSampleValuesChanged" />
+        @* Tested as the Attribute Flow it is (#2055): typed inputs, value processing and Missing Input Behaviour, stopping
+           at the base, as a Synchronisation does. *@
+        <ExpressionTester Expression="@BaseSource.Expression" SyncRule="StagedSyncRule" Mapping="Mapping" Source="BaseSource"
+            SampleValuesChanged="OnSampleValuesChanged" />
     }
 
     <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Uniqueness token</MudText>

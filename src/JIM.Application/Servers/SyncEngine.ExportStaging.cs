@@ -1075,7 +1075,7 @@ public partial class SyncEngine
         IExpressionEvaluator expressionEvaluator,
         List<AttributeFlowError>? flowErrors)
     {
-        var source = mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+        var source = AttributeFlowPipeline.GeneratedBaseSource(mapping);
 
         string? baseValue;
         bool baseUnavailable;
@@ -1097,44 +1097,32 @@ public partial class SyncEngine
                 return null;
             }
 
-            if (evaluation.Outcome == ExpressionSourceOutcome.NoValue)
+            // The checks a base must pass, shared with import and the tester (#2055). Export applies no value processing.
+            var generated = AttributeFlowPipeline.ResolveGeneratedBase(evaluation, processText: null);
+            switch (generated.Outcome)
             {
-                // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated
-                // mapping, FR 29) or a null result: wait. The worker resolves this as StickyOnly, which reasserts
-                // whatever the Connected System Object already holds rather than clearing it (FR 10): a
-                // committed generated value must never be recomputed or cleared by its inputs.
-                baseValue = null;
-                baseUnavailable = true;
-            }
-            else if (ExpressionResultValues.IsCollection(evaluation.Result))
-            {
-                // A generated value's base must be a single text value: a uniqueness token is appended to
-                // exactly one candidate, so a collection of anything (#2179, not only a list of text) is a
-                // misconfiguration, not data to select from. Nothing is staged for this attribute this pass.
-                flowErrors?.Add(new AttributeFlowError
-                {
-                    Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
-                    TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
-                    Expression = source.Expression
-                });
-                return null;
-            }
-            else if (!ExpressionText.TryFormat(evaluation.Result, out baseValue))
-            {
-                // A single value in JIM's text form (#2153, N1); a Binary value has none, so it cannot be a base.
-                flowErrors?.Add(new AttributeFlowError
-                {
-                    Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
-                    TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
-                    TargetAttributeType = AttributeDataType.Text,
-                    Expression = source.Expression,
-                    Value = ExpressionText.Describe(evaluation.Result!)
-                });
-                return null;
-            }
-            else
-            {
-                baseUnavailable = baseValue == null;
+                case GeneratedBaseOutcome.Base:
+                    baseValue = generated.BaseValue;
+                    baseUnavailable = false;
+                    break;
+
+                // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated mapping,
+                // FR 29) or a null result: wait. The worker resolves this as StickyOnly, which reasserts whatever the
+                // Connected System Object already holds rather than clearing it (FR 10): a committed generated value
+                // must never be recomputed or cleared by its inputs.
+                case GeneratedBaseOutcome.Waits:
+                    baseValue = null;
+                    baseUnavailable = true;
+                    break;
+
+                // Several values, or a value with no text form: a misconfiguration, not data to select from. Nothing
+                // is staged for this attribute this pass.
+                case GeneratedBaseOutcome.Error:
+                    flowErrors?.Add(GeneratedBaseError(generated, mapping.TargetConnectedSystemAttribute!.Name, source.Expression));
+                    return null;
+
+                default:
+                    throw new InvalidOperationException($"Unexpected generated base outcome '{generated.Outcome}' for a mapping with a base expression.");
             }
         }
 

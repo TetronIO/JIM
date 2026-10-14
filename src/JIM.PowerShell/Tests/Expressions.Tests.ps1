@@ -126,6 +126,41 @@ Describe 'Test-JIMExpression' {
         }
     }
 
+    It 'Tests a Generated Value with no base expression without an expression' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; generatedValue = $true; baseOutcome = 'NoBaseExpression' }
+            }
+
+            $result = Test-JIMExpression -SyncRuleId 12 -MappingId 43
+
+            $script:capturedBody.ContainsKey('expression') | Should -BeFalse
+            $script:capturedBody.mappingId | Should -Be 43
+            $result.BaseOutcome | Should -Be 'NoBaseExpression'
+        }
+    }
+
+    It 'Returns a Generated Value''s base, as the API reports it' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ IsValid = $true; GeneratedValue = $true; BaseOutcome = 'Base'; BaseValue = 'jsmith' }
+            }
+
+            $result = Test-JIMExpression -Expression 'Left(cs["givenName"], 1) + cs["sn"]' -SyncRuleId 12 -MappingId 43 -CsAttributes @{ givenName = 'John'; sn = 'Smith' }
+
+            $result.GeneratedValue | Should -BeTrue
+            $result.BaseValue | Should -Be 'jsmith'
+        }
+    }
+
+    It 'Still requires an expression without an Attribute Flow' {
+        { Test-JIMExpression -MvAttributes @{ Name = 'x' } -ErrorAction Stop } | Should -Throw
+    }
+
     It 'Requires -MappingId with -SyncRuleId' {
         { Test-JIMExpression -Expression '1' -SyncRuleId 12 -ErrorAction Stop } | Should -Throw
     }

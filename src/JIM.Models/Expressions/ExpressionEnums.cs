@@ -169,7 +169,42 @@ public enum AttributeFlowErrorReason
     /// <summary>
     /// The Expression returned several values for a single-valued target attribute.
     /// </summary>
-    ResultMultiValued
+    ResultMultiValued,
+
+    /// <summary>
+    /// A Generated Value's base expression returned more than one value. A base must be one text value, since the
+    /// uniqueness token is added to exactly one candidate.
+    /// </summary>
+    GeneratedBaseNotSingleValue
+}
+
+/// <summary>
+/// What a Generated Value's base expression gives generation (#2055, #242): the base the uniqueness token is added
+/// to, a wait, or an error. Generation itself, which needs the database, is not part of it.
+/// </summary>
+public enum GeneratedBaseOutcome
+{
+    /// <summary>
+    /// A base value, after the mapping's value processing. Generation adds the uniqueness token to it.
+    /// </summary>
+    Base,
+
+    /// <summary>
+    /// No base yet: an input is absent and Missing Input Behaviour is Contribute no value, the Expression returned no
+    /// value, or value processing left nothing. Synchronisation waits; a value already generated is kept, never
+    /// cleared.
+    /// </summary>
+    Waits,
+
+    /// <summary>
+    /// The mapping has no base expression, which a Sequence or Random token allows: the token alone is the value.
+    /// </summary>
+    NoBaseExpression,
+
+    /// <summary>
+    /// An error: nothing is generated this time, and the error is reported.
+    /// </summary>
+    Error
 }
 
 /// <summary>
