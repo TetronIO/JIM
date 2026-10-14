@@ -232,6 +232,17 @@
                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
                                     </MudTooltip>
                                 }
+                                @* A row is one line in a virtualised grid, so the note is an icon here and a caption on the card. *@
+                                @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, context.Item, _passwordSynchronisationConfigured))
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent><TooltipText Text="@PasswordDeliveryNote" /></TooltipContent>
+                                        <ChildContent>
+                                            <MudIcon Icon="@Icons.Material.Outlined.Info" Color="Color.Info" Size="Size.Small" Class="ml-2"
+                                                     aria-label="@PasswordDeliveryNote" data-testid="jim-password-delivery-note" />
+                                        </ChildContent>
+                                    </MudTooltip>
+                                }
                             }
                             @* Unique Value Generation (#242, Phase 6): the retired values register's size, only
                                when there is something in it. *@
@@ -485,6 +496,12 @@
                                 </MudTooltip>
                             }
                         </div>
+                        @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, attributeFlowRule, _passwordSynchronisationConfigured))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2" Style="max-width: 32rem;" data-testid="jim-password-delivery-note">
+                                @PasswordDeliveryNote
+                            </MudText>
+                        }
                     }
                 </MudPaper>
             }
@@ -1111,6 +1128,33 @@
     private AttributeFlowEditBaseline? _editBaseline;
 
     private ExpressionEditor? _expressionEditor;
+
+    // ─── Password delivery and userAccountControl (#2159) ───
+
+    /// <summary>
+    /// What the note on a userAccountControl Attribute Flow says, wherever passwords are delivered to this rule's
+    /// accounts (<see cref="AccountControlFlowNotes.ShowsPasswordDeliveryNote"/>).
+    /// </summary>
+    private const string PasswordDeliveryNote =
+        "Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.";
+
+    /// <summary>
+    /// Whether this rule's Connected System is configured for Password Synchronisation, so that passwords reach its
+    /// accounts other than as an Initial Password. Read once per Connected System, not per row.
+    /// </summary>
+    private bool _passwordSynchronisationConfigured;
+    private int? _passwordSynchronisationReadForConnectedSystemId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystemId <= 0 ||
+            _passwordSynchronisationReadForConnectedSystemId == SyncRule.ConnectedSystemId)
+            return;
+
+        _passwordSynchronisationReadForConnectedSystemId = SyncRule.ConnectedSystemId;
+        using var jim = JimFactory.Create();
+        _passwordSynchronisationConfigured = await jim.ConnectedSystems.GetPasswordSynchronisationAsync(SyncRule.ConnectedSystemId) != null;
+    }
 
     protected override async Task OnInitializedAsync()
     {

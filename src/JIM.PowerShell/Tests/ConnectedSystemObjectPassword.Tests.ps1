@@ -266,6 +266,49 @@ Describe 'Set-JIMConnectedSystemObjectPassword' {
             }
         }
 
+        It 'Should warn, not error, when the account took the password but could not apply everything asked' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        ActivityId = [guid]::NewGuid()
+                        Origin     = 'Explicit'
+                        Settled    = $true
+                        Targets    = @([PSCustomObject]@{ ConnectedSystemId = 1; ConnectedSystemName = 'Corporate OpenLDAP'; Enabled = $true; State = 'Set'; NextAttemptAt = $null; Message = 'Password set on Corporate OpenLDAP. Not everything asked for could be applied: the password ages according to its own policy.'; AttemptCount = 1; CompletedWithWarning = $true })
+                    }
+                }
+
+                $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id ([guid]::NewGuid()) `
+                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -Force `
+                    -WarningVariable warnings -WarningAction SilentlyContinue -ErrorVariable refusals -ErrorAction SilentlyContinue
+
+                $result.Targets[0].State | Should -Be 'Set'
+                @($refusals).Count | Should -Be 0
+                @($warnings).Count | Should -Be 1
+                "$($warnings[0])" | Should -BeLike 'Corporate OpenLDAP*own policy.'
+            }
+        }
+
+        It 'Should not warn when the account took the password exactly as asked' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        ActivityId = [guid]::NewGuid()
+                        Origin     = 'Explicit'
+                        Settled    = $true
+                        Targets    = @([PSCustomObject]@{ ConnectedSystemId = 1; ConnectedSystemName = 'Contoso AD'; Enabled = $true; State = 'Set'; NextAttemptAt = $null; Message = 'Password set on Contoso AD.'; AttemptCount = 1; CompletedWithWarning = $false })
+                    }
+                }
+
+                $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id ([guid]::NewGuid()) `
+                    -Password (ConvertTo-SecureString 'Correct-Horse-42' -AsPlainText -Force) -Force -WarningVariable warnings -WarningAction SilentlyContinue
+
+                $result.Targets[0].State | Should -Be 'Set'
+                @($warnings).Count | Should -Be 0
+            }
+        }
+
         It 'Should warn, not error, when the wait ran out with the account still in flight' {
             InModuleScope JIM {
                 $script:JIMConnection = @{ Url = 'https://jim.example.test' }

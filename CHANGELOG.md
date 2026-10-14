@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
 - 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
 - 🔄 Example Data dependencies now use scoping's operators and names, and every one works, comparing values as the attribute's own type. `GreaterThanOrEqual`, `LessThanOrEqual` and `Like` become `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains`. (#2053)
 - 🔄 A criterion compared with an empty value is no longer accepted; use **has no value** or **has a value**, which existing criteria that relied on an empty value have been converted to. (#2053)
@@ -100,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
+- 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
 - 🐛 The portal now refuses to save an Attribute Flow whose expression does not parse, naming the problem under the field (and suggesting the right case for a mistyped function name), instead of failing at synchronisation. (#2053)
 - 🐛 A scoping pattern that runs past its time limit on one object now stops only that object, with an error, when JIM evaluates exports, cleans up references to deleted objects or deletes a Connected System, instead of failing the whole run. (#2053)
 - 🐛 On Active Directory, an account your Attribute Flow enables while its Initial Password is queued, retrying or parked, like a pre-hire starting before it lands, waits disabled for it instead of failing the export; once it expires (7 days by default), it fails as before. (#2158)
@@ -214,6 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 The web, worker and scheduler images now ship .NET and ASP.NET Core 10.0.13, and the worker and scheduler's own .NET packages move to 10.0.13 with them, fixing the vulnerabilities in the 10.0.11 runtime and 10.0.12 packages they carried, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
 - 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
