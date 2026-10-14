@@ -45,9 +45,10 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Exporting | Drift Detection: whether a Connected System contributes an attribute that an export expression names | Same thing? | Ignore case | ❌ No |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
 | Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
-| Expressions | `==`, `Eq`, `StartsWith`, `EndsWith`, `Contains` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
-| Expressions | `Where` | Condition? | Exact | ✅ Pass `true` as the fourth argument |
-| Expressions | `Replace`, `Split` | Changes text rather than comparing it | Exact | ❌ No |
+| Expressions | `==`, `Eq` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
+| Expressions | `StartsWith`, `EndsWith`, `Contains`, `IsMatch`, `Where` | Condition? | Exact, character by character | ✅ Pass `true` as the last argument |
+| Expressions | `RegexReplace` | Changes text rather than comparing it | Exact | ✅ Pass `true` as the fourth argument |
+| Expressions | `Replace`, `Split`, `RegexExtract` | Changes text rather than comparing it | Exact | ❌ No |
 | Searching | Predefined Search criteria | Condition? | Exact | ✅ Per criterion |
 | Searching | Portal search boxes and list filters, log search | Finding? | Ignore case | ❌ No |
 | Configuration | [Names you give JIM](#configuration-names-ignore-case): attribute, Object Type, Connected System, Run Profile, Connector and Predefined Search names | Same thing? | Ignore case | ❌ No |
