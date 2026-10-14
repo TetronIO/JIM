@@ -42,6 +42,25 @@ public class SyncRuleScopingProposalMaterialiserTests
     }
 
     [Test]
+    public void Materialise_ExpressionProposal_CarriesTheExpressionAndNamesNoAttribute()
+    {
+        var storedRule = BuildImportRule();
+        var proposal = new SyncRuleScopingProposal([Group(new SyncRuleScopingCriterionProposal(null, null, SearchComparisonType.Equals,
+            StringValue: "sales", Expression: "Lower(cs[\"department\"])", CompareAs: AttributeDataType.Text))]);
+
+        var standIn = SyncRuleScopingProposalMaterialiser.Materialise(storedRule, proposal, ConnectedSystemAttributes(), []);
+
+        var criterion = standIn.ObjectScopingCriteriaGroups.Single().Criteria.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.EqualTo("Lower(cs[\"department\"])"));
+            Assert.That(criterion.CompareAs, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(criterion.IsValid(), Is.True);
+            Assert.That(new ScopingEvaluationServer().IsCsoInScopeForImportRule(CsoWithDepartment("Sales"), standIn), Is.True);
+        }
+    }
+
+    [Test]
     public void Materialise_ImportProposal_ActuallyScopesWhenEvaluated()
     {
         // The assertion that would have caught a half-attached stand-in: put the materialised rule to the real

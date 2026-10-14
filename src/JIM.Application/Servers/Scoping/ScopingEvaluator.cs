@@ -282,6 +282,30 @@ internal static class ScopingEvaluator
     }
 
     /// <summary>
+    /// The dates <paramref name="criterion"/>'s expression computes for the object; none when it computes none, or its
+    /// value cannot be evaluated or read as dates (the evaluation itself reports that).
+    /// </summary>
+    internal static IReadOnlyList<DateTime> ComputedDates<TSource>(SyncRuleScopingCriteria criterion, TSource source, DateTime nowUtc,
+        IExpressionEvaluator expressions)
+        where TSource : struct, IScopingValueSource
+    {
+        if (!criterion.IsExpression)
+            return [];
+
+        try
+        {
+            var result = expressions.Evaluate(criterion.Expression!, source.ExpressionContext(nowUtc));
+            return TryReadComputedValues(result, AttributeDataType.DateTime, out var values) == null
+                ? values.Where(value => value.DateTimeValue.HasValue).Select(value => value.DateTimeValue!.Value).ToList()
+                : [];
+        }
+        catch (ExpressionEvaluationException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// Reads every value an expression computed as <paramref name="type"/>, the way an expression's result is read
     /// everywhere else: each element of a collection, with no value and blank text read as no value. Returns why one
     /// cannot be read, naming it, or null when all can.

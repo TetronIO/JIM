@@ -135,6 +135,18 @@ public class ScopingEvaluationServer
 
     #endregion
 
+    /// <summary>
+    /// The dates an expression criterion computes for <paramref name="cso"/> as of <paramref name="nowUtc"/>; none when
+    /// it computes none, or cannot be evaluated or read as dates. The Scope tester uses these to find when a relative
+    /// date criterion's outcome can next change.
+    /// </summary>
+    internal IReadOnlyList<DateTime> ComputedDates(SyncRuleScopingCriteria criterion, ConnectedSystemObject cso, DateTime nowUtc) =>
+        ScopingEvaluator.ComputedDates(criterion, new CsoScopingValueSource(cso), nowUtc, _expressions.Value);
+
+    /// <summary>The dates an expression criterion computes for <paramref name="mvo"/>; see the import overload.</summary>
+    internal IReadOnlyList<DateTime> ComputedDates(SyncRuleScopingCriteria criterion, MetaverseObject mvo, DateTime nowUtc) =>
+        ScopingEvaluator.ComputedDates(criterion, new MvoScopingValueSource(mvo), nowUtc, _expressions.Value);
+
     private ScopingExplanation Explain<TSource>(SyncRule rule, TSource source, DateTime? nowUtc)
         where TSource : struct, IScopingValueSource
     {

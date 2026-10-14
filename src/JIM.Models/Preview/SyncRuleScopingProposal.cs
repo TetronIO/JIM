@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 
@@ -105,7 +106,8 @@ public record SyncRuleScopingCriteriaGroupProposal(
 }
 
 /// <summary>
-/// One proposed criterion: the attribute it reads, how it compares, and what it compares against.
+/// One proposed criterion: the attribute it reads (or the expression it computes), how it compares, and what it
+/// compares against.
 /// </summary>
 /// <remarks>
 /// Attributes are carried as ids rather than entities so the proposal stays serialisable. The evaluator reads the
@@ -127,6 +129,8 @@ public record SyncRuleScopingCriteriaGroupProposal(
 /// <param name="RelativeCount">The size of the offset from now, when <paramref name="ValueMode"/> is Relative.</param>
 /// <param name="RelativeUnit">The unit of the offset from now, when <paramref name="ValueMode"/> is Relative.</param>
 /// <param name="RelativeDirection">The direction of the offset from now, when <paramref name="ValueMode"/> is Relative.</param>
+/// <param name="Expression">The expression whose computed value the criterion compares, in place of an attribute.</param>
+/// <param name="CompareAs">The type an expression's computed value is compared as; null for an attribute criterion.</param>
 public record SyncRuleScopingCriterionProposal(
     int? MetaverseAttributeId,
     int? ConnectedSystemAttributeId,
@@ -142,8 +146,15 @@ public record SyncRuleScopingCriterionProposal(
     DateCriteriaValueMode ValueMode = DateCriteriaValueMode.Absolute,
     int? RelativeCount = null,
     RelativeDateUnit? RelativeUnit = null,
-    RelativeDateDirection? RelativeDirection = null)
+    RelativeDateDirection? RelativeDirection = null,
+    string? Expression = null,
+    AttributeDataType? CompareAs = null)
 {
+    /// <summary>
+    /// Whether the criterion compares an expression's computed value rather than an attribute.
+    /// </summary>
+    public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);
+
     /// <summary>
     /// This criterion as it currently stands on a Synchronisation Rule.
     /// </summary>
@@ -170,7 +181,9 @@ public record SyncRuleScopingCriterionProposal(
             criterion.ValueMode,
             criterion.RelativeCount,
             criterion.RelativeUnit,
-            criterion.RelativeDirection);
+            criterion.RelativeDirection,
+            criterion.Expression,
+            criterion.CompareAs);
     }
 
     internal string CanonicalKey()
@@ -182,6 +195,8 @@ public record SyncRuleScopingCriterionProposal(
         key.Append(CultureInfo.InvariantCulture, $";dt={DateTimeValue?.ToString("O", CultureInfo.InvariantCulture)}");
         key.Append(CultureInfo.InvariantCulture, $";b={BoolValue};g={GuidValue};cse={CaseSensitive}");
         key.Append(CultureInfo.InvariantCulture, $";vm={ValueMode};rc={RelativeCount};ru={RelativeUnit};rd={RelativeDirection}");
+        // Length-prefixed, so no expression text can run into the fields around it and collide with another key.
+        key.Append(CultureInfo.InvariantCulture, $";ca={CompareAs};ex={Expression?.Length}:{Expression}");
         return key.ToString();
     }
 }
