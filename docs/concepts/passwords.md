@@ -34,6 +34,17 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 
 The Connected System Object exists before its password does: setting a password cannot fail the export that created it, because if it could, JIM would treat the Connected System Object as never created and try to create it again. Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it, recorded as "Initial password queued for delivery to {system}", and the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. Because it shares the queue with every other password change, a refused or unreachable Connected System Object is retried on the Connected System's own [Password Synchronisation schedule](password-synchronisation.md) rather than waiting for another export run.
 
+**A password change already waiting for the person becomes the first password instead.** Where the person's own password change, or a password an administrator set on the new Connected System Object before it was created, is already waiting when the export creates it, JIM queues no Initial Password: that change is delivered as the Connected System Object's first password, usually within seconds, and the export records "Initial password not queued for {system}" saying so. Passwords replace each other; what the Initial Password promises about the Connected System Object carries forward. The delivery enables it as **Enable the Connected System Object once the password is set** says, and sets or clears "Password never expires" from the Initial Password's expiry, except where an export has written those itself, exactly as it would for the Initial Password. It keeps its own password and expiry, so a password the person chose is never made to change at the next sign-in. The same holds when the person's change arrives after the Initial Password was queued but before it was delivered. On **Operations > Passwords** and the identity's Password panel, such a change is marked **First password**; cancelling it leaves the Connected System Object without a password from JIM, and the portal asks you before it does.
+
+**Where the waiting change cannot reach the new Connected System Object, the Initial Password replaces it.** JIM replaces the waiting change with the Initial Password when:
+
+- Password Synchronisation is switched off on the system, because JIM delivers a first password whatever the pause;
+- JIM stopped trying to send the change because the system refused it or it can never be sent, which would leave the Connected System Object with no password;
+- the change is for a different Object Type from the new Connected System Object;
+- an administrator set it for a Connected System Object that no longer exists, or that is no longer the person's.
+
+A person has one Connected System Object per Connected System, so the change could not reach another of theirs there either. The export's Activity completes with a warning saying why, and the person's change records that it was not set on that system. The change is still delivered to every other system.
+
 ### What you will see afterwards
 
 Every Connected System Object ends up in one of five states, each recorded as a child Activity of the one written when the password was queued.

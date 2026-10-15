@@ -100,7 +100,9 @@ function Set-JIMSyncRuleInitialPassword {
     .PARAMETER EnableAccount
         Whether the Connected System Object is enabled once the password is set. It applies only where no export has
         written the object's enabled state (such as userAccountControl) by the time the password is delivered; where
-        one has, the Attribute Flow decides. $false leaves it as it was created.
+        one has, the Attribute Flow decides. $false leaves it as it was created. It also applies, with whether the
+        password never expires, when a password change already waiting for the person is delivered as the object's
+        first password instead of the Initial Password.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.

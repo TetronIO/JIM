@@ -60,9 +60,29 @@ public class PendingPasswordChangeHeader
     public PendingPasswordChangeOrigin Origin { get; set; } = PendingPasswordChangeOrigin.Propagated;
 
     /// <summary>
-    /// The Synchronisation Rule generating the password for a Provisioned row, or null for any other origin.
+    /// The Synchronisation Rule whose Initial Password this change delivers an account's first password under, or null
+    /// where it owes no account a first password. For a Provisioned change the rule also generates the password; for a
+    /// change carrying a first password in place of the Initial Password, only the rule's promises about the account
+    /// apply (whether it is enabled, and whether its password never expires).
     /// </summary>
     public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Connected System Object this change also gives its first password, or null. Equal to the change's own
+    /// account for a Provisioned change. Set on a propagated or explicit change that was already waiting as JIM
+    /// provisioned that Connected System Object, or that replaced its Initial Password before it was delivered: the
+    /// change's own password is delivered, with the provisioning Synchronisation Rule's Initial Password settings for
+    /// enabling the Connected System Object and for whether its password never expires. Cancelling such a change
+    /// leaves the Connected System Object without a first password.
+    /// </summary>
+    public Guid? ProvisionedConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// Whether this is a propagated or explicit change carrying a Connected System Object's first password in place of
+    /// its Initial Password: what the "First password" marker on the queue and the person's Password tab shows.
+    /// </summary>
+    public bool CarriesFirstPassword =>
+        Origin != PendingPasswordChangeOrigin.Provisioned && ProvisionedConnectedSystemObjectId.HasValue;
 
     public PendingPasswordChangeStatus Status { get; set; }
 
@@ -113,17 +133,24 @@ public class PendingPasswordChangeHeader
     /// </summary>
     public bool IsDue(DateTime asOf) =>
         Status == PendingPasswordChangeStatus.Pending
-        && (ConnectedSystemTakingPasswords || Origin != PendingPasswordChangeOrigin.Propagated)
+        && (ConnectedSystemTakingPasswords || !HeldWhilePasswordSynchronisationIsOff)
         && (NextRetryAt == null || NextRetryAt <= asOf);
 
     /// <summary>
     /// Whether the change is waiting on somebody switching its Connected System back on rather than on JIM.
     /// Distinguished from an ordinary wait because the remedy is a person's, not a retry's. Only a propagated
-    /// change is ever held; an explicit set or a provisioned row is delivered whether or not the system is
-    /// taking propagated passwords.
+    /// change is ever held, and not one carrying a Connected System Object's first password; an explicit set or a
+    /// provisioned row is delivered whether or not the system is taking propagated passwords.
     /// </summary>
     public bool IsHeld =>
         Status == PendingPasswordChangeStatus.Pending
         && !ConnectedSystemTakingPasswords
-        && Origin == PendingPasswordChangeOrigin.Propagated;
+        && HeldWhilePasswordSynchronisationIsOff;
+
+    /// <summary>
+    /// Whether a switched-off system holds a change of this kind at all: a propagated change, unless it carries a
+    /// Connected System Object's first password, which is delivered like the Initial Password it stands in for.
+    /// </summary>
+    private bool HeldWhilePasswordSynchronisationIsOff =>
+        Origin == PendingPasswordChangeOrigin.Propagated && !ProvisionedConnectedSystemObjectId.HasValue;
 }

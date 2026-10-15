@@ -188,6 +188,21 @@ public class PasswordChangeOutcomesTests
     }
 
     /// <summary>
+    /// A propagated change carrying a Connected System Object's first password (#2160) is delivered like the Initial
+    /// Password it stands in for, so a paused system does not hold it: it is queued and on its way.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_PropagatedRowCarryingAFirstPasswordOnAPausedSystem_IsQueuedNotHeldAsync()
+    {
+        _targets.Single(t => t.ConnectedSystemId == CorporateAdId).Enabled = false;
+        await RowAsync(CorporateAdId, r => r.CarryInitialPassword(Guid.NewGuid(), 500, false, r.ExpiresAt));
+
+        var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
+
+        Assert.That(outcomes!.Targets.Single().State, Is.EqualTo(PasswordChangeTargetState.Queued));
+    }
+
+    /// <summary>
     /// Decision D1, widened by #1697: a Provisioned row's account is already named, exactly like an
     /// explicit set, so it is delivered on a paused system rather than held.
     /// </summary>

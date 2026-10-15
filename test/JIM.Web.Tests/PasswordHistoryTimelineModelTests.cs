@@ -496,4 +496,55 @@ public class PasswordHistoryTimelineModelTests
     }
 
     #endregion
+
+    #region notes about an Initial Password (#2160)
+
+    /// <summary>
+    /// Export staging records what became of an Initial Password it did not queue (carried by a change already
+    /// waiting, or not queued at all) as an Activity of its own, which has no per-system outcomes. It reads as a note
+    /// in the export's own words, coloured by how it completed, never as a change that reached no Connected System.
+    /// </summary>
+    [Test]
+    public void Build_InitialPasswordNoteWithNoOutcomes_ReadsAsANoteInItsOwnWords()
+    {
+        var note = Change(Now.AddMinutes(-5), PendingPasswordChangeOrigin.Provisioned, "System", ActivityInitiatorType.System);
+        note.Message = "Initial password not queued for Corporate AD: a password change for another of this person's Connected System Objects there is still waiting.";
+        note.Status = ActivityStatus.CompleteWithError;
+
+        var entry = Single(PasswordHistoryTimelineModel.Build([note], [], Now));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Note, Is.EqualTo(note.Message));
+            Assert.That(entry.DotColour, Is.EqualTo(Color.Error));
+            Assert.That(entry.Targets, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Build_InitialPasswordStillQueued_IsAChangeNotANote()
+    {
+        var change = Change(Now.AddMinutes(-5), PendingPasswordChangeOrigin.Provisioned, "System", ActivityInitiatorType.System);
+        change.Message = "Initial password queued for delivery to Corporate AD.";
+
+        var entry = Single(PasswordHistoryTimelineModel.Build([change],
+            [Row(3, "Corporate AD", PendingPasswordChangeStatus.Pending, Now.AddMinutes(-5), origin: PendingPasswordChangeOrigin.Provisioned)], Now));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Note, Is.Null);
+            Assert.That(entry.Targets, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void Build_PropagatedChangeThatReachedNothing_IsNotANote()
+    {
+        var change = Change(Now.AddMinutes(-5), PendingPasswordChangeOrigin.Propagated);
+        change.Message = "No Connected System is configured for Password Synchronisation.";
+
+        Assert.That(Single(PasswordHistoryTimelineModel.Build([change], [], Now)).Note, Is.Null);
+    }
+
+    #endregion
 }

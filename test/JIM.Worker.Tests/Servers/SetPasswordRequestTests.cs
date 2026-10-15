@@ -608,6 +608,47 @@ public class SetPasswordRequestTests
         }
     }
 
+    /// <summary>
+    /// Decision (#2160): the Initial Password wins over a password change that would be held by a paused system. A
+    /// propagated change therefore does not replace a first password still owed on a Connected System whose Password
+    /// Synchronisation is switched off; it is not queued there, the result does not claim it was, and the Activity
+    /// says why. Everywhere else it is queued as usual.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_NoTargets_PausedSystemStillOwingAFirstPassword_IsNotQueuedThereAndSaysSoAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD");
+        var hrPortal = ArrangeSystem(HrPortalId, "HR Portal", enabled: false);
+        ArrangeAccount(CorporateAdId);
+        var hrAccount = ArrangeAccount(HrPortalId);
+        _syncRepository.SeedConnectedSystem(hrPortal);
+        await _syncRepository.QueuePasswordChangesAsync([new PendingPasswordChange
+        {
+            MetaverseObjectId = _metaverseObjectId,
+            ConnectedSystemId = HrPortalId,
+            ConnectedSystemObjectId = hrAccount.Id,
+            ProvisionedConnectedSystemObjectId = hrAccount.Id,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = 7,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        }]);
+
+        var result = await _server.SetPasswordAsync(Request(null), CancellationToken.None);
+
+        var hrRow = _syncRepository.PendingPasswordChanges.Values.Single(r => r.ConnectedSystemId == HrPortalId);
+        var parent = _createdActivities.Single(a => a.Id == result.ActivityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hrRow.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned), "the Initial Password stays");
+            Assert.That(_syncRepository.PendingPasswordChanges.Values.Single(r => r.ConnectedSystemId == CorporateAdId).Origin,
+                Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(result.Targets.Select(t => t.ConnectedSystemId), Is.EquivalentTo(new[] { CorporateAdId }));
+            Assert.That(parent.Message, Does.Contain("Not queued for HR Portal"));
+        }
+    }
+
     [Test]
     public async Task SetPasswordAsync_NoTargetsAndNothingConfigured_RecordsAnExplicitNoOpAsync()
     {
