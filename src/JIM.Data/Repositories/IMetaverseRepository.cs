@@ -71,6 +71,12 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// The identifiers of every Metaverse Object of one type, for a caller that loads them in batches behind this read
+    /// (Npgsql allows one command per connection, so streaming the objects while writing is not an option).
+    /// </summary>
+    public Task<List<Guid>> GetMetaverseObjectIdsOfTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Batch-loads Metaverse Objects by ID with their Type and attribute values, TRACKED, for callers that
     /// mutate and persist the loaded graph in the same context (#1537's deletion recall). The no-tracking
     /// sibling above is unusable there: without identity resolution it materialises duplicate instances of

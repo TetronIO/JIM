@@ -9,7 +9,8 @@ function New-JIMScopingCriterion {
     .DESCRIPTION
         Adds a criterion to a scoping criteria group: one attribute compared with one value. Name a Metaverse
         attribute for an export Synchronisation Rule and a Connected System attribute for an import one, and give
-        the value in the parameter for the attribute's data type; HasValue and HasNoValue take no value.
+        the value in the parameter for the attribute's data type; HasValue and HasNoValue take no value. To compare a
+        value computed from the object instead, give -Expression and the type to compare it as in -CompareAs.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule.
@@ -30,6 +31,16 @@ function New-JIMScopingCriterion {
 
     .PARAMETER ConnectedSystemAttributeName
         The name of the Connected System attribute to test, instead of its ID.
+
+    .PARAMETER Expression
+        An expression whose computed value the criterion compares, in place of an attribute. It reads the object the
+        Synchronisation Rule scopes: cs["name"] on an import rule, mv["Name"] on an export rule. Use it to compare a
+        value reshaped first, such as Lower(Trim(cs["department"])). Requires -CompareAs.
+
+    .PARAMETER CompareAs
+        The type the expression's computed value is compared as, which decides the comparisons and the value parameter
+        that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type
+        stops that object with an error rather than deciding its scope.
 
     .PARAMETER ComparisonType
         How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
@@ -118,6 +129,18 @@ function New-JIMScopingCriterion {
 
         Creates a criterion that keeps only objects with a mail address in the example.org domain, ignoring case.
 
+    .EXAMPLE
+        New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -Expression 'Lower(Trim(cs["department"]))' -CompareAs Text -ComparisonType StartsWith -StringValue 'fin'
+
+        Creates a criterion for an import Synchronisation Rule that keeps objects whose department starts with 'fin',
+        however it is cased or padded.
+
+    .EXAMPLE
+        New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -Expression 'ParseDate(cs["startDate"], "dd/MM/yyyy")' -CompareAs DateTime -ComparisonType LessThanOrEquals -ValueMode Relative -RelativeCount 14 -RelativeUnit Days -RelativeDirection FromNow
+
+        Creates a criterion that brings people into scope 14 days before a start date held as text. The cmdlet warns
+        that every Temporal Scope Reconciliation then evaluates every object of the type.
+
     .LINK
         Get-JIMScopingCriteria
         Remove-JIMScopingCriterion
@@ -143,6 +166,14 @@ function New-JIMScopingCriterion {
 
         [Parameter(Mandatory, ParameterSetName = 'ByCsName')]
         [string]$ConnectedSystemAttributeName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Expression,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
+        [ValidateSet('Text', 'Number', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Guid')]
+        [string]$CompareAs,
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
@@ -263,6 +294,12 @@ function New-JIMScopingCriterion {
             Write-Verbose "Resolved '$ConnectedSystemAttributeName' to attribute ID $($attribute.id)"
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ByExpression') {
+            $body.expression = $Expression
+            $body.compareAs = $CompareAs
+            $attrDisplay = "expression $Expression"
+        }
+
         # Add the value based on what was provided
         if ($PSBoundParameters.ContainsKey('StringValue')) {
             $body.stringValue = $StringValue
@@ -312,6 +349,12 @@ function New-JIMScopingCriterion {
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria" -Method 'POST' -Body $body
+
+                # Something the administrator should know about the criterion as saved, such as an expression compared
+                # against a relative date costing a full pass on every Temporal Scope Reconciliation.
+                if ($result.notice) {
+                    Write-Warning $result.notice
+                }
 
                 Write-Verbose "Created criterion ID: $($result.id)"
 
