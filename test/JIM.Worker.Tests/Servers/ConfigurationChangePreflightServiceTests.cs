@@ -40,6 +40,7 @@ public class ConfigurationChangePreflightServiceTests
     {
         TestUtilities.SetEnvironmentVariables();
         _repo = new Mock<IRepository>();
+        _repo.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _activityRepo = new Mock<IActivityRepository>();
         _serviceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);

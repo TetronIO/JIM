@@ -80,7 +80,7 @@ public partial class ConnectedSystemServer
     {
         await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
-            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey)),
+            async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
@@ -225,7 +225,7 @@ public partial class ConnectedSystemServer
             async hashKey =>
             {
                 var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-                return connectedSystem == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+                return connectedSystem == null ? null : await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey);
             },
             $"Connected System {connectedSystemId}");
     }
