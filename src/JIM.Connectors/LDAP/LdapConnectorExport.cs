@@ -402,6 +402,11 @@ internal class LdapConnectorExport
             workingDn = ProcessRename(currentDn, newDn);
             wasRenamed = true;
         }
+        else if (GetCaseOnlyRenameDn(pendingExport, currentDn, newDn) is { } caseOnlyRenameDn)
+        {
+            workingDn = ProcessRename(currentDn, caseOnlyRenameDn);
+            wasRenamed = true;
+        }
 
         // Track whether placeholder modifications were injected for error handling
         var hasPlaceholderModifications = RequiresPlaceholderMember(pendingExport);
@@ -879,6 +884,11 @@ internal class LdapConnectorExport
 
             // Sequential within this export: rename must complete before modify
             workingDn = await ProcessRenameAsync(currentDn, newDn);
+            wasRenamed = true;
+        }
+        else if (GetCaseOnlyRenameDn(pendingExport, currentDn, newDn) is { } caseOnlyRenameDn)
+        {
+            workingDn = await ProcessRenameAsync(currentDn, caseOnlyRenameDn);
             wasRenamed = true;
         }
 
@@ -1840,6 +1850,41 @@ internal class LdapConnectorExport
             results.Add(NewModification(consolidated.AttributeName, consolidated.Operation, values.Skip(i).Take(_modifyBatchSize)));
 
         return results;
+    }
+
+    /// <summary>
+    /// The distinguished name a change of case to the object's own name gives it (#2051), or null when the export makes
+    /// no such change. A distinguished name is compared ignoring case, because the directory owns the case of its parent
+    /// components, so a case-only change is read from the object's relative name: the RDN attribute's new value
+    /// (<c>cn</c>, which compares exactly), else the leaf of a staged distinguished name. The parent is kept as the
+    /// directory holds it. Only a single-valued RDN whose value differs from the current one in case alone qualifies; any
+    /// other change of name comes with a staged distinguished name, and is a rename of its own.
+    /// </summary>
+    internal static string? GetCaseOnlyRenameDn(PendingExport pendingExport, string currentDn, string? newDn)
+    {
+        if (!LdapDistinguishedName.TryParse(currentDn, out var current) || current.LeafRdn.Components.Count != 1)
+            return null;
+
+        var leaf = current.LeafRdn.Components[0];
+        var newValue = pendingExport.AttributeValueChanges
+            .LastOrDefault(change => change.ChangeType == PendingExportAttributeChangeType.Update &&
+                                     change.StringValue != null &&
+                                     change.Attribute?.Name.Equals(leaf.Type, StringComparison.OrdinalIgnoreCase) == true)?
+            .StringValue;
+
+        if (newValue == null &&
+            LdapDistinguishedName.TryParse(newDn, out var staged) &&
+            staged.LeafRdn.Components.Count == 1 &&
+            staged.LeafRdn.Components[0].Type.Equals(leaf.Type, StringComparison.OrdinalIgnoreCase))
+            newValue = staged.LeafRdn.Components[0].Value;
+
+        if (newValue == null ||
+            string.Equals(newValue, leaf.Value, StringComparison.Ordinal) ||
+            !string.Equals(newValue, leaf.Value, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var newRdn = $"{leaf.Type}={LdapConnectorUtilities.EscapeRdnValue(newValue)}";
+        return current.Parent == null ? newRdn : $"{newRdn},{current.Parent}";
     }
 
     /// <summary>

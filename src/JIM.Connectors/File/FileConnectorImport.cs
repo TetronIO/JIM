@@ -47,6 +47,42 @@ internal class FileConnectorImport
         _progress = progress;
     }
 
+    /// <summary>
+    /// Checks the file's header row against the schema before any row is read (#2051). Columns name their attributes
+    /// ignoring case, so two columns differing only in case cannot be told apart, and a column the schema reads (a
+    /// selected attribute, or an External ID or Secondary External ID) that the file lacks would otherwise be read as no
+    /// value and clear the attribute on every object. Either fails the import, naming the columns.
+    /// </summary>
+    private void ValidateHeader(string[] header)
+    {
+        var clashes = header
+            .GroupBy(column => IdentifierKey.For(column, caseExact: false), StringComparer.Ordinal)
+            .Where(group => group.Distinct(StringComparer.Ordinal).Count() > 1)
+            .Select(group => string.Join(", ", group.Distinct(StringComparer.Ordinal).Select(column => $"'{column}'")))
+            .ToList();
+        if (clashes.Count > 0)
+            throw new InvalidDataException(
+                $"The file '{_reader.FileName}' has columns whose names differ only in case ({string.Join("; ", clashes)}). " +
+                "Columns are matched to attributes ignoring case, so JIM cannot tell which to read. Rename or remove one of each.");
+
+        var columns = header.ToHashSet(IdentifierKey.Comparer(caseExact: false));
+        var objectTypes = _connectedSystem.ObjectTypes!
+            .Where(objectType => objectType.Selected &&
+                                 (string.IsNullOrEmpty(_objectTypeInfo.PredefinedObjectType) ||
+                                  objectType.Name.Equals(_objectTypeInfo.PredefinedObjectType, StringComparison.OrdinalIgnoreCase)));
+        var missing = objectTypes
+            .SelectMany(objectType => objectType.Attributes
+                .Where(attribute => attribute.Selected || attribute.IsExternalId || attribute.IsSecondaryExternalId)
+                .Select(attribute => attribute.Name))
+            .Where(name => !columns.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (missing.Count > 0)
+            throw new InvalidDataException(
+                $"The file '{_reader.FileName}' has no column for {string.Join(", ", missing.Select(name => $"'{name}'"))}, which the schema reads. " +
+                "Add the column, or refresh the schema and deselect the attribute.");
+    }
+
     internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
     {
         _logger.Verbose("GetFullImportObjects() called");
@@ -64,6 +100,7 @@ internal class FileConnectorImport
 
         await _reader.CsvReader.ReadAsync();
         _reader.CsvReader.ReadHeader();
+        ValidateHeader(_reader.CsvReader.HeaderRecord ?? []);
 
         var rowsRead = 0;
         while (await _reader.CsvReader.ReadAsync())
