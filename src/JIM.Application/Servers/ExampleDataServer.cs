@@ -235,6 +235,7 @@ public class ExampleDataServer
     public async Task CreateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
         template.Validate();
+        await EnsureTemplateExpressionsAreValidAsync(template);
         await EnsureTemplateNameIsUniqueAsync(template);
 
         var activity = new Activity
@@ -267,6 +268,7 @@ public class ExampleDataServer
         {
             // the incoming graph replaces the persisted one, so it must be valid in its own right.
             template.Validate();
+            await EnsureTemplateExpressionsAreValidAsync(template);
         }
         else if (string.IsNullOrEmpty(template.Name))
         {
@@ -997,6 +999,107 @@ public class ExampleDataServer
         };
     }
 
+    /// <summary>What an attribute's expression can read: the attributes the template generates on the object, other than itself.</summary>
+    private static List<MetaverseAttribute> GeneratedAlongside(ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute) =>
+        objectType.TemplateAttributes
+            .Where(other => other.MetaverseAttribute != null && !ReferenceEquals(other, attribute))
+            .Select(other => other.MetaverseAttribute!)
+            .ToList();
+
+    private static List<string> MetaverseInputsOf(string expression) =>
+        ExpressionInputResolver.Resolve(expression)
+            .Where(input => input.Source == ExpressionInputSource.Metaverse)
+            .Select(input => input.AttributeName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// The <c>mv["..."]</c> inputs of <paramref name="expression"/> that the template does not generate on the object, so
+    /// never have a value when it runs. Shared by the tester and the save check (#2055 Phase 3).
+    /// </summary>
+    private static List<string> InputsNotGenerated(ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute, string expression)
+    {
+        var generated = GeneratedAlongside(objectType, attribute);
+        return MetaverseInputsOf(expression)
+            .Where(name => !generated.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Checks every template attribute's expression on save (#2055 Phase 3), as Attribute Flow expressions are checked:
+    /// one that does not parse, or reads <c>cs["..."]</c> (Example Data has no Connected System Object), is refused if
+    /// it is new or changed, and only warned about if the save leaves it as it was. One reading an attribute the
+    /// template does not generate is always only a warning, because a template is built an attribute at a time.
+    /// Warnings are stamped onto <see cref="ExampleDataTemplate.SaveWarnings"/>.
+    /// </summary>
+    /// <exception cref="ExampleDataTemplateAttributeException">A new or changed expression is refused; every one is named.</exception>
+    private async Task EnsureTemplateExpressionsAreValidAsync(ExampleDataTemplate template)
+    {
+        template.SaveWarnings.Clear();
+        var withExpressions = template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes.Where(a => !string.IsNullOrWhiteSpace(a.Expression)).Select(a => (objectType, attribute: a)))
+            .ToList();
+        if (withExpressions.Count == 0)
+            return;
+
+        // The full graph replaces the stored one, so attributes are matched by what they generate, not by id.
+        var stored = template.Id > 0 ? await Application.Repository.ExampleData.GetTemplateAsync(template.Id) : null;
+        var storedExpressions = (stored?.ObjectTypes ?? [])
+            .SelectMany(objectType => objectType.TemplateAttributes.Where(a => !string.IsNullOrWhiteSpace(a.Expression))
+                .Select(a => (Key: ExpressionKey(objectType, a), a.Expression)))
+            .GroupBy(entry => entry.Key)
+            .ToDictionary(group => group.Key, group => group.First().Expression);
+
+        var refusals = new List<string>();
+        foreach (var (objectType, attribute) in withExpressions)
+        {
+            var expression = attribute.Expression!;
+            var unchanged = storedExpressions.TryGetValue(ExpressionKey(objectType, attribute), out var storedExpression) &&
+                            string.Equals(storedExpression, expression, StringComparison.Ordinal);
+            var name = $"'{AttributeName(attribute)}' on '{objectType.MetaverseObjectType?.Name}'";
+
+            foreach (var (message, blocking) in ExpressionProblems(objectType, attribute, expression, name))
+            {
+                if (blocking && !unchanged)
+                    refusals.Add(message);
+                else
+                    template.SaveWarnings.Add(message);
+            }
+        }
+
+        if (refusals.Count > 0)
+            throw new ExampleDataTemplateAttributeException(string.Join(" ", refusals));
+    }
+
+    private IEnumerable<(string Message, bool Blocking)> ExpressionProblems(
+        ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute, string expression, string name)
+    {
+        var parsed = _expressionEvaluator.Validate(expression);
+        if (!parsed.IsValid)
+        {
+            yield return ($"The expression for {name} does not parse: {parsed.ErrorMessage}", true);
+            yield break;
+        }
+
+        foreach (var input in ExpressionInputResolver.Resolve(expression).Where(i => i.Source == ExpressionInputSource.ConnectedSystem))
+        {
+            yield return ($"The expression for {name} reads {input.Accessor}, but Example Data creates Metaverse Objects and has no " +
+                          "Connected System Object to read, so it never has a value. Read mv[\"...\"] instead.", true);
+        }
+
+        foreach (var missing in InputsNotGenerated(objectType, attribute, expression))
+        {
+            yield return ($"The expression for {name} reads mv[\"{missing}\"], which this template does not generate on " +
+                          $"'{objectType.MetaverseObjectType?.Name}', so it never has a value.", false);
+        }
+    }
+
+    private static (string? ObjectType, string? Attribute) ExpressionKey(ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute) =>
+        (objectType.MetaverseObjectType?.Name, AttributeName(attribute));
+
+    private static string? AttributeName(ExampleDataTemplateAttribute attribute) =>
+        attribute.MetaverseAttribute?.Name ?? attribute.ConnectedSystemObjectTypeAttribute?.Name;
+
     /// <summary>
     /// Tests a template attribute's expression (#2055) against sample values for the attributes it reads, by the
     /// evaluation generating objects runs. Each sample is converted to the type of the template attribute that generates
@@ -1019,25 +1122,14 @@ public class ExampleDataServer
         ArgumentNullException.ThrowIfNull(samples);
         ArgumentNullException.ThrowIfNull(expressionEvaluator);
 
-        // What the expression can read: the attributes the template generates on this object, other than this one.
-        var generated = objectType.TemplateAttributes
-            .Where(other => other.MetaverseAttribute != null && !ReferenceEquals(other, attribute))
-            .Select(other => other.MetaverseAttribute!)
-            .ToList();
-
-        var read = ExpressionInputResolver.Resolve(expression)
-            .Where(input => input.Source == ExpressionInputSource.Metaverse)
-            .Select(input => input.AttributeName)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var generated = GeneratedAlongside(objectType, attribute);
+        var read = MetaverseInputsOf(expression);
         var inputs = read
             .Select(name => generated.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
             .Where(found => found != null)
             .Select(found => new AttributeSampleDescriptor(found!.Name, found.Type, found.AttributePlurality))
             .ToList();
-        var notGenerated = read
-            .Where(name => !generated.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        var notGenerated = InputsNotGenerated(objectType, attribute, expression);
 
         var errors = new List<string>();
         var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };

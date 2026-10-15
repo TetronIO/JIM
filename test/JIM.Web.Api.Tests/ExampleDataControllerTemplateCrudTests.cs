@@ -328,6 +328,43 @@ public class ExampleDataControllerTemplateCrudTests
     }
 
     [Test]
+    public async Task CreateTemplateAsync_ExpressionReadingAnAttributeTheTemplateDoesNotGenerate_ReturnsCreatedWithAWarningAsync()
+    {
+        // #2055 Phase 3: said, not refused, because a template is built an attribute at a time.
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 10, Expression = "Lower(mv[\"Nickname\"])" }
+        };
+        ExampleDataTemplate? created = null;
+        _mockExampleDataRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { t.Id = 42; created = t; })
+            .Returns(Task.CompletedTask);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(42)).ReturnsAsync(() => created);
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (ExampleDataTemplateDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.Warnings, Has.One.Contains("mv[\"Nickname\"]"));
+    }
+
+    [Test]
+    public async Task CreateTemplateAsync_ExpressionThatDoesNotParse_ReturnsBadRequestAsync()
+    {
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 10, Expression = "Lower(" }
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
+    [Test]
     public async Task CreateTemplateAsync_PatternOnNumberAttribute_ReturnsBadRequestAsync()
     {
         // Pattern is only valid on Text attributes; the server's Validate() call must reject this with a 400.

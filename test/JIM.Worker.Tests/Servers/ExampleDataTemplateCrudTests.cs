@@ -185,6 +185,83 @@ public class ExampleDataTemplateCrudTests
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.ExampleDataTemplate, It.IsAny<int>()))
             .ReturnsAsync(0);
 
+    // -- expressions (#2055 Phase 3) ---------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateTemplateAsync_ExpressionThatDoesNotParse_ThrowsNamingTheAttributeAndRecordsNoActivity()
+    {
+        var template = BuildTemplateWithExpression(0, "Lower(mv[\"First Name\"]");
+
+        Assert.That(async () => await _jim.ExampleData.CreateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateAttributeException>().With.Message.Contains("Account Name").And.Message.Contains("does not parse"));
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+    }
+
+    [Test]
+    public void CreateTemplateAsync_ExpressionReadingAConnectedSystemObject_Throws()
+    {
+        var template = BuildTemplateWithExpression(0, "Lower(cs[\"givenName\"])");
+
+        Assert.That(async () => await _jim.ExampleData.CreateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateAttributeException>().With.Message.Contains("cs[\"givenName\"]"));
+    }
+
+    [Test]
+    public async Task CreateTemplateAsync_ExpressionReadingAnAttributeTheTemplateDoesNotGenerate_SavesWithAWarningAsync()
+    {
+        // A template is built an attribute at a time, so an expression may name one not added yet: said, not refused.
+        var template = BuildTemplateWithExpression(0, "Lower(mv[\"Nickname\"])");
+
+        await _jim.ExampleData.CreateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        Assert.That(template.SaveWarnings, Has.One.Contains("mv[\"Nickname\"]"));
+    }
+
+    [Test]
+    public async Task UpdateTemplateAsync_UnchangedExpressionThatDoesNotParse_SavesWithAWarningAsync()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(BuildTemplateWithExpression(TemplateId, "Lower(mv[\"First Name\"]"));
+        var template = BuildTemplateWithExpression(TemplateId, "Lower(mv[\"First Name\"]");
+        template.Name = "Renamed";
+
+        await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        Assert.That(template.SaveWarnings, Has.One.Contains("does not parse"));
+    }
+
+    [Test]
+    public void UpdateTemplateAsync_ExpressionChangedToOneThatDoesNotParse_Throws()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(BuildTemplateWithExpression(TemplateId, "Lower(mv[\"First Name\"])"));
+        var template = BuildTemplateWithExpression(TemplateId, "Lower(mv[\"First Name\"]");
+
+        Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateAttributeException>());
+    }
+
+    private static ExampleDataTemplate BuildTemplateWithExpression(int id, string expression)
+    {
+        var template = new ExampleDataTemplate { Id = id, Name = "People" };
+        var objectType = new ExampleDataObjectType
+        {
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" },
+            ObjectsToCreate = 10
+        };
+        objectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Id = 11, Name = "First Name", Type = AttributeDataType.Text },
+            Pattern = "Ada"
+        });
+        objectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Id = 12, Name = "Account Name", Type = AttributeDataType.Text },
+            Expression = expression
+        });
+        template.ObjectTypes.Add(objectType);
+        return template;
+    }
+
     private static ExampleDataTemplate BuildValidTemplate(int id, string name)
     {
         var template = new ExampleDataTemplate { Id = id, Name = name };
