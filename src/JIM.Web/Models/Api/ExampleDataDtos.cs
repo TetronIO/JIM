@@ -140,6 +140,13 @@ public class ExampleDataTemplateDto
     public List<ExampleDataTemplateObjectTypeDto> ObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// What the create or update that returned this template had to say about its expressions without refusing it: an
+    /// expression reading an attribute the template does not generate, or a problem with one the update left as it was.
+    /// Empty on every read.
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
     /// Creates a DTO from an entity. The entity's ObjectTypes graph should be populated.
     /// </summary>
     public static ExampleDataTemplateDto FromEntity(ExampleDataTemplate entity)

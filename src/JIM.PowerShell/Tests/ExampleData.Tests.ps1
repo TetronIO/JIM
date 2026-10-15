@@ -1535,3 +1535,66 @@ Describe 'Test-JIMExampleDataExpression' {
         { Test-JIMExampleDataExpression -TemplateId 4 -ErrorAction Stop } | Should -Throw
     }
 }
+
+Describe 'Data Generation Template save warnings (#2055 Phase 3)' {
+
+    BeforeEach {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:saveWarning = "The expression for 'Account Name' on 'User' reads mv[""Nickname""], which this template does not generate on 'User', so it never has a value."
+            $script:warnedTemplate = [PSCustomObject]@{
+                id          = 7
+                name        = 'Demo Users'
+                builtIn     = $false
+                objectTypes = @(
+                    [PSCustomObject]@{
+                        id = 70; metaverseObjectTypeId = 1; metaverseObjectTypeName = 'User'; objectsToCreate = 10
+                        templateAttributes = @()
+                    }
+                )
+                warnings    = @($script:saveWarning)
+            }
+
+            Mock Invoke-JIMApi {
+                if ($Method -in 'POST', 'PUT') { return $script:warnedTemplate }
+                switch -Wildcard ($Endpoint) {
+                    '/api/v1/example-data/templates/*' { return $script:warnedTemplate }
+                    '/api/v1/metaverse/attributes*' {
+                        return [PSCustomObject]@{ items = @([PSCustomObject]@{ id = 12; name = 'Account Name' }) }
+                    }
+                }
+                return $null
+            }
+        }
+    }
+
+    It 'New-JIMExampleDataTemplate writes each save warning' {
+        InModuleScope JIM {
+            New-JIMExampleDataTemplate -Name 'Demo Users' -ObjectType @{ MetaverseObjectType = 1 } -Confirm:$false `
+                -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
+        }
+    }
+
+    It 'Set-JIMExampleDataTemplate writes each save warning' {
+        InModuleScope JIM {
+            Set-JIMExampleDataTemplate -Id 7 -ObjectType @{ MetaverseObjectType = 1; ObjectsToCreate = 10 } -Confirm:$false `
+                -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
+        }
+    }
+
+    It 'Add-JIMExampleDataTemplateAttribute writes each save warning' {
+        InModuleScope JIM {
+            Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 'Account Name' -Expression 'Lower(mv["Nickname"])' `
+                -Confirm:$false -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
+        }
+    }
+}

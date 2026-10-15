@@ -5,6 +5,8 @@ using JIM.Models.Activities;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace JIM.Models.ExampleData;
 
 [Index(nameof(Name))]
@@ -25,6 +27,14 @@ public class ExampleDataTemplate : IAuditable
     public string? LastUpdatedByName { get; set; }
 
     public List<ExampleDataObjectType> ObjectTypes { get; } = new();
+
+    /// <summary>
+    /// What the save that returned this instance had to say about the template's expressions without refusing it
+    /// (#2055 Phase 3): one reading an attribute the template does not generate, or a problem with one the save left
+    /// as it was. Transient: never persisted, and empty on every ordinary read.
+    /// </summary>
+    [NotMapped]
+    public List<string> SaveWarnings { get; } = [];
 
     public void Validate()
     {

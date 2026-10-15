@@ -159,6 +159,16 @@ public class SyncRule : IAuditable, IValidated
     public List<DependentDerivedFlow> SaveDependentDerivedFlows { get; } = [];
 
     /// <summary>
+    /// Every warning the save that returned this instance raised about its Attribute Flows
+    /// (<see cref="SyncRuleMapping.SaveWarnings"/>: a derived flow calling a non-repeatable function, #1750, or a
+    /// problem with an expression the save left as it was, #2055 Phase 3), each once, in mapping order. The one list the
+    /// portal and the REST API report, so neither says more or less than the other.
+    /// </summary>
+    [NotMapped]
+    public IReadOnlyList<string> AttributeFlowSaveWarnings =>
+        AttributeFlowRules.SelectMany(mapping => mapping.SaveWarnings).Distinct(StringComparer.Ordinal).ToList();
+
+    /// <summary>
     /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse.
     /// Used when the Connected System's ObjectMatchingRuleMode is set to SyncRule (advanced mode).
     /// When ObjectMatchingRuleMode is ConnectedSystem (default), rules are defined on the ConnectedSystemObjectType instead.
