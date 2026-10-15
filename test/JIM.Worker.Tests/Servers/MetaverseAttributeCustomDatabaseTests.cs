@@ -549,6 +549,59 @@ public class MetaverseAttributeCustomDatabaseTests
         Assert.That(boundCount, Is.EqualTo(0), "the binding join row must be removed under a NoTracking context");
     }
 
+    /// <summary>
+    /// Widening a single-valued attribute to multi-valued while Metaverse Objects hold values (#2153, D3), on a
+    /// NoTracking context as the portal and REST API run it: the new plurality persists, every stored value survives,
+    /// and a narrowing back is refused with nothing written.
+    /// </summary>
+    [Test]
+    public async Task ChangeMetaverseAttributeSchemaAsync_WideningWithStoredValuesUnderNoTrackingContext_PersistsAndKeepsValuesAsync()
+    {
+        int attributeId;
+        await using (var seed = NewContext())
+        {
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var propagation = new MetaverseAttribute { Name = "dSCorePropagationData", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(propagation);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            attributeId = propagation.Id;
+
+            var p1 = new MetaverseObject { Type = personType };
+            p1.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = propagation, MetaverseObject = p1, DateTimeValue = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc) });
+            var p2 = new MetaverseObject { Type = personType };
+            p2.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = propagation, MetaverseObject = p2, DateTimeValue = new DateTime(2026, 6, 7, 8, 9, 10, DateTimeKind.Utc) });
+            seed.MetaverseObjects.AddRange(p1, p2);
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var act = NewNoTrackingContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var impact = await jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+                attributeId, AttributeDataType.DateTime, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy());
+            Assert.That(impact.Applied, Is.True);
+        }
+
+        await using (var refuse = NewNoTrackingContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(refuse));
+            var impact = await jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+                attributeId, AttributeDataType.DateTime, AttributePlurality.SingleValued, TestUtilities.GetInitiatedBy());
+            Assert.That(impact.Applied, Is.False, "multi-valued to single-valued stays blocked by stored values");
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.MetaverseAttributes.AsNoTracking().SingleAsync(a => a.Id == attributeId);
+        var valueCount = await verify.MetaverseObjectAttributeValues.CountAsync(v => v.AttributeId == attributeId && v.DateTimeValue != null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued), "the widening must persist under a NoTracking context");
+            Assert.That(stored.Type, Is.EqualTo(AttributeDataType.DateTime));
+            Assert.That(valueCount, Is.EqualTo(2), "every stored value survives the widening");
+        }
+    }
+
     [Test]
     public async Task CreateMetaverseAttributeAsync_WithNullObjectTypesCollection_PersistsWithoutThrowingAsync()
     {
