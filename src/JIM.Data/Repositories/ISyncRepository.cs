@@ -584,9 +584,9 @@ public interface ISyncRepository
     /// The reference recall existence query (#1003): returns the Connected System Object attribute
     /// value rows among <paramref name="connectedSystemObjectIds"/> x <paramref name="connectedSystemAttributeIds"/>
     /// that reference a deleted object, matched by resolved reference
-    /// (<paramref name="deletedReferenceCsoIds"/>) or by case-insensitive raw reference string
-    /// (<paramref name="loweredReferenceValues"/>, pre-lowered with ToLowerInvariant to mirror the
-    /// OrdinalIgnoreCase DN comparison export evaluation uses). Call per target Connected System so
+    /// (<paramref name="deletedReferenceCsoIds"/>) or by raw reference string ignoring case
+    /// (<paramref name="referenceValues"/>, as given: the database folds both sides, #2051). A caller holding a
+    /// case-exact value decides the exact match itself from the rows returned. Call per target Connected System so
     /// values cannot cross-match between systems. Rows not returned are values the target does not
     /// hold; staging nothing for them replaces no-net-change detection.
     /// </summary>
@@ -594,7 +594,7 @@ public interface ISyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues);
+        IReadOnlyCollection<string> referenceValues);
 
     /// <summary>
     /// Bulk creates MVOs with their attribute values.

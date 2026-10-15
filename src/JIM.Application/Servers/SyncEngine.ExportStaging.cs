@@ -1228,7 +1228,7 @@ public partial class SyncEngine
             if (existingDn != null)
             {
                 // DNs are case-insensitive in LDAP
-                return string.Equals(pendingChange.UnresolvedReferenceValue, existingDn, StringComparison.OrdinalIgnoreCase);
+                return IdentifierKey.AreSame(pendingChange.UnresolvedReferenceValue, existingDn, caseExact: false);
             }
 
             // No match possible - CSO doesn't have this reference
@@ -1242,7 +1242,7 @@ public partial class SyncEngine
         // the CSO-side navigation no longer resolves to a Metaverse Object. DNs are case-insensitive.
         if (pendingChange.StringValue != null && existingValue.UnresolvedReferenceValue != null)
         {
-            return string.Equals(pendingChange.StringValue, existingValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase);
+            return IdentifierKey.AreSame(pendingChange.StringValue, existingValue.UnresolvedReferenceValue, caseExact: false);
         }
 
         // Compare based on which value type is set
@@ -1250,7 +1250,7 @@ public partial class SyncEngine
         // because the directory reports a name in the case it stored (#2195, #2051)
         if (pendingChange.StringValue != null || existingValue.StringValue != null)
         {
-            return string.Equals(pendingChange.StringValue, existingValue.StringValue, AttributeValueComparison.For(pendingChange.Attribute));
+            return AttributeValueComparison.AreSame(pendingChange.Attribute, pendingChange.StringValue, existingValue.StringValue);
         }
 
         // Integer comparison
@@ -1302,7 +1302,7 @@ public partial class SyncEngine
         // Unresolved reference comparison (only if neither side used cross-field DN)
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
-            return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, AttributeValueComparison.For(pendingChange.Attribute));
+            return AttributeValueComparison.AreSame(pendingChange.Attribute, pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue);
         }
 
         // Both null/empty - consider them matching

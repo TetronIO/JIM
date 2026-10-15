@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.InMemoryData.Tests;
@@ -511,7 +512,7 @@ public class SyncRepositoryCsoReadTests
     }
 
     [Test]
-    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffers_DoesNotMatchAsync()
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffersOnAnAttributeIgnoringCase_MatchesAsync()
     {
         var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
         cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
@@ -520,7 +521,27 @@ public class SyncRepositoryCsoReadTests
         var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
             CsId, ObjectTypeId, SecondaryAttrId, new[] { "cn=john,dc=test" });
 
-        Assert.That(result, Is.Empty, "matching must be exact and case-sensitive, matching the single-object method");
+        Assert.That(result.Select(r => r.Value), Is.EqualTo(new[] { "cn=john,dc=test" }),
+            "a value differing only in case names the same object unless the attribute is case-exact (#2051)");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffersOnACaseExactAttribute_DoesNotMatchAsync()
+    {
+        _repo.SeedObjectType(new ConnectedSystemObjectType
+        {
+            Id = ObjectTypeId,
+            Name = "user",
+            Attributes = [new ConnectedSystemObjectTypeAttribute { Id = SecondaryAttrId, Name = "id", Type = AttributeDataType.Text, IsSecondaryExternalId = true, CaseExact = true }]
+        });
+        var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "cn=john,dc=test" });
+
+        Assert.That(result, Is.Empty);
     }
 
     [Test]
