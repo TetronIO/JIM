@@ -4820,6 +4820,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Origin")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ProvisionedConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -4835,6 +4838,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
+
+                    b.HasIndex("ProvisionedConnectedSystemObjectId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ProvisionedConnectedSystemObjectId")
+                        .HasFilter("\"ProvisionedConnectedSystemObjectId\" IS NOT NULL");
 
                     b.HasIndex("SyncRuleId")
                         .HasDatabaseName("IX_PendingPasswordChanges_SyncRuleId")
@@ -6455,6 +6462,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("MetaverseObjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
+                        .WithMany()
+                        .HasForeignKey("ProvisionedConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany()
