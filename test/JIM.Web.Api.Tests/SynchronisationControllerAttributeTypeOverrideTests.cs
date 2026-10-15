@@ -125,6 +125,25 @@ public class SynchronisationControllerAttributeTypeOverrideTests
     }
 
     [Test]
+    public async Task UpdateConnectedSystemAttributeAsync_TypeOverrideToBooleanOnAMultiValuedAttribute_MakesItSingleValuedAsync()
+    {
+        // The Boolean rule (#2153): a Boolean holds one value, so overriding to Boolean also makes the attribute
+        // single-valued, exactly as the portal's Schema tab does.
+        Arrange(supportsUserSelectedAttributeTypes: true, out var attribute);
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+
+        var result = await _controller.UpdateConnectedSystemAttributeAsync(ConnectedSystemId, ObjectTypeId, AttributeId,
+            new UpdateConnectedSystemAttributeRequest { Type = AttributeDataType.Boolean });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Boolean));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
+        }
+    }
+
+    [Test]
     public async Task UpdateConnectedSystemAttributeAsync_TypeMatchingWhatDiscoveryInferred_IsStillRecordedAsChosenAsync()
     {
         // Choosing the type discovery happened to pick is still a choice. Inferring "not overridden" from the

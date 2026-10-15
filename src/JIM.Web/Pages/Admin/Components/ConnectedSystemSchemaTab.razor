@@ -1782,8 +1782,8 @@
             : _objectTypeAttributeBeingEdited?.Type ?? AttributeDataType.NotSet;
 
     /// <summary>
-    /// Mirrors what <see cref="SchemaAttributeEdit.Apply"/> can act on, so the button is never enabled with nothing
-    /// to confirm.
+    /// Mirrors what confirming can act on (a type override, or a case-exact declaration), so the button is never
+    /// enabled with nothing to confirm.
     /// </summary>
     private bool CanConfirmAttributeEdit() =>
         _objectTypeAttributeBeingEdited != null &&
@@ -1795,12 +1795,25 @@
         if (_objectTypeAttributeBeingEdited == null)
             return;
 
-        SchemaAttributeEdit.Apply(
-            _objectTypeAttributeBeingEdited,
-            ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes,
-            _objectTypeAttributeBeingEditedIsEditable,
-            Enum.TryParse<AttributeDataType>(_objectTypeAttributeBeingEditedText, out var chosenType) ? chosenType : null,
-            _objectTypeAttributeBeingEditedCaseExact);
+        // The type override goes through the server's rule set, the one the REST API (and so PowerShell) shares: it
+        // re-checks the Connector and the attribute's references, and makes a Boolean single-valued (#2153).
+        var madeSingleValued = false;
+        if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes &&
+            _objectTypeAttributeBeingEditedIsEditable &&
+            Enum.TryParse<AttributeDataType>(_objectTypeAttributeBeingEditedText, out var chosenType))
+        {
+            using var jim = JimFactory.Create();
+            var typeOverride = await jim.ConnectedSystems.OverrideAttributeTypeAsync(ConnectedSystem, _objectTypeAttributeBeingEdited, chosenType);
+            if (!typeOverride.Success)
+            {
+                Snackbar.Add(typeOverride.ErrorMessage ?? "The data type could not be changed.", Severity.Error);
+                return;
+            }
+
+            madeSingleValued = typeOverride.MadeSingleValued;
+        }
+
+        SchemaAttributeEdit.ApplyCaseExact(_objectTypeAttributeBeingEdited, _objectTypeAttributeBeingEditedCaseExact);
 
         RecomputeSelectedObjectTypeFlags();
         _editSchemaAttributeDialogVisible = false;
@@ -1810,7 +1823,9 @@
         await RefreshAttributeGridAsync();
 
         // all done, let the user know
-        Snackbar.Add("Attribute updated. Save your changes to apply it.", Severity.Success);
+        Snackbar.Add(madeSingleValued
+            ? "Attribute updated, and made single-valued: a Boolean holds one value. Save your changes to apply it."
+            : "Attribute updated. Save your changes to apply it.", Severity.Success);
     }
 
     private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)

@@ -32,11 +32,11 @@ public class SchemaAttributeEditTests
     }
 
     [Test]
-    public void Apply_ChangedCaseExact_SetsItAndRecordsItAsTheAdministrators()
+    public void ApplyCaseExact_Changed_SetsItAndRecordsItAsTheAdministrators()
     {
         var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text };
 
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: false, typeEditable: false, chosenType: null, caseExact: true);
+        SchemaAttributeEdit.ApplyCaseExact(attribute, caseExact: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -46,66 +46,23 @@ public class SchemaAttributeEditTests
     }
 
     [Test]
-    public void Apply_UnchangedCaseExact_LeavesItDiscovered()
+    public void ApplyCaseExact_Unchanged_LeavesItDiscovered()
     {
         // Confirming the dialog to change the data type must not quietly pin the declaration discovery stated.
         var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text, CaseExact = true };
 
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: true, typeEditable: true, chosenType: AttributeDataType.Text, caseExact: true);
+        SchemaAttributeEdit.ApplyCaseExact(attribute, caseExact: true);
 
         Assert.That(attribute.CaseExactSetByAdministrator, Is.False);
     }
 
     [Test]
-    public void Apply_TypeOnAConnectorWithoutOverrides_IsIgnored()
+    public void ApplyCaseExact_OnAnAttributeRetypedAwayFromText_IsNotDeclared()
     {
-        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text };
+        // The type override is applied first (by the server), so a retyped attribute is no longer Text here.
+        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number };
 
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: false, typeEditable: true, chosenType: AttributeDataType.Number, caseExact: false);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Text));
-            Assert.That(attribute.TypeSetByAdministrator, Is.False);
-        }
-    }
-
-    [Test]
-    public void Apply_TypeOnAReferencedAttribute_IsIgnoredButCaseExactStillApplies()
-    {
-        // An attribute already referenced or holding values keeps its type, but how its values compare is still
-        // the administrator's to declare.
-        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text };
-
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: true, typeEditable: false, chosenType: AttributeDataType.Number, caseExact: true);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Text));
-            Assert.That(attribute.CaseExact, Is.True);
-        }
-    }
-
-    [Test]
-    public void Apply_TypeOverride_SetsItAndRecordsItAsTheAdministrators()
-    {
-        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Decimal };
-
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: true, typeEditable: true, chosenType: AttributeDataType.Number, caseExact: false);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Number));
-            Assert.That(attribute.TypeSetByAdministrator, Is.True);
-        }
-    }
-
-    [Test]
-    public void Apply_CaseExactOnAnAttributeBeingRetypedAwayFromText_IsNotDeclared()
-    {
-        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text };
-
-        SchemaAttributeEdit.Apply(attribute, supportsUserSelectedTypes: true, typeEditable: true, chosenType: AttributeDataType.Number, caseExact: true);
+        SchemaAttributeEdit.ApplyCaseExact(attribute, caseExact: true);
 
         Assert.That(attribute.CaseExact, Is.False);
     }
