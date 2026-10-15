@@ -66,6 +66,7 @@ The matching rules, or with `-Id`, the one rule.
 | `Enabled` | `bool` | Whether the rule takes part in synchronisation; a disabled rule is skipped. |
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
+| `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
 <!-- END GENERATED: Get-JIMSyncRule -->
 
 ### Examples
@@ -167,6 +168,7 @@ With `-PassThru`, the rule created; otherwise nothing. A deletion source warning
 | `Enabled` | `bool` | Whether the rule takes part in synchronisation; a disabled rule is skipped. |
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
+| `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
 <!-- END GENERATED: New-JIMSyncRule -->
 
 ### Examples

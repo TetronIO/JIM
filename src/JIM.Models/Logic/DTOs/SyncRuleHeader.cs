@@ -97,6 +97,12 @@ public class SyncRuleHeader
     public OutboundDeprovisionAction OutboundDeprovisionAction { get; set; }
 
     /// <summary>
+    /// For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks
+    /// the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule.
+    /// </summary>
+    public InboundOutOfScopeAction InboundOutOfScopeAction { get; set; }
+
+    /// <summary>
     /// Creates a header from a SyncRule entity.
     /// </summary>
     public static SyncRuleHeader FromEntity(SyncRule entity)
@@ -118,7 +124,8 @@ public class SyncRuleHeader
             ProjectToMetaverse = entity.ProjectToMetaverse,
             Enabled = entity.Enabled,
             EnforceState = entity.EnforceState,
-            OutboundDeprovisionAction = entity.OutboundDeprovisionAction
+            OutboundDeprovisionAction = entity.OutboundDeprovisionAction,
+            InboundOutOfScopeAction = entity.InboundOutOfScopeAction
         };
     }
 }

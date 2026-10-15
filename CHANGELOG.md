@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Get-JIMSyncRule` and the REST API now return an import Synchronisation Rule's out-of-scope action (**When objects fall out of scope** in the portal), which could be set over both but not read back.
 - 🐛 `Get-JIMPendingExport -Count -Status Parked` now counts the Pending Exports held back for a decision about a generated value; the cmdlet rejected `Parked` before.
 - 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
