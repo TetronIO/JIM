@@ -270,7 +270,11 @@ public class BulkInsertColumnCompletenessTests
         AssertUpdateListsCoverInsertList(
             "PendingPasswordChanges",
             PendingPasswordChangeBulkColumns.PendingPasswordChanges,
-            [PendingPasswordChangeBulkColumns.PendingPasswordChangesSupersedeUpdate, PendingPasswordChangeBulkColumns.PendingPasswordChangesAttemptUpdate],
+            [
+                PendingPasswordChangeBulkColumns.PendingPasswordChangesSupersedeUpdate,
+                PendingPasswordChangeBulkColumns.PendingPasswordChangesInitialPasswordObligation,
+                PendingPasswordChangeBulkColumns.PendingPasswordChangesAttemptUpdate
+            ],
             PendingPasswordChangeBulkColumns.PendingPasswordChangesUpdateExclusions);
     }
 

@@ -77,6 +77,20 @@ public class PasswordDeliveryRunResult
     public int ExpiryBehaviourNotHonouredCount { get; set; }
 
     /// <summary>
+    /// Password changes delivered as an account's first password in place of its Initial Password (#2160): the
+    /// person's own password, with the provisioning Synchronisation Rule's promises about the account (whether it is
+    /// enabled, and whether its password never expires). Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int FirstPasswordsDeliveredInPlaceCount { get; set; }
+
+    /// <summary>
+    /// Password changes owing an account its first password that were delivered without the Initial Password's
+    /// promises (#2160): the provisioning Synchronisation Rule no longer sets one, or the change reached another of the
+    /// person's accounts. Each delivery's Activity says which. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int FirstPasswordPromisesNotAppliedCount { get; set; }
+
+    /// <summary>
     /// Changes given back unattempted because an export was being sent to their account (#2173, #2158, #2159): that
     /// export may be disabling it, writing the flags it owns, or holding back an enable the delivery would complete, so
     /// the delivery waits for it and tries again shortly. Nothing is counted against them, and they are neither
