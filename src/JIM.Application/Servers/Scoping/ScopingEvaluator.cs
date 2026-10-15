@@ -313,13 +313,12 @@ internal static class ScopingEvaluator
     private static string? TryReadComputedValues(object? result, AttributeDataType type, out List<ScopingValue> values)
     {
         values = [];
-        foreach (var element in ExpressionResultValues.Elements(result))
+        // No value, and blank text, read as no value.
+        foreach (var element in ExpressionResultValues.Elements(result)
+                     .Where(element => element != null && !(element is string text && string.IsNullOrWhiteSpace(text))))
         {
-            if (element == null || element is string text && string.IsNullOrWhiteSpace(text))
-                continue;
-
-            if (!ExpressionResultConverter.TryConvert(element, type, out var converted) || converted == null)
-                return $"Its expression computed '{ExpressionText.Describe(element)}', which cannot be compared as {DescribeType(type)}.";
+            if (!ExpressionResultConverter.TryConvert(element!, type, out var converted) || converted == null)
+                return $"Its expression computed '{ExpressionText.Describe(element!)}', which cannot be compared as {DescribeType(type)}.";
 
             values.Add(converted switch
             {

@@ -138,14 +138,15 @@ public class ScopeReconciliationServer
         var csos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(rule.ConnectedSystemId, candidateIds);
         var flagged = new List<Guid>();
 
-        foreach (var cso in csos)
+        // An object whose scope cannot be decided answers null, and is neither flagged nor left out of the evaluated set.
+        var decided = csos
+            .Select(cso => (Cso: cso, InScope: Decide(() => ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, nowUtc), rule, cso.Id, result)))
+            .Where(answer => answer.InScope.HasValue);
+        foreach (var (cso, inScope) in decided)
         {
-            if (Decide(() => ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, nowUtc), rule, cso.Id, result) is not { } inScope)
-                continue;
-
             // FK scalar, not the navigation: the CSO is joined (connected) when it points at a Metaverse Object.
             var connected = cso.MetaverseObjectId.HasValue;
-            if (inScope != connected)
+            if (inScope!.Value != connected)
                 flagged.Add(cso.Id);
         }
 
@@ -163,14 +164,14 @@ public class ScopeReconciliationServer
         var mvos = await Application.Repository.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(candidateIds);
         var flagged = new List<Guid>();
 
-        foreach (var mvo in mvos)
+        var decided = mvos
+            .Select(mvo => (Mvo: mvo, InScope: Decide(() => ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, nowUtc), rule, mvo.Id, result)))
+            .Where(answer => answer.InScope.HasValue);
+        foreach (var (mvo, inScope) in decided)
         {
-            if (Decide(() => ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, nowUtc), rule, mvo.Id, result) is not { } inScope)
-                continue;
-
             // The same "already provisioned to the target system?" check the export evaluator uses to deprovision.
             var provisioned = await Application.SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, rule.ConnectedSystemId) != null;
-            if (inScope != provisioned)
+            if (inScope!.Value != provisioned)
                 flagged.Add(mvo.Id);
         }
 

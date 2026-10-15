@@ -1,6 +1,6 @@
 # Expression Value Sources in Scoping Criteria
 
-- **Status:** Doing (PR 1 in progress)
+- **Status:** Doing (PR 1 complete: model, evaluation, validation, REST, PowerShell, reconciliation; PR 2, the portal, outstanding)
 - **Issue:** [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3 of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 3: Expression value sources in scoping criteria", Scenario 10, Open Question 3)
 
@@ -84,11 +84,15 @@ CSO values --> ExpressionContext (cs) --> IExpressionEvaluator.Evaluate
 2. **Relative dates are allowed on expression criteria**, at the cost of a batched in-memory pass per reconciliation for that rule, stated at save time and counted on the Activity. The alternative was to refuse relative-date values on expression criteria; it was rejected because a date the source writes as text is exactly what expressions exist for. (Product owner's delegate, 2026-10-13.)
 3. **Failures in export, recall and deprovisioning** are fixed ahead of this plan as their own change ([#2250](https://github.com/TetronIO/JIM/pull/2250)), since a failing pattern criterion could already fail a whole export Activity. Every path errors the one object and fails closed; Synchronised Deprovisioning holds an undecidable object back through a read-only pre-flight over the rules `ScopingEvaluationServer.CanFailToEvaluate` names. This plan extends that predicate to expression criteria, so every path covers them without further change.
 
+4. **Configuration scope, attribute references and attribute delete do not read expression inputs.** Plan step 3 listed them among the sites to move onto the shared input helper. They were left reading attribute ids only, because Attribute Flow and Object Matching expressions are not tracked there either: an attribute an expression names is invisible to all three for every kind of expression today. Making scoping alone track them would leave the behaviour inconsistent rather than fixed; the durable fix covers every expression kind at once and is its own change. Save-time validation still refuses an expression naming an attribute the type does not have, so the gap is limited to an attribute renamed or deleted after the rule was saved, which the run then reports per object.
+5. **An explanation shows the expression and its computed value, not each input.** Plan step 5 asked for the inputs too. The Connections tab and REST explanation name the expression where they name an attribute, and show the value it computed; the per-input view belongs with the portal's Scope tester work in PR 2.
+6. **Previews and the Sync Preview report an undecidable object instead of failing.** #2250 made synchronisation fail closed per object but left the Configuration Change Preview's scope walk and the Sync Preview throwing on the same exception, a rare event for a pattern and a routine one for an expression. The scope preview now reports such an object as one the run would fail, and the Sync Preview reports a `ScopingCriterionFailed` error. The Attribute Flow, Destructive Toggle and Object Matching preview adapters still fail as a whole on one, naming the rule and the reason; they evaluate scope only to skip out-of-scope objects, and changing their meaning is out of this issue's scope.
+
 ## Implementation Phases
 
 One issue, delivered as two PRs so each stays reviewable. The final one closes #2054.
 
-### PR 1: Model, evaluation, validation, REST and PowerShell
+### PR 1: Model, evaluation, validation, REST and PowerShell ✅
 
 1. Migration adding `Expression` and `CompareAs` to `SyncRuleScopingCriteria`; `IsValid()`; `GetAttributeDataType()`/`GetAttributeName()`.
 2. `ScopingEvaluator` expression branch; `ScopingEvaluationServer` takes `IExpressionEvaluator`; cached input resolution on the sync path. `CanFailToEvaluate` returns true for an expression criterion, so #2250's per-object handling and Synchronised Deprovisioning's pre-flight cover it. Scenario 008 (Medium) before the PR, since this touches export evaluation.
