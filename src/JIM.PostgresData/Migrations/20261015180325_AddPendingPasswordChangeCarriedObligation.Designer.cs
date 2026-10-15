@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261013135338_AddPendingPasswordChangeCarriedObligation")]
+    [Migration("20261015180325_AddPendingPasswordChangeCarriedObligation")]
     partial class AddPendingPasswordChangeCarriedObligation
     {
         /// <inheritdoc />
@@ -21,7 +21,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -468,6 +468,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId");
 
                     b.HasIndex("ExternalIdSnapshot");
+
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItems_MetaverseObjectId")
+                        .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
 
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
@@ -982,6 +986,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
+
+                    b.HasIndex("DeletedMetaverseObjectId")
+                        .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
+                        .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
 
                     b.HasIndex("DeletedObjectTypeId");
 
@@ -3404,6 +3412,10 @@ namespace JIM.PostgresData.Migrations
                         .IsUnique();
 
                     b.HasIndex("ConnectedSystemObjectId");
+
+                    b.HasIndex("DeletedConnectedSystemObjectId")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
+                        .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
 
                     b.HasIndex("DeletedObjectExternalIdAttributeValueId");
 
