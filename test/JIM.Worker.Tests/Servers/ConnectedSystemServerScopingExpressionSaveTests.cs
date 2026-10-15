@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.TestSupport;
@@ -27,6 +28,7 @@ public class ConnectedSystemServerScopingExpressionSaveTests
     private Mock<IMetaverseRepository> _mvRepo = null!;
     private Mock<IActivityRepository> _activityRepo = null!;
     private MetaverseObject _initiator = null!;
+    private Dictionary<int, SyncRuleScopingCriterionState> _stored = null!;
 
     private readonly ConnectedSystemObjectType _person = new()
     {
@@ -68,6 +70,16 @@ public class ConnectedSystemServerScopingExpressionSaveTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>())).ReturnsAsync(0);
+
+        _stored = [];
+        _csRepo.Setup(r => r.GetSyncRuleScopingCriterionStatesAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(() => _stored);
+        _csRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _csRepo.Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>())).ReturnsAsync(new Dictionary<int, int>());
+        _csRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+        _csRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync((IList<SyncRuleHeader>)new List<SyncRuleHeader>());
+        _csRepo.Setup(r => r.GetSyncRuleMappingKeepUniqueAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(new Dictionary<int, bool>());
+        _repo.Setup(r => r.Sync).Returns(TestUtilities.StubQueuedChangeWithdrawal(new Mock<ISyncRepository>()).Object);
 
         _initiator = TestUtilities.GetInitiatedBy();
     }
@@ -125,6 +137,70 @@ public class ConnectedSystemServerScopingExpressionSaveTests
         var rule = ImportRule("cs[\"department\"]", AttributeDataType.Number, SearchComparisonType.StartsWith);
 
         Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+    }
+
+    // ── A criterion that stopped being valid after it was saved never locks the rule (#2054) ───────────────────────
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_DisablingARuleWithAnUnchangedRelativeDateOnText_SavesWithAWarningAsync()
+    {
+        // Stored when the attribute was a date; its type has since changed to Text under it.
+        var rule = StoredRuleWith(new SyncRuleScopingCriteria
+        {
+            Id = 31, ConnectedSystemAttribute = _person.Attributes[0], ConnectedSystemAttributeId = 70, ComparisonType = SearchComparisonType.LessThan,
+            ValueMode = DateCriteriaValueMode.Relative, RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days, RelativeDirection = RelativeDateDirection.Ago
+        });
+        rule.Enabled = false;
+
+        var saved = await BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(saved, Is.True);
+            Assert.That(rule.ScopingSaveWarnings, Has.One.Contains("department"));
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_UnchangedExpressionReadingARenamedAttribute_SavesWithAWarningAsync()
+    {
+        var rule = StoredRuleWith(new SyncRuleScopingCriteria
+        {
+            Id = 31, Expression = "Lower(cs[\"dept\"])", CompareAs = AttributeDataType.Text, ComparisonType = SearchComparisonType.StartsWith, StringValue = "fin"
+        });
+
+        var saved = await BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(saved, Is.True);
+            Assert.That(rule.ScopingSaveWarnings, Has.One.Contains("cs[\"dept\"]"));
+        }
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ChangedCriterionStillInvalid_IsRefused()
+    {
+        // The save changed its value, so it is checked in full, as a new one is.
+        var criterion = new SyncRuleScopingCriteria
+        {
+            Id = 31, ConnectedSystemAttribute = _person.Attributes[0], ConnectedSystemAttributeId = 70, ComparisonType = SearchComparisonType.LessThan,
+            ValueMode = DateCriteriaValueMode.Relative, RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days, RelativeDirection = RelativeDateDirection.Ago
+        };
+        var rule = StoredRuleWith(criterion);
+        criterion.RelativeCount = 60;
+
+        Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+    }
+
+    /// <summary>A stored rule holding <paramref name="criterion"/> exactly as stored.</summary>
+    private SyncRule StoredRuleWith(SyncRuleScopingCriteria criterion)
+    {
+        var rule = ImportRule("Lower(cs[\"department\"])");
+        rule.Id = 5;
+        rule.ObjectScopingCriteriaGroups[0].Criteria = [criterion];
+        _stored[criterion.Id] = SyncRuleScopingCriterionState.Of(criterion);
+        return rule;
     }
 
     private SyncRule ImportRule(string expression, AttributeDataType compareAs = AttributeDataType.Text,

@@ -79,7 +79,7 @@ A criterion can compare the value an [expression](../concepts/expressions.md) co
 
 For example, to bring in people whose department starts with *Finance* however the source system cases or pads it, compare `Lower(Trim(cs["department"]))` as Text with *starts with* `finance`.
 
-JIM refuses an expression criterion when you save the rule if it could never work: one that does not parse, reads the other side (`mv["..."]` on an import rule), reads no attribute, names an attribute the object type does not have, or calls `Now()` or another function that returns a different value each time it runs. To scope by how long ago something happened, compare the date as a Date/Time against a [relative date](#relative-dates-in-scope-filters) instead.
+JIM refuses an expression criterion when you save the rule if it could never work: one that does not parse, reads the other side (`mv["..."]` on an import rule), reads no attribute, names an attribute the object type does not have, or calls `Now()` or another function that returns a different value each time it runs. To scope by how long ago something happened, compare the date as a Date/Time against a [relative date](#relative-dates-in-scope-filters) instead. A criterion that stops being valid after it was saved, because an attribute it reads was renamed, removed or changed type, is not refused when the rule is next saved: the save goes ahead and warns about it, so the rule can always be disabled or corrected. Changing that criterion without fixing it is refused.
 
 ## Relative dates in scope filters
 

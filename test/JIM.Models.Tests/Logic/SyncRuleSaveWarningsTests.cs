@@ -30,4 +30,25 @@ public class SyncRuleSaveWarningsTests
     {
         Assert.That(new SyncRule { AttributeFlowRules = [new SyncRuleMapping()] }.AttributeFlowSaveWarnings, Is.Empty);
     }
+
+    [Test]
+    public void SaveWarnings_FlowsAndNestedScopingCriteria_GivesEveryWarningOnceFlowsFirst()
+    {
+        // Every warning a save raised, Attribute Flows and Scoping Criteria (#2054) alike: the one list the portal and
+        // the REST API report.
+        var mapping = new SyncRuleMapping();
+        mapping.SaveWarnings.Add("flow");
+        var topCriterion = new SyncRuleScopingCriteria();
+        topCriterion.SaveWarnings.Add("top");
+        var nestedCriterion = new SyncRuleScopingCriteria();
+        nestedCriterion.SaveWarnings.AddRange(["nested", "top"]);
+        var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
+        syncRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Criteria = [topCriterion],
+            ChildGroups = [new SyncRuleScopingCriteriaGroup { Criteria = [nestedCriterion] }]
+        });
+
+        Assert.That(syncRule.SaveWarnings, Is.EqualTo(new[] { "flow", "top", "nested" }));
+    }
 }

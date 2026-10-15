@@ -83,6 +83,14 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public RelativeDateDirection? RelativeDirection { get; set; }
 
     /// <summary>
+    /// Problems the save that returned this instance found with a criterion it left as it was (#2054): reported, not
+    /// refused, so a criterion that stopped being valid after it was saved never stops the rule being saved. Transient:
+    /// never persisted, and empty on every ordinary read.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<string> SaveWarnings { get; } = [];
+
+    /// <summary>
     /// Whether the criterion compares an expression's computed value rather than an attribute.
     /// </summary>
     public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);

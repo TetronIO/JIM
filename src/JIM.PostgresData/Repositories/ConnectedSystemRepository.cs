@@ -7533,6 +7533,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             m => new SyncRuleMappingExpressionState(m.TargetMetaverseAttributeId, m.TargetConnectedSystemAttributeId, m.Expressions));
     }
 
+    public async Task<Dictionary<int, SyncRuleScopingCriterionState>> GetSyncRuleScopingCriterionStatesAsync(IReadOnlyCollection<int> criterionIds)
+    {
+        if (criterionIds.Count == 0)
+            return [];
+
+        // Read-only comparison input, so no tracking: a caller holding the criterion tracked has already changed it, and
+        // a tracked query would hand back that changed instance rather than what is stored.
+        var ids = criterionIds.ToList();
+        return await Repository.Database.SyncRuleScopingCriteria
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => new SyncRuleScopingCriterionState(
+                c.MetaverseAttributeId, c.ConnectedSystemAttributeId, c.Expression, c.CompareAs, c.ComparisonType, c.CaseSensitive,
+                c.ValueMode, c.RelativeCount, c.RelativeUnit, c.RelativeDirection, c.StringValue, c.IntValue, c.LongValue,
+                c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue));
+    }
+
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)
     {
         var row = await Repository.Database.SyncRules

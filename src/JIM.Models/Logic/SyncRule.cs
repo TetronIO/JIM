@@ -169,6 +169,25 @@ public class SyncRule : IAuditable, IValidated
         AttributeFlowRules.SelectMany(mapping => mapping.SaveWarnings).Distinct(StringComparer.Ordinal).ToList();
 
     /// <summary>
+    /// Every warning the save that returned this instance raised about its Scoping Criteria
+    /// (<see cref="SyncRuleScopingCriteria.SaveWarnings"/>: a problem with a criterion the save left as it was, #2054),
+    /// each once. Reported beside <see cref="AttributeFlowSaveWarnings"/> by the portal and the REST API.
+    /// </summary>
+    [NotMapped]
+    public IReadOnlyList<string> ScopingSaveWarnings => ScopingWarningsOf(ObjectScopingCriteriaGroups).Distinct(StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// Every warning the save that returned this instance raised: <see cref="AttributeFlowSaveWarnings"/>, then
+    /// <see cref="ScopingSaveWarnings"/>, each once. The one list the portal and the REST API report, so neither says
+    /// more or less than the other.
+    /// </summary>
+    [NotMapped]
+    public IReadOnlyList<string> SaveWarnings => AttributeFlowSaveWarnings.Concat(ScopingSaveWarnings).Distinct(StringComparer.Ordinal).ToList();
+
+    private static IEnumerable<string> ScopingWarningsOf(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+        groups.SelectMany(group => group.Criteria.SelectMany(criterion => criterion.SaveWarnings).Concat(ScopingWarningsOf(group.ChildGroups)));
+
+    /// <summary>
     /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse.
     /// Used when the Connected System's ObjectMatchingRuleMode is set to SyncRule (advanced mode).
     /// When ObjectMatchingRuleMode is ConnectedSystem (default), rules are defined on the ConnectedSystemObjectType instead.
