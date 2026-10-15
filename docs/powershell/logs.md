@@ -1,5 +1,8 @@
 ---
 title: Logs
+description: "The cmdlets that read and follow JIM's service logs, filtered by service, date, level and text, without access to the host."
+type: reference
+audience: automation-author
 ---
 
 # Logs

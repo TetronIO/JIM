@@ -2,7 +2,7 @@
 
 ## Status: Point-in-time evidence (2026-10-11) for [#1454](https://github.com/TetronIO/JIM/issues/1454)
 
-The evidence behind [`PRD_PUBLIC_DOCUMENTATION_STANDARD.md`](../../prd/doing/PRD_PUBLIC_DOCUMENTATION_STANDARD.md). Every page under `docs/` was read in full against the house rules in `docs/CLAUDE.md` and the root `CLAUDE.md`, and the product's customer-facing surfaces were inventoried from source and mapped to the docs.
+The evidence behind [`PRD_PUBLIC_DOCUMENTATION_STANDARD.md`](../../prd/done/PRD_PUBLIC_DOCUMENTATION_STANDARD.md). Every page under `docs/` was read in full against the house rules in `docs/CLAUDE.md` and the root `CLAUDE.md`, and the product's customer-facing surfaces were inventoried from source and mapped to the docs.
 
 Line numbers refer to `docs/` as it stood at commit `4ec9e65`. They drift as pages change; search for the quoted text rather than trusting the number. Do not update these files to track later changes: they record what was true when the standard was designed.
 

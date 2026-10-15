@@ -6335,6 +6335,76 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The deletion records for Connected System Objects deleted quietly: objects their Metaverse Object's deletion had
+    /// already disconnected, which the confirming import then found gone (#2100). They have no execution item, because
+    /// the disconnection was recorded when it happened, so each record stands alone, attributed to the run deleting them.
+    /// Without it, nothing would lead from the object's id to its execution items once its row is gone.
+    /// </summary>
+    /// <param name="connectedSystemObjects">The objects about to be deleted, with their attribute values loaded.</param>
+    /// <param name="activity">The run deleting them.</param>
+    /// <param name="changeTrackingEnabled">Whether Connected System Object changes are recorded at all.</param>
+    public List<ConnectedSystemObjectChange> BuildQuietDeletionChangeRecords(
+        IReadOnlyList<ConnectedSystemObject> connectedSystemObjects, Activity activity, bool changeTrackingEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObjects);
+        ArgumentNullException.ThrowIfNull(activity);
+
+        var changes = new List<ConnectedSystemObjectChange>();
+        if (!changeTrackingEnabled)
+            return changes;
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            try
+            {
+                changes.Add(NewDeletionChangeRecord(cso, activity));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Same boundary as LinkDeleteChangeRecords (#1386): one object's record must not cost the batch its
+                // deletion. With no execution item to carry the error, the log is where it is reported.
+                Log.Error(ex, "BuildQuietDeletionChangeRecords: could not record the deletion of Connected System Object {CsoId}; it is deleted without a deletion record",
+                    cso.Id);
+            }
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// A Connected System Object's deletion record, with every final value recorded as removed. Attribute values are
+    /// read now, because they are deleted with the object.
+    /// </summary>
+    private ConnectedSystemObjectChange NewDeletionChangeRecord(ConnectedSystemObject cso, Activity? activity)
+    {
+        // Name only, never NameOrId: the external id is captured separately alongside it. The guarded read throws a
+        // diagnostic error on a duplicated anchor, which each caller reports in its own way (#1386).
+        var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
+        var finalAttributeValues = cso.AttributeValues
+            .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+            .ToList();
+
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ChangeType = ObjectChangeType.Deleted,
+            ChangeTime = DateTime.UtcNow,
+            DeletedObjectType = cso.Type,
+            DeletedObjectExternalId = externalId,
+            DeletedObjectDisplayName = cso.Name,
+            DeletedConnectedSystemObjectId = cso.Id,
+            InitiatedByType = activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activity?.InitiatedById,
+            InitiatedByName = activity?.InitiatedByName
+        };
+
+        foreach (var av in finalAttributeValues)
+            AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+
+        return change;
+    }
+
+    /// <summary>
     /// Links RPEI change records to CSOs before deletion. Pure business logic — no data access.
     /// Captures final attribute snapshots for audit trail before the CSOs are deleted.
     /// Called by SyncServer before deleting CSOs via ISyncRepository.
@@ -6356,32 +6426,11 @@ public partial class ConnectedSystemServer
 
                 try
                 {
-                    // Name only, never NameOrId: the external id is captured separately alongside it.
-                    // The guarded read throws a diagnostic error on a duplicated anchor, recorded per
-                    // object below rather than escaping the run (#1386).
-                    var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
-                    var finalAttributeValues = cso.AttributeValues
-                        .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-                        .ToList();
-
-                    var change = new ConnectedSystemObjectChange
-                    {
-                        ConnectedSystemId = cso.ConnectedSystemId,
-                        ChangeType = ObjectChangeType.Deleted,
-                        ChangeTime = DateTime.UtcNow,
-                        DeletedObjectType = cso.Type,
-                        DeletedObjectExternalId = externalId,
-                        DeletedObjectDisplayName = cso.Name,
-                        DeletedConnectedSystemObjectId = cso.Id,
-                        ActivityRunProfileExecutionItem = executionItem,
-                        InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-                        InitiatedById = executionItem.Activity?.InitiatedById,
-                        InitiatedByName = executionItem.Activity?.InitiatedByName
-                    };
+                    // A duplicated anchor throws a diagnostic error, recorded per object below rather than
+                    // escaping the run (#1386).
+                    var change = NewDeletionChangeRecord(cso, executionItem.Activity);
+                    change.ActivityRunProfileExecutionItem = executionItem;
                     executionItem.ConnectedSystemObjectChange = change;
-
-                    foreach (var av in finalAttributeValues)
-                        AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

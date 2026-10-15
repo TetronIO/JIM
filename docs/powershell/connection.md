@@ -1,5 +1,8 @@
 ---
 title: Connection
+description: "The cmdlets that connect the module to a JIM instance, by single sign-on or API key, check the session, and disconnect."
+type: reference
+audience: automation-author
 ---
 
 # Connection
@@ -147,7 +150,7 @@ Disconnect-JIM -All
 ### Notes
 
 - Clears the in-memory session (access and refresh tokens) **and** removes the persisted refresh token for the targeted instance from the OS credential store, so a later `Connect-JIM` must authenticate again. By default the targeted instance is the connected one; use `-Url` for a specific instance or `-All` for every instance.
-- Removal is **auth-agnostic**: a stored refresh token for the instance is removed even if the cleared session authenticated with an API key. API keys themselves are never persisted by the module, so for an API-key-only session there is simply nothing in the store to remove.
+- Removal is **auth-agnostic**: a stored refresh token for the instance is removed even if the cleared session authenticated with an API key. API keys themselves are never persisted by the module, so for an API-key-only session there is nothing in the store to remove.
 - `-Url` and `-All` work even when there is no active connection, since clearing the credential store is a maintenance operation independent of session state. A bare `Disconnect-JIM` while not connected has no instance to target and does nothing.
 - Does **not** sign you out of your identity provider. If you authenticated via SSO, your identity provider session remains active.
 - After disconnecting, you must call [Connect-JIM](#connect-jim) again before using other JIM cmdlets.

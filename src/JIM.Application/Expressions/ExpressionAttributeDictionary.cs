@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Expressions;
+using JIM.Utilities;
 
 namespace JIM.Application.Expressions;
 
@@ -16,9 +17,16 @@ internal sealed class ExpressionAttributeDictionary
 {
     private readonly Dictionary<string, List<object?>> _values = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Adds one stored value of <paramref name="attributeName"/>; a null value records the attribute with no value.</summary>
+    /// <summary>
+    /// Adds one stored value of <paramref name="attributeName"/>; a null value records the attribute with no value. A date
+    /// is added in the form JIM holds it (#2153, N4): UTC, to the microsecond, whatever Kind the database read it as, so
+    /// two stored forms of one date are one value and an expression never sees the host's offset.
+    /// </summary>
     internal void Add(string attributeName, object? value)
     {
+        if (value is DateTime date)
+            value = DateTimeAttributeValue.ToCanonical(date);
+
         if (!_values.TryGetValue(attributeName, out var values))
         {
             values = [];

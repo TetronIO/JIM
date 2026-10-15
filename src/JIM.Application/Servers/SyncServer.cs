@@ -298,6 +298,19 @@ public class SyncServer : ISyncServer
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
+    public async Task DeleteConnectedSystemObjectsQuietlyAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
+    {
+        // Built before the deletion, which takes the objects' attribute values with it; persisted after, so a record
+        // never describes an object that is still there.
+        var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
+        var deletionRecords = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords(connectedSystemObjects, activity, changeTrackingEnabled);
+
+        await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+
+        if (deletionRecords.Count > 0)
+            await _syncRepo.PersistCsoChangesAsync(deletionRecords);
+    }
+
     public async Task CreateProvisioningCsoChangeRecordsAsync(
         List<ConnectedSystemObject> provisioningCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> mvoIdToRpei)
