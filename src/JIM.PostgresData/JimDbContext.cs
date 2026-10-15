@@ -246,6 +246,11 @@ public class JimDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // PostgreSQL's lower(), so identity lookups fold a parameter in SQL as they fold the column (#2051).
+        modelBuilder.HasDbFunction(typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Lower))!)
+            .HasName("lower")
+            .IsBuiltIn();
+
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.AttributeValues)
             .WithOne(av => av.ConnectedSystemObject)
