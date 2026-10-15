@@ -31,9 +31,11 @@
     reason. A check that ran more than once (a re-run, or a run cancelled by a
     newer one) counts by its latest run only.
 
-    Review threads are read with GraphQL, so this needs the gh CLI, signed in.
-    Claude Code on the web has no gh and no GraphQL; there, subscribe to the pull
-    request's activity instead, which reports the same events.
+    Needs the gh CLI, signed in. It reads the pull request with one GraphQL
+    query; where GraphQL is refused (Claude Code on the web, whose relay allows
+    only REST), it falls back to REST and the relay's review-thread route for the
+    rest of the run. A thread is identified by its first comment's id in both,
+    so -AcknowledgedThreadIds takes the same values either way.
 
 .PARAMETER Number
     The pull request number.
@@ -46,7 +48,8 @@
 
 .PARAMETER AcknowledgedThreadIds
     Review threads left open on purpose (a security finding waiting on the
-    user's decision), by the Id this script printed for them. They no longer
+    user's decision), by the id this script printed for them (the thread's
+    first comment's id). They no longer
     end the wait, and they stop a Blocked report, since they are what blocks.
 
 .PARAMETER Once
@@ -59,6 +62,12 @@
 .PARAMETER Response
     Evaluate this GraphQL response (the parsed JSON of the query below) instead
     of asking GitHub, once. For tests.
+
+.PARAMETER RestResponse
+    Evaluate these REST responses instead of asking GitHub, once. For tests. A
+    hashtable: Pull (the pull request), CheckRuns, Statuses (the combined
+    status's statuses), Threads (the relay's review threads) and Comments (each
+    unresolved thread's first comment, by id).
 
 .PARAMETER PassThru
     Return the result object instead of printing it and setting the exit code.
@@ -97,6 +106,9 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Response')]
     [object]$Response,
 
+    [Parameter(Mandatory, ParameterSetName = 'Rest')]
+    [hashtable]$RestResponse,
+
     [switch]$PassThru
 )
 
@@ -132,7 +144,7 @@ query($owner: String!, $name: String!, $number: Int!) {
           id
           isResolved
           comments(first: 1) {
-            nodes { author { login } path line body url }
+            nodes { databaseId author { login } path line body url }
           }
         }
       }
@@ -175,7 +187,7 @@ function ConvertTo-PullRequestSnapshot {
     $threads = foreach ($t in @($pr.reviewThreads.nodes | Where-Object { $_ })) {
         $first = @($t.comments.nodes)[0]
         [pscustomobject]@{
-            Id         = $t.id
+            Id         = [string]$first.databaseId
             IsResolved = [bool]$t.isResolved
             Author     = $first.author.login
             Path       = $first.path
@@ -188,6 +200,60 @@ function ConvertTo-PullRequestSnapshot {
     [pscustomobject]@{
         State            = $pr.state
         MergeStateStatus = $pr.mergeStateStatus
+        Checks           = @($checks)
+        Threads          = @($threads)
+    }
+}
+
+function ConvertFrom-RestPullRequest {
+    # The same snapshot, from REST: the pull request, the head commit's check runs
+    # and combined status, and the relay's review threads (which carry no thread
+    # id, only comment ids; Comments holds each unresolved thread's first comment).
+    param([Parameter(Mandatory)] [hashtable]$Rest)
+
+    $pull = $Rest.Pull
+    $state = if ($pull.merged) { 'MERGED' } elseif ($pull.state -eq 'closed') { 'CLOSED' } else { 'OPEN' }
+
+    $checks = @(
+        foreach ($r in @($Rest.CheckRuns | Where-Object { $_ })) {
+            [pscustomobject]@{
+                Name       = $r.name
+                Status     = ([string]$r.status).ToUpperInvariant()
+                Conclusion = if ($r.conclusion) { ([string]$r.conclusion).ToUpperInvariant() } else { $null }
+                StartedAt  = $r.started_at
+                Url        = $r.html_url
+            }
+        }
+        foreach ($st in @($Rest.Statuses | Where-Object { $_ })) {
+            $pending = $st.state -eq 'pending'
+            [pscustomobject]@{
+                Name       = $st.context
+                Status     = if ($pending) { 'PENDING' } else { 'COMPLETED' }
+                Conclusion = if ($pending) { $null } else { ([string]$st.state).ToUpperInvariant() }
+                StartedAt  = $st.created_at
+                Url        = $st.target_url
+            }
+        }
+    )
+
+    $comments = if ($Rest.Comments) { $Rest.Comments } else { @{} }
+    $threads = foreach ($t in @($Rest.Threads | Where-Object { $_ })) {
+        $id = [string]@($t.comment_ids)[0]
+        $first = $comments[$id]
+        [pscustomobject]@{
+            Id         = $id
+            IsResolved = [bool]$t.resolved
+            Author     = $first.user.login
+            Path       = $t.path
+            Line       = $t.line
+            Body       = $first.body
+            Url        = $first.html_url
+        }
+    }
+
+    [pscustomobject]@{
+        State            = $state
+        MergeStateStatus = ([string]$pull.mergeable_state).ToUpperInvariant()
         Checks           = @($checks)
         Threads          = @($threads)
     }
@@ -243,12 +309,57 @@ function Get-PullRequestAttention {
     & $result 'Waiting' 'Nothing needs you yet.'
 }
 
+function Invoke-GhJson {
+    param([string[]]$Arguments)
+    $out = & gh @Arguments 2>&1
+    $text = ($out | ForEach-Object { "$_" }) -join "`n"
+    if ($LASTEXITCODE -ne 0) {
+        $err = [System.Exception]::new("gh $($Arguments[0..1] -join ' ') failed (exit $LASTEXITCODE): $text")
+        $err.Data['Output'] = $text
+        throw $err
+    }
+    $text | ConvertFrom-Json
+}
+
+function Get-RestSnapshot {
+    param([string]$Repository, [int]$Number)
+    $base = "repos/$Repository"
+    $pull = Invoke-GhJson @('api', "$base/pulls/$Number")
+    $sha = $pull.head.sha
+    $runs = Invoke-GhJson @('api', '--paginate', '--slurp', "$base/commits/$sha/check-runs?per_page=100")
+    $status = Invoke-GhJson @('api', "$base/commits/$sha/status")
+    $threads = @(Invoke-GhJson @('api', "$base/pulls/$Number/ccr/review_threads"))
+    $comments = @{}
+    foreach ($t in @($threads | Where-Object { $_ -and -not $_.resolved })) {
+        $id = [string]@($t.comment_ids)[0]
+        if ($id) { $comments[$id] = Invoke-GhJson @('api', "$base/pulls/comments/$id") }
+    }
+    ConvertFrom-RestPullRequest -Rest @{
+        Pull      = $pull
+        CheckRuns = @($runs | ForEach-Object { $_.check_runs })
+        Statuses  = @($status.statuses)
+        Threads   = $threads
+        Comments  = $comments
+    }
+}
+
+$script:UseRest = $false
 function Get-PullRequestSnapshot {
     param([string]$Repository, [int]$Number)
-    $owner, $name = $Repository.Split('/', 2)
-    $json = gh api graphql -F owner=$owner -F name=$name -F number=$Number -f query=$script:Query
-    if ($LASTEXITCODE -ne 0) { throw "gh api graphql failed (exit $LASTEXITCODE)." }
-    ConvertTo-PullRequestSnapshot -Response ($json | ConvertFrom-Json)
+    if (-not $script:UseRest) {
+        $owner, $name = $Repository.Split('/', 2)
+        try {
+            $response = Invoke-GhJson @('api', 'graphql', '-F', "owner=$owner", '-F', "name=$name", '-F', "number=$Number", '-f', "query=$script:Query")
+            return ConvertTo-PullRequestSnapshot -Response $response
+        }
+        catch {
+            # Claude Code on the web refuses GraphQL outright; switch to REST for
+            # the rest of the run. Anything else is a real failure.
+            if ("$($_.Exception.Data['Output'])" -notmatch 'GraphQL is not available') { throw }
+            $script:UseRest = $true
+        }
+    }
+    Get-RestSnapshot -Repository $Repository -Number $Number
 }
 
 function Write-Attention {
@@ -280,7 +391,10 @@ function Get-ExitCode {
 if ($PSCmdlet.ParameterSetName -eq 'Response') {
     $Snapshot = ConvertTo-PullRequestSnapshot -Response $Response
 }
-if ($PSCmdlet.ParameterSetName -in @('Snapshot', 'Response')) {
+if ($PSCmdlet.ParameterSetName -eq 'Rest') {
+    $Snapshot = ConvertFrom-RestPullRequest -Rest $RestResponse
+}
+if ($PSCmdlet.ParameterSetName -in @('Snapshot', 'Response', 'Rest')) {
     $attention = Get-PullRequestAttention -Snapshot $Snapshot -AcknowledgedThreadIds $AcknowledgedThreadIds
     if ($PassThru) { return $attention }
     Write-Attention -Attention $attention -Label 'Pull request'
