@@ -1227,6 +1227,38 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// List the causal timeline for a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Returns every Run Profile Execution Item about the object, newest first, each with its nearest recorded cause:
+    /// the same list the Causality Explorer shows for it. Works for a deleted object too, through the records its
+    /// deletion left. Each row's <c>id</c> is the execution item's, so its full causes and consequences are one call
+    /// away on the Activities endpoints.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A page of the object's causal timeline, with the object it describes.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/causal-timeline", Name = "GetConnectedSystemObjectCausalTimeline")]
+    [ProducesResponseType(typeof(CausalTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectCausalTimelineAsync(int connectedSystemId, Guid csoId, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested causal timeline for CSO {CsoId} in Connected System {SystemId}", csoId, connectedSystemId);
+
+        var timeline = await _application.Activities.GetCausalTimelineAsync(
+            new CausalTimelineSubject(CausalTimelineSubjectKind.ConnectedSystemObject, csoId), pagination.Page, pagination.PageSize);
+
+        // The header covers the object live and deleted alike, so it is what decides whether the object exists; checking
+        // its Connected System keeps the route honest, as change history's does.
+        if (timeline.Header == null || timeline.Header.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
+
+        return Ok(CausalTimelineDto.FromModel(timeline));
+    }
+
+    /// <summary>
     /// List Attribute Values for a Connected System Object
     /// </summary>
     /// <remarks>
@@ -1556,6 +1588,30 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
 
         return Ok(PendingExportDetailDto.FromDetailResult(result));
+    }
+
+    /// <summary>
+    /// List the runs that queued a Pending Export
+    /// </summary>
+    /// <remarks>
+    /// Returns the synchronisation runs that staged the Pending Export, newest first, each as the execution item that
+    /// staged it with its nearest recorded cause: why the change is waiting to be exported. Runs whose records history
+    /// retention has since removed are counted in <c>notRetainedCount</c> rather than listed.
+    /// </remarks>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the Pending Export.</param>
+    /// <returns>The runs that queued the Pending Export.</returns>
+    [HttpGet("pending-exports/{pendingExportId:guid}/queued-by", Name = "GetPendingExportQueuedBy")]
+    [ProducesResponseType(typeof(CausalQueuedByDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportQueuedByAsync(Guid pendingExportId)
+    {
+        _logger.LogTrace("Requested queueing runs for Pending Export: {PendingExportId}", pendingExportId);
+        var queuedBy = await _application.Activities.GetPendingExportQueuedByAsync(pendingExportId);
+        if (queuedBy == null)
+            return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
+
+        return Ok(CausalQueuedByDto.FromModel(queuedBy));
     }
 
     /// <summary>
@@ -6479,6 +6535,40 @@ public class SynchronisationController(
     #endregion
 
     #region Expression Testing
+
+    /// <summary>
+    /// List the expression functions
+    /// </summary>
+    /// <remarks>
+    /// Every built-in function an expression can call, with its signature, parameters, what it returns, a description and
+    /// an example: the same list the expression editor's Insert function menu offers. Functions come back grouped by
+    /// category, in the order the Expressions reference lists them.
+    /// </remarks>
+    /// <param name="name">Only functions whose name contains this text, ignoring case.</param>
+    /// <param name="category">Only functions in this category.</param>
+    /// <returns>The matching functions.</returns>
+    /// <response code="200">The matching functions; empty when none match.</response>
+    /// <response code="400">The category is not one of the categories.</response>
+    /// <response code="401">Authentication required.</response>
+    [HttpGet("expression-functions", Name = "GetExpressionFunctions")]
+    [ProducesResponseType(typeof(IEnumerable<ExpressionFunctionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult GetExpressionFunctions([FromQuery] string? name = null, [FromQuery] ExpressionFunctionCategory? category = null)
+    {
+        var functions = ExpressionFunctionCatalogue.All.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var search = name.Trim();
+            functions = functions.Where(f => f.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (category is { } wanted)
+            functions = functions.Where(f => f.Category == wanted);
+
+        return Ok(functions.Select(ExpressionFunctionDto.FromFunction).ToList());
+    }
 
     /// <summary>
     /// Test an expression with sample Attribute data

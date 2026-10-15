@@ -154,8 +154,8 @@ Set-JIMMetaverseAttribute -InputObject <PSCustomObject> [-Name <string>] [-Rende
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | An attribute from the pipeline, for example from `Get-JIMMetaverseAttribute`. Accepts pipeline input. |
 | `Name` | `string` | No |  | A new name for the attribute. It must be unique, ignoring case. |
 | `RenderingHint` | `string` | No |  | How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute. One of `Default`, `Table`, `ChipSet` or `List`. |
-| `Type` | `string` | No |  | A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses the change while any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without `-AttributePlurality` also makes the attribute single-valued. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid` or `Binary`. |
-| `AttributePlurality` | `string` | No |  | Whether the attribute holds one value or many. JIM refuses the change while any Metaverse Object holds a value for the attribute, and refuses MultiValued for a Boolean. One of `SingleValued` or `MultiValued`. |
+| `Type` | `string` | No |  | A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without `-AttributePlurality` also makes the attribute single-valued. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid` or `Binary`. |
+| `AttributePlurality` | `string` | No |  | Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute, JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to SingleValued, and refuses MultiValued for a Boolean. One of `SingleValued` or `MultiValued`. |
 | `StandardMappings` | `Array` | No |  | The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a Standard (Scim, Ldap or Jim), a CounterpartName (the attribute's name in that standard) and optional Notes. Standard Mappings are guidance only and never affect synchronisation. |
 | `ChangeReason` | `string` | No |  | An optional reason for the change, recorded in the attribute's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated attribute. |
@@ -167,7 +167,7 @@ With `-PassThru`, the updated attribute in full; otherwise nothing.
 Properties as under [Get-JIMMetaverseAttribute](#get-jimmetaverseattribute).
 <!-- END GENERATED: Set-JIMMetaverseAttribute -->
 
-JIM refuses a change of `-Type` or `-AttributePlurality` while any Metaverse Object holds a value for the attribute; clear the values first. Giving either sends both, the other as the attribute has it now, except that `-Type Boolean` alone makes the attribute single-valued, since a Boolean holds one value. To bind the attribute to an Object Type or unbind it, use [`Add-JIMMetaverseObjectTypeAttribute`](#add-jimmetaverseobjecttypeattribute) and [`Remove-JIMMetaverseObjectTypeAttribute`](#remove-jimmetaverseobjecttypeattribute).
+While any Metaverse Object holds a value for the attribute, the one schema change JIM makes is widening it from single-valued to multi-valued with its type unchanged, which keeps every value. It refuses any other change of `-Type` or `-AttributePlurality` until the values are cleared, and the cmdlet reports the refusal as an error. Giving either parameter sends both, the other as the attribute has it now, except that `-Type Boolean` alone makes the attribute single-valued, since a Boolean holds one value. To bind the attribute to an Object Type or unbind it, use [`Add-JIMMetaverseObjectTypeAttribute`](#add-jimmetaverseobjecttypeattribute) and [`Remove-JIMMetaverseObjectTypeAttribute`](#remove-jimmetaverseobjecttypeattribute).
 
 ### Examples
 
@@ -181,6 +181,10 @@ Get-JIMMetaverseAttribute -Name "proxyAddresses" | Set-JIMMetaverseAttribute -Re
 
 ```powershell title="Change an attribute's data type (refused if any object holds a value)"
 Set-JIMMetaverseAttribute -Id 42 -Type Integer
+```
+
+```powershell title="Widen a single-valued attribute to multi-valued, keeping its values"
+Set-JIMMetaverseAttribute -Id 42 -AttributePlurality MultiValued -ChangeReason "The directory now holds several values"
 ```
 
 ```powershell title="Record how a custom attribute corresponds to the SCIM 2.0 and LDAP standards"

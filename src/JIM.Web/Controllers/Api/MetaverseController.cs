@@ -125,7 +125,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (existingByPluralName != null)
             return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{request.PluralName}' already exists."));
 
-        var deletionRule = request.DeletionRule ?? MetaverseObjectDeletionRule.Manual;
+        var deletionRule = request.DeletionRule ?? MetaverseObjectType.DefaultDeletionRule;
 
         // Deletion rule settings share their validation with Update; on create the request's trigger
         // list is both the requested and the effective set (there is no stored state to fall back to).
@@ -755,16 +755,18 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Change a Metaverse Attribute's data type and/or plurality
     /// </summary>
     /// <remarks>
-    /// Refused while any Metaverse Object holds a stored value for the attribute; in that case a 409 is returned with
-    /// the blocking impact (the stored-value count). Built-in attributes cannot be changed. A Boolean attribute holds
-    /// one value, so changing to a multi-valued Boolean is refused with a 400.
+    /// While any Metaverse Object holds a stored value for the attribute, the only change allowed is widening it from
+    /// single-valued to multi-valued with its data type unchanged; every stored value is kept. Any other change (a data
+    /// type change, or multi-valued to single-valued) is refused with a 409 carrying the blocking impact, and nothing is
+    /// changed. Built-in attributes cannot be changed. A Boolean attribute holds one value, so changing to a
+    /// multi-valued Boolean is refused with a 400.
     /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
     /// <param name="request">The new type and plurality.</param>
     /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
     /// <response code="400">Invalid request: no Type, a multi-valued Boolean, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}/schema", Name = "ChangeAttributeSchema")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -799,7 +801,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
 
-        if (impact.BlockedByValues)
+        // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, and a
+        // refused change is never applied.
+        if (!impact.Applied)
             return Conflict(impact);
 
         var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
@@ -1712,6 +1716,36 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
         ApiDateValues.CanonicaliseDates(items);
         return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// List the causal timeline for a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns every Run Profile Execution Item about the object, newest first, each with its nearest recorded cause:
+    /// the same list the Causality Explorer shows for it. Works for a deleted object too, through the records its
+    /// deletion left. Where this deployment records no Metaverse Object changes, the timeline holds only what the
+    /// object's joined Connected System Objects recorded, and <c>metaverseObjectChangesNotRecorded</c> says so.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A page of the object's causal timeline, with the object it describes.</returns>
+    [HttpGet("objects/{id:guid}/causal-timeline", Name = "GetObjectCausalTimeline")]
+    [ProducesResponseType(typeof(CausalTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectCausalTimelineAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested causal timeline for Metaverse Object: {Id}", id);
+
+        var timeline = await _application.Activities.GetCausalTimelineAsync(
+            new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, id), pagination.Page, pagination.PageSize);
+
+        // The header covers the object live and deleted alike, so it is what decides whether the object exists.
+        if (timeline.Header == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        return Ok(CausalTimelineDto.FromModel(timeline));
     }
 
     /// <summary>

@@ -1,0 +1,156 @@
+@using JIM.Models.Activities
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An object's causal timeline in the Causality Explorer (#2100): what happened to the object, newest first, each row
+   with the run that did it, what it did, and its nearest recorded cause, worded as the Lineage words it. Explore
+   re-centres the explorer on the row's item. The host pages the rows in, fifty at a time. *@
+
+<MudTable T="CausalTimelineRow" Items="Rows" Dense="_dense" Hover="true" Elevation="0" Outlined="true"
+          RowClass="jim-causality-timeline-row" Class="jim-causality-timeline">
+    <ToolBarContent>
+        <TableDensityToggle @bind-Dense="_dense" />
+        <MudText Class="mx-2 mud-text-disabled">|</MudText>
+        <MudText Typo="Typo.h6">What happened to it</MudText>
+        <MudSpacer />
+        @if (TotalCount > 0)
+        {
+            <span class="jim-causality-timeline-count">
+                @(Rows.Count < TotalCount
+                    ? $"{Rows.Count:N0} of {TotalCount:N0} items, newest first"
+                    : $"{TotalCount:N0} {(TotalCount == 1 ? "item" : "items")}, newest first")
+            </span>
+        }
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>When</MudTh>
+        <MudTh>Run</MudTh>
+        <MudTh>What happened</MudTh>
+        <MudTh>Because</MudTh>
+        <MudTh />
+    </HeaderContent>
+    <RowTemplate>
+        @{ var executedLocal = context.Entry.Executed.ToLocalTime(); }
+        <MudTd DataLabel="When" Class="jim-nowrap">
+            <span title="@executedLocal.ToFriendlyDate()">@executedLocal.ToRelativeTime()</span>
+        </MudTd>
+        <MudTd DataLabel="Run" Class="jim-nowrap">
+            <div>@(context.Entry.ActivityTargetName ?? "A run")</div>
+            @if (!string.IsNullOrWhiteSpace(context.Entry.ActivityTargetContext))
+            {
+                <div class="mud-text-secondary jim-causality-timeline-system">@context.Entry.ActivityTargetContext</div>
+            }
+        </MudTd>
+        <MudTd DataLabel="What happened">
+            <OutcomeSummaryChips OutcomeSummary="@context.Entry.OutcomeSummary" ErrorType="@context.Entry.ErrorType" />
+        </MudTd>
+        <MudTd DataLabel="Because">
+            <CausalityNearestCause NearestCauses="context.NearestCauses" EffectName="@context.Entry.DisplayName" />
+        </MudTd>
+        <MudTd Class="jim-nowrap">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="jim-causality-explore"
+                       StartIcon="@Icons.Material.Filled.CenterFocusStrong" Href="@Links.ItemHref(context.Entry.RunProfileExecutionItemId)">
+                Explore
+            </MudButton>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <TableEmptyState Icon="@Icons.Material.Filled.History" PrimaryText="Nothing recorded for this object"
+                         SecondaryText="No execution item about it is retained. History retention may have removed them, or nothing has processed it yet." />
+    </NoRecordsContent>
+</MudTable>
+
+@if (Rows.Count < TotalCount && OnShowMore.HasDelegate)
+{
+    <div class="jim-causality-timeline-more">
+        <MudButton Variant="Variant.Outlined" Class="jim-causality-show-more" Disabled="@Loading" OnClick="OnShowMore">
+            Show @Math.Min(ActivityServerPageSize, TotalCount - Rows.Count).ToString("N0") more
+        </MudButton>
+    </div>
+}
+
+@if (MetaverseObjectChangesNotRecorded)
+{
+    <div class="jim-causality-timeline-note">@ChangesNotRecordedNote</div>
+}
+@if (Header is { IsDeleted: true } deleted)
+{
+    <div class="jim-causality-timeline-note">
+        @if (deleted.Subject.Kind == CausalTimelineSubjectKind.ConnectedSystemObject)
+        {
+            @($"This object has been deleted. Its items are found through its deletion record and by its external ID within {deleted.ConnectedSystemName ?? "its Connected System"}, as the Lineage does for a deleted record.")
+        }
+        else
+        {
+            @("This object has been deleted. Its items are found through the change records its deletion kept.")
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// How many rows the host reads at a time.
+    /// </summary>
+    private const int ActivityServerPageSize = JIM.Application.Servers.ActivityServer.CausalTimelineDefaultPageSize;
+
+    /// <summary>
+    /// The rows read so far, newest first.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CausalTimelineRow> Rows { get; set; } = [];
+
+    /// <summary>
+    /// How many rows the object's timeline holds in all.
+    /// </summary>
+    [Parameter]
+    public int TotalCount { get; set; }
+
+    /// <summary>
+    /// Where a row's Explore goes.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ICausalityLinks Links { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the object is a Metaverse Object on a deployment that records no Metaverse Object changes.
+    /// </summary>
+    [Parameter]
+    public bool MetaverseObjectChangesNotRecorded { get; set; }
+
+    /// <summary>
+    /// The object, where it is known; a deleted one says how its rows were found.
+    /// </summary>
+    [Parameter]
+    public CausalObjectHeader? Header { get; set; }
+
+    /// <summary>
+    /// Whether the host is reading the next rows.
+    /// </summary>
+    [Parameter]
+    public bool Loading { get; set; }
+
+    /// <summary>
+    /// Reads the next rows; the button shows only where the host handles it.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnShowMore { get; set; }
+
+    private const string ChangesNotRecordedNote =
+        "Changes made directly to this Metaverse Object are not recorded on this deployment, because change tracking is off. " +
+        "These rows come from the items recorded against its joined Connected System Objects.";
+
+    private bool _dense;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _dense = await PreferenceService.GetTableDenseAsync() == true;
+        StateHasChanged();
+    }
+}

@@ -396,6 +396,51 @@ public class MetaverseControllerAttributeTests
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
     }
 
+    /// <summary>
+    /// The lossless widening (#2153, D3) is applied while values exist, so the endpoint reports success. Gating on
+    /// the stored-value count instead returned 409 for a change that had already been made.
+    /// </summary>
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_WideningWithStoredValues_ReturnsOkWithTheWidenedAttributeAsync()
+    {
+        var attribute = Attr(1);
+        _mv.Setup(r => r.GetAttributeValueObjectCountAsync(1)).ReturnsAsync(77);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = (((OkObjectResult)result).Value as MetaverseAttributeDetailDto)!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+        }
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_NarrowingWithStoredValues_ReturnsConflictAndAppliesNothingAsync()
+    {
+        var attribute = Attr(1);
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        _mv.Setup(r => r.GetAttributeValueObjectCountAsync(1)).ReturnsAsync(3);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued });
+
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+        var impact = (((ConflictObjectResult)result).Value as AttributeSchemaChangeImpact)!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.False);
+            Assert.That(impact.BlockedByValues, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.False);
+            Assert.That(impact.CurrentPlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(impact.ProposedPlurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+        }
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
     [Test]
     public async Task ChangeAttributeSchemaAsync_ToMultiValuedBoolean_ReturnsBadRequestNamingTheRuleAsync()
     {

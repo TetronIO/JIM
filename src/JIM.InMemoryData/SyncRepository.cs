@@ -187,6 +187,15 @@ public class SyncRepository : ISyncRepository
         _objectTypes[objectType.Id] = objectType;
     }
 
+    /// <summary>
+    /// An attribute's case-exact declaration (#2051), from the seeded Object Types and Connected System Objects; an
+    /// attribute the repository has not seen ignores case, which is the declaration's default.
+    /// </summary>
+    private bool IsCaseExact(int attributeId) =>
+        _objectTypes.Values.SelectMany(t => t.Attributes ?? []).FirstOrDefault(a => a.Id == attributeId)?.CaseExact
+        ?? _csos.Values.SelectMany(c => c.AttributeValues).FirstOrDefault(av => av.AttributeId == attributeId && av.Attribute != null)?.Attribute?.CaseExact
+        ?? false;
+
     public void SeedSyncRule(SyncRule syncRule)
     {
         _syncRules[syncRule.Id] = syncRule;
@@ -439,9 +448,12 @@ public class SyncRepository : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
         int connectedSystemId, int attributeId, string attributeValue)
     {
+        // Mirrors the Postgres lookup: exact for a case-exact attribute, else ignoring case (#2051).
+        var caseExact = IsCaseExact(attributeId);
+        var key = IdentifierKey.For(attributeValue, caseExact);
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
-                .Any(av => av.AttributeId == attributeId && av.StringValue == attributeValue));
+                .Any(av => av.AttributeId == attributeId && av.StringValue != null && IdentifierKey.For(av.StringValue, caseExact) == key));
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
@@ -476,12 +488,14 @@ public class SyncRepository : ISyncRepository
     public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051).
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.TypeId == objectTypeId &&
                 c.SecondaryExternalIdAttributeId.HasValue &&
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
-                    av.StringValue == secondaryExternalIdValue));
+                    av.StringValue != null &&
+                    IdentifierKey.AreSame(av.StringValue, secondaryExternalIdValue, IsCaseExact(av.AttributeId))));
 
         // Cloned for the same reason as GetConnectedSystemObjectsByIdsAsync (#1079 Regression B):
         // this is the confirming import's PendingProvisioning fallback lookup path
@@ -493,9 +507,10 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Honest in-memory equivalent of the Postgres batch query: same predicate as
-    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
-    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
-    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (<c>StringValue</c> equality
+    /// against that CSO's own configured secondary external id attribute, ignoring case unless the
+    /// attribute is case-exact), evaluated for many values at once, each match reported under the value
+    /// asked for. Virtual so tests can spy on call counts to
     /// prove the import pipeline batches this per page instead of calling it per object.
     /// </summary>
     /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
@@ -511,7 +526,11 @@ public class SyncRepository : ISyncRepository
         if (secondaryExternalIdValues.Count == 0)
             return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
 
-        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        var caseExact = IsCaseExact(secondaryExternalIdAttributeId);
+        var requestedByKey = secondaryExternalIdValues
+            .Distinct(StringComparer.Ordinal)
+            .GroupBy(value => IdentifierKey.For(value, caseExact), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             if (cso.TypeId != objectTypeId ||
@@ -522,9 +541,9 @@ public class SyncRepository : ISyncRepository
                 av.AttributeId == secondaryExternalIdAttributeId &&
                 av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
                 av.StringValue != null &&
-                valueSet.Contains(av.StringValue)))
+                requestedByKey.ContainsKey(IdentifierKey.For(av.StringValue, caseExact))))
             {
-                results.Add((av.StringValue!, cso.Id, cso.Status));
+                results.AddRange(requestedByKey[IdentifierKey.For(av.StringValue!, caseExact)].Select(requested => (requested, cso.Id, cso.Status)));
             }
         }
 
@@ -545,16 +564,16 @@ public class SyncRepository : ISyncRepository
 
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, Guid>(CsoLookupKey.Comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv);
+            var primaryValue = GetExternalIdValueString(cso, primaryAv);
 
             if (primaryValue != null)
             {
-                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
                 result.TryAdd(cacheKey, cso.Id);
                 continue;
             }
@@ -563,11 +582,11 @@ public class SyncRepository : ISyncRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv);
+                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
 
                 if (secondaryValue != null)
                 {
-                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
                     result.TryAdd(cacheKey, cso.Id);
                 }
             }
@@ -582,18 +601,18 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
-        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(CsoLookupKey.Comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
 
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv);
+            var primaryValue = GetExternalIdValueString(cso, primaryAv);
 
             if (primaryValue != null)
             {
-                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
                 result.TryAdd(cacheKey, entry);
                 continue;
             }
@@ -602,11 +621,11 @@ public class SyncRepository : ISyncRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv);
+                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
 
                 if (secondaryValue != null)
                 {
-                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
                     result.TryAdd(cacheKey, entry);
                 }
             }
@@ -706,9 +725,15 @@ public class SyncRepository : ISyncRepository
     {
         // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
         // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
-        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
-        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
-        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them, and text ignores case
+        // unless the anchor is case-exact (#2051). Keyed by the value asked for, as the Postgres implementation is.
+        var caseExact = IsCaseExact(attributeId);
+        var comparer = IdentifierKey.Comparer(caseExact);
+        var requestedByValue = attributeValues
+            .Distinct(StringComparer.Ordinal)
+            .GroupBy(value => value, comparer)
+            .ToDictionary(group => group.Key, group => group.ToList(), comparer);
+        var result = new Dictionary<string, ConnectedSystemObject>(comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
@@ -718,8 +743,11 @@ public class SyncRepository : ISyncRepository
                     ?? av.IntValue?.ToString()
                     ?? av.LongValue?.ToString()
                     ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
-                if (renderedValue != null && valueSet.Contains(renderedValue))
-                    result.TryAdd(renderedValue, cso);
+                if (renderedValue == null || !requestedByValue.TryGetValue(renderedValue, out var requested))
+                    continue;
+
+                foreach (var requestedValue in requested)
+                    result.TryAdd(requestedValue, cso);
             }
         }
         return Task.FromResult(result);
@@ -728,15 +756,20 @@ public class SyncRepository : ISyncRepository
     public virtual Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
         int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
-        var valueSet = new HashSet<string>(secondaryExternalIdValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Mirrors the Postgres implementation: keyed by the value asked for, each object's value compared as its own
+        // secondary external id attribute compares (ignoring case unless case-exact, #2051).
+        var requested = secondaryExternalIdValues.Distinct(StringComparer.Ordinal).ToList();
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             if (!cso.SecondaryExternalIdAttributeId.HasValue) continue;
             var secIdAv = cso.AttributeValues
                 .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-            if (secIdAv?.StringValue != null && valueSet.Contains(secIdAv.StringValue))
-                result.TryAdd(secIdAv.StringValue, cso);
+            if (secIdAv?.StringValue == null) continue;
+
+            var comparer = IdentifierKey.Comparer(IsCaseExact(secIdAv.AttributeId));
+            foreach (var value in requested.Where(value => comparer.Equals(value, secIdAv.StringValue)))
+                result.TryAdd(value, cso);
         }
         return Task.FromResult(result);
     }
@@ -1258,11 +1291,13 @@ public class SyncRepository : ISyncRepository
                 if (av.UnresolvedReferenceValue == null || av.ReferenceValueId.HasValue)
                     continue;
 
-                // Try to find a CSO with this external ID value in the same Connected System
+                // Mirrors the Postgres fixup: the CSO whose Secondary External ID the reference names, ignoring case
+                // unless that attribute is case-exact (#2051).
                 var target = GetCsosForSystem(connectedSystemId)
-                    .FirstOrDefault(c => c.AttributeValues
-                        .Any(tav => tav.AttributeId == c.ExternalIdAttributeId &&
-                                    tav.StringValue == av.UnresolvedReferenceValue));
+                    .FirstOrDefault(c => c.SecondaryExternalIdAttributeId.HasValue && c.AttributeValues
+                        .Any(tav => tav.AttributeId == c.SecondaryExternalIdAttributeId &&
+                                    tav.StringValue != null &&
+                                    IdentifierKey.AreSame(tav.StringValue, av.UnresolvedReferenceValue, IsCaseExact(tav.AttributeId))));
 
                 if (target != null)
                 {
@@ -1279,14 +1314,18 @@ public class SyncRepository : ISyncRepository
     {
         // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
         // resolution below is a single pass either way.
-        // Build a lookup of secondary external ID values → CSO for the Connected System
-        var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        // Build a lookup of secondary external ID values → CSO for the Connected System, keyed as each attribute
+        // compares its values (ignoring case unless case-exact, #2051), so it mirrors the Postgres fixup.
+        var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+        var caseExactSecondaryKeys = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.Attribute?.IsSecondaryExternalId == true && av.StringValue != null))
             {
-                if (av.Attribute?.IsSecondaryExternalId == true && av.StringValue != null)
-                    secondaryIdLookup.TryAdd(av.StringValue, cso);
+                if (av.Attribute!.CaseExact)
+                    caseExactSecondaryKeys.TryAdd(av.StringValue!, cso);
+                else
+                    secondaryIdLookup.TryAdd(IdentifierKey.For(av.StringValue!, caseExact: false), cso);
             }
         }
 
@@ -1306,7 +1345,8 @@ public class SyncRepository : ISyncRepository
                     if (valueChange.ReferenceValue != null || valueChange.StringValue == null)
                         continue;
 
-                    if (secondaryIdLookup.TryGetValue(valueChange.StringValue, out var targetCso))
+                    if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue, out var targetCso) ||
+                        secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue, caseExact: false), out targetCso))
                     {
                         valueChange.ReferenceValue = targetCso;
                         resolved++;
@@ -1721,12 +1761,12 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues)
+        IReadOnlyCollection<string> referenceValues)
     {
         var csoIds = connectedSystemObjectIds as HashSet<Guid> ?? [.. connectedSystemObjectIds];
         var attributeIds = connectedSystemAttributeIds as HashSet<int> ?? [.. connectedSystemAttributeIds];
         var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
-        var loweredValues = loweredReferenceValues.ToHashSet(StringComparer.Ordinal);
+        var loweredValues = referenceValues.Select(value => IdentifierKey.For(value, caseExact: false)).ToHashSet(StringComparer.Ordinal);
 
         // Same comparison semantics as the SQL implementation: exact match on the resolved
         // reference id, or the pre-lowered raw reference string against LOWER(value).
@@ -1737,7 +1777,7 @@ public class SyncRepository : ISyncRepository
                 .Where(av => attributeIds.Contains(av.AttributeId) &&
                              ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
                               (av.UnresolvedReferenceValue != null &&
-                               loweredValues.Contains(av.UnresolvedReferenceValue.ToLowerInvariant()))))
+                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false)))))
                 .Select(av => new CsoReferenceValueMatch
                 {
                     AttributeValueId = av.Id,
@@ -3285,20 +3325,14 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Converts a CSO attribute value to its lowercase string representation for cache key building.
-    /// Mirrors the logic in ConnectedSystemRepository.GetExternalIdValueString.
+    /// A CSO anchor value in its lookup-key form, folded by its attribute's case-exact declaration. Mirrors
+    /// ConnectedSystemRepository.GetAllCsoImportStateLookupAsync.
     /// </summary>
-    private static string? GetExternalIdValueString(ConnectedSystemObjectAttributeValue? av)
+    private static string? GetExternalIdValueString(ConnectedSystemObject cso, ConnectedSystemObjectAttributeValue? av)
     {
         if (av == null) return null;
-        if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
-        if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
-        if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
-        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
-        // otherwise key differently despite being the same anchor (#1283).
-        if (av.DecimalValue.HasValue) return ExternalIdValue.ToCanonicalString(av.DecimalValue.Value);
-        if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
-        return null;
+        var attribute = av.Attribute ?? cso.Type?.Attributes.FirstOrDefault(a => a.Id == av.AttributeId);
+        return CsoLookupKey.ValueKey(av.StringValue, av.IntValue, av.LongValue, av.GuidValue, av.DecimalValue, attribute?.CaseExact ?? false);
     }
 
     private void AddToCsIndex(ConnectedSystemObject cso)

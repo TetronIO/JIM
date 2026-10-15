@@ -18,6 +18,9 @@ Attribute Flow { #attribute-flow }
 Attribute Priority { #attribute-priority }
 :   The deterministic precedence that decides which Connected System's value wins when several contribute the same Metaverse Object attribute. Each contributing inbound Synchronisation Rule holds a priority for the attribute, and the highest-priority contributor that has a value sets it, so the result never depends on the order synchronisations happen to run in.
 
+Causality Explorer { #causality-explorer }
+:   The page that follows one story across objects and runs: an object's causal timeline, each item's Lineage, and the runs that queued a Pending Export, with a trail of every step taken. See [Causality](../configuration/causality.md#the-causality-explorer).
+
 Configuration Change History { #configuration-change-history }
 :   A versioned, per-object audit of who changed a configuration entity, what changed, and when, captured as a redacted snapshot on the originating Activity. It covers every administrator-mutable configuration type and is retained on its own, typically much longer, retention period.
 

@@ -453,6 +453,15 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportAsync(Guid id);
 
     /// <summary>
+    /// Retrieves a single Pending Export's own row by ID, with nothing it points at: for reads that need its columns
+    /// alone, such as the runs that staged it (<see cref="PendingExport.Stagers"/>, #2100), without loading its
+    /// changes and both objects' attribute values as <see cref="GetPendingExportAsync"/> does.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    /// <returns>The Pending Export, untracked and without navigations, or null if it no longer exists.</returns>
+    public Task<PendingExport?> GetPendingExportCoreAsync(Guid id);
+
+    /// <summary>
     /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
@@ -636,6 +645,16 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="metaverseObjectIds">The Metaverse Objects to find joined Connected System Objects for.</param>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Retrieves Connected System Objects by id with what names and identifies them and nothing else (#2100): their
+    /// type, their Connected System, and only their external ID and naming attribute values, so naming a Group never
+    /// loads its members. As <see cref="GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync"/>, keyed on the
+    /// objects themselves.
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The objects to read.</param>
+    /// <returns>The objects found, untracked; an id that no longer exists is absent.</returns>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Which of the given Connected System Object ids still exist (#2052).
@@ -965,6 +984,14 @@ public interface IConnectedSystemRepository
     /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
     /// <returns>The Deleted change record, or null when there is none for that id.</returns>
     Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
+
+    /// <summary>
+    /// As <see cref="GetDeletedCsoChangeAsync"/>, for several deleted objects in one read (#2100): each object's latest
+    /// deletion record, with the deleted object's type.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectIds">The ids the objects had before deletion.</param>
+    /// <returns>One record per id that has one; ids with none are absent.</returns>
+    Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedConnectedSystemObjectIds);
 
     #region Synchronisation Rule Mappings
     /// <summary>

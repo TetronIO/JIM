@@ -41,11 +41,13 @@ public static class CausalityConsequenceTestData
         MvoTypePluralName: "Users",
         DeletedMetaverseObjectId: deletedMvoId);
 
-    public static CausalityLineageModel BuildImportLineage(CausalConsequences? consequences, Guid? deletedMvoId = null)
+    public static CausalityLineageModel BuildImportLineage(CausalConsequences? consequences, Guid? deletedMvoId = null,
+        ICausalityLinks? links = null)
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Updated };
         CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, parent: null, ordinal: 0, detailCount: 1);
-        var model = CausalityModelBuilder.Build(item, ImportContext(deletedMvoId));
+        var context = links == null ? ImportContext(deletedMvoId) : ImportContext(deletedMvoId) with { Links = links };
+        var model = CausalityModelBuilder.Build(item, context);
         return CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Updated, consequences);
     }
 

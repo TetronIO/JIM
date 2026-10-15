@@ -246,6 +246,11 @@ public class JimDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // PostgreSQL's lower(), so identity lookups fold a parameter in SQL as they fold the column (#2051).
+        modelBuilder.HasDbFunction(typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Lower))!)
+            .HasName("lower")
+            .IsBuiltIn();
+
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.AttributeValues)
             .WithOne(av => av.ConnectedSystemObject)
@@ -294,6 +299,28 @@ public class JimDbContext : DbContext
         // scan a table this large.
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
             .HasIndex(rpei => rpei.ExternalIdSnapshot);
+
+        // The Causality Explorer's object timelines (#2100). Each column is null on almost every row and is read
+        // only for one object at a time, so each index is filtered to the rows that carry a value: it costs nothing
+        // on the synchronisation flush that writes the overwhelming majority of rows, and the one write that sets the
+        // column (a deletion's re-key or record, an export scope review) pays for a small index.
+        // An item that records a Metaverse Object directly (an export scope review, #1971).
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(rpei => rpei.MetaverseObjectId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItems_MetaverseObjectId")
+            .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
+
+        // A deleted Metaverse Object's change records, which its deletion re-keys from its own id to this one.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasIndex(mvoc => mvoc.DeletedMetaverseObjectId)
+            .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
+            .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
+
+        // A deleted Connected System Object's deletion record, the only place its id survives.
+        modelBuilder.Entity<ConnectedSystemObjectChange>()
+            .HasIndex(csoc => csoc.DeletedConnectedSystemObjectId)
+            .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
+            .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()

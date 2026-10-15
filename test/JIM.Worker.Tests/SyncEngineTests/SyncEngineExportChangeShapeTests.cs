@@ -51,6 +51,31 @@ public class SyncEngineExportChangeShapeTests
         }
     }
 
+    /// <summary>
+    /// Widening a Metaverse Attribute from single-valued to multi-valued while values exist (#2153, D3) is lossless
+    /// for export only because the change shape follows the target: every single-valued target the attribute flows to
+    /// still receives one Update, never a Remove plus an Add. The attribute is widened in place, exactly as the schema
+    /// change does, after its values were already held.
+    /// </summary>
+    [Test]
+    public void ComputeAttributeValueChanges_SourceWidenedToMultiValuedIntoASingleValuedTarget_StillStagesOneUpdate()
+    {
+        var source = MetaverseAttribute("Email", AttributePlurality.SingleValued);
+        var target = TargetAttribute("mail", AttributePlurality.SingleValued);
+        var removed = TextValue(source, "a@x", persisted: true);
+        var added = TextValue(source, "b@x");
+        var mvo = MetaverseObjectHolding(added);
+        source.AttributePlurality = AttributePlurality.MultiValued;
+
+        var changes = _engine.ComputeAttributeValueChanges(mvo, ExportRule(source, target), [added, removed],
+            PendingExportChangeType.Update, existingCso: null, csoAttributeCache: null, out _, removedAttributes: [removed]);
+
+        Assert.That(changes.Select(c => (c.ChangeType, c.StringValue)), Is.EqualTo(new[]
+        {
+            (PendingExportAttributeChangeType.Update, "b@x")
+        }));
+    }
+
     [Test]
     public void ComputeAttributeValueChanges_MultiValuedSourceLosingItsOnlyValueIntoASingleValuedTarget_StagesOneClearingUpdate()
     {

@@ -32,14 +32,15 @@ public static class AttributeValueComparison
         attribute != null && (attribute.Type == AttributeDataType.Reference || attribute.IsExternalId || attribute.IsSecondaryExternalId);
 
     /// <summary>
-    /// The comparison for two text values of the attribute: an identity comparison for an identifier, following its
-    /// case-exact declaration, and an exact one for everything else (including when the attribute is not known).
+    /// Whether two text values of the attribute are the same: an identity comparison for an identifier, following its
+    /// case-exact declaration (<see cref="IdentifierKey"/>), and an exact one for everything else (including when the
+    /// attribute is not known).
     /// </summary>
-    public static StringComparison For(ConnectedSystemObjectTypeAttribute? attribute) =>
-        IsIdentifier(attribute) ? IdentifierKey.Comparison(attribute!.CaseExact) : StringComparison.Ordinal;
+    public static bool AreSame(ConnectedSystemObjectTypeAttribute? attribute, string? first, string? second) =>
+        ComparerFor(attribute).Equals(first, second);
 
     /// <summary>
-    /// The comparer matching <see cref="For"/>, for sets of the attribute's values.
+    /// The comparer matching <see cref="AreSame"/>, for sets of the attribute's values.
     /// </summary>
     public static StringComparer ComparerFor(ConnectedSystemObjectTypeAttribute? attribute) =>
         IsIdentifier(attribute) ? IdentifierKey.Comparer(attribute!.CaseExact) : StringComparer.Ordinal;

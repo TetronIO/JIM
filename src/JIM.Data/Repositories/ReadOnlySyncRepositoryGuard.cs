@@ -172,8 +172,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<int> targetConnectedSystemIds)
         => _inner.GetConnectedSystemObjectRecallTargetsAsync(metaverseObjectIds, targetConnectedSystemIds);
 
-    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> connectedSystemAttributeIds, IReadOnlyCollection<Guid> deletedReferenceCsoIds, IReadOnlyCollection<string> loweredReferenceValues)
-        => _inner.GetCsoReferenceValueMatchesAsync(connectedSystemObjectIds, connectedSystemAttributeIds, deletedReferenceCsoIds, loweredReferenceValues);
+    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> connectedSystemAttributeIds, IReadOnlyCollection<Guid> deletedReferenceCsoIds, IReadOnlyCollection<string> referenceValues)
+        => _inner.GetCsoReferenceValueMatchesAsync(connectedSystemObjectIds, connectedSystemAttributeIds, deletedReferenceCsoIds, referenceValues);
 
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _inner.GetPendingExportsAsync(connectedSystemId);

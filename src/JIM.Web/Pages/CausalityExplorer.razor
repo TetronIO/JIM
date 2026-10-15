@@ -1,0 +1,326 @@
+@page "/causality"
+@page "/causality/items/{ItemId:guid}"
+@page "/causality/connected-system-objects/{ConnectedSystemObjectId:guid}"
+@page "/causality/metaverse-objects/{MetaverseObjectId:guid}"
+@attribute [Authorize(Roles = "User")]
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+@using JIM.Web.Shared.Causality
+@inject IJimApplicationFactory JimFactory
+@inject NavigationManager NavManager
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Causality Explorer (#2100): one page that follows a chain of causes and consequences without leaving it. An
+   execution item shows its Lineage, an object shows what happened to it; every item and object they name re-centres
+   this page on itself, carrying the trail back. Re-centring is ordinary navigation to another of this page's
+   addresses, so the router re-parameterises this instance and back and forward step through the foci. *@
+
+<PageTitle>@(_focus == null ? "Causality Explorer" : $"Causality Explorer: {CausalityFocusLabel.For(_focus, _labels)}")</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Causality Explorer
+    <PageInfo Title="Causality Explorer" DocsPage="configuration/causality.md">
+        Follows why things happened and what they went on to cause, from one focus to the next, without leaving the page.
+        An execution item shows its Lineage; a Connected System Object or Metaverse Object shows what happened to it. The
+        trail leads back through everything followed.
+    </PageInfo>
+</MudText>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="pl-0" />
+
+@if (_focus is not { } focus)
+{
+    <MudPaper Outlined="true" Class="pa-4 mt-2 jim-causality-start">
+        <MudText Typo="Typo.h6" Class="mb-2">Start from what you want to explain</MudText>
+        <MudText>
+            Open the explorer from where the question arises: <strong>Explore causality</strong> on a Connected System Object
+            or a Metaverse Object, <strong>Explore</strong> beside a run in a Pending Export's <strong>Queued by</strong>
+            panel, or <strong>Open in explorer</strong> on an execution item's causality panel.
+        </MudText>
+    </MudPaper>
+}
+else
+{
+    <div class="causality-explorer mt-2">
+        <CausalityTrailBar Trail="_trail" Current="focus" Labels="_labels" />
+        <CausalityFocusHeader Focus="focus" Labels="_labels" OnCopyLink="CopyLinkAsync" />
+
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (focus.Kind == CausalityFocusKind.Item)
+        {
+            @if (_item is { } item)
+            {
+                <CausalityPanel Item="item.Item"
+                                Context="item.Context"
+                                LivePendingExportIds="item.LivePendingExportIds"
+                                Timestamp="item.Timestamp"
+                                Chain="item.Chain"
+                                DeletionPolicySnapshot="item.DeletionPolicySnapshot"
+                                IsSynchronisationRun="item.IsSynchronisationRun"
+                                LineageOnly="true"
+                                Consequences="_consequences"
+                                ConsequencesLoading="_consequencesLoading"
+                                OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
+                                LoadConsequenceMembers="LoadConsequenceMembersAsync" />
+            }
+        }
+        else if (_timeline is { } timeline && _links is { } links && (timeline.Header != null || _rows.Count > 0))
+        {
+            <CausalityObjectTimeline Rows="_rows"
+                                     TotalCount="timeline.TotalCount"
+                                     Links="links"
+                                     MetaverseObjectChangesNotRecorded="timeline.MetaverseObjectChangesNotRecorded"
+                                     Header="timeline.Header"
+                                     Loading="_loadingMore"
+                                     OnShowMore="ShowMoreAsync" />
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The execution item in focus, where the focus is one.
+    /// </summary>
+    [Parameter]
+    public Guid? ItemId { get; set; }
+
+    /// <summary>
+    /// The Connected System Object in focus, live or deleted, where the focus is one.
+    /// </summary>
+    [Parameter]
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object in focus, live or deleted, where the focus is one.
+    /// </summary>
+    [Parameter]
+    public Guid? MetaverseObjectId { get; set; }
+
+    private readonly List<BreadcrumbItem> _breadcrumbs =
+    [
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Activity", href: "/activity"),
+        new("Causality Explorer", href: null, disabled: true)
+    ];
+
+    private CausalityFocus? _focus;
+    private CausalityTrail _trail = CausalityTrail.Empty;
+    private CausalityExplorerLinks? _links;
+    private CausalFocusLabels? _labels;
+    private bool _loading;
+
+    // An item focus: what the panel needs, read by the loader the item page shares.
+    private CausalityItemData? _item;
+
+    // What the item went on to cause (#1811), read after the first render as the item page reads it.
+    private CausalConsequences? _consequences;
+    private bool _consequencesLoading;
+    private Guid? _consequencesReadFor;
+
+    // An object focus: its timeline, fifty rows at a time.
+    private CausalTimeline? _timeline;
+    private List<CausalTimelineRow> _rows = [];
+    private bool _loadingMore;
+
+    // Counts the reads this page has started, so one superseded by a later re-centring never lands on the wrong focus.
+    private int _loadSequence;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var focus = CurrentFocus();
+        var trail = focus == null ? CausalityTrail.Empty : CausalityTrail.Parse(TrailFromAddress(), focus);
+        // Parameters are set again on every re-render of the host; only a new focus or trail is a new read.
+        if (_loadSequence > 0 && Equals(focus, _focus) && Equals(trail, _trail))
+            return;
+
+        var load = ++_loadSequence;
+        _focus = focus;
+        _trail = trail;
+        _links = focus == null ? null : new CausalityExplorerLinks(trail, focus);
+        _labels = null;
+        _item = null;
+        _timeline = null;
+        _rows = [];
+        _consequences = null;
+        _consequencesReadFor = null;
+        if (focus == null)
+            return;
+
+        _loading = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+
+            // Every focus on the trail is named in one read, the focus in view included, whose header this also is.
+            var foci = trail.Foci.Append(focus).ToList();
+            var labels = await jim.Activities.GetCausalFocusLabelsAsync(
+                foci.Where(f => f.Kind == CausalityFocusKind.Item).Select(f => f.Id).Distinct().ToList(),
+                foci.Select(f => f.Subject).OfType<CausalTimelineSubject>().Distinct().ToList());
+
+            CausalityItemData? item = null;
+            CausalTimeline? timeline = null;
+            if (focus.Subject is { } subject)
+                timeline = await jim.Activities.GetCausalTimelineAsync(subject);
+            else if (labels.Items.ContainsKey(focus.Id))
+                item = await CausalityItemLoader.LoadAsync(jim, focus.Id, _links);
+
+            if (load != _loadSequence)
+                return;
+
+            _labels = labels;
+            _item = item;
+            _timeline = timeline;
+            _rows = timeline?.Rows.ToList() ?? [];
+        }
+        finally
+        {
+            if (load == _loadSequence)
+                _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Every render, not only the first: re-centring reuses this instance, and each item's walk is read once, after
+        // its panel is already on screen.
+        if (_item is not { } item || _consequencesReadFor == item.Item.Id || _consequencesLoading
+            || !CausalityItemLoader.ShowsCausality(item.Item))
+            return;
+
+        await ReadConsequencesAsync();
+    }
+
+    /// <summary>
+    /// The focus the address names, or null on the explorer's own address.
+    /// </summary>
+    private CausalityFocus? CurrentFocus()
+    {
+        if (ItemId is { } itemId)
+            return new CausalityFocus(CausalityFocusKind.Item, itemId);
+        if (ConnectedSystemObjectId is { } connectedSystemObjectId)
+            return new CausalityFocus(CausalityFocusKind.ConnectedSystemObject, connectedSystemObjectId);
+        return MetaverseObjectId is { } metaverseObjectId
+            ? new CausalityFocus(CausalityFocusKind.MetaverseObject, metaverseObjectId)
+            : null;
+    }
+
+    /// <summary>
+    /// The trail as the address carries it. Read from the address rather than supplied as a parameter, so a change to the
+    /// trail alone, with the same focus, is still seen.
+    /// </summary>
+    private string? TrailFromAddress()
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(NavManager.ToAbsoluteUri(NavManager.Uri).Query);
+        return query["trail"];
+    }
+
+    /// <summary>
+    /// Reads what the item in focus went on to cause, a reading taken now: consequences can still be happening.
+    /// </summary>
+    private async Task ReadConsequencesAsync()
+    {
+        if (_item is not { } item)
+            return;
+
+        var itemId = item.Item.Id;
+        _consequencesLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var consequences = await jim.Activities.GetCausalConsequencesAsync(itemId);
+            // A re-centring while this was read must not show this item's consequences on the next focus.
+            if (_item?.Item.Id == itemId)
+            {
+                _consequences = consequences;
+                _consequencesReadFor = itemId;
+            }
+        }
+        finally
+        {
+            _consequencesLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task CheckConsequencesAgainAsync()
+    {
+        _consequences = null;
+        _consequencesReadFor = null;
+        return ReadConsequencesAsync();
+    }
+
+    private async Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?> LoadConsequenceMembersAsync(string cohortKey, int page, string? search)
+    {
+        if (_item is not { } item)
+            return null;
+
+        using var jim = JimFactory.Create();
+        return await jim.Activities.GetCausalConsequenceCohortMembersAsync(item.Item.Id, cohortKey, page,
+            JIM.Application.Servers.ActivityServer.CausalConsequenceMemberPageSize, search);
+    }
+
+    /// <summary>
+    /// Reads the object's next fifty rows. An item recorded since the first page was read moves every later row down
+    /// one, so a row already shown is not shown twice.
+    /// </summary>
+    private async Task ShowMoreAsync()
+    {
+        if (_focus?.Subject is not { } subject || _timeline is not { } timeline)
+            return;
+
+        var load = _loadSequence;
+        _loadingMore = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var next = await jim.Activities.GetCausalTimelineAsync(subject, timeline.Page + 1, timeline.PageSize);
+            if (load != _loadSequence)
+                return;
+
+            var shown = _rows.Select(r => r.Entry.RunProfileExecutionItemId).ToHashSet();
+            _rows.AddRange(next.Rows.Where(r => !shown.Contains(r.Entry.RunProfileExecutionItemId)));
+            _timeline = next;
+        }
+        finally
+        {
+            _loadingMore = false;
+        }
+    }
+
+    /// <summary>
+    /// Copies this focus's address, trail included. Over plain HTTP the browser refuses the clipboard, and a copy can
+    /// fail for other reasons too; either way the address is offered in a dialog, selected, to copy by hand.
+    /// </summary>
+    private async Task CopyLinkAsync()
+    {
+        var address = NavManager.Uri;
+        bool copied;
+        try
+        {
+            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", address);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            copied = false;
+        }
+
+        if (copied)
+        {
+            Snackbar.Add("Link copied to the clipboard.", Severity.Success);
+            return;
+        }
+
+        var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, address } };
+        await DialogService.ShowAsync<CopyTextDialog>("Copy link", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
+    }
+}
