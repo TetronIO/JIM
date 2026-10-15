@@ -130,13 +130,15 @@ Describe 'Watch-PullRequest: reading the GraphQL response' {
     { "__typename": "StatusContext", "context": "legacy", "state": "PENDING", "createdAt": "2026-10-13T10:00:00Z", "targetUrl": "https://x/2" }
   ] } } } } ] },
   "reviewThreads": { "nodes": [
-    { "id": "PRRT_1", "isResolved": false, "comments": { "nodes": [ { "author": { "login": "claude" }, "path": "docs/a.md", "line": 7, "body": "**SAFE-1** x", "url": "https://x/3" } ] } }
+    { "id": "PRRT_1", "isResolved": false, "comments": { "nodes": [ { "databaseId": 4252088407, "author": { "login": "claude" }, "path": "docs/a.md", "line": 7, "body": "**SAFE-1** x", "url": "https://x/3" } ] } }
   ] }
 } } } }
 '@ | ConvertFrom-Json
         $a = & $script:ScriptPath -Response $json -PassThru
         $a.Reason | Should -Be 'UnresolvedThreads'
-        $a.Threads[0].Id | Should -Be 'PRRT_1'
+        # Keyed by the first comment's id, which the REST route also gives, so one
+        # -AcknowledgedThreadIds value works whichever API answered.
+        $a.Threads[0].Id | Should -Be '4252088407'
         $a.Threads[0].Path | Should -Be 'docs/a.md'
     }
 
@@ -156,5 +158,66 @@ Describe 'Watch-PullRequest: reading the GraphQL response' {
     It 'keeps waiting on a commit with no checks yet, rather than reporting Blocked' {
         $json = '{ "data": { "repository": { "pullRequest": { "state": "OPEN", "mergeStateStatus": "BLOCKED", "commits": { "nodes": [ { "commit": { "statusCheckRollup": null } } ] }, "reviewThreads": { "nodes": [] } } } } }' | ConvertFrom-Json
         (& $script:ScriptPath -Response $json -PassThru).Reason | Should -Be 'Waiting'
+    }
+}
+
+Describe 'Watch-PullRequest: reading the REST responses (when GraphQL is refused)' {
+    BeforeAll {
+        function New-Rest {
+            param(
+                [string]$State = 'open', [bool]$Merged = $false, [string]$MergeableState = 'blocked',
+                $CheckRuns = @(), $Statuses = @(), $Threads = @(), $Comments = @{}
+            )
+            @{
+                Pull      = [pscustomobject]@{ state = $State; merged = $Merged; mergeable_state = $MergeableState }
+                CheckRuns = @($CheckRuns | ForEach-Object { [pscustomobject]$_ })
+                Statuses  = @($Statuses | ForEach-Object { [pscustomobject]$_ })
+                Threads   = @($Threads | ForEach-Object { [pscustomobject]$_ })
+                Comments  = $Comments
+            }
+        }
+        function Invoke-Rest { param($Rest, [string[]]$Acknowledged = @()) & $script:ScriptPath -RestResponse $Rest -AcknowledgedThreadIds $Acknowledged -PassThru }
+    }
+
+    It 'reads a merged pull request as Merged' {
+        (Invoke-Rest (New-Rest -State closed -Merged $true -MergeableState unknown)).Reason | Should -Be 'Merged'
+    }
+
+    It 'reads a closed, unmerged pull request as Closed' {
+        (Invoke-Rest (New-Rest -State closed -MergeableState blocked)).Reason | Should -Be 'Closed'
+    }
+
+    It 'reads a failed check run, in lower case as REST gives it' {
+        $rest = New-Rest -CheckRuns @(@{ name = 'Analyze (csharp)'; status = 'completed'; conclusion = 'failure'; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' })
+        $a = Invoke-Rest $rest
+        $a.Reason | Should -Be 'ChecksFailed'
+        $a.Checks.Name | Should -Be @('Analyze (csharp)')
+    }
+
+    It 'reads a pending commit status as still running' {
+        $rest = New-Rest -MergeableState blocked -CheckRuns @(@{ name = 'build-and-test'; status = 'completed'; conclusion = 'success'; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' }) -Statuses @(@{ context = 'legacy'; state = 'pending'; created_at = '2026-10-13T10:00:00Z'; target_url = 'https://x/2' })
+        (Invoke-Rest $rest).Reason | Should -Be 'Waiting'
+    }
+
+    It 'reads an unresolved thread, with its first comment''s author and text' {
+        $rest = New-Rest -Threads @(
+            @{ resolved = $false; outdated = $false; path = 'docs/a.md'; line = 37; comment_ids = @(4252088407, 4252099999) },
+            @{ resolved = $true; outdated = $false; path = 'docs/a.md'; line = 39; comment_ids = @(4252088576) }
+        ) -Comments @{ '4252088407' = [pscustomobject]@{ user = [pscustomobject]@{ login = 'claude[bot]' }; body = '**ACC-4** x'; html_url = 'https://x/c' } }
+        $a = Invoke-Rest $rest
+        $a.Reason | Should -Be 'UnresolvedThreads'
+        $a.Threads.Id | Should -Be @('4252088407')
+        $a.Threads[0].Author | Should -Be 'claude[bot]'
+        $a.Threads[0].Line | Should -Be 37
+    }
+
+    It 'honours an acknowledged thread by its first comment''s id' {
+        $rest = New-Rest -MergeableState blocked -CheckRuns @(@{ name = 'build-and-test'; status = 'in_progress'; conclusion = $null; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' }) -Threads @(@{ resolved = $false; outdated = $false; path = 'docs/a.md'; line = 37; comment_ids = @(4252088407) })
+        (Invoke-Rest $rest -Acknowledged '4252088407').Reason | Should -Be 'Waiting'
+    }
+
+    It 'reads mergeable_state behind as Behind' {
+        $rest = New-Rest -MergeableState behind -CheckRuns @(@{ name = 'build-and-test'; status = 'completed'; conclusion = 'success'; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' })
+        (Invoke-Rest $rest).Reason | Should -Be 'Behind'
     }
 }
