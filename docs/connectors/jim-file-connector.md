@@ -256,7 +256,7 @@ The error `Object type column 'Type' not found in file headers` means the column
 
 ### Column missing from the file
 
-An import fails with an error naming the columns when the file's header lacks a column that a selected Object Type reads: a selected attribute, or its External ID or Secondary External ID. JIM stops rather than reading the column as empty, which would clear that attribute on every object.
+An import fails with an error naming the columns when the file's header lacks a column that a selected Object Type reads: a selected attribute, or its External ID or Secondary External ID. JIM stops rather than reading the column as empty, which would clear that attribute on every object. This includes a Connected System whose file has never had the column: its imports fail until you add the column to the file or deselect the attribute.
 
 - Check the header row; the match ignores case, but the column must be there.
 - If the column was removed on purpose, deselect the attribute on the Connected System's Schema tab, or refresh the schema.
