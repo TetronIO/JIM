@@ -6,6 +6,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -302,7 +303,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (av.IntValue.HasValue)
@@ -448,7 +449,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (av.IntValue.HasValue)
@@ -1364,7 +1365,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (avc.DateTimeValue.HasValue)
-                await writer.WriteAsync(avc.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(avc.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (avc.IntValue.HasValue)

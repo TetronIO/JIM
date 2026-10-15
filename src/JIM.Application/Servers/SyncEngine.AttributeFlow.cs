@@ -744,7 +744,7 @@ public partial class SyncEngine
             case int number: newValue.IntValue = number; break;
             case long longNumber: newValue.LongValue = longNumber; break;
             case decimal decimalNumber: newValue.DecimalValue = decimalNumber; break;
-            case DateTime date: newValue.DateTimeValue = date; break;
+            case DateTime date: newValue.DateTimeValue = DateTimeAttributeValue.ToCanonical(date); break;
             case bool flag: newValue.BoolValue = flag; break;
             case Guid guid: newValue.GuidValue = guid; break;
             case byte[] bytes: newValue.ByteValue = bytes; break;
@@ -1196,12 +1196,14 @@ public partial class SyncEngine
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue,
+                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
-        else if (csoValue != null && mvoValue != null && mvoValue.DateTimeValue != csoValue.DateTimeValue)
+        // Compared canonically (#2153): a value read from the database is Kind Local and to the microsecond, one made in
+        // memory is Kind Utc, so the same date in two forms is not a change.
+        else if (csoValue != null && mvoValue != null && !DateTimeAttributeValue.AreEqual(mvoValue.DateTimeValue, csoValue.DateTimeValue))
         {
             mvo.PendingAttributeValueRemovals.Add(mvoValue);
             mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
@@ -1209,7 +1211,7 @@ public partial class SyncEngine
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue,
+                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
@@ -1217,6 +1219,18 @@ public partial class SyncEngine
 
         TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
+
+    /// <summary>
+    /// A date in the form JIM holds it (#2153), or null for none. Every date the engine creates is written this way.
+    /// </summary>
+    internal static DateTime? CanonicalDate(DateTime? value) =>
+        value.HasValue ? DateTimeAttributeValue.ToCanonical(value.Value) : null;
+
+    /// <summary>
+    /// A date's canonical key (#2153), or null for none: what a set or tuple of values compares a date by.
+    /// </summary>
+    internal static long? DateKey(DateTime? value) =>
+        value.HasValue ? DateTimeAttributeValue.Key(value.Value) : null;
 
     private static void ProcessBinaryAttribute(
         MetaverseObject mvo,

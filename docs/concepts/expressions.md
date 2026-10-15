@@ -234,7 +234,7 @@ These use .NET [regular expressions](https://learn.microsoft.com/dotnet/standard
 
 ### Dates and Numbers as Text
 
-**Writing.** Whatever the server's language, `ToString()`, a date flowing to a Text attribute, and the tester write a date as `2026-03-15 10:30:00Z`: UTC, with a fraction of a second only when there is one. Joining a date to text with `+` uses the same pattern in the zone the date carries. Numbers use `.` as the decimal point. For any other form, use `FormatDate()`:
+**Writing.** Whatever the server's language, `ToString()`, a date flowing to a Text attribute, and the tester write a date as `2026-03-15 10:30:00Z`: UTC, with a fraction of a second only when there is one. Joining a date to text with `+` writes the same form, because every date an expression reads is in UTC, to the microsecond. Numbers use `.` as the decimal point. For any other form, use `FormatDate()`:
 
 ```csharp
 "Changed " + ToString(mv["Last Changed"])       // Changed 2026-03-15 10:30:00Z

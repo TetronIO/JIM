@@ -1,5 +1,8 @@
 ---
 title: Run Profiles
+description: "The cmdlets that list, create, change, remove and run a Connected System's Run Profiles."
+type: reference
+audience: automation-author
 ---
 
 # Run Profiles

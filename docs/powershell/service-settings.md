@@ -1,5 +1,8 @@
 ---
 title: Service Settings
+description: "The cmdlets that read Service Settings, change them, and return them to their defaults."
+type: reference
+audience: automation-author
 ---
 
 # Service Settings

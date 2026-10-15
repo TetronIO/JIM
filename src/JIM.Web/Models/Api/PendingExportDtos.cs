@@ -3,6 +3,7 @@
 
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Utilities;
 
 namespace JIM.Web.Models.Api;
 
@@ -348,7 +349,7 @@ public class PendingExportAttributeValueChangeDto
             ChangeType = entity.ChangeType,
             Status = entity.Status,
             StringValue = entity.StringValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = entity.DateTimeValue.HasValue ? DateTimeAttributeValue.ToCanonical(entity.DateTimeValue.Value) : null,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,

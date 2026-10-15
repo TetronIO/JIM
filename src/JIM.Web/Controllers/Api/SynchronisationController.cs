@@ -1249,6 +1249,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
 
         var (items, totalCount) = await _application.ConnectedSystems.GetCsoChangeHistoryAsync(csoId, pagination.Page, pagination.PageSize);
+        ApiDateValues.CanonicaliseDates(items);
         return Ok(PaginatedResponse<CsoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
     }
 

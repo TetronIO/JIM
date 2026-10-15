@@ -1,10 +1,13 @@
 ---
 title: Example Data
+description: "The cmdlets that manage Example Data Sets and Example Data Templates, and generate sample identities from them."
+type: reference
+audience: automation-author
 ---
 
 # Example Data
 
-Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the metaverse with realistic test identities without requiring a live Connected System.
+Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the Metaverse with realistic test identities without requiring a live Connected System.
 
 ---
 
@@ -311,7 +314,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | Key | Type | Description |
 |-----|------|-------------|
 | `MetaverseAttribute` | `string` or `int` | The Metaverse Attribute values are generated for, by name or ID. |
-| `ConnectedSystemObjectTypeAttributeId` | `int` | The Connected System attribute values are generated for, when targeting a Connected System instead of the metaverse. |
+| `ConnectedSystemObjectTypeAttributeId` | `int` | The Connected System attribute values are generated for, when targeting a Connected System instead of the Metaverse. |
 | `Pattern` | `string` | A variable-replacement pattern for constructing string values, e.g. `{0}.{1}@contoso.com`. |
 | `Expression` | `string` | An expression constructing the value from already-generated attributes via `mv["Attribute Name"]`. |
 | `ExampleDataSets` | `object[]` | The Example Data Sets values are drawn from, by name or ID. Order follows array order, which is what index-based patterns refer to. |
