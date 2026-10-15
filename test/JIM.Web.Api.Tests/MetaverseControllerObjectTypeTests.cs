@@ -795,6 +795,35 @@ public class MetaverseControllerObjectTypeTests
         Assert.That(captured.Attributes, Is.Empty);
     }
 
+    [Test]
+    public async Task CreateObjectTypeAsync_DeletionRuleNotProvided_UsesTheSameDefaultAsThePortalAsync()
+    {
+        // The portal creates an Object Type without choosing a rule, so the model's default applies there; the API
+        // must arrive at the same rule, or a type's lifecycle depends on which surface created it.
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync("Device", false))
+            .ReturnsAsync((MetaverseObjectType?)null);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeByPluralNameAsync("Devices", false))
+            .ReturnsAsync((MetaverseObjectType?)null);
+
+        MetaverseObjectType? captured = null;
+        _mockMetaverseRepo.Setup(r => r.CreateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Callback<MetaverseObjectType>(o => { o.Id = 9; captured = o; })
+            .Returns(Task.CompletedTask);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(9, false))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateMetaverseObjectTypeRequest
+        {
+            Name = "Device",
+            PluralName = "Devices"
+        };
+
+        var result = await _controller.CreateObjectTypeAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedResult>());
+        Assert.That(captured!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected));
+    }
+
     #endregion
 
     #region MetaverseObjectTypeHeader.FromEntity tests

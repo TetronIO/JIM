@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
 - 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
@@ -107,6 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
 - 🐛 File Connector imports match headers ignoring case, and fail naming a column the file lacks instead of clearing that attribute on every object. On upgrade, a file lacking a selected attribute's column fails to import until you add the column or deselect the attribute. (#2051)
 - 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when the key is written in a different case. (#2051)
+- 🐛 `Get-JIMSyncRule` and the REST API now return an import Synchronisation Rule's out-of-scope action (**When objects fall out of scope** in the portal), which could be set over both but not read back.
+- 🐛 `Get-JIMPendingExport -Count -Status Parked` now counts the Pending Exports held back for a decision about a generated value; the cmdlet rejected `Parked` before.
 - 🐛 An External ID or reference containing the Turkish capital `İ` is now found by the lookups that compare in the database, instead of being missed and imported again as a new object. (#2051)
 - 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
