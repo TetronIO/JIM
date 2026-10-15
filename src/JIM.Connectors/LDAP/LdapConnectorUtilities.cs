@@ -572,6 +572,14 @@ internal static class LdapConnectorUtilities
         return AttributeWritability.Writable;
     }
 
+    /// <summary>
+    /// Whether an Active Directory attribute syntax compares values exactly (#2051). AD has no per-attribute
+    /// matching rule; case-sensitivity is a property of the syntax. String(Case Sensitive) (omSyntax 27,
+    /// attributeSyntax 2.5.5.3) and the IA5 and Printable strings (omSyntax 22 and 19, 2.5.5.5) are case-exact.
+    /// Unicode, Teletex and every other string syntax ignore case.
+    /// </summary>
+    internal static bool IsAdSyntaxCaseExact(int omSyntax) => omSyntax is 27 or 22 or 19;
+
     internal static AttributeDataType GetLdapAttributeDataType(int omSyntax)
     {
         // map the directory omSyntax to an attribute data type

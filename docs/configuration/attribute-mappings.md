@@ -46,7 +46,7 @@ An expression whose input has no value on the object does not fail; it evaluates
 | **Fail this mapping** | Skips the mapping and records an **Expression Missing Input** error; the object's other attributes still flow. |
 | **Fail the object** | Nothing flows for the object at all, and it is recorded as an **Expression Missing Input** error. For identity-critical values such as a Distinguished Name. |
 
-JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
+JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expression-nulls.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
 
 ### Changing a mapping after it is created
 
@@ -86,7 +86,7 @@ Mappings support both single-valued and multi-valued attributes. A **Multi-Value
 
 The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
 
-To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`, or `Split()` with an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
+To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`, `Min()`, `Max()`, or `Join()` to combine them (see [Multi-Valued Attributes](../concepts/expressions.md#multi-valued-attributes)). Reference attributes on import are exempt from this rule; they are resolved separately.
 
 ## Standard Mapping hints
 

@@ -12,6 +12,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -387,7 +388,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(a => EF.Functions.ILike(a.Name, searchPattern));
         }
 
@@ -1255,7 +1256,7 @@ public class MetaverseRepository : IMetaverseRepository
                     IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                     LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
                     DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    DateTimeValue = reader.IsDBNull(7) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(7)),
                     BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
                     GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                     NullValue = reader.GetBoolean(10)
@@ -1827,7 +1828,7 @@ public class MetaverseRepository : IMetaverseRepository
             IntValue = r.IntValue,
             LongValue = r.LongValue,
             DecimalValue = r.DecimalValue,
-            DateTimeValue = r.DateTimeValue,
+            DateTimeValue = BulkSqlHelpers.CanonicalDate(r.DateTimeValue),
             BoolValue = r.BoolValue,
             GuidValue = r.GuidValue,
             NullValue = r.NullValue
@@ -2444,7 +2445,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
     /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
-    /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
+    /// parameters to <paramref name="parameters"/> (no value parameter for "has a value" and "has no value"). Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
     /// </summary>
     private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters, DateTime nowUtc)
@@ -2469,11 +2470,29 @@ public class MetaverseRepository : IMetaverseRepository
         NotSupportedException Unsupported() =>
             new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
 
+        // The presence operators (#2053) take no value and mean the same for every type: whether the object holds a
+        // value at all, asserted-null markers excluded, exactly as the scoping evaluator counts values.
+        const string heldValue = "NOT cav.\"NullValue\"";
+        switch (criteria.ComparisonType)
+        {
+            case SearchComparisonType.HasValue:
+                return Exists(heldValue);
+            case SearchComparisonType.HasNoValue:
+                return $"NOT {Exists(heldValue)}";
+        }
+
         switch (dataType)
         {
             case AttributeDataType.Text:
             {
-                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
+                // LIKE and ILIKE are given the value with %, _ and \ escaped, so it means what it says (#2053); equality is
+                // given it as it is. Pattern operators are never translated to SQL: the catalogue does not offer them in a
+                // Predefined Search, and Unsupported() refuses them if one is persisted anyway.
+                var isLike = criteria.ComparisonType is SearchComparisonType.StartsWith or SearchComparisonType.NotStartsWith or
+                    SearchComparisonType.EndsWith or SearchComparisonType.NotEndsWith or
+                    SearchComparisonType.Contains or SearchComparisonType.NotContains;
+                var boundValue = isLike && criteria.StringValue != null ? LikePattern.Escape(criteria.StringValue) : criteria.StringValue;
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)boundValue ?? DBNull.Value });
                 const string col = "cav.\"StringValue\"";
                 // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
                 var equalsPredicate = criteria.CaseSensitive
@@ -2711,7 +2730,7 @@ public class MetaverseRepository : IMetaverseRepository
                       AND sav."StringValue" IS NOT NULL
                       AND sav."StringValue" ILIKE @searchPattern)
                 """;
-            sharedParams.Add(new NpgsqlParameter("searchPattern", $"%{searchQuery}%"));
+            sharedParams.Add(new NpgsqlParameter("searchPattern", LikePattern.Contains(searchQuery)));
         }
 
         // Attribute-presence filter (the hasAttribute: search token). Restricts results to objects of the type that
@@ -2785,7 +2804,8 @@ public class MetaverseRepository : IMetaverseRepository
                 if (sortAttrId == null)
                 {
                     await using var lookupCmd = connection.CreateCommand();
-                    lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE "Name" = @name LIMIT 1""";
+                    // Attribute names ignore case (#2051); an exact name wins where two differ only in case.
+                    lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE lower("Name") = lower(@name) ORDER BY ("Name" = @name) DESC, "Id" LIMIT 1""";
                     lookupCmd.Parameters.Add(new NpgsqlParameter("name", sortBy));
                     var result = await lookupCmd.ExecuteScalarAsync();
                     sortAttrId = result as int?;
@@ -2901,7 +2921,7 @@ public class MetaverseRepository : IMetaverseRepository
                         AttributePlurality = (AttributePlurality)reader.GetInt32(6)
                     },
                     StringValue = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    DateTimeValue = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+                    DateTimeValue = reader.IsDBNull(8) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(8)),
                     IntValue = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     LongValue = reader.IsDBNull(10) ? null : reader.GetInt64(10),
                     DecimalValue = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
@@ -2960,11 +2980,9 @@ public class MetaverseRepository : IMetaverseRepository
             attributeNames = new HashSet<string> { Constants.BuiltInAttributes.DisplayName };
             if (attributes != null)
             {
-                foreach (var attr in attributes)
-                {
-                    if (!string.IsNullOrWhiteSpace(attr))
-                        attributeNames.Add(attr);
-                }
+                // Attribute names ignore case (#2051), so each is resolved to the name JIM stores.
+                foreach (var attr in attributes.Where(a => !string.IsNullOrWhiteSpace(a)))
+                    attributeNames.Add(await ResolveMetaverseAttributeNameAsync(attr));
             }
         }
 
@@ -2985,18 +3003,20 @@ public class MetaverseRepository : IMetaverseRepository
         // filter by search query (searches display name attribute)
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
+            var searchPattern = LikePattern.Contains(searchQuery);
             objects = objects.Where(q =>
                 q.AttributeValues.Any(av =>
                     av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+                    EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // filter by specific attribute name and value (exact match, case-insensitive; not
         // EF.Functions.ILike, which treats %, _ and \ in the value as wildcards. EF translates
-        // ToLower() to PostgreSQL's lower().)
+        // ToLower() to PostgreSQL's lower().) The attribute name ignores case too (#2051).
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
+            filterAttributeName = await ResolveMetaverseAttributeNameAsync(filterAttributeName);
             objects = objects.Where(q =>
                 q.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
@@ -3736,16 +3756,18 @@ public class MetaverseRepository : IMetaverseRepository
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(mo =>
                 mo.AttributeValues.Any(av =>
                     av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+                    EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // Exact match, case-insensitive; see the comment in GetMetaverseObjectsAsync's equivalent filter above.
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
+            filterAttributeName = await ResolveMetaverseAttributeNameAsync(filterAttributeName);
             query = query.Where(mo =>
                 mo.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
@@ -3896,7 +3918,7 @@ public class MetaverseRepository : IMetaverseRepository
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
                     BulkSqlHelpers.NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
-                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                    BulkSqlHelpers.NullableParam(BulkSqlHelpers.CanonicalDate(valueChange.DateTimeValue), NpgsqlTypes.NpgsqlDbType.TimestampTz),
                     BulkSqlHelpers.NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint),
                     BulkSqlHelpers.NullableParam(valueChange.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric),
@@ -4004,7 +4026,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Case-insensitive for user convenience, matching the other list searches.
         if (!string.IsNullOrWhiteSpace(displayNameSearch))
         {
-            var searchPattern = $"%{displayNameSearch}%";
+            var searchPattern = LikePattern.Contains(displayNameSearch);
             query = query.Where(c =>
                 c.DeletedObjectDisplayName != null &&
                 EF.Functions.ILike(c.DeletedObjectDisplayName, searchPattern));
@@ -4265,6 +4287,21 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
+    /// Resolves a Metaverse Attribute name as given (an API filter, a PowerShell parameter) to the name JIM stores, so
+    /// configuration names ignore case (#2051) while the query that follows still compares the indexed column exactly.
+    /// A name no attribute answers to is returned unchanged, so it simply matches nothing.
+    /// </summary>
+    private async Task<string> ResolveMetaverseAttributeNameAsync(string name)
+    {
+        var nameLower = name.ToLowerInvariant();
+        var candidates = await Repository.Database.MetaverseAttributes
+            .Where(a => a.Name.ToLower() == nameLower)
+            .Select(a => a.Name)
+            .ToListAsync();
+        return ConfigurationName.Resolve(candidates, name) ?? name;
+    }
+
+    /// <summary>
     /// Shared core for the paged and range Metaverse Object attribute value reads: one object's values for one
     /// attribute, optionally narrowed by a case-insensitive search over the stored value and the referenced
     /// object's own values, ordered by id and windowed by absolute <paramref name="offset"/> and
@@ -4280,6 +4317,8 @@ public class MetaverseRepository : IMetaverseRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051).
+        attributeName = await ResolveMetaverseAttributeNameAsync(attributeName);
         var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
             .Where(av => av.MetaverseObject.Id == metaverseObjectId
                          && av.Attribute.Name == attributeName);

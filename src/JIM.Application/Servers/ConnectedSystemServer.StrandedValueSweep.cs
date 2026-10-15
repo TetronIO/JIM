@@ -334,6 +334,9 @@ public partial class ConnectedSystemServer
                 var referenceRecallResult = await syncServer.StageReferenceRecallExportsAsync(
                     referenceRecallContext, deletionCandidateIds, exportEvaluationCache);
                 result.PendingExportsStaged += referenceRecallResult.PendingExportsStaged;
+
+                // A referencing object whose export scope could not be decided received no recall: its error.
+                executionItems.AddRange(referenceRecallResult.ScopingFailureExecutionItems());
             }
 
             if (executionItems.Count > 0)

@@ -38,35 +38,46 @@ public static class SchemaRefreshDependentDetector
         var dependents = new SchemaRefreshDependents();
         var refreshDescription = $"schema refresh of {refreshedAtUtc.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)}";
 
-        var typesByName = result.PreRefreshSchema.ToDictionary(type => type.Name, StringComparer.OrdinalIgnoreCase);
+        // Names resolve through the result, which follows a case-only rename back to the name the snapshot holds and
+        // keeps two names differing only in case apart (#2051).
         var typeNamesById = result.PreRefreshSchema.ToDictionary(type => type.Id, type => type.Name);
         var removedTypeIds = result.RemovedObjectTypes
-            .Where(typesByName.ContainsKey)
-            .Select(name => typesByName[name].Id)
+            .Select(result.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
             .ToHashSet();
 
         // Removed and redefined attributes, resolved per Object Type so a name shared by two types cannot
         // invalidate the wrong one's mappings.
         var removedAttributeIdsByTypeId = new Dictionary<int, HashSet<int>>();
         var removedAttributeNamesByTypeId = new Dictionary<int, HashSet<string>>();
-        foreach (var (typeName, attributeNames) in result.RemovedAttributes.Where(kvp => typesByName.ContainsKey(kvp.Key)))
+        foreach (var (type, attributeNames) in result.RemovedAttributes
+                     .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.AttributeNames)))
         {
-            var type = typesByName[typeName];
             removedAttributeNamesByTypeId[type.Id] = new HashSet<string>(attributeNames, StringComparer.OrdinalIgnoreCase);
+            // A removed attribute is reported under the name JIM held, so it is matched exactly: a case-exact
+            // Connected System can hold a second attribute whose name differs only in case, and that one stays.
             removedAttributeIdsByTypeId[type.Id] = type.Attributes
-                .Where(attribute => attributeNames.Contains(attribute.Name, StringComparer.OrdinalIgnoreCase))
+                .Where(attribute => attributeNames.Contains(attribute.Name, StringComparer.Ordinal))
                 .Select(attribute => attribute.Id)
                 .ToHashSet();
         }
 
         var changedByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
-        foreach (var (typeName, changes) in result.ChangedAttributes.Where(kvp => typesByName.ContainsKey(kvp.Key)))
+        foreach (var (type, changes) in result.ChangedAttributes
+                     .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), Changes: kvp.Value))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.Changes)))
         {
-            var type = typesByName[typeName];
             var byAttributeId = new Dictionary<int, SchemaAttributeDefinitionChange>();
             foreach (var change in changes)
             {
-                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
+                // A change names the attribute as the Connector now does, which may differ only in case from the
+                // snapshot's name; an exact name wins where both exist.
+                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.Ordinal))
+                    ?? type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
                 if (attribute != null)
                     byAttributeId[attribute.Id] = change;
             }

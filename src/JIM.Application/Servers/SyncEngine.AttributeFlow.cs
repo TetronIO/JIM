@@ -466,55 +466,20 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// The result of <see cref="EvaluateExpressionSource"/>: a pure collaboration detail shared by
-    /// <see cref="ProcessExpressionMapping"/> and <see cref="ProcessGeneratedMapping"/> (Unique Value Generation,
-    /// #242), not a public result type, so unlike <c>ProjectionDecision</c> it stays local to this file rather
-    /// than living in <c>JIM.Models</c> (cf. <c>AttributeValueIndex</c> in <c>SyncEngine.Reconciliation.cs</c>,
-    /// the same precedent for a private algorithm-local helper type).
-    /// </summary>
-    private readonly struct ExpressionSourceEvaluation
-    {
-        /// <summary>
-        /// Nothing further should happen: no <see cref="IExpressionEvaluator"/> was supplied, or the mapping's
-        /// Missing Input Behaviour is FailMapping (its <see cref="AttributeFlowError"/> is already recorded by
-        /// <see cref="EvaluateExpressionSource"/>). Whatever the caller already holds for the attribute is
-        /// untouched; this is distinct from <see cref="NoValue"/>, which callers resolve as a positive "no value".
-        /// </summary>
-        public bool Stopped { get; private init; }
-
-        /// <summary>
-        /// The expression contributed no value: Missing Input Behaviour is ContributeNoValue and an input is
-        /// absent, or the expression evaluated to null. Each caller applies its own "no value" semantics.
-        /// </summary>
-        public bool NoValue { get; private init; }
-
-        /// <summary>
-        /// The expression's raw result, one value or a collection (<see cref="ExpressionResultValues"/>), with no
-        /// conversion or inbound value processing applied yet. Guaranteed non-null, and set, exactly when neither
-        /// <see cref="Stopped"/> nor <see cref="NoValue"/> applies.
-        /// </summary>
-        public object? Result { get; private init; }
-
-        public static ExpressionSourceEvaluation Stop() => new() { Stopped = true };
-        public static ExpressionSourceEvaluation Missing() => new() { NoValue = true };
-        public static ExpressionSourceEvaluation Value(object result) => new() { Result = result };
-    }
-
-    /// <summary>
-    /// Evaluates an expression source against the Connected System Object, and, for a Metaverse-Derived Attribute
-    /// Flow (#1750), the Metaverse Object's effective values: Missing Input Behaviour (#1361), then the expression
-    /// itself. Shared by
-    /// <see cref="ProcessExpressionMapping"/> and <see cref="ProcessGeneratedMapping"/>'s base expression (Unique
-    /// Value Generation, #242, plan decision 6), so the guarded evaluation and exception mapping exist in one
-    /// place rather than two. FailMapping and FailObject are identical for every caller (record the error, or
-    /// throw) and are resolved here; only ContributeNoValue's consequence differs by caller, communicated through
-    /// <see cref="ExpressionSourceEvaluation.NoValue"/> for each caller to interpret (an ordinary mapping abstains
-    /// or clears by priority; a generated mapping withholds generation without touching any existing value, FR 10).
+    /// Runs the first half of the evaluation pipeline (<see cref="AttributeFlowPipeline.EvaluateSource"/>, #2055) for an
+    /// expression source against the Connected System Object and, for a Metaverse-Derived Attribute Flow (#1750), the
+    /// Metaverse Object's effective values, then applies what synchronisation does with a stopped source. Used by
+    /// <see cref="ProcessGeneratedMapping"/>'s base expression (Unique Value Generation, #242, plan decision 6);
+    /// <see cref="ProcessExpressionMapping"/> runs the whole pipeline through <see cref="AttributeFlowPipeline.EvaluateInbound"/>
+    /// and applies the same handling.
     /// </summary>
     /// <param name="metaverseAttributes">The Metaverse Object's effective values
     /// (<see cref="BuildEffectiveAttributeDictionary"/>), supplied only by the derived pass; null for the ordinary
     /// inbound pass.</param>
-    private static ExpressionSourceEvaluation EvaluateExpressionSource(
+    /// <returns>Null when nothing further should happen: no <see cref="IExpressionEvaluator"/> was supplied, or Missing
+    /// Input Behaviour is FailMapping (its <see cref="AttributeFlowError"/> is already recorded). Otherwise a result or
+    /// no value, which each caller interprets.</returns>
+    private static ExpressionSourceEvaluation? EvaluateExpressionSource(
         ConnectedSystemObject cso,
         SyncRuleMapping syncRuleMapping,
         SyncRuleMappingSource source,
@@ -523,118 +488,83 @@ public partial class SyncEngine
         List<AttributeFlowError>? errors,
         IDictionary<string, object?>? metaverseAttributes = null)
     {
-        if (expressionEvaluator == null)
-        {
-            Log.Warning("EvaluateExpressionSource: Expression-based mapping requires an IExpressionEvaluator but none was provided. Expression: {Expression}", source.Expression);
-            return ExpressionSourceEvaluation.Stop();
-        }
+        if (!HasExpressionEvaluator(expressionEvaluator, source))
+            return null;
 
         var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType);
+        var evaluated = AttributeFlowPipeline.EvaluateSource(expressionEvaluator!, source.Expression!, source.MissingInputBehaviour,
+            csAttributeDictionary, metaverseAttributes);
 
-        Log.Debug("EvaluateExpressionSource: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
-            cso.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
-
-        var context = new ExpressionContext(
-            metaverseAttributes: metaverseAttributes,
-            connectedSystemAttributes: csAttributeDictionary);
-
-        // Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it evaluates cleanly
-        // and returns a structurally broken value ("ada.@corp.local" for a person with no surname) that no layer
-        // downstream can tell from a good one. Whether that matters is the administrator's call, not JIM's: an
-        // Expression built on IIF or IsNullOrEmpty handles the absence itself, and one building an identifier
-        // must not run at all.
-        //
-        // Which sides count depends on whether the expression has a Metaverse view. A Metaverse-Derived Attribute
-        // Flow (#1750), evaluated by the derived pass, reads both the Connected System Object and the Metaverse
-        // Object's effective values as of this pass, so an absent input on either side is an absent input, reported
-        // in accessor form (cs["x"], mv["x"]); an asserted-null marker is excluded from that view, so it reads as
-        // absent exactly as it does to an export expression. Everywhere else (the ordinary inbound pass, and every
-        // inbound pass on a context built with no derived flow graph) there is no Metaverse view: mv[...] reads
-        // nothing, and counting it as missing would fail every object on a mapping over something no object can
-        // supply. There only Connected System inputs are considered.
-        if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
-        {
-            var missingInputs = FindMissingInputs(source.Expression, csAttributeDictionary, metaverseAttributes);
-            if (missingInputs.Count > 0)
-            {
-                switch (source.MissingInputBehaviour)
-                {
-                    case MissingInputBehaviour.ContributeNoValue:
-                        // Not a fault: the same outcome an Expression returning null produces. An ordinary mapping
-                        // resolves this by Attribute Priority and "Null is a value", so a lower-priority
-                        // contributor can win; a generated mapping withholds generation instead (FR 29).
-                        Log.Debug("EvaluateExpressionSource: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
-                            cso.Id, string.Join(", ", missingInputs));
-                        return ExpressionSourceEvaluation.Missing();
-
-                    case MissingInputBehaviour.FailMapping:
-                        // One attribute lost, the object's others unaffected: the shape MultiValuedToSingleValued
-                        // already uses, recorded by the worker as an ExpressionMissingInput execution item.
-                        errors?.Add(new AttributeFlowError
-                        {
-                            Kind = AttributeFlowErrorKind.ExpressionMissingInput,
-                            TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
-                            Expression = source.Expression,
-                            MissingInputs = missingInputs
-                        });
-                        return ExpressionSourceEvaluation.Stop();
-
-                    case MissingInputBehaviour.FailObject:
-                        // The whole object is left untouched, exactly as for an Expression that threw.
-                        throw new SyncExpressionMissingInputException(source.Expression,
-                            syncRuleMapping.TargetMetaverseAttribute?.Name, missingInputs);
-                }
-            }
-        }
-
-        // Only the evaluation itself is guarded. A thrown expression must be surfaced as an errored
-        // object, never swallowed and never conflated with a deliberate null (which clears the value).
-        // Every failure an expression can cause arrives as the one ExpressionEvaluationException (#2153, N5) and is
-        // rethrown as SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError
-        // RPEI; anything else is a JIM fault and propagates to the worker's UnhandledError handler.
-        object? result;
-        try
-        {
-            result = expressionEvaluator.Evaluate(source.Expression!, context);
-        }
-        catch (ExpressionEvaluationException ex)
-        {
-            throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex);
-        }
-
-        if (result == null)
-        {
-            Log.Debug("EvaluateExpressionSource: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
-                source.Expression, cso.Id, string.Join(", ", csAttributeDictionary.Keys));
-
-            // Expression null is a positive "no value" assertion (ConnectedNoValue), not "no opinion".
-            return ExpressionSourceEvaluation.Missing();
-        }
-
-        return ExpressionSourceEvaluation.Value(result);
+        return ContinueAfterSource(evaluated, cso, syncRuleMapping, source, errors) ? evaluated : null;
     }
 
-    /// <summary>
-    /// The inputs an expression reads that have no value (Missing Input Behaviour, #1361), in accessor form: always
-    /// the Connected System side, and the Metaverse side too when a Metaverse view is supplied (the derived pass,
-    /// #1750). See the comment at the call site in <see cref="EvaluateExpressionSource"/>.
-    /// </summary>
-    private static IReadOnlyList<string> FindMissingInputs(
-        string? expression,
-        IDictionary<string, object?> connectedSystemAttributes,
-        IDictionary<string, object?>? metaverseAttributes)
+    private static bool HasExpressionEvaluator(IExpressionEvaluator? expressionEvaluator, SyncRuleMappingSource source)
     {
-        var missing = ExpressionInputResolver.FindMissingInputs(expression, ExpressionInputSource.ConnectedSystem, connectedSystemAttributes);
-        if (metaverseAttributes == null)
-            return missing;
+        if (expressionEvaluator != null)
+            return true;
 
-        return missing
-            .Concat(ExpressionInputResolver.FindMissingInputs(expression, ExpressionInputSource.Metaverse, metaverseAttributes))
-            .ToList();
+        Log.Warning("EvaluateExpressionSource: Expression-based mapping requires an IExpressionEvaluator but none was provided. Expression: {Expression}", source.Expression);
+        return false;
     }
 
     /// <summary>
-    /// Processes an expression-based Synchronisation Rule mapping source.
+    /// What synchronisation does with the first half of the pipeline's outcome. Missing Input Behaviour (#1361): an
+    /// Expression whose input is absent does not fail, it evaluates cleanly and returns a structurally broken value
+    /// ("ada.@corp.local" for a person with no surname) that no layer downstream can tell from a good one, so the
+    /// administrator chooses what an absent input means. FailMapping records an <see cref="AttributeFlowError"/> and
+    /// stops (one attribute lost, the object's others unaffected, as MultiValuedToSingleValued already does);
+    /// FailObject throws, leaving the whole object untouched exactly as for an Expression that threw; ContributeNoValue
+    /// is not a fault, and continues as no value. A thrown Expression is surfaced as an errored object, never swallowed
+    /// and never conflated with a deliberate null: it is rethrown as <see cref="SyncExpressionEvaluationException"/>
+    /// for the worker to record as an ExpressionEvaluationError RPEI.
+    /// </summary>
+    /// <returns>True to continue with the result or no value; false when the mapping stops here.</returns>
+    private static bool ContinueAfterSource(
+        ExpressionSourceEvaluation evaluated,
+        ConnectedSystemObject cso,
+        SyncRuleMapping syncRuleMapping,
+        SyncRuleMappingSource source,
+        List<AttributeFlowError>? errors)
+    {
+        switch (evaluated.Outcome)
+        {
+            case ExpressionSourceOutcome.MissingInputFailedMapping:
+                errors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                    TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
+                    Expression = source.Expression,
+                    MissingInputs = evaluated.MissingInputs
+                });
+                return false;
+
+            case ExpressionSourceOutcome.MissingInputFailedObject:
+                throw new SyncExpressionMissingInputException(source.Expression,
+                    syncRuleMapping.TargetMetaverseAttribute?.Name, evaluated.MissingInputs);
+
+            case ExpressionSourceOutcome.EvaluationFailed:
+                throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, evaluated.EvaluationException!);
+
+            case ExpressionSourceOutcome.NoValue when evaluated.MissingInputs.Count > 0:
+                // Not a fault: the same outcome an Expression returning null produces.
+                Log.Debug("EvaluateExpressionSource: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
+                    cso.Id, string.Join(", ", evaluated.MissingInputs));
+                return true;
+
+            case ExpressionSourceOutcome.NoValue:
+                // Expression null is a positive "no value" assertion (ConnectedNoValue), not "no opinion".
+                Log.Debug("EvaluateExpressionSource: Expression '{Expression}' for CSO {CsoId} returned null.", source.Expression, cso.Id);
+                return true;
+
+            default:
+                return true;
+        }
+    }
+
+    /// <summary>
+    /// Processes an expression-based Synchronisation Rule mapping source: the whole evaluation pipeline
+    /// (<see cref="AttributeFlowPipeline.EvaluateInbound"/>, #2055), the same code the Attribute Flow tester runs, then
+    /// what synchronisation does with its outcome.
     /// </summary>
     private static void ProcessExpressionMapping(
         ConnectedSystemObject cso,
@@ -650,28 +580,22 @@ public partial class SyncEngine
         List<AttributeFlowError>? errors,
         IDictionary<string, object?>? metaverseAttributes)
     {
-        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors, metaverseAttributes);
-
-        if (evaluation.Stopped)
+        if (!HasExpressionEvaluator(expressionEvaluator, source))
             return;
 
-        if (evaluation.NoValue)
-        {
-            // Resolve by priority and "Null is a value" (#91): a missing input under ContributeNoValue and a
-            // null/whitespace-collapsed expression result are both the ConnectedNoValue state.
-            ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+        var evaluation = AttributeFlowPipeline.EvaluateInbound(cso, csoType, syncRuleMapping, source, expressionEvaluator!, metaverseAttributes);
+
+        if (!ContinueAfterSource(evaluation.Source, cso, syncRuleMapping, source, errors))
             return;
-        }
 
         // The one result handler (#2179): every value converted to the target's type before anything is staged, so a
         // value the type cannot hold is reported and the existing value kept, never removed first and then not
         // replaced. Inbound text processing (#843) applies to a Text target's values only.
         var target = syncRuleMapping.TargetMetaverseAttribute!;
-        var resolution = ResolveInboundExpressionResult(evaluation.Result, target, syncRuleMapping);
 
-        switch (resolution.Kind)
+        switch (evaluation.ErrorReason)
         {
-            case ExpressionResultResolutionKind.NotConvertible:
+            case AttributeFlowErrorReason.ResultNotConvertible:
                 // The value itself is source data, so it goes to the Run Profile Execution Item (AttributeFlowError.Value),
                 // never to the log.
                 Log.Warning("ProcessExpressionMapping: Expression result cannot be stored in {Type} attribute {AttributeName}; " +
@@ -683,34 +607,35 @@ public partial class SyncEngine
                     TargetAttributeName = target.Name,
                     TargetAttributeType = target.Type,
                     Expression = source.Expression,
-                    Value = resolution.UnconvertibleValue
+                    Value = evaluation.Resolution!.UnconvertibleValue
                 });
                 return;
 
-            case ExpressionResultResolutionKind.SeveralValues:
+            case AttributeFlowErrorReason.ResultMultiValued:
                 Log.Warning("ProcessExpressionMapping: Expression returned {ValueCount} values for single-valued attribute {AttributeName}; " +
                     "the attribute keeps its value on MVO {MvoId}. CSO {CsoId}",
-                    resolution.ValueCount, target.Name, mvo.Id, cso.Id);
+                    evaluation.Resolution!.ValueCount, target.Name, mvo.Id, cso.Id);
                 errors?.Add(new AttributeFlowError
                 {
                     Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
                     TargetAttributeName = target.Name,
+                    SourceAttributeName = evaluation.Resolution.SourceAttributeName,
                     Expression = source.Expression,
-                    ValueCount = resolution.ValueCount
+                    ValueCount = evaluation.Resolution.ValueCount
                 });
                 return;
-
-            case ExpressionResultResolutionKind.NoValue:
-                // An empty collection, or values that all collapse to no value under inbound processing: the
-                // ConnectedNoValue state, resolved by priority and "Null is a value" (#91) like a null result.
-                ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
-                return;
-
-            case ExpressionResultResolutionKind.Values:
-            default:
-                ApplyExpressionValues(mvo, target, resolution.Values, contributingSystemId, contributingSyncRuleId);
-                return;
         }
+
+        if (evaluation.Outcome == AttributeFlowOutcome.NoValue)
+        {
+            // A missing input under ContributeNoValue, a null result, an empty collection, or values that all collapse
+            // to no value under inbound processing: the ConnectedNoValue state, resolved by priority and "Null is a
+            // value" (#91).
+            ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+            return;
+        }
+
+        ApplyExpressionValues(mvo, target, evaluation.Values, contributingSystemId, contributingSyncRuleId);
     }
 
     /// <summary>
@@ -718,14 +643,8 @@ public partial class SyncEngine
     /// (#2179), applying the mapping's inbound text processing (#843) to a Text target. Internal so the provenance
     /// inspector (#399) shows exactly the values the engine would flow.
     /// </summary>
-    internal static ExpressionResultResolution ResolveInboundExpressionResult(object? result, MetaverseAttribute target, SyncRuleMapping syncRuleMapping)
-    {
-        Func<string, string?>? processText = target.Type == AttributeDataType.Text
-            ? value => ApplyInboundTextProcessing(value, syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation)
-            : null;
-
-        return ExpressionResultValues.Resolve(result, target.Type, target.AttributePlurality, processText);
-    }
+    internal static ExpressionResultResolution ResolveInboundExpressionResult(object? result, MetaverseAttribute target, SyncRuleMapping syncRuleMapping) =>
+        ExpressionResultValues.Resolve(result, target.Type, target.AttributePlurality, AttributeFlowPipeline.InboundTextProcessing(syncRuleMapping, target));
 
     /// <summary>
     /// Makes the target attribute hold exactly <paramref name="values"/> (distinct, already converted to its type):
@@ -825,7 +744,7 @@ public partial class SyncEngine
             case int number: newValue.IntValue = number; break;
             case long longNumber: newValue.LongValue = longNumber; break;
             case decimal decimalNumber: newValue.DecimalValue = decimalNumber; break;
-            case DateTime date: newValue.DateTimeValue = date; break;
+            case DateTime date: newValue.DateTimeValue = DateTimeAttributeValue.ToCanonical(date); break;
             case bool flag: newValue.BoolValue = flag; break;
             case Guid guid: newValue.GuidValue = guid; break;
             case byte[] bytes: newValue.ByteValue = bytes; break;
@@ -893,14 +812,14 @@ public partial class SyncEngine
         // recorded for this attribute this pass; unlike an ordinary mapping there is no value for a generated
         // mapping to leave untouched here, only the absence of a request, which is the correct outcome: a
         // temporarily unresolvable mapping simply generates nothing this pass rather than failing the object.
-        if (evaluation.Stopped)
+        if (evaluation == null)
             return;
 
         // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated mapping, FR 29)
         // or a null result: wait. NEVER ApplyNoValueOutcome here, unlike ProcessExpressionMapping: that clears an
         // EXISTING value under Attribute Priority, and a committed generated value must never be recomputed or
         // cleared by its inputs (FR 10) - "contribute no value" for a generated mapping means wait, not withdraw.
-        if (evaluation.NoValue)
+        if (evaluation.Outcome == ExpressionSourceOutcome.NoValue)
         {
             mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
             {
@@ -1277,12 +1196,14 @@ public partial class SyncEngine
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue,
+                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
-        else if (csoValue != null && mvoValue != null && mvoValue.DateTimeValue != csoValue.DateTimeValue)
+        // Compared canonically (#2153): a value read from the database is Kind Local and to the microsecond, one made in
+        // memory is Kind Utc, so the same date in two forms is not a change.
+        else if (csoValue != null && mvoValue != null && !DateTimeAttributeValue.AreEqual(mvoValue.DateTimeValue, csoValue.DateTimeValue))
         {
             mvo.PendingAttributeValueRemovals.Add(mvoValue);
             mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
@@ -1290,7 +1211,7 @@ public partial class SyncEngine
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue,
+                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
@@ -1298,6 +1219,18 @@ public partial class SyncEngine
 
         TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
+
+    /// <summary>
+    /// A date in the form JIM holds it (#2153), or null for none. Every date the engine creates is written this way.
+    /// </summary>
+    internal static DateTime? CanonicalDate(DateTime? value) =>
+        value.HasValue ? DateTimeAttributeValue.ToCanonical(value.Value) : null;
+
+    /// <summary>
+    /// A date's canonical key (#2153), or null for none: what a set or tuple of values compares a date by.
+    /// </summary>
+    internal static long? DateKey(DateTime? value) =>
+        value.HasValue ? DateTimeAttributeValue.Key(value.Value) : null;
 
     private static void ProcessBinaryAttribute(
         MetaverseObject mvo,
@@ -1537,7 +1470,8 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Builds the <c>cs[...]</c> attribute dictionary an Expression evaluates against. Internal (rather than
+    /// Builds the <c>cs[...]</c> attribute dictionary an Expression evaluates against: every value of each attribute,
+    /// as <see cref="ExpressionAttributeDictionary"/> reads them (#2053). Internal (rather than
     /// private) so the provenance inspector (#399) can evaluate an Attribute Priority candidate's expression
     /// exactly as the engine would, without duplicating this projection logic.
     /// </summary>
@@ -1545,7 +1479,7 @@ public partial class SyncEngine
         ConnectedSystemObject cso,
         ConnectedSystemObjectType csoType)
     {
-        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var attributes = new ExpressionAttributeDictionary();
 
         foreach (var attributeValue in cso.AttributeValues)
         {
@@ -1557,16 +1491,10 @@ public partial class SyncEngine
                 continue;
             }
 
-            var attributeName = csotAttribute.Name;
-            var value = ToExpressionValue(attributeValue, csotAttribute.Type);
-
-            if (!attributes.ContainsKey(attributeName))
-            {
-                attributes[attributeName] = value;
-            }
+            attributes.Add(csotAttribute.Name, ToExpressionValue(attributeValue, csotAttribute.Type));
         }
 
-        return attributes;
+        return attributes.Build();
     }
 
     /// <summary>

@@ -406,6 +406,13 @@ public partial class SyncEngine
     /// Checks if the Pending Export attribute change value exists in the CSO's attribute values.
     /// Uses type-aware comparison based on the attribute's data type.
     /// </summary>
+    /// <remarks>
+    /// Text compares through <see cref="AttributeValueComparison"/> (#2051): an identifier (an External ID, a
+    /// Secondary External ID) ignores case unless declared case-exact, because a directory reports a name in the case
+    /// it stored, which need not be the case JIM wrote (#2195); every other text attribute compares exactly, so a change
+    /// of case is confirmed only when the new case arrives. A resolved reference is the object it names, so it is
+    /// confirmed by the referenced Connected System Object's id; its DN, like an unresolved one, ignores case.
+    /// </remarks>
     public static bool ValueExistsOnCso(List<ConnectedSystemObjectAttributeValue> csoValues, PendingExportAttributeValueChange attrChange)
     {
         if (csoValues.Count == 0)
@@ -417,7 +424,7 @@ public partial class SyncEngine
         {
             AttributeDataType.Text =>
                 !string.IsNullOrEmpty(attrChange.StringValue) &&
-                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, StringComparison.Ordinal)),
+                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, AttributeValueComparison.For(attrChange.Attribute))),
 
             AttributeDataType.Number =>
                 attrChange.IntValue.HasValue &&
@@ -433,7 +440,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                csoValues.Any(v => v.DateTimeValue == attrChange.DateTimeValue),
+                csoValues.Any(v => DateTimeAttributeValue.AreEqual(v.DateTimeValue, attrChange.DateTimeValue)),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -451,11 +458,14 @@ public partial class SyncEngine
                 // Reference attributes can be stored in two ways:
                 // 1. UnresolvedReferenceValue — the raw DN string (before or after resolution)
                 // 2. StringValue — set during export resolution (when UnresolvedReferenceValue is cleared)
-                // We need to check both the Pending Export value AND the CSO values to handle both cases
+                // We need to check both the Pending Export value AND the CSO values to handle both cases.
+                // A resolved reference also matches by the referenced object's id, whatever either DN says.
+                (attrChange.ResolvedReferenceCsoId.HasValue &&
+                 csoValues.Any(v => v.ReferenceValueId == attrChange.ResolvedReferenceCsoId)) ||
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal))) ||
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, AttributeValueComparison.For(attrChange.Attribute)))) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, StringComparison.Ordinal))),
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, AttributeValueComparison.For(attrChange.Attribute)))),
 
             _ => false
         };
@@ -469,9 +479,9 @@ public partial class SyncEngine
     /// </summary>
     /// <remarks>
     /// Number/LongNumber/Guid/Boolean/DateTime use typed sets (not stringified keys) so that set
-    /// membership is exactly the same comparison the original code performed (e.g. DateTime equality
-    /// via <c>Ticks</c>, which - like the <c>==</c> operator this replaces - ignores <see cref="DateTimeKind"/>;
-    /// stringifying with a round-trip format would incorrectly make Kind significant). Binary values are
+    /// membership is exactly the same comparison <see cref="ValueExistsOnCso"/> performs (DateTime by its
+    /// canonical key, <see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind nor a sub-microsecond
+    /// part is significant; stringifying with a round-trip format would make Kind significant). Binary values are
     /// not indexed: byte arrays do not hash usefully, and Binary attributes are never large multi-valued
     /// sets in practice (they are typically a single profile picture, certificate, etc.), so the original
     /// linear <c>SequenceEqual</c> scan is kept for them.
@@ -490,6 +500,19 @@ public partial class SyncEngine
 
         public HashSet<string>? TextValues { get; init; }
         public HashSet<string>? ReferenceValues { get; init; }
+
+        /// <summary>
+        /// The ids of the Connected System Objects the values reference, so a resolved reference is matched by the
+        /// object it names (see <see cref="ValueExistsOnCso"/>).
+        /// </summary>
+        public HashSet<Guid>? ReferenceIds { get; init; }
+
+        /// <summary>
+        /// How <see cref="TextValues"/> or <see cref="ReferenceValues"/> compares: taken from the attribute on the
+        /// Connected System Object's values. A probe whose own attribute compares differently falls back to the linear
+        /// comparison, so the two paths can never disagree.
+        /// </summary>
+        public StringComparison StringComparison { get; init; } = StringComparison.Ordinal;
         public HashSet<int>? NumberValues { get; init; }
         public HashSet<long>? LongNumberValues { get; init; }
         public HashSet<decimal>? DecimalValues { get; init; }
@@ -505,13 +528,18 @@ public partial class SyncEngine
     /// </summary>
     private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
     {
+        var attribute = values.Count > 0 ? values[0].Attribute : null;
+        var stringComparison = AttributeValueComparison.For(attribute);
+        var stringComparer = AttributeValueComparison.ComparerFor(attribute);
+
         return attrType switch
         {
             AttributeDataType.Text => new AttributeValueIndex
             {
                 Count = values.Count,
                 RawValues = values,
-                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(StringComparer.Ordinal)
+                StringComparison = stringComparison,
+                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(stringComparer)
             },
 
             AttributeDataType.Reference => new AttributeValueIndex
@@ -521,7 +549,9 @@ public partial class SyncEngine
                 // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
                 // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
                 // so a single index built from that one CSO-side field covers both probes.
-                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(StringComparer.Ordinal)
+                StringComparison = stringComparison,
+                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
+                ReferenceIds = values.Where(v => v.ReferenceValueId.HasValue).Select(v => v.ReferenceValueId!.Value).ToHashSet()
             },
 
             AttributeDataType.Number => new AttributeValueIndex
@@ -565,7 +595,7 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => v.DateTimeValue!.Value.Ticks).ToHashSet()
+                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value)).ToHashSet()
             },
 
             // Binary: keep the existing linear SequenceEqual scan - byte arrays do not hash usefully,
@@ -619,7 +649,11 @@ public partial class SyncEngine
             // for uniformity.
             _ => false
         };
-        if (!typedSetAvailableForProbe)
+        // The same guard for the comparison itself: a set built to ignore case cannot answer an exact probe, nor the
+        // reverse, so a probe whose attribute compares differently from the values' attribute takes the linear path.
+        if (!typedSetAvailableForProbe ||
+            (attrType is AttributeDataType.Text or AttributeDataType.Reference &&
+             index.StringComparison != AttributeValueComparison.For(attrChange.Attribute)))
             return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch
@@ -642,7 +676,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                (index.DateTimeTicksValues?.Contains(attrChange.DateTimeValue.Value.Ticks) ?? false),
+                (index.DateTimeTicksValues?.Contains(DateTimeAttributeValue.Key(attrChange.DateTimeValue.Value)) ?? false),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -657,6 +691,8 @@ public partial class SyncEngine
                 (index.GuidValues?.Contains(attrChange.GuidValue.Value) ?? false),
 
             AttributeDataType.Reference =>
+                (attrChange.ResolvedReferenceCsoId.HasValue &&
+                 (index.ReferenceIds?.Contains(attrChange.ResolvedReferenceCsoId.Value) ?? false)) ||
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
                  (index.ReferenceValues?.Contains(attrChange.UnresolvedReferenceValue) ?? false)) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
@@ -861,7 +897,7 @@ public partial class SyncEngine
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
             AttributeDataType.LongNumber => csoAttrValues.Select(v => v.LongValue?.ToString()).Where(v => v != null),
             AttributeDataType.Decimal => csoAttrValues.Select(v => v.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(v.DecimalValue.Value) : null).Where(v => v != null),
-            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
+            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(v.DateTimeValue.Value) : null).Where(v => v != null),
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
             AttributeDataType.Reference => csoAttrValues.Select(v => v.UnresolvedReferenceValue).Where(v => v != null),
@@ -887,7 +923,7 @@ public partial class SyncEngine
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
             AttributeDataType.LongNumber => attrChange.LongValue?.ToString() ?? "(null)",
             AttributeDataType.Decimal => attrChange.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value) : "(null)",
-            AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
+            AttributeDataType.DateTime => attrChange.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(attrChange.DateTimeValue.Value) : "(null)",
             AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
             AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",
             AttributeDataType.Reference => attrChange.UnresolvedReferenceValue ?? "(null)",

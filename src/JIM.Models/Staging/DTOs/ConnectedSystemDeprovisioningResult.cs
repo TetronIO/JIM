@@ -18,6 +18,12 @@ public class ConnectedSystemDeprovisioningResult
     public int ConnectedSystemObjectsProcessed { get; set; }
 
     /// <summary>
+    /// Connected System Objects left exactly as they were, with their Metaverse Objects, because a surviving
+    /// contributor's scope could not be decided. While any is held back the Connected System is not deleted.
+    /// </summary>
+    public int ConnectedSystemObjectsHeldBack { get; set; }
+
+    /// <summary>
     /// How many attribute values a surviving contributor was re-elected for during the per-object pass (the
     /// attribute handed to another Connected System rather than blanked).
     /// </summary>

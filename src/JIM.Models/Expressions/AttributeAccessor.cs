@@ -50,31 +50,31 @@ public class AttributeAccessor
     }
 
     /// <summary>
-    /// Gets the value of an attribute by name.
-    /// Returns null if the attribute is not found.
+    /// Gets the value of an attribute by name: null for no value, the value itself for one, and
+    /// <see cref="ExpressionValues"/> for several (#2053). A list or array supplied by the caller reads exactly as the
+    /// synchronisation builders' values do (<see cref="ExpressionValues.FromAttribute"/>).
     /// </summary>
     /// <param name="attributeName">The name of the attribute to retrieve.</param>
-    /// <returns>The attribute value, or null if not found. A Binary value is a copy (#2153, N6): an expression is
-    /// handed bytes of its own, so nothing it does can change the attribute value they came from.</returns>
-    public object? this[string attributeName]
+    /// <returns>The attribute's value or values, or null if not found. A Binary value is a copy (#2153, N6): an
+    /// expression is handed bytes of its own, so nothing it does can change the attribute value they came from.</returns>
+    /// <remarks>Virtual so the evaluator can hand an expression every date in the form JIM holds it (#2153, N4), whoever
+    /// built the dictionary.</remarks>
+    public virtual object? this[string attributeName]
     {
-        get => !_attributes.TryGetValue(attributeName, out var value) ? null
-            : value is byte[] bytes ? (byte[])bytes.Clone()
-            : value;
-    }
+        get
+        {
+            if (!_attributes.TryGetValue(attributeName, out var value))
+                return null;
 
-    /// <summary>
-    /// Checks if an attribute exists in the accessor.
-    /// </summary>
-    /// <param name="attributeName">The name of the attribute to check.</param>
-    /// <returns>True if the attribute exists, false otherwise.</returns>
-    public bool HasAttribute(string attributeName)
-    {
-        return _attributes.ContainsKey(attributeName);
+            return value switch
+            {
+                byte[] bytes => (byte[])bytes.Clone(),
+                ExpressionValues values when values.Any(v => v is byte[]) => ExpressionValues.FromAttribute(values.SourceName, values),
+                ExpressionValues values => values,
+                string => value,
+                System.Collections.IEnumerable collection => ExpressionValues.FromAttribute(attributeName, collection.Cast<object?>()),
+                _ => value
+            };
+        }
     }
-
-    /// <summary>
-    /// Gets all attribute names available in this accessor.
-    /// </summary>
-    public IEnumerable<string> AttributeNames => _attributes.Keys;
 }

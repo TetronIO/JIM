@@ -8,7 +8,7 @@ function Set-JIMScopingCriterion {
 
     .DESCRIPTION
         Replaces a criterion: its attribute, comparison and value are all set from what you give, as
-        New-JIMScopingCriterion would set them.
+        New-JIMScopingCriterion would set them. Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule.
@@ -34,11 +34,14 @@ function Set-JIMScopingCriterion {
         The name of the Connected System attribute to test, instead of its ID.
 
     .PARAMETER ComparisonType
-        How the attribute is compared with the value. The Not forms are met when no value of the attribute matches;
-        the others when any value does.
+        How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
+        none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a
+        value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in
+        -StringValue, for Text attributes.
 
     .PARAMETER StringValue
-        The value to compare a Text attribute with.
+        The value to compare a Text attribute with, or the regular expression for MatchesPattern and
+        NotMatchesPattern.
 
     .PARAMETER IntValue
         The value to compare a Number attribute with.
@@ -60,8 +63,8 @@ function Set-JIMScopingCriterion {
         The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        Whether a Text comparison respects case: $false ignores it. Case-sensitive when omitted, even if the
-        criterion ignored case before, because the whole criterion is replaced.
+        Whether a Text comparison respects case: $false ignores it. When omitted, the criterion keeps its current
+        setting.
 
     .PARAMETER ValueMode
         For a DateTime attribute: Absolute compares with -DateTimeValue, and Relative with a date worked out from
@@ -125,7 +128,8 @@ function Set-JIMScopingCriterion {
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
-                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals')]
+                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+                     'HasValue', 'HasNoValue', 'MatchesPattern', 'NotMatchesPattern')]
         [string]$ComparisonType,
 
         [Parameter()]

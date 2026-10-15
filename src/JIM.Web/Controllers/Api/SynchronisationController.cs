@@ -8,6 +8,7 @@ using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Servers.Scoping;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
@@ -18,6 +19,7 @@ using JIM.Models.Activities;
 using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
+using JIM.Models.Logic.Scoping;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Preview;
 using JIM.Models.Search;
@@ -347,9 +349,26 @@ public class SynchronisationController(
             }
         }
 
+        // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact.
+        // The type checked is the one the attribute will have, so a Type and a CaseExact sent together agree (#2051).
+        if (request.CaseExact == true && (request.Type ?? attribute.Type) != AttributeDataType.Text)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact. Only text values compare with or without regard to case."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
+
+        if (request.CaseExact.HasValue)
+        {
+            attribute.CaseExact = request.CaseExact.Value;
+
+            // Recorded, not inferred from the value differing, for the same reason as a type override: a schema
+            // refresh must leave the administrator's declaration alone even where it matches what was discovered.
+            attribute.CaseExactSetByAdministrator = true;
+        }
 
         if (request.Type.HasValue)
         {
@@ -478,7 +497,7 @@ public class SynchronisationController(
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
             kvp => kvp.Key,
-            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId)
+            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId, kvp.Value.CaseExact)
         );
 
         // Get the current API key for Activity attribution if authenticated via API key
@@ -1230,6 +1249,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
 
         var (items, totalCount) = await _application.ConnectedSystems.GetCsoChangeHistoryAsync(csoId, pagination.Page, pagination.PageSize);
+        ApiDateValues.CanonicaliseDates(items);
         return Ok(PaginatedResponse<CsoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
     }
 
@@ -5603,7 +5623,9 @@ public class SynchronisationController(
             return (relativeError, false);
 
         criterion.ComparisonType = comparisonType;
-        criterion.CaseSensitive = request.CaseSensitive;
+        // Omitted keeps the criterion's setting: a new criterion's default (respect case), or what an update finds
+        // stored (#2051), so a PUT that does not mention case sensitivity cannot reset it.
+        criterion.CaseSensitive = request.CaseSensitive ?? criterion.CaseSensitive;
         criterion.ValueMode = valueMode;
 
         if (valueMode == DateCriteriaValueMode.Relative)
@@ -5903,14 +5925,16 @@ public class SynchronisationController(
             MetaverseObjectTypeId = metaverseObjectType.Id,
             MetaverseObjectType = metaverseObjectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
-            TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
+            TargetMetaverseAttribute = targetMvAttr
         };
 
         var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, objectType, ruleId: 0, out var sources);
         if (sourcesError != null)
             return sourcesError;
         rule.Sources.AddRange(sources);
+
+        // Omitted, the setting follows the sources' case-exact declaration, as the portal's does (#2051).
+        rule.CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitiveFor(rule.Sources);
 
         try
         {
@@ -6241,8 +6265,7 @@ public class SynchronisationController(
             SyncRuleId = syncRule.Id,
             SyncRule = syncRule,
             TargetMetaverseAttributeId = targetMvAttr.Id,
-            TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
+            TargetMetaverseAttribute = targetMvAttr
         };
 
         // Add sources - for advanced mode, sources read the Synchronisation Rule's object type
@@ -6250,6 +6273,9 @@ public class SynchronisationController(
         if (sourcesError != null)
             return sourcesError;
         rule.Sources.AddRange(sources);
+
+        // Omitted, the setting follows the sources' case-exact declaration, as the portal's does (#2051).
+        rule.CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitiveFor(rule.Sources);
 
         try
         {
@@ -6484,21 +6510,35 @@ public class SynchronisationController(
     /// <summary>
     /// Test an expression with sample Attribute data
     /// </summary>
+    /// <remarks>
+    /// Given <c>syncRuleId</c> and <c>mappingId</c>, the expression is tested as that Attribute Flow, by the same code a
+    /// synchronisation runs: each sample is converted to its attribute's type, then the Attribute Flow's Missing Input
+    /// Behaviour, the expression, value processing and conversion to the target attribute's type apply in turn, and
+    /// <c>outcome</c> says what the target would be given. Without them, the expression is evaluated alone.
+    /// </remarks>
     /// <param name="request">The test expression request containing the expression and sample Attribute Values.</param>
     /// <returns>The result of evaluating the expression.</returns>
     /// <response code="200">Expression evaluated successfully.</response>
     /// <response code="400">Invalid expression or test data.</response>
     /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Synchronisation Rule or Attribute Flow was not found.</response>
     [HttpPost("test-expression", Name = "TestExpression")]
     [ProducesResponseType(typeof(TestExpressionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public IActionResult TestExpression([FromBody] TestExpressionRequest request)
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestExpressionAsync([FromBody] TestExpressionRequest request)
     {
         _logger.LogDebug("Testing expression: {Expression}", LogSanitiser.Sanitise(request.Expression));
 
         if (string.IsNullOrWhiteSpace(request.Expression))
             return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
+
+        if (request.SyncRuleId.HasValue != request.MappingId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest("Give both syncRuleId and mappingId to test the expression as an Attribute Flow, or neither."));
+
+        if (!request.SyncRuleId.HasValue && (request.ConnectedSystemObjectId.HasValue || request.MetaverseObjectId.HasValue))
+            return BadRequest(ApiErrorResponse.BadRequest("Values can be loaded from an object only when testing the expression as an Attribute Flow: give syncRuleId and mappingId too."));
 
         // First validate the expression syntax
         var validationResult = _expressionEvaluator.Validate(request.Expression);
@@ -6512,10 +6552,16 @@ public class SynchronisationController(
             });
         }
 
+        if (request.SyncRuleId is { } syncRuleId && request.MappingId is { } mappingId)
+            return await TestExpressionAsAttributeFlowAsync(request, syncRuleId, mappingId);
+
         // Build the context from the provided attribute values
-        var mvAttributes = request.MvAttributes ?? new Dictionary<string, object?>();
-        var csAttributes = request.CsAttributes ?? new Dictionary<string, object?>();
-        var context = new ExpressionContext(mvAttributes, csAttributes);
+        var context = new ExpressionContext(
+            TestExpressionSampleValues.ToExpressionAttributes(request.MvAttributes),
+            TestExpressionSampleValues.ToExpressionAttributes(request.CsAttributes))
+        {
+            NowUtc = AsUtc(request.AsOf)
+        };
 
         // Evaluate the expression
         var testResult = _expressionEvaluator.Test(request.Expression, context);
@@ -6530,6 +6576,409 @@ public class SynchronisationController(
             ResultType = testResult.ResultType,
             ErrorMessage = testResult.ErrorMessage
         });
+    }
+
+    /// <summary>
+    /// Tests the request's expression as an Attribute Flow (#2055), through <see cref="AttributeFlowTester"/>: the
+    /// evaluation pipeline synchronisation runs.
+    /// </summary>
+    private async Task<IActionResult> TestExpressionAsAttributeFlowAsync(TestExpressionRequest request, int syncRuleId, int mappingId)
+    {
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var mapping = syncRule.AttributeFlowRules.FirstOrDefault(m => m.Id == mappingId);
+        if (mapping == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute Flow with ID {mappingId} not found on Synchronisation Rule {syncRuleId}."));
+
+        var target = (Name: mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name,
+            Type: mapping.TargetMetaverseAttribute?.Type ?? mapping.TargetConnectedSystemAttribute?.Type);
+        if (target.Name == null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Attribute Flow {mappingId} has no target attribute to test against."));
+
+        // The expression under test takes the Attribute Flow's own Missing Input Behaviour.
+        var source = new SyncRuleMappingSource
+        {
+            Expression = request.Expression,
+            MissingInputBehaviour = mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression))?.MissingInputBehaviour
+                ?? MissingInputBehaviour.EvaluateAnyway
+        };
+
+        var loaded = await LoadTestInputsFromObjectsAsync(request, syncRule);
+        if (loaded.Problem != null)
+            return loaded.Problem;
+
+        // A sample replaces the loaded value for its attribute, so a real object's values can be edited.
+        var samples = TestExpressionSampleValues.ToTestInputs(request.CsAttributes, ExpressionInputSource.ConnectedSystem)
+            .Concat(TestExpressionSampleValues.ToTestInputs(request.MvAttributes, ExpressionInputSource.Metaverse))
+            .ToList();
+        var inputs = samples
+            .Concat(loaded.Inputs.Where(fromObject => !samples.Any(sample =>
+                sample.Source == fromObject.Source && string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+
+        var tested = AttributeFlowTester.Test(syncRule, mapping, source, inputs, _expressionEvaluator, AsUtc(request.AsOf));
+        var response = new TestExpressionResponse
+        {
+            TargetAttributeName = target.Name,
+            TargetAttributeType = target.Type,
+            Inputs = AttributeFlowTester.DescribeInputs(syncRule, request.Expression)
+                .Select(input => new TestExpressionInputDto
+                {
+                    Input = input.Accessor,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = inputs
+                        .Where(given => given.Source == input.Source && string.Equals(given.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(given => given.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (tested.Evaluation is not { } evaluation)
+        {
+            response.IsValid = false;
+            response.InputErrors = tested.InputErrors;
+            response.ErrorMessage = string.Join(" ", tested.InputErrors);
+            return Ok(response);
+        }
+
+        var description = AttributeFlowTester.Describe(evaluation, target.Name);
+        var expressionResult = evaluation.Source.Result;
+        response.IsValid = evaluation.Outcome != AttributeFlowOutcome.Error;
+        response.Outcome = evaluation.Outcome;
+        response.ErrorReason = evaluation.ErrorReason;
+        response.OutcomeDescription = description;
+        response.ErrorMessage = evaluation.Outcome == AttributeFlowOutcome.Error ? description : null;
+        response.MissingInputs = evaluation.Source.MissingInputs.Count > 0 ? evaluation.Source.MissingInputs : null;
+        response.Result = expressionResult;
+        response.ResultLines = expressionResult != null ? ExpressionText.ToDisplayLines(expressionResult) : null;
+        response.ResultType = expressionResult?.GetType().Name;
+        response.ValueLines = evaluation.Outcome == AttributeFlowOutcome.Values ? evaluation.Values.Select(ExpressionText.Describe).ToList() : null;
+        response.ValueProcessingSteps = tested.ValueProcessing?.Steps;
+        response.ValueProcessingChanged = tested.ValueProcessing?.Changed;
+        response.IfInputHasNoValue = tested.IfInputHasNoValue
+            .Select(absent => new TestExpressionAbsentInputDto
+            {
+                Input = absent.Accessor,
+                Outcome = absent.Evaluation.Outcome,
+                ErrorReason = absent.Evaluation.ErrorReason,
+                OutcomeDescription = AttributeFlowTester.Describe(absent.Evaluation, target.Name)
+            })
+            .ToList();
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// The inputs an Attribute Flow test takes from real objects (#2055): a Connected System Object of the rule's
+    /// Connected System for an import Attribute Flow, with the Metaverse Object it is joined to for any <c>mv[...]</c>
+    /// input, and a Metaverse Object for an export Attribute Flow (or to supply an import flow's <c>mv[...]</c> inputs).
+    /// </summary>
+    private async Task<(IReadOnlyList<AttributeFlowTestInput> Inputs, IActionResult? Problem)> LoadTestInputsFromObjectsAsync(
+        TestExpressionRequest request, SyncRule syncRule)
+    {
+        var inputs = new List<AttributeFlowTestInput>();
+        var metaverseObjectId = request.MetaverseObjectId;
+
+        if (request.ConnectedSystemObjectId is { } csoId)
+        {
+            if (syncRule.Direction == SyncRuleDirection.Export)
+                return ([], BadRequest(ApiErrorResponse.BadRequest(
+                    "An export Attribute Flow reads the Metaverse Object, so give metaverseObjectId rather than connectedSystemObjectId.")));
+
+            var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(syncRule.ConnectedSystemId, csoId);
+            if (cso == null)
+                return ([], NotFound(ApiErrorResponse.NotFound(
+                    $"Connected System Object with ID {csoId} not found in the Synchronisation Rule's Connected System.")));
+            if (cso.TypeId != syncRule.ConnectedSystemObjectType.Id)
+                return ([], BadRequest(ApiErrorResponse.BadRequest(
+                    $"Connected System Object {csoId} is not a '{syncRule.ConnectedSystemObjectType.Name}', the object type this Synchronisation Rule synchronises.")));
+
+            inputs.AddRange(AttributeFlowTester.InputsFromConnectedSystemObject(cso, syncRule.ConnectedSystemObjectType, request.Expression));
+
+            // A Metaverse-Derived Attribute Flow (#1750) also reads the Metaverse Object the CSO is joined to.
+            var readsMetaverse = ExpressionInputResolver.Resolve(request.Expression).Any(input => input.Source == ExpressionInputSource.Metaverse);
+            if (metaverseObjectId == null && readsMetaverse && cso.MetaverseObjectId is { } joinedId
+                && await _application.Metaverse.GetMetaverseObjectAsync(joinedId) is { } joined)
+                inputs.AddRange(AttributeFlowTester.InputsFromMetaverseObject(joined, request.Expression));
+        }
+
+        if (metaverseObjectId is { } mvoId)
+        {
+            var mvo = await _application.Metaverse.GetMetaverseObjectAsync(mvoId);
+            if (mvo == null)
+                return ([], NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {mvoId} not found.")));
+
+            inputs.AddRange(AttributeFlowTester.InputsFromMetaverseObject(mvo, request.Expression));
+        }
+
+        return (inputs, null);
+    }
+
+    #endregion
+
+    #region Scope Testing
+
+    /// <summary>
+    /// Test a Synchronisation Rule's scoping criteria
+    /// </summary>
+    /// <remarks>
+    /// Evaluates the rule's scoping criteria against an object holding the given values, by the same code a
+    /// synchronisation runs, and explains the outcome criterion by criterion. Relative date criteria resolve against
+    /// <c>asOf</c> (the current time when omitted), and <c>nextChange</c> says when the outcome would next change as
+    /// time passes. Values can be given as samples, loaded from a real object (a Connected System Object for an import
+    /// rule, a Metaverse Object for an export rule), or both, a sample replacing the object's value for its attribute.
+    /// </remarks>
+    /// <param name="syncRuleId">The Synchronisation Rule whose scoping criteria to test.</param>
+    /// <param name="request">The values to test, and the instant to test as of.</param>
+    /// <response code="200">The scoping criteria were evaluated, or the values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">An object was given for the wrong side of the rule.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Synchronisation Rule or object was not found.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/test", Name = "TestSyncRuleScope")]
+    [ProducesResponseType(typeof(TestScopeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestScopeAsync(int syncRuleId, [FromBody] TestScopeRequest request)
+    {
+        _logger.LogDebug("Testing the scope of Synchronisation Rule {Id}", syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var exporting = syncRule.Direction == SyncRuleDirection.Export;
+        if (exporting && request.ConnectedSystemObjectId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An export rule scopes Metaverse Objects, so give metaverseObjectId rather than connectedSystemObjectId."));
+        if (!exporting && request.MetaverseObjectId.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An import rule scopes Connected System Objects, so give connectedSystemObjectId rather than metaverseObjectId."));
+
+        IReadOnlyList<AttributeSample> loaded = [];
+        if (request.ConnectedSystemObjectId is { } csoId)
+        {
+            var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(syncRule.ConnectedSystemId, csoId);
+            if (cso == null)
+                return NotFound(ApiErrorResponse.NotFound(
+                    $"Connected System Object with ID {csoId} not found in the Synchronisation Rule's Connected System."));
+            if (cso.TypeId != syncRule.ConnectedSystemObjectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"Connected System Object {csoId} is not a '{syncRule.ConnectedSystemObjectType.Name}', the object type this Synchronisation Rule synchronises."));
+            loaded = ScopeTester.InputsFromConnectedSystemObject(cso, syncRule);
+        }
+        else if (request.MetaverseObjectId is { } mvoId)
+        {
+            var mvo = await _application.Metaverse.GetMetaverseObjectAsync(mvoId);
+            if (mvo == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {mvoId} not found."));
+            loaded = ScopeTester.InputsFromMetaverseObject(mvo, syncRule);
+        }
+
+        // A sample replaces the loaded value for its attribute, so a real object's values can be edited.
+        var samples = TestExpressionSampleValues.ToAttributeSamples(request.Attributes).ToList();
+        var inputs = samples
+            .Concat(loaded.Where(fromObject => !samples.Any(sample =>
+                string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+
+        var asOf = AsUtc(request.AsOf) ?? DateTime.UtcNow;
+        var tested = ScopeTester.Test(syncRule, inputs, asOf);
+        var response = new TestScopeResponse
+        {
+            IsValid = tested.Explanation != null,
+            EvaluatedAt = asOf,
+            Inputs = ScopeTester.DescribeInputs(syncRule)
+                .Select(input => new AttributeSampleDto
+                {
+                    Attribute = input.AttributeName,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = inputs
+                        .Where(given => string.Equals(given.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(given => given.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (tested.Explanation is not { } explanation)
+        {
+            response.InputErrors = tested.InputErrors;
+            return Ok(response);
+        }
+
+        response.Outcome = explanation.Outcome;
+        response.Explanation = ScopingExplanationDto.FromModel(explanation);
+        response.NextChange = tested.NextChange is { } change ? new TestScopeChangeDto { At = change.AtUtc, Outcome = change.Outcome } : null;
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// A test's as-of instant in UTC. A time given without an offset is read as UTC, the API's time zone, rather than
+    /// the server's local time.
+    /// </summary>
+    private static DateTime? AsUtc(DateTime? asOf) => asOf is not { } instant
+        ? null
+        : instant.Kind == DateTimeKind.Local ? instant.ToUniversalTime() : DateTime.SpecifyKind(instant, DateTimeKind.Utc);
+
+    #endregion
+
+    #region Object Matching Testing
+
+    /// <summary>
+    /// Test an Object Matching Rule on a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Works out what the rule would compare for an object holding the given values, by the same code a
+    /// synchronisation runs: each sample is converted to its attribute's type, then the rule's source attribute or
+    /// Expression gives the values, converted to the Metaverse attribute's type. With <c>lookUp</c>, the values are
+    /// also looked up in the Metaverse as an import join would look them up, and the response says what a
+    /// synchronisation would do: join, no match, or an ambiguous match. Nothing is written. Values can be given as
+    /// samples, loaded from a Connected System Object of the rule's Object Type, or both, a sample replacing the
+    /// object's value for its attribute.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System the rule belongs to.</param>
+    /// <param name="ruleId">The Object Matching Rule to test.</param>
+    /// <param name="request">The values to test, and whether to look them up.</param>
+    /// <response code="200">The rule was evaluated, or the values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">The Connected System Object is not of the rule's Object Type.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Connected System, rule or object was not found.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}/test", Name = "TestObjectMatchingRule")]
+    [ProducesResponseType(typeof(TestMatchingRuleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestConnectedSystemMatchingRuleAsync(int connectedSystemId, int ruleId, [FromBody] TestMatchingRuleRequest request)
+    {
+        _logger.LogDebug("Testing Object Matching Rule {RuleId} on Connected System {SystemId}", ruleId, connectedSystemId);
+
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule?.ConnectedSystemObjectTypeId is not { } objectTypeId
+            || await GetObjectTypeInConnectedSystemAsync(connectedSystemId, objectTypeId) is not { } objectType)
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
+
+        return await TestMatchingRuleAsync(rule, objectType, request);
+    }
+
+    /// <summary>
+    /// Test an Object Matching Rule on a Synchronisation Rule
+    /// </summary>
+    /// <remarks>
+    /// As the Connected System form, for a rule on a Synchronisation Rule (Synchronisation Rule mode): it reads the
+    /// Synchronisation Rule's Connected System Object Type, and a lookup matches against its Metaverse Object Type.
+    /// </remarks>
+    /// <param name="syncRuleId">The Synchronisation Rule the rule belongs to.</param>
+    /// <param name="ruleId">The Object Matching Rule to test.</param>
+    /// <param name="request">The values to test, and whether to look them up.</param>
+    /// <response code="200">The rule was evaluated, or the values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">The Connected System Object is not of the rule's Object Type.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The Synchronisation Rule, rule or object was not found.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}/test", Name = "TestSyncRuleObjectMatchingRule")]
+    [ProducesResponseType(typeof(TestMatchingRuleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestSyncRuleMatchingRuleAsync(int syncRuleId, int ruleId, [FromBody] TestMatchingRuleRequest request)
+    {
+        _logger.LogDebug("Testing Object Matching Rule {RuleId} on Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var rule = syncRule.ObjectMatchingRules.FirstOrDefault(r => r.Id == ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
+
+        // In Synchronisation Rule mode the rule matches against its Synchronisation Rule's Metaverse Object Type, as
+        // synchronisation sets it before matching.
+        rule.MetaverseObjectType = syncRule.MetaverseObjectType;
+        return await TestMatchingRuleAsync(rule, syncRule.ConnectedSystemObjectType, request);
+    }
+
+    /// <summary>
+    /// Tests <paramref name="rule"/> through the Object Matching tester (#2055), on samples, a real Connected System
+    /// Object's values, or both.
+    /// </summary>
+    private async Task<IActionResult> TestMatchingRuleAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType, TestMatchingRuleRequest request)
+    {
+        ConnectedSystemObject? tested = null;
+        IReadOnlyList<AttributeSample> loaded = [];
+        if (request.ConnectedSystemObjectId is { } csoId)
+        {
+            tested = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(objectType.ConnectedSystemId, csoId);
+            if (tested == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System Object with ID {csoId} not found in the rule's Connected System."));
+            if (tested.TypeId != objectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"Connected System Object {csoId} is not a '{objectType.Name}', the Object Type this Object Matching Rule reads."));
+            loaded = _application.ObjectMatching.TestInputsFromConnectedSystemObject(tested, rule, objectType);
+        }
+
+        // A sample replaces the loaded value for its attribute, so a real object's values can be edited.
+        var samples = TestExpressionSampleValues.ToAttributeSamples(request.Attributes).ToList();
+        var inputs = samples
+            .Concat(loaded.Where(fromObject => !samples.Any(sample =>
+                string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+
+        var result = await _application.ObjectMatching.TestAsync(rule, objectType, inputs, request.LookUp, tested);
+        var response = new TestMatchingRuleResponse
+        {
+            IsValid = result.Resolution != null,
+            Inputs = _application.ObjectMatching.DescribeTestInputs(rule, objectType)
+                .Select(input => new AttributeSampleDto
+                {
+                    Attribute = input.AttributeName,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = inputs
+                        .Where(given => string.Equals(given.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(given => given.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (result.Resolution is not { } resolution)
+        {
+            response.InputErrors = result.InputErrors;
+            return Ok(response);
+        }
+
+        response.Outcome = resolution.Kind;
+        response.ValueType = resolution.ValueType;
+        response.ValueLines = resolution.Values.Select(ExpressionText.Describe).ToList();
+        response.FailureMessage = resolution.FailureMessage;
+        response.Lookup = result.Lookup is { } lookup
+            ? new TestMatchingRuleLookupDto
+            {
+                Outcome = lookup.Outcome,
+                Description = lookup.Description,
+                MetaverseObjectId = lookup.MetaverseObjectId,
+                MetaverseObjectName = lookup.MetaverseObjectName,
+                Candidates = lookup.Candidates
+                    .Select(candidate => new TestMatchingRuleCandidateDto
+                    {
+                        Id = candidate.CandidateId,
+                        Name = candidate.DisplayNameSnapshot,
+                        TypeName = candidate.TypeNameSnapshot,
+                        MatchedValue = candidate.MatchedValue
+                    })
+                    .ToList(),
+                CandidateTotal = lookup.Candidates.Count > 0 ? lookup.Candidates[0].CandidateTotal : null
+            }
+            : null;
+        return Ok(response);
     }
 
     #endregion

@@ -4,32 +4,31 @@
 function Set-JIMConnectedSystem {
     <#
     .SYNOPSIS
-        Updates an existing Connected System in JIM.
+        Changes a Connected System.
 
     .DESCRIPTION
-        Updates the name, description, setting values, export parallelism, and/or unresolved reference handling
-        of an existing Connected System. Only the parameters provided will be updated.
+        Changes a Connected System's name, description, settings, and how it exports and treats references and
+        passwords. What you leave out stays as it is.
 
     .PARAMETER Id
-        The unique identifier of the Connected System to update.
+        The ID of the Connected System to change.
 
     .PARAMETER InputObject
-        Connected System object to update (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER Name
-        The new name for the Connected System.
+        The new name of the Connected System.
 
     .PARAMETER Description
-        The new description for the Connected System.
+        What the Connected System is for, for administrators.
 
     .PARAMETER SettingValues
-        A hashtable of setting values to update, where keys are setting IDs and values are
-        hashtables with stringValue, intValue, or checkboxValue properties.
+        The Connector settings to change, as a hashtable keyed by setting ID (from Get-JIMConnectorDefinition) whose
+        values are hashtables holding a stringValue, intValue or checkboxValue.
 
     .PARAMETER MaxExportParallelism
-        Maximum number of export batches to process concurrently (1-16).
-        Only applicable when the connector supports parallel export.
-        Default is 1 (sequential processing).
+        How many export batches run at once, where the Connector supports exporting in parallel. 1 exports one batch
+        at a time.
 
     .PARAMETER RequireSecureTransport
         Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted.
@@ -40,26 +39,24 @@ function Set-JIMConnectedSystem {
         discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password.
 
     .PARAMETER InitialPasswordTimeToLive
-        How long an account provisioned into this Connected System stays owed an initial password before JIM
-        records an expiry and stops trying. Accepts a TimeSpan, e.g. (New-TimeSpan -Days 30). JIM's default when
-        none has been set is 7 days. Raise it ahead of a planned outage longer than the current window; every
-        account provisioned while the target is unreachable otherwise expires without a password.
+        How long an account provisioned into the Connected System stays owed an initial password before JIM records
+        an expiry and stops trying, as a TimeSpan. Seven days until one is set.
+        Raise it ahead of an outage longer than the current window, or every account provisioned while the Connected
+        System is unreachable expires without a password.
 
     .PARAMETER UnresolvedReferenceHandling
-        Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
-        is treated: 'Error' (default; marks the affected Run Profile Execution Item as errored), 'Warn' (no
-        per-object error, but the Activity completes with a warning summarising the count), or 'Ignore' (no
-        per-object error and no Activity warning; unresolved references are still logged and remain visible on the
-        Connected System Object).
+        How an imported reference value that cannot be resolved to a Connected System Object is treated: Error fails
+        the object's Run Profile execution item; Warn completes the Activity with a warning counting them instead;
+        Ignore records neither, though the references are still logged and shown on the Connected System Object.
 
     .PARAMETER ChangeReason
-        An optional reason for the change, recorded against this Connected System's change history.
+        Why the change was made, recorded in the Connected System's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated Connected System object.
+        Returns the Connected System as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Connected System object.
+        With -PassThru, the Connected System as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystem -Id 1 -Name "Updated Name"
@@ -115,7 +112,7 @@ function Set-JIMConnectedSystem {
         Remove-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

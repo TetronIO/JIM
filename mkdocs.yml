@@ -116,6 +116,7 @@ nav:
       - Passwords: concepts/passwords.md
       - Password Synchronisation: concepts/password-synchronisation.md
       - Expressions: concepts/expressions.md
+      - Nulls and Missing Inputs: concepts/expression-nulls.md
       - Case Sensitivity: concepts/case-sensitivity.md
       - Object Naming: concepts/object-naming.md
   - Configuration:
@@ -207,6 +208,12 @@ nav:
       - System: powershell/system.md
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
+      - Connectors: powershell/connectors.md
+      - Connected System Schema: powershell/connected-system-schema.md
+      - Auxiliary Object Classes: powershell/connected-system-auxiliary-classes.md
+      - Partitions and Containers: powershell/partitions-and-containers.md
+      - Connected System Objects: powershell/connected-system-objects.md
+      - Pending Exports: powershell/pending-exports.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
       - Attribute Mappings: powershell/attribute-mappings.md
@@ -218,6 +225,7 @@ nav:
       - Metaverse Object Types: powershell/metaverse-object-types.md
       - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
+      - Password Queue: powershell/password-queue.md
       - Generated Values: powershell/generated-values.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md

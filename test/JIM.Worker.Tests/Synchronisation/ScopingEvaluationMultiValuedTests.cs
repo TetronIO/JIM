@@ -166,16 +166,44 @@ public class ScopingEvaluationMultiValuedTests
     }
 
     [Test]
-    public void IsInScope_EmptyEqualsCriterion_MatchesOnlyAnAttributeWithNoValues()
+    public void IsInScope_HasNoValue_MatchesOnlyAnAttributeWithNoValues()
     {
-        // The missing-value rule is unchanged: an Equals criterion with no value matches an object holding no value,
-        // and an object holding several values is not "missing" the attribute.
+        // "has no value" (#2053) replaces the "Equals with no value" workaround: an object holding several values is not
+        // missing the attribute.
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.Equals, null, []), Is.True);
-            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.Equals, null, []), Is.True);
-            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.Equals, null, ["All Staff", "Finance Readers"]), Is.False);
-            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.Equals, null, ["All Staff", "Finance Readers"]), Is.False);
+            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.HasNoValue, null, []), Is.True);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.HasNoValue, null, []), Is.True);
+            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.HasNoValue, null, ["All Staff", "Finance Readers"]), Is.False);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.HasNoValue, null, ["All Staff", "Finance Readers"]), Is.False);
+        }
+    }
+
+    [Test]
+    public void IsInScope_HasValue_MatchesAnyAttributeHoldingAValue()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.HasValue, null, []), Is.False);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.HasValue, null, []), Is.False);
+            Assert.That(EvaluateMvo(AttributeDataType.Text, SearchComparisonType.HasValue, null, ["All Staff", "Finance Readers"]), Is.True);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.HasValue, null, ["All Staff", "Finance Readers"]), Is.True);
+        }
+    }
+
+    [Test]
+    public void IsInScope_MatchesPattern_IsMetWhenAnyValueMatches()
+    {
+        // PRD Scenario 8, over several values: one address matching is enough, and "does not match" needs every one.
+        string[] proxyAddresses = ["SMTP:priya.shah@example.org", "x500:/o=Example/cn=pshah"];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.MatchesPattern, @"^smtp:[a-z.]+@example\.org$", proxyAddresses, caseSensitive: false), Is.True);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.MatchesPattern, @"^smtp:[a-z.]+@example\.org$", proxyAddresses, caseSensitive: true), Is.False);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.NotMatchesPattern, "^x500:", proxyAddresses), Is.False);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.NotMatchesPattern, "^sip:", proxyAddresses), Is.True);
+            Assert.That(EvaluateCso(AttributeDataType.Text, SearchComparisonType.NotMatchesPattern, "^sip:", []), Is.False,
+                "a negated operator needs a value, as \"does not equal\" does");
         }
     }
 

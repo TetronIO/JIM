@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using JIM.Models.Search;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Staging;
@@ -99,7 +100,7 @@ public class ExampleDataDtoTests
             {
                 Id = 81,
                 MetaverseAttribute = status,
-                ComparisonType = ComparisonType.Equals,
+                ComparisonType = SearchComparisonType.Equals,
                 StringValue = "Employed"
             },
             ReferenceMetaverseObjectTypes = [metaverseObjectType],

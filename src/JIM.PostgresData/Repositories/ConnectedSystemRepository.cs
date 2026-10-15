@@ -15,6 +15,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -88,7 +89,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        // Configuration names ignore case (#2051); an exact name wins over one differing only in case.
+        var nameLower = name.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectorDefinitions
+            .Where(cd => cd.Name.ToLower() == nameLower)
+            .Select(cd => cd.Name)
+            .ToListAsync();
+        var resolvedName = ConfigurationName.Resolve(candidateNames, name);
+        if (resolvedName == null)
+            return null;
+
+        return await query.SingleOrDefaultAsync(cd => cd.Name == resolvedName);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -878,11 +889,65 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// Updates an existing Object Matching Rule.
     /// </summary>
+    /// <remarks>
+    /// A rule's sources are saved as a set: a source with no id is added, a persisted source the rule no longer holds
+    /// is deleted, and the ones it keeps are saved as they now stand, since a caller may have edited one in place.
+    /// The rule usually arrives untracked (JIM.Web loads NoTracking), so marking only the rule modified would save
+    /// none of a change to its sources while reporting success, which is how a REST or PowerShell change of a rule's
+    /// source was silently lost.
+    /// <para>
+    /// The context may already track another instance of the rule: loading its Synchronisation Rule does, since that
+    /// load tracks the rules it includes. The values are then applied to the tracked instance, as attaching the copy
+    /// would collide with it.
+    /// </para>
+    /// </remarks>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
-        // Use Entry().State instead of Update() to avoid graph traversal.
-        var entry = Repository.Database.Entry(rule);
-        entry.State = EntityState.Modified;
+        var keptIds = rule.Sources.Where(source => source.Id != 0).Select(source => source.Id).ToList();
+        var removedIds = await Repository.Database.ObjectMatchingRuleSources
+            .Where(source => source.ObjectMatchingRuleId == rule.Id && !keptIds.Contains(source.Id))
+            .Select(source => source.Id)
+            .ToListAsync();
+
+        // Find tracked instances without DetectChanges, which would attach whatever untracked graph hangs off the
+        // rule's navigations.
+        var previousAutoDetect = Repository.Database.ChangeTracker.AutoDetectChangesEnabled;
+        Repository.Database.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var tracked = Repository.Database.ObjectMatchingRules.Local.FirstOrDefault(candidate => candidate.Id == rule.Id);
+            if (tracked != null && !ReferenceEquals(tracked, rule))
+                Repository.Database.Entry(tracked).CurrentValues.SetValues(rule);
+            else
+                Repository.Database.Entry(rule).State = EntityState.Modified; // Entry() rather than Update(): no graph traversal
+
+            foreach (var removed in removedIds.Select(id =>
+                         Repository.Database.ObjectMatchingRuleSources.Local.FirstOrDefault(source => source.Id == id)
+                         ?? new ObjectMatchingRuleSource { Id = id }))
+                Repository.Database.Entry(removed).State = EntityState.Deleted;
+
+            // A kept source may have been edited in place, so it is saved too rather than assumed unchanged.
+            foreach (var kept in rule.Sources.Where(source => source.Id != 0))
+            {
+                kept.ObjectMatchingRuleId = rule.Id;
+                var trackedSource = Repository.Database.ObjectMatchingRuleSources.Local.FirstOrDefault(source => source.Id == kept.Id);
+                if (trackedSource != null && !ReferenceEquals(trackedSource, kept))
+                    Repository.Database.Entry(trackedSource).CurrentValues.SetValues(kept);
+                else
+                    Repository.Database.Entry(kept).State = EntityState.Modified;
+            }
+
+            foreach (var added in rule.Sources.Where(source => source.Id == 0))
+            {
+                added.ObjectMatchingRuleId = rule.Id;
+                Repository.Database.Entry(added).State = EntityState.Added;
+            }
+        }
+        finally
+        {
+            Repository.Database.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetect;
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -1248,7 +1313,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(cso =>
                 // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
@@ -2253,6 +2318,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the object's own Object Type, where an exact name
+        // wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.Id == connectedSystemObjectId)
+            .SelectMany(cso => cso.Type.Attributes)
+            .Where(a => a.Name.ToLower() == attributeNameLower)
+            .Select(a => a.Name)
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
             .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
                          && av.Attribute.Name == attributeName);
@@ -5373,7 +5449,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(pe =>
                 (pe.LastErrorMessage != null && EF.Functions.ILike(pe.LastErrorMessage, searchPattern)) ||
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
@@ -5619,13 +5695,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchText,
         bool includeTotalCount)
     {
+        // Attribute names ignore case (#2051): resolved against the attributes this Pending Export changes, where an
+        // exact name wins over one differing only in case.
+        var attributeNameLower = attributeName.ToLowerInvariant();
+        var candidateNames = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId && avc.Attribute.Name.ToLower() == attributeNameLower)
+            .Select(avc => avc.Attribute.Name)
+            .Distinct()
+            .ToListAsync();
+        attributeName = ConfigurationName.Resolve(candidateNames, attributeName) ?? attributeName;
+
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId
                           && avc.Attribute.Name == attributeName);
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
@@ -5722,7 +5808,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            var searchPattern = $"%{searchText}%";
+            var searchPattern = LikePattern.Contains(searchText);
             query = query.Where(avc =>
                 (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
                 || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
@@ -6147,7 +6233,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             IntValue = r.IntValue,
             LongValue = r.LongValue,
             DecimalValue = r.DecimalValue,
-            DateTimeValue = r.DateTimeValue,
+            DateTimeValue = BulkSqlHelpers.CanonicalDate(r.DateTimeValue),
             BoolValue = r.BoolValue,
             GuidValue = r.GuidValue
         }).ToList();
@@ -6530,7 +6616,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
                 DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                DateTimeValue = reader.IsDBNull(7) ? null : DateTime.SpecifyKind(reader.GetDateTime(7), DateTimeKind.Utc),
+                DateTimeValue = reader.IsDBNull(7) ? null : DateTimeAttributeValue.ToCanonical(reader.GetDateTime(7)),
                 BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
                 GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                 ByteValue = reader.IsDBNull(10) ? null : reader.GetFieldValue<byte[]>(10),
@@ -7090,7 +7176,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // searches.
         if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            var searchPattern = $"%{externalIdSearch}%";
+            var searchPattern = LikePattern.Contains(externalIdSearch);
             query = query.Where(c =>
                 c.DeletedObjectExternalId != null &&
                 EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));
@@ -8526,7 +8612,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             else
                 await writer.WriteNullAsync();
             if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (av.IntValue.HasValue)
@@ -8676,6 +8762,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
+        // The attribute value changes are written first, while each Pending Export still holds the status it had, and
+        // the Pending Exports second. The order applies to every caller, and matters wherever the two statements do not
+        // commit together (UpdatePendingExportAsync runs them without a transaction; UpdatePendingExportsAsync commits
+        // them as one, #2083):
+        //  - A delivery waits while an export to the account is Executing, and completes an enable the export held back
+        //    for want of a password once it reads the hold (AwaitsInitialPassword, #2173, #2158). Written in this order,
+        //    the hold is readable before the export stops being in flight, so no delivery can find neither.
+        //  - A crash between the two leaves sent changes under a Pending Export still Executing, which
+        //    RecoverStrandedExecutingPendingExportsAsync resolves to Exported at the next start. The opposite order
+        //    would leave a Pending Export recorded as Exported over changes never marked as sent.
+        // Reconciliation and the unreconciled-hold sweep both skip Executing Pending Exports, so nothing misreads the
+        // moment in between.
+        //
+        // Persists the attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
+        // AwaitsInitialPassword). Without this, reconciliation during confirming import cannot find
+        // ExportedPendingConfirmation changes and the PE is never confirmed/deleted, causing stale Create exports on
+        // re-evaluation.
+        await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
+
         const int columnsPerRow = 11; // Id + 10 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
@@ -8714,12 +8819,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
-
-        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
-        // AwaitsInitialPassword).
-        // Without this, reconciliation during confirming import cannot find ExportedPendingConfirmation changes
-        // and the PE is never confirmed/deleted, causing stale Create exports on re-evaluation.
-        await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
     }
 
     /// <summary>

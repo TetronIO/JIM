@@ -16,23 +16,23 @@ function Set-JIMConnectedSystemStructuralCarrierClass {
         Connected System can be one.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the auxiliary Object Type.
+        The ID of the auxiliary Object Type.
 
     .PARAMETER StructuralCarrierObjectTypeId
         The structural Object Type JIM writes alongside the auxiliary class when creating an object.
 
     .PARAMETER Clear
-        Clear the carrier, leaving the Object Type importable but not creatable.
+        Clears the carrier, so objects of the type can be imported but not created.
 
     .PARAMETER PassThru
-        If specified, returns the updated Object Type.
+        Returns the Object Type as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Object Type, whose
-        StructuralCarrierObjectTypeId property names its carrier.
+        With -PassThru, the Object Type as changed, whose StructuralCarrierObjectTypeId names its carrier; otherwise
+        nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemStructuralCarrierClass -ConnectedSystemId 1 -ObjectTypeId 12 -StructuralCarrierObjectTypeId 3
@@ -56,7 +56,7 @@ function Set-JIMConnectedSystemStructuralCarrierClass {
         Set-JIMConnectedSystemAuxiliaryClass
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'Set')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectTypeDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,

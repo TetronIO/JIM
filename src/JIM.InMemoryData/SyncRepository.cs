@@ -134,6 +134,14 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Metaverse Objects, keyed by MVO ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
 
+    /// <summary>
+    /// The Connected System Object change records persisted without an execution item (quiet deletions), which the
+    /// RPEIs therefore cannot carry.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemObjectChange> StandaloneCsoChanges => _standaloneCsoChanges;
+
+    private readonly List<ConnectedSystemObjectChange> _standaloneCsoChanges = [];
+
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
@@ -2356,6 +2364,12 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    {
+        _standaloneCsoChanges.AddRange(changes);
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region Synchronisation Rules and Configuration
@@ -2434,13 +2448,22 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// How many times <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> has been called, so a test can prove the
-    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039).
+    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039), and the export run
+    /// only when a batch holds an Update a password could follow (#2158).
     /// </summary>
     public int GetMetaverseObjectIdsOwedPasswordCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> throws it (after counting the call), so a test can
+    /// prove a failed lookup is contained rather than failing the export batch (#2158).
+    /// </summary>
+    public Exception? FailOwedPasswordLookupWith { get; set; }
 
     public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
     {
         GetMetaverseObjectIdsOwedPasswordCallCount++;
+        if (FailOwedPasswordLookupWith != null)
+            throw FailOwedPasswordLookupWith;
 
         var asked = metaverseObjectIds.ToHashSet();
         var owed = _pendingPasswordChanges.Values

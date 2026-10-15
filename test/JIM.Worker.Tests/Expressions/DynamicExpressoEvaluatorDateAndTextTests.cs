@@ -118,19 +118,49 @@ public class DynamicExpressoEvaluatorDateAndTextTests
     }
 
     [Test]
-    public void Evaluate_LocalDateConcatenatedWithText_KeepsTheZoneTheDateCarries()
+    public void Evaluate_LocalDateConcatenatedWithText_IsWrittenInUtc()
     {
-        // JIM reads dates from PostgreSQL with Npgsql's legacy timestamp behaviour, so a stored date reaches an
-        // expression as Kind Local. Joining it to text with + writes it in the date's own zone, with its offset rather
-        // than Z, until expression inputs are canonicalised as UTC (#2153 N4, slice S1); this pins today's form so that
-        // change shows up as deliberate.
+        // JIM reads dates from PostgreSQL with Npgsql's legacy timestamp behaviour, so a stored date can reach an
+        // expression as Kind Local. Expressions are handed every date canonical (#2153 N4): UTC, to the microsecond. So
+        // joining one to text with + writes the UTC instant with Z, never the host's offset, exactly as ToString does.
         var local = new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Local);
-        var offset = TimeZoneInfo.Local.GetUtcOffset(local);
-        var expectedZone = $"{(offset < TimeSpan.Zero ? "-" : "+")}{offset:hh\\:mm}";
 
         var result = Evaluate("\"Changed \" + mv[\"When\"]", new Dictionary<string, object?> { ["When"] = local });
 
-        Assert.That(result, Is.EqualTo($"Changed 2026-03-15 10:30:00{expectedZone}"));
+        Assert.That(result, Is.EqualTo("Changed " + local.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "Z"));
+    }
+
+    [Test]
+    public void Evaluate_DateInput_IsHandedToTheExpressionCanonical()
+    {
+        var subMicrosecond = new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Unspecified).AddTicks(1234567);
+
+        var result = Evaluate("mv[\"When\"]", new Dictionary<string, object?> { ["When"] = subMicrosecond });
+
+        Assert.That(result, Is.InstanceOf<DateTime>());
+        var date = (DateTime)result!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(date.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(date.Ticks, Is.EqualTo(subMicrosecond.Ticks - 7));
+        }
+    }
+
+    [Test]
+    public void Evaluate_SeveralDateInputs_AreEachHandedToTheExpressionCanonical()
+    {
+        var first = new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Unspecified).AddTicks(1234567);
+        var second = first.AddDays(1);
+
+        var result = Evaluate("mv[\"When\"]", new Dictionary<string, object?> { ["When"] = new List<DateTime> { second, first } });
+
+        Assert.That(result, Is.InstanceOf<System.Collections.IEnumerable>());
+        var dates = ((System.Collections.IEnumerable)result!).Cast<DateTime>().ToList();
+        Assert.That(dates.Select(d => (d.Kind, d.Ticks)), Is.EqualTo(new[]
+        {
+            (DateTimeKind.Utc, first.Ticks - 7),
+            (DateTimeKind.Utc, second.Ticks - 7)
+        }));
     }
 
     [Test]

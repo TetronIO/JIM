@@ -4,30 +4,29 @@
 function New-JIMConnectedSystem {
     <#
     .SYNOPSIS
-        Creates a new Connected System in JIM.
+        Creates a Connected System.
 
     .DESCRIPTION
-        Creates a new Connected System with the specified connector type. Default settings
-        from the connector definition are applied automatically. Use Set-JIMConnectedSystem
-        to configure the settings after creation.
+        Creates a Connected System that uses a Connector, with that Connector's default settings. Change the
+        settings afterwards with Set-JIMConnectedSystem.
 
     .PARAMETER Name
-        The name for the Connected System.
+        The name of the Connected System.
 
     .PARAMETER Description
-        Optional description for the Connected System.
+        What the Connected System is for, for administrators.
 
     .PARAMETER ConnectorDefinitionId
-        The ID of the ConnectorDefinition to use for this Connected System.
+        The ID of the Connector the Connected System uses; Get-JIMConnectorDefinition lists them.
 
     .PARAMETER ChangeReason
-        An optional reason for the change, recorded against this Connected System's change history.
+        Why the change was made, recorded in the Connected System's change history.
 
     .PARAMETER PassThru
-        If specified, returns the created Connected System object.
+        Returns the Connected System created.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Connected System object.
+        With -PassThru, the Connected System created; otherwise nothing.
 
     .EXAMPLE
         New-JIMConnectedSystem -Name "HR System" -ConnectorDefinitionId 1
@@ -52,7 +51,7 @@ function New-JIMConnectedSystem {
         Get-JIMConnectorDefinition
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemDetailDto')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]

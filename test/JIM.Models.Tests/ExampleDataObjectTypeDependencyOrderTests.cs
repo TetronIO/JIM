@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Search;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Exceptions;
@@ -83,7 +84,7 @@ public class ExampleDataObjectTypeDependencyOrderTests
         {
             MetaverseAttribute = company.MetaverseAttribute!,
             StringValue = "Acme",
-            ComparisonType = ComparisonType.Equals
+            ComparisonType = SearchComparisonType.Equals
         };
 
         var objectType = new ExampleDataObjectType { MetaverseObjectType = new MetaverseObjectType { Name = "User" } };
