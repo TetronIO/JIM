@@ -342,20 +342,10 @@ internal static class ScopingEvaluator
     {
         node.Expression = expression;
         var accessor = source.ExpressionSide == ExpressionInputSource.Metaverse ? context.Mv : context.Cs;
-        foreach (var input in ExpressionInputResolver.ResolveCached(expression)
-                     .Where(input => input.Source == source.ExpressionSide)
-                     .DistinctBy(input => input.AttributeName, StringComparer.OrdinalIgnoreCase))
-        {
-            var values = ExpressionResultValues.Elements(accessor[input.AttributeName]).Where(value => value != null).ToList();
-            var masked = ScopingTraceBuilder.IsMasked(input.AttributeName, source.SchemaType(input.AttributeName) ?? AttributeDataType.Text);
-            node.ExpressionInputs.Add(new ScopingExpressionInputExplanation
-            {
-                Accessor = input.Accessor,
-                ValueCount = values.Count,
-                Masked = masked,
-                Values = masked ? [] : values.Take(ScopingExpressionInputExplanation.MaxValuesShown).Select(value => ExpressionText.Describe(value!)).ToList()
-            });
-        }
+        node.ExpressionInputs.AddRange(ExpressionInputResolver.ResolveCached(expression)
+            .Where(input => input.Source == source.ExpressionSide)
+            .DistinctBy(input => input.AttributeName, StringComparer.OrdinalIgnoreCase)
+            .Select(input => DescribeInput(input.Accessor, input.AttributeName, accessor, source)));
 
         if (node.ExpressionInputs.Any(input => input.Masked))
         {
@@ -363,6 +353,21 @@ internal static class ScopingEvaluator
             node.ActualDisplay = null;
             node.ExpectedDisplay = null;
         }
+    }
+
+    private static ScopingExpressionInputExplanation DescribeInput<TSource>(string inputAccessor, string attributeName,
+        AttributeAccessor accessor, TSource source)
+        where TSource : struct, IScopingValueSource
+    {
+        var values = ExpressionResultValues.Elements(accessor[attributeName]).Where(value => value != null).ToList();
+        var masked = ScopingTraceBuilder.IsMasked(attributeName, source.SchemaType(attributeName) ?? AttributeDataType.Text);
+        return new ScopingExpressionInputExplanation
+        {
+            Accessor = inputAccessor,
+            ValueCount = values.Count,
+            Masked = masked,
+            Values = masked ? [] : values.Take(ScopingExpressionInputExplanation.MaxValuesShown).Select(value => ExpressionText.Describe(value!)).ToList()
+        };
     }
 
     /// <summary>
