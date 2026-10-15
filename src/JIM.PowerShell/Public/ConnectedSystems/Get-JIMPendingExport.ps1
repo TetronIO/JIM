@@ -157,7 +157,7 @@ function Get-JIMPendingExport {
         [string]$ChangeType,
 
         [Parameter(ParameterSetName = 'Count')]
-        [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Failed', 'Exported')]
+        [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Failed', 'Exported', 'Parked')]
         [string]$Status
     )
 

@@ -6857,7 +6857,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem,
             Enabled = sr.Enabled,
             EnforceState = sr.EnforceState,
-            OutboundDeprovisionAction = sr.OutboundDeprovisionAction
+            OutboundDeprovisionAction = sr.OutboundDeprovisionAction,
+            InboundOutOfScopeAction = sr.InboundOutOfScopeAction
         }).ToListAsync();
     }
 
