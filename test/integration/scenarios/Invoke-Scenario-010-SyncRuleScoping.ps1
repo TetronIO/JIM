@@ -855,6 +855,7 @@ try {
         $expressionCriterion = $null
         $originalCriteria = @()
         $importGroupId = $null
+        $createdGroup = $false
         try {
             # Cascade sub-tests above reset JIM, so re-resolve everything this step touches.
             $hrSystem = (Get-JIMConnectedSystem) | Where-Object { $_.name -eq $hrSystemName }
@@ -862,10 +863,14 @@ try {
             $importRuleId = Get-RuleId -Name $importRuleName
             Set-JIMSyncRule -Id $importRuleId -InboundOutOfScopeAction Disconnect | Out-Null
 
+            # The cascade sub-tests clear the import rule's scope, so the group may be gone; create one when it is.
             $importGroup = @(Get-JIMScopingCriteria -SyncRuleId $importRuleId) | Select-Object -First 1
-            if (-not $importGroup) { throw "T10 expected the import rule to have a scoping criteria group" }
+            if (-not $importGroup) {
+                $importGroup = New-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -Type All -PassThru
+                $createdGroup = $true
+            }
             $importGroupId = $importGroup.id
-            $originalCriteria = @($importGroup.criteria)
+            $originalCriteria = @($importGroup.criteria | Where-Object { $_ })
 
             foreach ($criterion in $originalCriteria) {
                 Remove-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId -CriterionId $criterion.id -Confirm:$false | Out-Null
@@ -945,7 +950,10 @@ try {
             # Restore the rule's attribute criterion, so a later -Step run starts from the documented setup.
             if ($importGroupId) {
                 try {
-                    if ($expressionCriterion) {
+                    if ($createdGroup) {
+                        Remove-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -GroupId $importGroupId -Confirm:$false | Out-Null
+                    }
+                    elseif ($expressionCriterion) {
                         Remove-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId -CriterionId $expressionCriterion.id -Confirm:$false | Out-Null
                     }
                     foreach ($criterion in $originalCriteria) {
