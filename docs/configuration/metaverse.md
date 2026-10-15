@@ -130,6 +130,17 @@ Alongside JIM's built-in attributes (which are read-only and cannot be deleted),
 - **Create and bind in one step**<br /> When creating an attribute you can optionally bind it to zero or more Object Types there and then; leave the binding empty to create it unbound and assign it later. An unbound attribute collects no data until it is bound, which the list flags as "Not assigned".
 - **Bindings**<br /> Bind an existing attribute to an Object Type from that Object Type's **Attributes** tab (the "Add Attribute" picker), or unbind it with the row's remove action. Built-in attributes cannot be re-bound or unbound.
 - **Rendering**<br /> Multi-valued attributes can carry a rendering hint (default, table, chip set, or list) controlling how their values display on object detail pages.
+- **Data type and plurality**<br /> While no Metaverse Object holds a value for the attribute, you can change its data type and plurality freely. Once values exist, the one change JIM makes is **widening** the attribute from single-valued to multi-valued with its data type unchanged; see [Widening an attribute to multi-valued](#widening-an-attribute-to-multi-valued). Any other change (a different data type, or multi-valued to single-valued) is refused until the values are cleared.
+
+### Widening an attribute to multi-valued
+
+A Connected System sometimes holds several values for something you first modelled as single-valued: a directory attribute that turns out to be multi-valued, say. Widen the Metaverse Attribute to multi-valued and every value a Metaverse Object already holds is kept, so there is nothing to clear first. The next synchronisation flows every value its sources hold. A single-valued attribute in a Connected System that the attribute flows to still receives one value, exactly as before.
+
+- **Portal**<br /> In the attribute's edit dialog, choose **Multi-valued** for **Plurality**. While values exist, **Data Type** stays locked, and so does **Plurality** on an attribute that is already multi-valued; each says why beneath it.
+- **REST API**<br /> `PATCH /api/v1/metaverse/attributes/{id}/schema` with the attribute's current type and a plurality of `MultiValued`. A refused change answers `409 Conflict` with the number of Metaverse Objects holding values, and changes nothing.
+- **PowerShell**<br /> `Set-JIMMetaverseAttribute -Id 42 -AttributePlurality MultiValued`. A refused change is reported as an error.
+
+The change is audited like any other change to the attribute, in its [Configuration Change History](activities.md#configuration-change-history).
 
 ### Deleting attributes and removing bindings
 

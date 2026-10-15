@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values: every value is kept, the change is audited, and single-valued targets still receive one value. From the attribute's edit dialog, REST or `Set-JIMMetaverseAttribute -AttributePlurality MultiValued`. (#2153)
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
 - ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
 - ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
