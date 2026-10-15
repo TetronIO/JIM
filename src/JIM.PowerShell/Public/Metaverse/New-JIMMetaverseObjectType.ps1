@@ -42,7 +42,7 @@ function New-JIMMetaverseObjectType {
         WhenLastConnectorDisconnected, it deletes an object once no Connected System Object is joined to it; an
         account JIM has provisioned counts as one. With WhenAuthoritativeSourceDisconnected, it deletes an object
         when the sources named in -DeletionTriggerConnectedSystemIds disconnect, as -DeletionTriggerMode decides.
-        Manual is the default.
+        WhenLastConnectorDisconnected is the default, as in the portal.
 
     .PARAMETER DeletionGracePeriod
         How long JIM waits, once the deletion rule is met, before it deletes the object. [TimeSpan]::Zero deletes at
@@ -68,7 +68,7 @@ function New-JIMMetaverseObjectType {
     .EXAMPLE
         New-JIMMetaverseObjectType -Name "Device" -PluralName "Devices"
 
-        Creates a new "Device" Metaverse Object Type with default deletion rule (Manual).
+        Creates a new "Device" Metaverse Object Type with the default Deletion Rule, WhenLastConnectorDisconnected.
 
     .EXAMPLE
         New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" -AttributeIds 1,2,3

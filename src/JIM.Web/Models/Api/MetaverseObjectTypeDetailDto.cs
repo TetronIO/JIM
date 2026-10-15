@@ -147,7 +147,7 @@ public class CreateMetaverseObjectTypeRequest
 
     /// <summary>
     /// Determines when Metaverse Objects of this type should be automatically deleted.
-    /// Defaults to Manual when omitted.
+    /// WhenLastConnectorDisconnected when omitted, as for an Object Type created in the portal.
     /// </summary>
     public MetaverseObjectDeletionRule? DeletionRule { get; set; }
 
