@@ -510,6 +510,39 @@ public class SqlConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_RelatedRowJoinedInAnotherCaseToAnAnchorThatIgnoresCase_GathersItsValuesOntoTheObjectAsync()
+    {
+        // Microsoft SQL Server's default collation joins 'abc' to 'ABC', so the database hands the row back; matching it
+        // to its parent exactly dropped the value, and JIM then removed the one it held (#2051).
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_CODE"], ["ABC"]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_CODE", "PHONE_NUMBER"], ["abc", "0100"]);
+
+        var run = await RunImportAsync(provider, PhonesByCodeDocument, PhonesByCodeSystem(caseExact: false), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0100" }));
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedRowsOfTwoCaseExactAnchorsDifferingOnlyInCase_EachGathersOntoItsOwnObjectAsync()
+    {
+        var provider = new FakeSqlProvider { CaseSensitiveCollation = true };
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_CODE"], ["ABC"], ["abc"]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_CODE", "PHONE_NUMBER"], ["ABC", "0100"], ["abc", "0200"]);
+
+        var run = await RunImportAsync(provider, PhonesByCodeDocument, PhonesByCodeSystem(caseExact: true), pageSize: 10);
+
+        ConnectedSystemImportObject ObjectWithCode(string code) =>
+            run.ImportObjects.Single(importObject => Attribute(importObject, "EMPLOYEE_CODE").StringValues.Single() == code);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Attribute(ObjectWithCode("ABC"), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0100" }));
+            Assert.That(Attribute(ObjectWithCode("abc"), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0200" }));
+        }
+    }
+
+    [Test]
     public async Task ImportAsync_RelatedTableAcrossPages_IsQueriedOncePerPage()
     {
         var provider = new FakeSqlProvider();
@@ -1073,6 +1106,40 @@ public class SqlConnectorImportTests
           ]
         }
         """;
+
+    private const string PhonesByCodeDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_CODE" ],
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_CODE" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    private static ConnectedSystem PhonesByCodeSystem(bool caseExact)
+    {
+        var code = Attribute("EMPLOYEE_CODE", AttributeDataType.Text, isExternalId: true);
+        code.CaseExact = caseExact;
+
+        return new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes = [ObjectType("Person", code, Attribute("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued))]
+        };
+    }
 
     /// <summary>
     /// Everything one Full Import produced: each call's result in order, and what it narrated.

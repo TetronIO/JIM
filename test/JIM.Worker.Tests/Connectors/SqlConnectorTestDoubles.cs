@@ -1102,14 +1102,25 @@ internal sealed class FakeDbCommand : DbCommand
             .Select(group => group
                 .OrderBy(join => join.Key, StringComparer.Ordinal)
                 .Select(join => (Ordinal: dataTable.IndexOf(join.Value), Value: BoundValue(join.Key)))
-                .ToList());
+                .ToList())
+            .ToList();
 
-        var wanted = anchorTuples
-            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => CompareValues(row[part.Ordinal], part.Value) == 0)))
+        // A row satisfying several of the OR'd predicates is still one row, as it is from a real database.
+        var wanted = dataTable.Rows
+            .Where(row => anchorTuples.Any(tuple => tuple.All(part => JoinMatches(row[part.Ordinal], part.Value))))
             .ToList();
 
         return FakeDbDataReader.ForRows(dataTable.Columns, wanted);
     }
+
+    /// <summary>
+    /// Whether a join or anchor predicate holds, comparing text the way the stand-in's collation does: without regard
+    /// to case unless it is case-sensitive.
+    /// </summary>
+    private bool JoinMatches(object? rowValue, object? boundValue) =>
+        rowValue is string rowText && boundValue is string boundText
+            ? string.Equals(rowText, boundText, _provider.CaseSensitiveCollation ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
+            : CompareValues(rowValue, boundValue) == 0;
 
     /// <summary>
     /// The columns the command orders by, which for a keyset page are exactly its anchor columns.
