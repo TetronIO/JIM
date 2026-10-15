@@ -1,6 +1,6 @@
 # Expression Value Sources in Scoping Criteria
 
-- **Status:** Doing (PR 1 complete: model, evaluation, validation, REST, PowerShell, reconciliation; PR 2, the portal, outstanding)
+- **Status:** Done
 - **Issue:** [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3 of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Phase 3: Expression value sources in scoping criteria", Scenario 10, Open Question 3)
 
@@ -87,6 +87,8 @@ CSO values --> ExpressionContext (cs) --> IExpressionEvaluator.Evaluate
 4. **An expression input naming no attribute of the scoped type stops the object; attribute deletion and rename are not yet refused.** Plan step 3 listed configuration scope, attribute references and attribute delete among the sites to move onto the shared input helper. What protects scope is the runtime check instead: before evaluating, every attribute the expression reads on the scoped side must be an attribute of the rule's object type (the rule loaders include it), so a renamed or removed attribute raises `ScopingCriterionFailed` for each object and never reads as "no value", which could otherwise take a population out of scope and deprovision it. That covers every route to a missing name (rename, delete, a Connected System schema refresh) where refusing deletion would cover one. Refusing deletion and rename of an attribute a scoping expression reads, naming the rule, is a follow-up: deletion today cascade-removes ordinary criteria rather than refusing (and is blocked while any object holds a value), and Attribute Flow and Object Matching expressions are not tracked by it either, so the change belongs with all three.
 5. **An explanation shows the expression and its computed value, not each input.** Plan step 5 asked for the inputs too. The Connections tab and REST explanation name the expression where they name an attribute, and show the value it computed; the per-input view belongs with the portal's Scope tester work in PR 2.
 6. **Previews and the Sync Preview report an undecidable object instead of failing.** #2250 made synchronisation fail closed per object but left the Configuration Change Preview's scope walk and the Sync Preview throwing on the same exception, a rare event for a pattern and a routine one for an expression. The scope preview now reports such an object as one the run would fail, and the Sync Preview reports a `ScopingCriterionFailed` error. The Attribute Flow, Destructive Toggle and Object Matching preview adapters still fail as a whole on one, naming the rule and the reason; they evaluate scope only to skip out-of-scope objects, and changing their meaning is out of this issue's scope.
+7. **The per-input view lives on the explanation, not only in the portal tester.** Decision 5 left inputs to the portal. PR 2 put them on the explanation model instead: the expression, each attribute it read with the object's values (at most ten listed per input), and why an undecidable object could not be evaluated. The Connections tab, the Scope tester, REST and PowerShell then show the same words, as every other part of a scope explanation does. An expression's computed value reads "computed ...", not "is ...", so it is not mistaken for an attribute's.
+8. **Values derived from a credential-like attribute are withheld on every path.** PR 1's failure message quoted the computed value ("computed 's3cret', which cannot be compared as a Number"), and that message also becomes the object's synchronisation error. When the expression reads an attribute that may hold a credential (judged by its schema type, so a date such as `pwdLastSet` stays visible), the message, the input values and the computed value are all withheld.
 
 ## Implementation Phases
 
@@ -104,7 +106,7 @@ One issue, delivered as two PRs so each stays reviewable. The final one closes #
 8. Temporal reconciliation for expression date criteria (batched full pass, the save-time notice, the evaluated count on the Activity) and the scope tester's `NextChange`.
 9. Docs: `docs/configuration/synchronisation-rules.md` (scoping), the PowerShell and API reference, and the "Criteria expressions use the JIM expression language" claim the PRD's Affected Areas table says to fix.
 
-### PR 2: Portal, Scenario 10, and closing the issue
+### PR 2: Portal, Scenario 10, and closing the issue ✅
 
 1. Add Criteria dialog: **Compare: Attribute | Expression** (`SegmentedToggle`). Expression shows `ExpressionEditor` (with suggestions, Insert attribute, Insert function and the syntax check from #2053), a **Compare as** select, then the operator list from `CriterionOperatorOptions.ForType(CompareAs, Scoping)` and `CriterionValueEditor`. Add stays disabled until the expression parses and the operator and value suit the type.
 2. Criterion chips show an expression criterion's expression (highlighted, as the `Ex` chip does).

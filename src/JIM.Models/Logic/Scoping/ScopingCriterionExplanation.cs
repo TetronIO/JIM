@@ -61,6 +61,21 @@ public sealed class ScopingCriterionExplanation
 
     public ScopingCriterionOutcome Outcome { get; set; }
 
+    /// <summary>
+    /// The expression the criterion compares in place of an attribute (#2054); null for an attribute criterion. Its
+    /// computed value is <see cref="ActualDisplay"/>, compared as <see cref="AttributeType"/>.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>The attributes an expression criterion read, with the values the object held for each; empty otherwise.</summary>
+    public List<ScopingExpressionInputExplanation> ExpressionInputs { get; set; } = [];
+
+    /// <summary>
+    /// Why an expression criterion could not be evaluated for the object (<see cref="ScopingCriterionOutcome.Invalid"/>);
+    /// null otherwise. Quotes no value read from an attribute that may hold a credential.
+    /// </summary>
+    public string? FailureReason { get; set; }
+
     /// <summary>The criterion as a condition, for example "Department equals Finance"; a masked value reads as hidden.</summary>
     public string Description { get; set; } = string.Empty;
 

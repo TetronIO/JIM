@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ A Scoping Criterion can compare a value computed by an expression, such as `Lower(Trim(cs["department"]))` or a date held as text, compared as the type you choose. An object the expression cannot decide is left as it is with an error, never scoped on a guess. Also via REST and `New-JIMScopingCriterion -Expression`. (#2054)
+- ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`, as the type you choose, and explanations show what it read and computed. An object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
 - ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values: every value is kept, the change is audited, and single-valued targets still receive one value. (#2153)
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
 - ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)

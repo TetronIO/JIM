@@ -393,7 +393,7 @@ One object per entry: each joined Connected System Object and, with `-IncludeNot
 | `BulletsTitle` | `string` | When not connected, the heading for Bullets. |
 | `Bullets` | `string[]` | When not connected, what would change it, a line each. |
 | `Summary` | `string` | When not connected, a plain-text summary to paste into a ticket. |
-| `Scoping` | `object[]` | One explanation per relevant Synchronisation Rule, evaluated now against current values: SyncRuleName, Direction, Outcome, Hint, Groups and Criteria, each criterion with Path, Met, Outcome, AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and ActualDescription. |
+| `Scoping` | `object[]` | One explanation per relevant Synchronisation Rule, evaluated now against current values: SyncRuleName, Direction, Outcome, Hint, Groups and Criteria, each criterion with Path, Met, Outcome, AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and ActualDescription; an expression criterion adds Expression, ExpressionInputs (each attribute it read, with Accessor, Values, ValueCount and Masked) and, when it could not be evaluated, FailureReason. |
 | `Conflicts` | `object[]` | For a connection, the export Synchronisation Rules that cannot connect because it holds the slot. |
 | `EvaluatedAt` | `datetime` | When JIM evaluated the explanations (UTC). |
 <!-- END GENERATED: Get-JIMMetaverseObjectConnection -->

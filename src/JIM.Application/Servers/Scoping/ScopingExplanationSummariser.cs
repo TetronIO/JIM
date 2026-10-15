@@ -57,25 +57,30 @@ internal static class ScopingExplanationSummariser
         if (criterion.Outcome == ScopingCriterionOutcome.AttributeMissing)
             return "references no attribute";
         if (criterion.Outcome == ScopingCriterionOutcome.Invalid)
-            return "cannot be evaluated";
+            return criterion.FailureReason == null ? "cannot be evaluated" : $"cannot be evaluated. {criterion.FailureReason}";
+
+        // An expression criterion's value is the one it computed (#2054), and saying "is" would read as an attribute's.
+        var computed = criterion.Expression != null;
         if (criterion.Masked)
-            return "is hidden";
+            return computed ? "computed a hidden value" : "is hidden";
         if (criterion.ValueCount == 0)
-            return "has no value";
+            return computed ? "computed no value" : "has no value";
         if (criterion.ValueCount == 1)
-            return $"is {criterion.ActualDisplay}";
+            return $"{(computed ? "computed" : "is")} {criterion.ActualDisplay}";
 
         // Several values (#1923): name the one that decided it, or say that none matched.
         var count = criterion.ValueCount.ToString(CultureInfo.InvariantCulture);
         if (criterion.ActualDisplay != null)
-            return $"includes {criterion.ActualDisplay} (one of {count} values)";
+            return computed
+                ? $"computed {criterion.ActualDisplay} (one of {count} values)"
+                : $"includes {criterion.ActualDisplay} (one of {count} values)";
 
         var expected = criterion.ExpectedDisplay ?? criterion.RelativeDisplay;
         if (expected == null)
-            return $"has {count} values";
+            return $"{(computed ? "computed" : "has")} {count} values";
 
         var (condition, _) = Wording(PositiveForm(criterion.ComparisonType), criterion.AttributeType);
-        return $"none of {count} values {condition} {expected}";
+        return $"none of {count} {(computed ? "computed " : "")}values {condition} {expected}";
     }
 
     /// <summary>A group as one line of the tree, for example "All of these must be met (not met)".</summary>

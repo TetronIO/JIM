@@ -13,9 +13,10 @@ namespace JIM.Web.Models.Api;
 public class SyncRuleSaveResponse : SyncRuleHeader
 {
     /// <summary>
-    /// Non-blocking warnings the save raised about the rule's Attribute Flows, for example that an Attribute Flow
-    /// deriving a Metaverse attribute calls a function returning a different value each time it is evaluated. The
-    /// save went ahead regardless. Always present; empty when there are none.
+    /// Non-blocking warnings the save raised about the rule's Attribute Flows and Scoping Criteria, for example that an
+    /// Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is
+    /// evaluated, or that a Scoping Criterion the save left as it was is no longer valid. The save went ahead
+    /// regardless. Always present; empty when there are none.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 
@@ -50,7 +51,7 @@ public class SyncRuleSaveResponse : SyncRuleHeader
         var header = FromEntity(saved);
         var response = new SyncRuleSaveResponse
         {
-            Warnings = savedInstance.AttributeFlowSaveWarnings.ToList(),
+            Warnings = savedInstance.SaveWarnings.ToList(),
             DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList(),
             DeletionSourceWarning = deletionSourceWarning?.Message
         };

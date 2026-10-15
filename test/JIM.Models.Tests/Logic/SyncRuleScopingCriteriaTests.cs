@@ -4,6 +4,7 @@
 using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using NUnit.Framework;
 
@@ -134,5 +135,17 @@ public class SyncRuleScopingCriteriaTests
         {
             CultureInfo.CurrentCulture = originalCulture;
         }
+    }
+
+    [TestCase(AttributeDataType.DateTime, DateCriteriaValueMode.Relative, true)]
+    [TestCase(AttributeDataType.DateTime, DateCriteriaValueMode.Absolute, false)]
+    [TestCase(AttributeDataType.Text, DateCriteriaValueMode.Relative, false)]
+    public void NeedsFullReconciliationPass_OnlyForAnExpressionComparedAsADateAgainstARelativeDate(AttributeDataType compareAs,
+        DateCriteriaValueMode mode, bool expected)
+    {
+        // A value mode left at Relative after Compare As moved off Date Time compares nothing against the clock.
+        var criterion = new SyncRuleScopingCriteria { Expression = "cs[\"startDate\"]", CompareAs = compareAs, ValueMode = mode };
+
+        Assert.That(criterion.NeedsFullReconciliationPass, Is.EqualTo(expected));
     }
 }

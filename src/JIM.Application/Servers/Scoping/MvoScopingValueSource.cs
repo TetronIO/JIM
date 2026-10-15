@@ -74,10 +74,16 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, 
     /// </remarks>
     public bool? IsInSchema(string attributeName)
     {
-        var attributes = schema is { Count: > 0 } ? schema : (IReadOnlyCollection<MetaverseAttribute>?)metaverseObject.Type?.Attributes;
+        var attributes = Schema;
         if (attributes is not { Count: > 0 })
             return null;
 
         return attributes.Any(attribute => string.Equals(attribute.Name, attributeName, StringComparison.OrdinalIgnoreCase));
     }
+
+    public AttributeDataType? SchemaType(string attributeName) =>
+        Schema?.FirstOrDefault(attribute => string.Equals(attribute.Name, attributeName, StringComparison.OrdinalIgnoreCase))?.Type;
+
+    private IReadOnlyCollection<MetaverseAttribute>? Schema =>
+        schema is { Count: > 0 } ? schema : (IReadOnlyCollection<MetaverseAttribute>?)metaverseObject.Type?.Attributes;
 }

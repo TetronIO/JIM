@@ -39,6 +39,12 @@
                                  follow-on work for a dedicated scoping evaluation matrix
                                  scenario.
 
+    Expression criteria (import rule, HR CSV source):
+      - ExpressionCriterion:     the import rule's criterion becomes Lower(Trim(cs["department"]))
+                                 starts with "fin"; "Finance" and " FINANCE " are in scope and
+                                 joined, "Facilities" is not, and each object's scope explanation
+                                 shows the value the expression computed (PRD Scenario 10)
+
     Coverage that lives in other scenarios (referenced, not duplicated here):
       - WhenAuthoritativeSourceDisconnected leaver cascade -> Scenario 001, Scenario 004
       - MVO deletion rule trigger from CSO disconnect      -> Scenario 004
@@ -75,7 +81,7 @@ param(
         "InboundEnterScope", "InboundInScopeUpdate",
         "InboundExitDisconnect", "InboundExitRemainJoined",
         "OutboundEnterScope", "OutboundExitDisconnect", "OutboundExitDelete",
-        "CrossSystemCascade", "CriteriaOperators", "All")]
+        "CrossSystemCascade", "CriteriaOperators", "ExpressionCriterion", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -834,6 +840,133 @@ try {
         catch {
             Add-StepResult -Name "CriteriaOperators" -Success $false -ErrorMsg $_.Exception.Message
             Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # T10 (ExpressionCriterion): PRD Scenario 10. The import rule scopes on the
+    # value an expression computes, Lower(Trim(cs["department"])) starts with
+    # "fin", so a department written as " FINANCE " is in scope where the
+    # attribute criterion (department equals Finance) would not reach it.
+    # The rule's original criterion is restored afterwards.
+    # ─────────────────────────────────────────────────────────────────────────
+    if (Test-StepEnabled "ExpressionCriterion") {
+        Write-TestSection "Test 10: Expression Scoping Criterion"
+        $expressionCriterion = $null
+        $originalCriteria = @()
+        $importGroupId = $null
+        $createdGroup = $false
+        try {
+            # Cascade sub-tests above reset JIM, so re-resolve everything this step touches.
+            $hrSystem = (Get-JIMConnectedSystem) | Where-Object { $_.name -eq $hrSystemName }
+            if (-not $hrSystem) { throw "Connected system '$hrSystemName' not found at the start of T10" }
+            $importRuleId = Get-RuleId -Name $importRuleName
+            Set-JIMSyncRule -Id $importRuleId -InboundOutOfScopeAction Disconnect | Out-Null
+
+            # The cascade sub-tests clear the import rule's scope, so the group may be gone; create one when it is.
+            $importGroup = @(Get-JIMScopingCriteria -SyncRuleId $importRuleId) | Select-Object -First 1
+            if (-not $importGroup) {
+                $importGroup = New-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -Type All -PassThru
+                $createdGroup = $true
+            }
+            $importGroupId = $importGroup.id
+            $originalCriteria = @($importGroup.criteria | Where-Object { $_ })
+
+            foreach ($criterion in $originalCriteria) {
+                Remove-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId -CriterionId $criterion.id -Confirm:$false | Out-Null
+            }
+            $expressionCriterion = New-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId `
+                -Expression 'Lower(Trim(cs["department"]))' -CompareAs Text -ComparisonType StartsWith -StringValue 'fin' -PassThru
+
+            $expressionUsers = @(
+                ($baseUsers[0].PSObject.Copy()),
+                ($baseUsers[1].PSObject.Copy()),
+                [PSCustomObject]@{
+                    employeeId        = "EMP000012"
+                    firstName         = "Cara"
+                    lastName          = "Facility"
+                    email             = "cara.facility@panoply.local"
+                    department        = "Facilities"
+                    title             = "Facilities Coordinator"
+                    company           = "Panoply"
+                    pronouns          = ""
+                    samAccountName    = "cara.facility12"
+                    displayName       = "Cara Facility"
+                    status            = "Active"
+                    userPrincipalName = "cara.facility@panoply.local"
+                    employeeType      = "Employee"
+                    employeeEndDate   = "2099-12-31T00:00:00Z"
+                }
+            )
+            $expressionUsers[0].department = "Finance"
+            $expressionUsers[1].department = " FINANCE "
+            Write-HRCsv -Users $expressionUsers
+
+            $null = Invoke-FullImportAndSync -SystemId $hrSystem.id -Label "T10"
+
+            $expected = @(
+                @{ Name = "Aria Scope"; InScope = $true; Computed = "finance" },
+                @{ Name = "Brett Boundary"; InScope = $true; Computed = "finance" },
+                @{ Name = "Cara Facility"; InScope = $false; Computed = "facilities" }
+            )
+            $notes = @()
+            foreach ($case in $expected) {
+                $cso = @(Get-JIMConnectedSystemObject -ConnectedSystemId $hrSystem.id -Search $case.Name -PageSize 10) |
+                    Where-Object { $_.displayName -eq $case.Name } | Select-Object -First 1
+                if (-not $cso) { throw "T10 could not find the HR object for '$($case.Name)'" }
+
+                $joined = $cso.joinType -ne "NotJoined"
+                if ($joined -ne $case.InScope) {
+                    throw "T10 expected '$($case.Name)' to be $(if ($case.InScope) { 'joined' } else { 'not joined' }); its join type is $($cso.joinType)"
+                }
+
+                $test = Test-JIMScope -SyncRuleId $importRuleId -ConnectedSystemObjectId $cso.id
+                $expectedOutcome = if ($case.InScope) { "InScope" } else { "OutOfScope" }
+                if ($test.outcome -ne $expectedOutcome) {
+                    throw "T10 expected '$($case.Name)' to test as $expectedOutcome; got $($test.outcome)"
+                }
+
+                $explained = @($test.explanation.groups | ForEach-Object { $_.criteria }) | Select-Object -First 1
+                if ($explained.expression -ne 'Lower(Trim(cs["department"]))') {
+                    throw "T10 expected '$($case.Name)''s explanation to name the expression; got '$($explained.expression)'"
+                }
+                if ($explained.actual -ne $case.Computed) {
+                    throw "T10 expected '$($case.Name)''s explanation to show the computed value '$($case.Computed)'; got '$($explained.actual)'"
+                }
+                $firstInput = @($explained.expressionInputs) | Select-Object -First 1
+                if ($firstInput.accessor -ne 'cs["department"]') {
+                    throw "T10 expected '$($case.Name)''s explanation to list cs[""department""] as an input; got '$($firstInput.accessor)'"
+                }
+                $notes += "$($case.Name): $expectedOutcome, computed '$($explained.actual)'"
+            }
+
+            Add-StepResult -Name "ExpressionCriterion" -Success $true -Note ($notes -join "; ")
+        }
+        catch {
+            Add-StepResult -Name "ExpressionCriterion" -Success $false -ErrorMsg $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+        finally {
+            # Restore the rule's attribute criterion, so a later -Step run starts from the documented setup.
+            if ($importGroupId) {
+                try {
+                    if ($createdGroup) {
+                        Remove-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -GroupId $importGroupId -Confirm:$false | Out-Null
+                    }
+                    elseif ($expressionCriterion) {
+                        Remove-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId -CriterionId $expressionCriterion.id -Confirm:$false | Out-Null
+                    }
+                    foreach ($criterion in $originalCriteria) {
+                        New-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $importGroupId `
+                            -ConnectedSystemAttributeId $criterion.connectedSystemAttributeId `
+                            -ComparisonType $criterion.comparisonType -StringValue $criterion.stringValue `
+                            -CaseSensitive ([bool]$criterion.caseSensitive) | Out-Null
+                    }
+                }
+                catch {
+                    Write-Host "  WARN could not restore the import rule's original scoping criterion: $_" -ForegroundColor Yellow
+                }
+            }
         }
     }
 

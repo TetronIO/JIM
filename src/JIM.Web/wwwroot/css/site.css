@@ -6437,6 +6437,29 @@ td.jim-connection-detail-cell {
     font-weight: 500;
 }
 
+/* An expression criterion's inputs (#2054): under the criterion's text, spanning the outcome column too. */
+.jim-scoping-expression-inputs {
+    grid-column: 2 / -1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.jim-scoping-expression-accessor {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    margin-right: 6px;
+}
+
+.jim-scoping-expression-held {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 /* The server's bullets: each typed segment set apart by its look, never by added words. */
 .jim-scoping-bullets {
     margin: 0;

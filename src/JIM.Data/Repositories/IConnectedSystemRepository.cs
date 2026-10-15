@@ -1285,6 +1285,13 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<int, SyncRuleMappingExpressionState>> GetSyncRuleMappingExpressionStatesAsync(IReadOnlyCollection<int> mappingIds);
 
     /// <summary>
+    /// The stored state of the given Scoping Criteria, by criterion id (#2054): what each compares and against what.
+    /// Untracked; read on the save path, before anything flushes, to tell a criterion the save changed (checked in full)
+    /// from one it leaves as it was (whose problems are only warned about). Ids with no stored row are absent.
+    /// </summary>
+    public Task<Dictionary<int, SyncRuleScopingCriterionState>> GetSyncRuleScopingCriterionStatesAsync(IReadOnlyCollection<int> criterionIds);
+
+    /// <summary>
     /// Returns the settings that decide which Metaverse Objects a stored Synchronisation Rule covers (enabled,
     /// provisioning, Scoping Criteria at every depth), or null when the rule does not exist (issue #1925).
     /// <para>
