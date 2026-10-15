@@ -99,6 +99,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingGeneration> SyncRuleMappingGenerations { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingGenerationExclusion> SyncRuleMappingGenerationExclusions { get; set; } = null!;
     public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
+    public virtual DbSet<ConfigurationTestCase> ConfigurationTestCases { get; set; } = null!;
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
     public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
     public virtual DbSet<GeneratedValueRevisionPending> GeneratedValueRevisionsPending { get; set; } = null!;
@@ -1541,6 +1542,40 @@ public class JimDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint(
                 "CK_GeneratedValueSequences_OneAttribute",
                 "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1"));
+
+        // ConfigurationTestCase (#2055 Phase 4): a saved test case is configuration of what it covers, so each of its
+        // three references cascades, and the case is deleted with its Attribute Flow, Synchronisation Rule or Object
+        // Matching Rule. Exactly the reference its Kind covers is set (AttributeFlow and GeneratedValue an Attribute
+        // Flow, Scope a Synchronisation Rule, ObjectMatchingRule an Object Matching Rule), so the runner can never meet
+        // a case naming the wrong thing, or two things, whatever wrote the row.
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.SyncRuleMapping)
+            .WithMany()
+            .HasForeignKey(c => c.SyncRuleMappingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.SyncRule)
+            .WithMany()
+            .HasForeignKey(c => c.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.ObjectMatchingRule)
+            .WithMany()
+            .HasForeignKey(c => c.ObjectMatchingRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .Property(c => c.Name)
+            .HasMaxLength(ConfigurationTestCase.MaxNameLength);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_ConfigurationTestCases_CoversWhatItsKindTests",
+                "(\"Kind\" IN (0, 1) AND \"SyncRuleMappingId\" IS NOT NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NULL) OR " +
+                "(\"Kind\" = 2 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NOT NULL AND \"ObjectMatchingRuleId\" IS NULL) OR " +
+                "(\"Kind\" = 3 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NOT NULL)"));
 
         // GeneratedValueAssignment: exactly one of the two (object, attribute) pairs must be populated, matching
         // whether the owning flow is an import or export mapping. All four owning-side FKs cascade: the

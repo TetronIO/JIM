@@ -1634,6 +1634,83 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ExampleDataTemplateAttributeWeightedValues");
                 });
 
+            modelBuilder.Entity("JIM.Models.Logic.ConfigurationTestCase", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExpectationJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("InputsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("ObjectMatchingRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RunAsOfUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SyncRuleMappingId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ObjectMatchingRuleId");
+
+                    b.HasIndex("SyncRuleId");
+
+                    b.HasIndex("SyncRuleMappingId");
+
+                    b.ToTable("ConfigurationTestCases", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConfigurationTestCases_CoversWhatItsKindTests", "(\"Kind\" IN (0, 1) AND \"SyncRuleMappingId\" IS NOT NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NULL) OR (\"Kind\" = 2 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NOT NULL AND \"ObjectMatchingRuleId\" IS NULL) OR (\"Kind\" = 3 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
                 {
                     b.Property<int>("Id")
@@ -5394,6 +5471,30 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("WeightedStringValues")
                         .HasForeignKey("ExampleDataTemplateAttributeId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("JIM.Models.Logic.ConfigurationTestCase", b =>
+                {
+                    b.HasOne("JIM.Models.Logic.ObjectMatchingRule", "ObjectMatchingRule")
+                        .WithMany()
+                        .HasForeignKey("ObjectMatchingRuleId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Logic.SyncRuleMapping", "SyncRuleMapping")
+                        .WithMany()
+                        .HasForeignKey("SyncRuleMappingId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ObjectMatchingRule");
+
+                    b.Navigation("SyncRule");
+
+                    b.Navigation("SyncRuleMapping");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
