@@ -101,6 +101,29 @@ public class UnconfirmedExportedCreateRetryTests
         }
     }
 
+    /// <summary>
+    /// Whether the import returned the object follows the External ID attribute's case-exact declaration (#2051): a
+    /// value in another case is the same object unless the attribute is case-exact.
+    /// </summary>
+    [TestCase(false, PendingExportStatus.Exported)]
+    [TestCase(true, PendingExportStatus.ExportNotConfirmed)]
+    public async Task RetryUnconfirmedExportedCreates_FullImportReturnedTheExternalIdInAnotherCase_FollowsTheDeclarationAsync(
+        bool caseExact, PendingExportStatus expectedStatus)
+    {
+        var (processor, repo, _, pendingExportId, _) = BuildFixture(ConnectedSystemRunType.FullImport, caseExact);
+
+        var importAttribute = new ConnectedSystemImportObjectAttribute { Name = "id", Type = AttributeDataType.Text };
+        importAttribute.StringValues.Add(ExternalIdValue.ToLowerInvariant());
+        var externalIdsImported = new List<ExternalIdPair>
+        {
+            new() { ConnectedSystemObjectTypeId = ObjectTypeId, ConnectedSystemImportObjectAttribute = importAttribute }
+        };
+
+        await InvokeRetryStepAsync(processor, externalIdsImported, totalObjectsImported: 1);
+
+        Assert.That(repo.PendingExports[pendingExportId].Status, Is.EqualTo(expectedStatus));
+    }
+
     [Test]
     public async Task RetryUnconfirmedExportedCreates_FullImportSawTheObject_LeavesItUntouchedAsync()
     {
@@ -226,7 +249,7 @@ public class UnconfirmedExportedCreateRetryTests
     }
 
     private static (SyncImportTaskProcessor Processor, SyncRepository Repo, Guid CsoId, Guid PendingExportId, Guid AttrChangeId) BuildFixture(
-        ConnectedSystemRunType runType)
+        ConnectedSystemRunType runType, bool externalIdCaseExact = false)
     {
         var repository = new SyncRepository();
 
@@ -293,6 +316,7 @@ public class UnconfirmedExportedCreateRetryTests
                             Name = "id",
                             Type = AttributeDataType.Text,
                             IsExternalId = true,
+                            CaseExact = externalIdCaseExact,
                             Selected = true
                         }
                     ]

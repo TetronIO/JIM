@@ -1302,9 +1302,13 @@ public class ExportEvaluationServer
                 }
                 csoIdsBySystem[cso.ConnectedSystemId] = cso.Id;
 
-                var resolvedValue = ResolveCsoReferenceValue(cso);
+                var resolvedAnchor = ResolveCsoReferenceAnchor(cso);
+                var resolvedValue = resolvedAnchor?.ToReferenceValueString();
                 if (resolvedValue == null)
                     continue;
+
+                if (resolvedAnchor!.Attribute?.CaseExact == true)
+                    context.CaseExactReferenceValues.Add((referencedId, cso.ConnectedSystemId));
 
                 if (!context.ResolvedReferenceValuesBySystem.TryGetValue(referencedId, out var bySystem))
                 {
@@ -1327,14 +1331,16 @@ public class ExportEvaluationServer
     /// (for example the DN for LDAP) when available, else the primary external ID. The same
     /// preference order export execution's reference resolution uses.
     /// </summary>
-    internal static string? ResolveCsoReferenceValue(ConnectedSystemObject cso)
-    {
-        var resolvedAttr =
-            cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true) ??
-            cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
+    internal static string? ResolveCsoReferenceValue(ConnectedSystemObject cso) =>
+        ResolveCsoReferenceAnchor(cso)?.ToReferenceValueString();
 
-        return resolvedAttr?.ToReferenceValueString();
-    }
+    /// <summary>
+    /// The attribute value <see cref="ResolveCsoReferenceValue"/> renders, so a caller can also read its attribute's
+    /// case-exact declaration.
+    /// </summary>
+    private static ConnectedSystemObjectAttributeValue? ResolveCsoReferenceAnchor(ConnectedSystemObject cso) =>
+        cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true) ??
+        cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
 
     /// <summary>
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
@@ -1503,7 +1509,8 @@ public class ExportEvaluationServer
         var csoIdsBySystem = new Dictionary<int, HashSet<Guid>>();
         var attributeIdsBySystem = new Dictionary<int, HashSet<int>>();
         var deletedCsoToMvoBySystem = new Dictionary<int, Dictionary<Guid, Guid>>();
-        var loweredValueToMvoBySystem = new Dictionary<int, Dictionary<string, Guid>>();
+        // Reference values per system, compared as the referenced anchor compares its values (#2051).
+        var referenceValueToMvoBySystem = new Dictionary<int, ReferenceValueIndex<Guid>>();
         var flowBySystemAndAttribute = new Dictionary<(int ConnectedSystemId, int AttributeId), ReferenceRecallDirectFlow>();
         var referencingMvoByCsoId = new Dictionary<Guid, Guid>();
         var scopeResults = new Dictionary<(Guid MvoId, int RuleId), bool>();
@@ -1571,7 +1578,7 @@ public class ExportEvaluationServer
                         csoIdsBySystem[systemId] = csoIds;
                         attributeIdsBySystem[systemId] = [];
                         deletedCsoToMvoBySystem[systemId] = [];
-                        loweredValueToMvoBySystem[systemId] = [];
+                        referenceValueToMvoBySystem[systemId] = new ReferenceValueIndex<Guid>();
                     }
                     csoIds.Add(target.ConnectedSystemObjectId);
                     referencingMvoByCsoId[target.ConnectedSystemObjectId] = mvoId;
@@ -1591,7 +1598,9 @@ public class ExportEvaluationServer
                     if (deletedCsoId.HasValue)
                         deletedCsoToMvoBySystem[systemId][deletedCsoId.Value] = candidate.ReferencedMetaverseObjectId;
                     if (resolvedValue != null)
-                        loweredValueToMvoBySystem[systemId][resolvedValue.ToLowerInvariant()] = candidate.ReferencedMetaverseObjectId;
+                        referenceValueToMvoBySystem[systemId].Register(resolvedValue,
+                            context.CaseExactReferenceValues.Contains((candidate.ReferencedMetaverseObjectId, systemId)),
+                            candidate.ReferencedMetaverseObjectId);
                 }
             }
         }
@@ -1612,7 +1621,7 @@ public class ExportEvaluationServer
                     csoIds.ToList(),
                     attributeIdsBySystem[systemId].ToList(),
                     deletedCsoToMvoBySystem[systemId].Keys.ToList(),
-                    loweredValueToMvoBySystem[systemId].Keys.ToList());
+                    referenceValueToMvoBySystem[systemId].Values.ToList());
                 existenceSpan.SetTag("matchCount", matches.Count);
                 existenceSpan.SetSuccess();
             }
@@ -1625,7 +1634,7 @@ public class ExportEvaluationServer
                     deletedCsoToMvoBySystem[systemId].TryGetValue(match.ReferenceValueId.Value, out var mvoIdByReference))
                     deletedMvoId = mvoIdByReference;
                 else if (match.UnresolvedReferenceValue != null &&
-                         loweredValueToMvoBySystem[systemId].TryGetValue(match.UnresolvedReferenceValue.ToLowerInvariant(), out var mvoIdByValue))
+                         referenceValueToMvoBySystem[systemId].TryMatch(match.UnresolvedReferenceValue, out var mvoIdByValue))
                     deletedMvoId = mvoIdByValue;
                 else
                     continue; // defensive: the row matched an identifier not registered for this system
