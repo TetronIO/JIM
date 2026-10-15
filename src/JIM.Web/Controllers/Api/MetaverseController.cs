@@ -741,15 +741,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Change a Metaverse Attribute's data type and/or plurality
     /// </summary>
     /// <remarks>
-    /// Refused while any Metaverse Object holds a stored value for the attribute; in that case a 409 is returned with
-    /// the blocking impact (the stored-value count). Built-in attributes cannot be changed.
+    /// While any Metaverse Object holds a stored value for the attribute, the only change allowed is widening it from
+    /// single-valued to multi-valued with its data type unchanged; every stored value is kept. Any other change (a data
+    /// type change, or multi-valued to single-valued) is refused with a 409 carrying the blocking impact, and nothing is
+    /// changed. Built-in attributes cannot be changed.
     /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
     /// <param name="request">The new type and plurality.</param>
     /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
     /// <response code="400">Invalid request, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}/schema", Name = "ChangeAttributeSchema")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -773,7 +775,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
             : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
 
-        if (impact.BlockedByValues)
+        // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, and a
+        // refused change is never applied.
+        if (!impact.Applied)
             return Conflict(impact);
 
         var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);

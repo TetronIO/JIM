@@ -10,10 +10,12 @@ function Set-JIMMetaverseAttribute {
         Updates a custom Metaverse Attribute. Changes are routed to the correct endpoint:
 
         - Name, RenderingHint and StandardMappings are updated together via the attribute endpoint.
-        - Type and AttributePlurality are updated via the dedicated schema endpoint. Because the
-          schema change is refused while any Metaverse Object holds a stored value for the
-          attribute, supplying either -Type or -AttributePlurality sends both (the unspecified one
-          is read from the attribute's current schema).
+        - Type and AttributePlurality are updated via the dedicated schema endpoint, which needs
+          both, so supplying either sends both (the unspecified one is read from the attribute's
+          current schema). While any Metaverse Object holds a value for the attribute, the only
+          schema change JIM allows is widening it from SingleValued to MultiValued with its type
+          unchanged; every value is kept. Any other schema change is refused until the values are
+          cleared.
 
         Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
@@ -31,12 +33,13 @@ function Set-JIMMetaverseAttribute {
         How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute.
 
     .PARAMETER Type
-        A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses the change while
+        A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while
         any Metaverse Object holds a value for the attribute.
 
     .PARAMETER AttributePlurality
-        Whether the attribute holds one value or many. JIM refuses the change while any Metaverse Object holds a
-        value for the attribute.
+        Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute,
+        JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to
+        SingleValued.
 
     .PARAMETER StandardMappings
         The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a
@@ -71,6 +74,11 @@ function Set-JIMMetaverseAttribute {
         Get-JIMMetaverseAttribute -Name "CustomAttr" | Set-JIMMetaverseAttribute -Type Integer
 
         Changes an attribute's data type (refused if any object holds a stored value).
+
+    .EXAMPLE
+        Set-JIMMetaverseAttribute -Id 42 -AttributePlurality MultiValued -ChangeReason "The directory now holds several values"
+
+        Widens a single-valued attribute to multi-valued, keeping the values Metaverse Objects already hold.
 
     .LINK
         Get-JIMMetaverseAttribute
