@@ -1879,6 +1879,24 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // Only the values ObjectNaming names a Metaverse Object from: a Group's members are never loaded to name it.
+        var ids = metaverseObjectIds.Distinct().ToList();
+        var nameAttributes = ObjectNaming.MetaverseNameAttributes.ToList();
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mo => mo.Type)
+            .Include(mo => mo.AttributeValues.Where(av => nameAttributes.Contains(av.Attribute.Name)))
+                .ThenInclude(av => av.Attribute)
+            .Where(mo => ids.Contains(mo.Id))
+            .ToListAsync();
+    }
+
     #region value provenance (#399)
 
     public async Task<MetaverseObjectProvenance?> GetMetaverseObjectProvenanceAsync(Guid metaverseObjectId)
@@ -4047,6 +4065,29 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
 
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedMetaverseObjectIds)
+    {
+        if (deletedMetaverseObjectIds.Count == 0)
+            return [];
+
+        // A deleted object's earlier changes carry the same deleted id once its deletion re-keys them, so the Deleted
+        // record is picked out by type, and the latest taken per id as the single-object read takes it.
+        var ids = deletedMetaverseObjectIds.Distinct().ToList();
+        var records = await Repository.Database.MetaverseObjectChanges
+            .AsNoTracking()
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedMetaverseObjectId != null
+                        && ids.Contains(c.DeletedMetaverseObjectId.Value))
+            .Include(c => c.DeletedObjectType)
+            .ToListAsync();
+
+        return records
+            .GroupBy(c => c.DeletedMetaverseObjectId)
+            .Select(g => g.OrderByDescending(c => c.ChangeTime).First())
+            .ToList();
     }
 
     /// <inheritdoc />

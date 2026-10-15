@@ -982,9 +982,15 @@ public partial class ActivityServer
             return null;
 
         var importEvent = await FindSourceImportEventAsync(summary);
-        if (importEvent == null)
-            return null;
+        return importEvent == null ? null : BuildSourceImportCohort(importEvent, summary.ConnectedSystemObjectId);
+    }
 
+    /// <summary>
+    /// The source-import hop for an import event already found: shared by the walk, which finds the event one item at
+    /// a time, and the Causality Explorer, which finds a page of them at once, so the two can never word it differently.
+    /// </summary>
+    private static CausalChainCohort BuildSourceImportCohort(CausalSourceImportEvent importEvent, Guid? connectedSystemObjectId)
+    {
         return new CausalChainCohort
         {
             SourceImportChangeType = importEvent.ChangeType,
@@ -995,7 +1001,7 @@ public partial class ActivityServer
                 new CausalChainMember
                 {
                     RunProfileExecutionItemId = importEvent.RunProfileExecutionItemId,
-                    ConnectedSystemObjectId = summary.ConnectedSystemObjectId,
+                    ConnectedSystemObjectId = connectedSystemObjectId,
                     DisplayName = importEvent.DisplayName,
                     // Every other member takes its time from the stored edge; this one is built by hand, so
                     // omitting it left the hop with default(DateTime), which the Lineage reads as "no time

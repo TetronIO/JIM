@@ -1,0 +1,45 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An item's nearest recorded cause in one line (#2100), worded and highlighted as the Lineage's own card for it is,
+   with how many more there are; or how the item's story ends where it has none, so a story cut short never reads as a
+   complete one. Shared by the Causality Explorer's object timeline and a Pending Export's Queued by panel. *@
+
+<span class="jim-causality-because">
+    @if (NearestCauses.Cohorts.Count == 0)
+    {
+        @(CausalityCauseWording.Ending(NearestCauses.Resolution) ?? CausalityCauseWording.Ending(CausalChainResolution.NoFurtherCauses))
+    }
+    else
+    {
+        @foreach (var part in CausalityCauseWording.Sentence(NearestCauses.Cohorts[0], EffectName))
+        {
+            @if (part.IsAttributeName)
+            {
+                <span class="jim-causality-attr">@part.Text</span>
+            }
+            else
+            {
+                @part.Text
+            }
+        }
+        @CausalityCauseWording.MoreCausesSuffix(NearestCauses)
+    }
+</span>
+
+@code {
+    /// <summary>
+    /// The item's nearest causes.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalNearestCauses NearestCauses { get; set; } = null!;
+
+    /// <summary>
+    /// What the item was about, which the cause's sentence names as its effect.
+    /// </summary>
+    [Parameter]
+    public string? EffectName { get; set; }
+}

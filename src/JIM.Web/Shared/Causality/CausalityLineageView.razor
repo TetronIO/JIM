@@ -106,7 +106,15 @@
                                    "deleted after this run" note at the other end for the same reason. *@
                                 @foreach (var ending in lineageObject.Endings)
                                 {
-                                    <div class="ln-end" @key="ending">@ending.Text</div>
+                                    <div class="ln-end" @key="ending">
+                                        @ending.Text
+                                        @foreach (var continuation in ending.Continuations)
+                                        {
+                                            <div class="ln-end-continue">
+                                                <a class="ln-link" href="@continuation.Href">@continuation.Text</a>
+                                            </div>
+                                        }
+                                    </div>
                                 }
                                 @foreach (var card in lineageObject.Cards)
                                 {
@@ -138,7 +146,7 @@
                                     }
                                     else if (card.Hop is { } hop)
                                     {
-                                        <CausalityLineageChainCard Hop="hop" @key="card" />
+                                        <CausalityLineageChainCard Hop="hop" Links="Model.Links" @key="card" />
                                     }
                                 }
                                 @* What became of the object afterwards, stated last because it happened
@@ -162,7 +170,8 @@
                                         <CausalityLineageConsequenceCard @key="consequence" Consequence="consequence"
                                                                          SelectedEvent="SelectedEvent"
                                                                          OnSelect="ToggleSelectionAsync"
-                                                                         LoadMembers="LoadConsequenceMembers" />
+                                                                         LoadMembers="LoadConsequenceMembers"
+                                                                         Links="Model.Links" />
                                     }
                                 }
                             </div>

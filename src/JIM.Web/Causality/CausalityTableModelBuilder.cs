@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -366,7 +365,7 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static string? SourceHref(CausalityModel model) =>
         model.Context.CsoId is { } csoId && csoId != Guid.Empty && model.Context.CsoConnectedSystemId is { } systemId
-            ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            ? model.Context.Links.ConnectedSystemObjectHref(systemId, csoId)
             : null;
 
     /// <summary>

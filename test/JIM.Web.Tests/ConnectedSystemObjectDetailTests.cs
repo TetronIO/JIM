@@ -211,6 +211,21 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
     private static IEnumerable<string> VisibleAttributeNames(IRenderedComponent<ConnectedSystemObjectDetail> cut) =>
         AttributeTable(cut).VisibleItems.Select(g => g.AttributeName);
 
+    /// <summary>
+    /// The page opens the Causality Explorer on itself (#2100), so the first thing shown is what happened to the object
+    /// and why.
+    /// </summary>
+    [Test]
+    public void CsoDetail_ExploreCausality_OpensTheExplorerOnThisObject()
+    {
+        SetupAttributeValues(BuildAttributeValues("displayName"));
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Find("[data-testid='jim-cso-explore-causality']").GetAttribute("href"),
+            Is.EqualTo($"/causality/connected-system-objects/{ConnectedSystemObjectId}")));
+    }
+
     [Test]
     public void CsoDetail_Attributes_AreAPlainAttributeTableAndTheQueuedChangesAVirtualisedGrid()
     {
