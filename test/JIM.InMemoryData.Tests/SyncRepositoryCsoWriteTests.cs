@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 
@@ -192,15 +193,34 @@ public class SyncRepositoryCsoWriteTests
         Assert.That(count, Is.EqualTo(0));
     }
 
-    [Test]
-    public async Task FixupCrossBatchReferenceIdsAsync_ResolvesReferencesAsync()
+    /// <summary>
+    /// Mirrors the Postgres fixup: an unresolved reference resolves to the object whose Secondary External ID it names,
+    /// ignoring case unless that attribute is case-exact (#2051).
+    /// </summary>
+    [TestCase("CN=Target,DC=test", false, true)]
+    [TestCase("cn=target,dc=test", false, true)]
+    [TestCase("cn=target,dc=test", true, false)]
+    [TestCase("CN=Target,DC=test", true, true)]
+    public async Task FixupCrossBatchReferenceIdsAsync_ResolvesReferencesBySecondaryExternalIdAsync(string reference, bool caseExact, bool expectResolved)
     {
+        const int secondaryAttrId = 11;
+        _repo.SeedObjectType(new ConnectedSystemObjectType
+        {
+            Id = ObjectTypeId,
+            Name = "user",
+            Attributes =
+            [
+                new ConnectedSystemObjectTypeAttribute { Id = secondaryAttrId, Name = "dn", Type = AttributeDataType.Text, IsSecondaryExternalId = true, CaseExact = caseExact }
+            ]
+        });
+
         var targetCso = CreateCso();
+        targetCso.SecondaryExternalIdAttributeId = secondaryAttrId;
         targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
-            AttributeId = AttrId,
-            StringValue = "target-ext-id"
+            AttributeId = secondaryAttrId,
+            StringValue = "CN=Target,DC=test"
         });
         _repo.SeedConnectedSystemObject(targetCso);
 
@@ -209,15 +229,18 @@ public class SyncRepositoryCsoWriteTests
         {
             Id = Guid.NewGuid(),
             AttributeId = 20,
-            UnresolvedReferenceValue = "target-ext-id"
+            UnresolvedReferenceValue = reference
         });
         _repo.SeedConnectedSystemObject(sourceCso);
 
         var resolved = await _repo.FixupCrossBatchReferenceIdsAsync(CsId);
-        Assert.That(resolved, Is.EqualTo(1));
 
         var updatedSource = await _repo.GetConnectedSystemObjectAsync(CsId, sourceCso.Id);
         var refAv = updatedSource!.AttributeValues.First(av => av.AttributeId == 20);
-        Assert.That(refAv.ReferenceValueId, Is.EqualTo(targetCso.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolved, Is.EqualTo(expectResolved ? 1 : 0));
+            Assert.That(refAv.ReferenceValueId, Is.EqualTo(expectResolved ? targetCso.Id : null));
+        }
     }
 }
