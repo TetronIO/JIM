@@ -217,7 +217,9 @@ internal class FileConnectorExport
             {
                 Delimiter = delimiter,
                 HeaderValidated = null,
-                MissingFieldFound = null
+                MissingFieldFound = null,
+                // As on import: a column header names its attribute ignoring case (#2051).
+                PrepareHeaderForMatch = args => IdentifierKey.For(args.Header, caseExact: false)
             });
 
             csv.Read();

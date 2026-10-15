@@ -110,6 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
+- 🐛 File Connector imports match headers ignoring case, and fail naming a column the file lacks instead of clearing that attribute on every object. On upgrade, a file lacking a selected attribute's column fails to import until you add the column or deselect the attribute. (#2051)
+- 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when the key is written in a different case. (#2051)
 - 🐛 `Get-JIMSyncRule` and the REST API now return an import Synchronisation Rule's out-of-scope action (**When objects fall out of scope** in the portal), which could be set over both but not read back.
 - 🐛 `Get-JIMPendingExport -Count -Status Parked` now counts the Pending Exports held back for a decision about a generated value; the cmdlet rejected `Parked` before.
 - 🐛 An External ID or reference containing the Turkish capital `İ` is now found by the lookups that compare in the database, instead of being missed and imported again as a new object. (#2051)

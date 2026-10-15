@@ -1218,6 +1218,41 @@ try {
         else {
             Write-Host "  ✓ Generated Account Name '$moverAccountName' kept across the rename" -ForegroundColor Green
         }
+
+        # A change of case alone to the name (#2051): a distinguished name compares ignoring case, so the rename is
+        # driven by cn changing case, and the directory must hold the new case afterwards.
+        $caseOnlyDisplayName = $newDisplayName.ToUpperInvariant()
+        Write-Host "Changing only the case of the display name to '$caseOnlyDisplayName'..." -ForegroundColor Gray
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
+        if ($targetUser) {
+            $targetUser.displayName = $caseOnlyDisplayName
+        }
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+
+        if ($isRfcDirectory) {
+            $caseUser = Get-LDAPUser -UserIdentifier $moverAccountName -DirectoryConfig $DirectoryConfig
+            $caseCn = if ($caseUser) { $caseUser["cn"] } else { $null }
+            $caseRenamed = $caseCn -ceq $caseOnlyDisplayName
+            $caseDetail = "cn is '$caseCn'"
+        }
+        else {
+            $caseInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverAccountName)" -Attributes @('dn', 'cn') -AsText
+            $caseRenamed = $caseInfo -cmatch "CN=$([regex]::Escape($caseOnlyDisplayName)),"
+            $caseDetail = "$caseInfo"
+        }
+
+        if ($caseRenamed) {
+            Write-Host "  ✓ Name now held as '$caseOnlyDisplayName' in $directoryName" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Mover-RenameCase"; Success = $true }
+        }
+        else {
+            Write-Host "  ✗ Change of case to the name not held in $directoryName ($caseDetail)" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Mover-RenameCase"; Success = $false; Error = "Case-only rename not applied" }
+            if (-not $ContinueOnError) { exit 1 }
+        }
         $stepTimings["2b. Mover-Rename"] = (Get-Date) - $step2bStart
     }
 
