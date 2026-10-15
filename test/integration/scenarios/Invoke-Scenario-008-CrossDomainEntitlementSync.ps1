@@ -1924,6 +1924,42 @@ try {
             $targetSystemRefreshed = Get-JIMConnectedSystem | Where-Object { $_.name -eq $targetSystemName }
             Write-Host "    Pending exports staged for Target: $($targetSystemRefreshed.pendingExportObjectsCount) (cohort accounts: $($cohortUids.Count); groups with cohort members also need membership-removal exports)" -ForegroundColor Cyan
 
+            # Step 7.8b: Queued by (#2100). Before anything exports, a Pending Export must name the Synchronisation that
+            # queued it: a Group losing a cohort member, and a cohort member's Target account. Each run it names carries
+            # its nearest recorded cause, so the change waiting to export can be explained without opening the run.
+            Write-Host "  Validating Queued by on the staged Target exports..." -ForegroundColor Gray
+            $queuedByFailures = [System.Collections.Generic.List[string]]::new()
+            $stagedExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -All)
+            $groupsLosingMembers = @($verificationGroups | Where-Object { $groupBaselines[$_].CohortInGroup.Count -gt 0 })
+            $groupExport = $stagedExports | Where-Object {
+                $_.ChangeType -eq 'Update' -and $groupsLosingMembers -contains $_.SourceMetaverseObjectDisplayName } | Select-Object -First 1
+            $accountExport = $stagedExports | Where-Object { $_.ChangeType -eq 'Delete' -and $_.ConnectedSystemObjectId } | Select-Object -First 1
+            foreach ($staged in @(
+                    @{ Label = "the Group export"; Export = $groupExport },
+                    @{ Label = "the account deletion"; Export = $accountExport })) {
+                if (-not $staged.Export) {
+                    $queuedByFailures.Add("no Pending Export staged for $($staged.Label)")
+                    continue
+                }
+                $runs = @(Get-JIMPendingExport -Id $staged.Export.Id -QueuedBy)
+                $applyRun = @($runs | Where-Object { $_.ActivityId -eq $applySync.activityId })
+                if ($applyRun.Count -ne 1) {
+                    $queuedByFailures.Add("$($staged.Label) ($($staged.Export.Id)) names $($runs.Count) run(s), none of them the apply Synchronisation")
+                }
+                elseif ($applyRun[0].Resolution -ne 'Resolved' -or $applyRun[0].NearestCauseCount -lt 1) {
+                    $queuedByFailures.Add("$($staged.Label): the apply Synchronisation carries no recorded cause ($($applyRun[0].Resolution): $($applyRun[0].Because))")
+                }
+                else {
+                    Write-Host "    $($staged.Label) was queued by the apply Synchronisation, because: $($applyRun[0].Because)" -ForegroundColor Gray
+                }
+            }
+            if ($queuedByFailures.Count -gt 0) {
+                foreach ($failure in $queuedByFailures) { Write-Host "    - $failure" -ForegroundColor Red }
+                throw "LeaverCohort Queued by failed: $($queuedByFailures.Count) failure(s). See details above."
+            }
+            Write-Host "    OK Queued by names the Synchronisation that staged each export, with its cause" -ForegroundColor Green
+            $deprovisionedAccountId = $accountExport.ConnectedSystemObjectId
+
             # Step 7.9: Export to Target and confirm.
             Write-Host "  Exporting deprovisioning to Target..." -ForegroundColor Gray
             $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
@@ -2011,6 +2047,21 @@ try {
                 }
                 throw "LeaverCohort failed: $($validationFailures.Count) validation failure(s) across $groupsWithFailures group(s). See details above."
             }
+
+            # Step 7.10b: The deprovisioned account's causal timeline (#2100). The account is gone by now, so this also proves
+            # a deleted Connected System Object's timeline is still read, through what its deletion kept. It must list the
+            # export that deleted it, with the deletion staged by the apply Synchronisation as that export's nearest cause.
+            Write-Host "  Validating the deprovisioned account's causal timeline..." -ForegroundColor Gray
+            $accountTimeline = @(Get-JIMActivityExecutionItem -ConnectedSystemId $targetSystem.id -ConnectedSystemObjectId $deprovisionedAccountId -All)
+            $deprovision = @($accountTimeline | Where-Object { $_.ActivityId -eq $exportResult.activityId -and $_.ObjectChangeType -eq 'Deprovisioned' })
+            if ($deprovision.Count -ne 1) {
+                throw "LeaverCohort account timeline: $($accountTimeline.Count) item(s) for account $deprovisionedAccountId, $($deprovision.Count) of them the Export's deprovision; expected 1"
+            }
+            $deletionCause = @($deprovision[0].NearestCauses | Where-Object { $_.ReasonCode -eq 'ExportDeleteStaged' })
+            if ($deletionCause.Count -eq 0) {
+                throw "LeaverCohort account timeline: the deprovision's nearest causes are not the staged deletion ($($deprovision[0].Resolution): $($deprovision[0].Because))"
+            }
+            Write-Host "    OK The account's timeline lists its deprovision, because: $($deprovision[0].Because)" -ForegroundColor Green
 
             # Step 7.11: The same cascade read back through the downward walk (#1811). From a cohort member's import,
             # what it went on to cause must reach the Synchronisation that deleted their Metaverse Object, the deletion of

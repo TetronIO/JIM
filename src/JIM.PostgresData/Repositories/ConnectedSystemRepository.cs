@@ -5601,6 +5601,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.Id == id);
     }
 
+    /// <inheritdoc />
+    public async Task<PendingExport?> GetPendingExportCoreAsync(Guid id)
+    {
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pe => pe.Id == id);
+    }
+
     private const int PendingExportCappedMvaLimit = 10;
 
     /// <inheritdoc />
@@ -6195,6 +6203,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId || nameAttributes.Contains(av.Attribute.Name.ToLower())))
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId != null && metaverseObjectIds.Contains(cso.MetaverseObjectId.Value))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        // The values that identify an object and the ones that name it, exactly as the by-Metaverse-Object read above,
+        // so a Group is named without its members.
+        var ids = connectedSystemObjectIds.Distinct().ToList();
+        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLowerInvariant()).ToList();
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.ConnectedSystem)
+            .Include(cso => cso.AttributeValues.Where(av =>
+                    av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId || nameAttributes.Contains(av.Attribute.Name.ToLower())))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => ids.Contains(cso.Id))
             .ToListAsync();
     }
 
@@ -7245,6 +7274,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
 
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedConnectedSystemObjectIds)
+    {
+        if (deletedConnectedSystemObjectIds.Count == 0)
+            return [];
+
+        // An object has one Deleted record in practice; the latest is taken per id, as the single-object read takes it,
+        // so the two never name a deleted object differently.
+        var ids = deletedConnectedSystemObjectIds.Distinct().ToList();
+        var records = await Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedConnectedSystemObjectId != null
+                        && ids.Contains(c.DeletedConnectedSystemObjectId.Value))
+            .Include(c => c.DeletedObjectType)
+            .ToListAsync();
+
+        return records
+            .GroupBy(c => c.DeletedConnectedSystemObjectId)
+            .Select(g => g.OrderByDescending(c => c.ChangeTime).First())
+            .ToList();
     }
 
     /// <inheritdoc />

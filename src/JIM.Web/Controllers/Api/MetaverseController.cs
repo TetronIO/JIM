@@ -1693,6 +1693,36 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// List the causal timeline for a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns every Run Profile Execution Item about the object, newest first, each with its nearest recorded cause:
+    /// the same list the Causality Explorer shows for it. Works for a deleted object too, through the records its
+    /// deletion left. Where this deployment records no Metaverse Object changes, the timeline holds only what the
+    /// object's joined Connected System Objects recorded, and <c>metaverseObjectChangesNotRecorded</c> says so.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A page of the object's causal timeline, with the object it describes.</returns>
+    [HttpGet("objects/{id:guid}/causal-timeline", Name = "GetObjectCausalTimeline")]
+    [ProducesResponseType(typeof(CausalTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectCausalTimelineAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested causal timeline for Metaverse Object: {Id}", id);
+
+        var timeline = await _application.Activities.GetCausalTimelineAsync(
+            new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, id), pagination.Page, pagination.PageSize);
+
+        // The header covers the object live and deleted alike, so it is what decides whether the object exists.
+        if (timeline.Header == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        return Ok(CausalTimelineDto.FromModel(timeline));
+    }
+
+    /// <summary>
     /// Get the value provenance of every attribute on a Metaverse Object
     /// </summary>
     /// <remarks>

@@ -96,8 +96,8 @@ public static class CausalitySummaryBuilder
             // The record's own Connected System, not the run's: they diverge for cross-system
             // cascades, and linking with the wrong system id 404s (ConnectedSystemObjectDetail looks
             // the record up by {connectedSystemId}+{id}).
-            var recordHref = context.CsoConnectedSystemId.HasValue && context.CsoId.HasValue
-                ? JimUtilities.GetConnectedSystemObjectHref(context.CsoConnectedSystemId.Value, context.CsoId.Value)
+            var recordHref = context.CsoConnectedSystemId is { } recordSystemId && context.CsoId is { } recordId
+                ? context.Links.ConnectedSystemObjectHref(recordSystemId, recordId)
                 : null;
             segments.Add(new SummarySegment.Entity(recordLabel, recordHref, CausalityEntityKind.Record));
         }

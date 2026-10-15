@@ -372,6 +372,55 @@ public interface IActivityRepository
     public Task<Dictionary<Guid, ActivityRunProfileExecutionItem>> GetCausalConsequenceRepresentativesAsync(
         IReadOnlyCollection<Guid> runProfileExecutionItemIds);
 
+    /// <summary>
+    /// Reads one page of an object's causal timeline (#2100): the execution items about it, newest first by their
+    /// Activity's time and then by id, with how many there are in all.
+    /// </summary>
+    /// <remarks>
+    /// The items about an object come from several places, taken together and counted once each:
+    /// <list type="bullet">
+    /// <item><description>A Connected System Object: the items that processed it while it existed; once deleted, the
+    /// item its deletion record names, and the items its deletion nulled the id on, found by the external ID and
+    /// Connected System that record keeps, at or before the deletion.</description></item>
+    /// <item><description>A Metaverse Object: the items its change records name, under its own id while it exists and
+    /// under the id its deletion re-keys them to after; the items of the Connected System Objects joined to it; the
+    /// items that record it directly; and the item that scheduled its deletion.</description></item>
+    /// </list>
+    /// One statement, whichever applies: a live object has no deletion record, and a deleted one has nothing left
+    /// under its own id. Every source is read through an index, so a page costs the same however long the object's
+    /// history.
+    /// </remarks>
+    /// <param name="subject">The object whose timeline to read.</param>
+    /// <param name="skip">How many items to skip.</param>
+    /// <param name="take">How many items to return.</param>
+    /// <returns>The page of items, and how many items the object's timeline holds.</returns>
+    public Task<(List<CausalTimelineEntry> Entries, int TotalCount)> GetCausalTimelinePageAsync(
+        CausalTimelineSubject subject, int skip, int take);
+
+    /// <summary>
+    /// Reads the given execution items as timeline entries (#2100), each with its run named: the runs that queued a
+    /// Pending Export, and the items a Causality Explorer trail names.
+    /// </summary>
+    /// <param name="runProfileExecutionItemIds">The items to read.</param>
+    /// <returns>The items found, by id; an item since purged is simply absent.</returns>
+    public Task<Dictionary<Guid, CausalTimelineEntry>> GetCausalTimelineEntriesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// The source-import hop for many items in one round trip (#2100): for each item, the import that last changed its
+    /// record at or before its Activity ran, exactly as <see cref="GetLatestImportItemForCsoAsync"/> and
+    /// <see cref="GetLatestImportItemForExternalIdAsync"/> find it one item at a time. Found by the record's id while it
+    /// exists, and by the item's external ID within its Connected System once a deletion has nulled the id.
+    /// </summary>
+    /// <remarks>
+    /// The causal walk asks per item because it asks about one member at a time; a page of timeline rows asks about
+    /// fifty at once, and the explorer must not issue a query per row to word each one's nearest cause.
+    /// </remarks>
+    /// <param name="runProfileExecutionItemIds">The items whose source import to find.</param>
+    /// <returns>The import event per item; items with no retained import are absent.</returns>
+    public Task<Dictionary<Guid, CausalSourceImportEvent>> GetLatestImportEventsForItemsAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.

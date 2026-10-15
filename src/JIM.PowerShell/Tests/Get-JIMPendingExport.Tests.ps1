@@ -120,6 +120,63 @@ Describe 'Get-JIMPendingExport' {
         }
     }
 
+    Context 'Queued by' {
+
+        It 'Has a QueuedBy parameter set' {
+            (Get-Command Get-JIMPendingExport).ParameterSets.Name | Should -Contain 'QueuedBy'
+        }
+
+        It 'Requests the runs that queued the Pending Export and returns them as rows' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $pendingExportId = [guid]::NewGuid()
+                $first = [guid]::NewGuid()
+                $second = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        pendingExportId = $pendingExportId
+                        runs = @([PSCustomObject]@{ id = $first }, [PSCustomObject]@{ id = $second })
+                        notRetainedCount = 0; earlierRunsMayBeOmitted = $false
+                    }
+                }
+
+                $rows = @(Get-JIMPendingExport -Id $pendingExportId -QueuedBy -WarningVariable warnings)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/synchronisation/pending-exports/$pendingExportId/queued-by" }
+                $rows.id | Should -Be @($first, $second)
+                @($warnings).Count | Should -Be 0
+            }
+        }
+
+        It 'Warns where runs are no longer retained or earlier ones may be missing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{ runs = @(); notRetainedCount = 2; earlierRunsMayBeOmitted = $true }
+                }
+
+                $null = Get-JIMPendingExport -Id ([guid]::NewGuid()) -QueuedBy -WarningVariable warnings -WarningAction SilentlyContinue
+
+                @($warnings).Count | Should -Be 2
+                "$($warnings[0])" | Should -BeLike '*2*no longer retained*'
+            }
+        }
+
+        It 'Takes Pending Exports piped from the list, by their Id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ runs = @(); notRetainedCount = 0; earlierRunsMayBeOmitted = $false } }
+                $pendingExportId = [guid]::NewGuid()
+                # A list row carries its Connected System beside its own id.
+                $listRow = [PSCustomObject]@{ Id = $pendingExportId; ConnectedSystemId = 2 }
+
+                $listRow | Get-JIMPendingExport -QueuedBy | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/synchronisation/pending-exports/$pendingExportId/queued-by" }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

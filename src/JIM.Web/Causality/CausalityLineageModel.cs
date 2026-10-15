@@ -36,4 +36,11 @@ public sealed class CausalityLineageModel
     /// it after the panel first renders, so the Lineage never waits on the walk.
     /// </summary>
     public CausalityLineageConsequenceSummary? Consequences { get; init; }
+
+    /// <summary>
+    /// The link policy the Lineage's addresses were written with (#2100). The view writes a few of its own (a cohort's
+    /// members, paged on request) and what each item link says, and takes both from here so they can never disagree
+    /// with the rest.
+    /// </summary>
+    public ICausalityLinks Links { get; init; } = CausalityPageLinks.Instance;
 }

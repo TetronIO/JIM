@@ -4,7 +4,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -188,15 +187,30 @@ public static partial class CausalityLineageModelBuilder
             foreach (var cohort in cohorts)
             {
                 var column = AssignCohort(cohort);
-                column.Hops.Add((BuildHop(cohort, effectName, effectItemId), hopSequence++));
+                column.Hops.Add((BuildHop(cohort, effectName, effectItemId, context.Links), hopSequence++));
 
                 foreach (var member in cohort.Members)
                 {
                     if (member.Causes.Count > 0)
+                    {
                         Walk(member.Causes, member.DisplayName, member.RunProfileExecutionItemId);
-                    else if (CausalityCauseWording.Ending(member.Resolution) != null
-                             && !column.EndingResolutions.Contains(member.Resolution))
+                        continue;
+                    }
+
+                    if (CausalityCauseWording.Ending(member.Resolution) == null)
+                        continue;
+
+                    if (!column.EndingResolutions.Contains(member.Resolution))
                         column.EndingResolutions.Add(member.Resolution);
+
+                    // Where the walk stopped at its bound on a single item, carrying on from that item shows the next
+                    // levels (#2100). A cohort of several already links each member, so it gets no link of its own.
+                    if (member.Resolution == CausalChainResolution.DepthLimitReached && cohort.MemberCount == 1
+                        && member.RunProfileExecutionItemId is { } farthestItemId && farthestItemId != Guid.Empty)
+                    {
+                        column.Continuations.Add(new CausalityLineageContinuation(
+                            ContinueFromText(member.DisplayName), context.Links.ItemHref(farthestItemId)));
+                    }
                 }
             }
         }
@@ -281,7 +295,8 @@ public static partial class CausalityLineageModelBuilder
             Columns = columns,
             Joins = joins,
             IsTruncatedByDepth = chain?.IsTruncatedByDepth ?? false,
-            Consequences = consequenceSummary
+            Consequences = consequenceSummary,
+            Links = context.Links
         };
     }
 
@@ -289,7 +304,8 @@ public static partial class CausalityLineageModelBuilder
     /// Prepares one cohort for rendering: sentence, attribution, run kind, timestamp, links and the
     /// member list a plural cohort expands to.
     /// </summary>
-    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId)
+    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId,
+        ICausalityLinks links)
     {
         var soleMember = cohort.MemberCount == 1 ? cohort.Members[0] : null;
 
@@ -301,15 +317,21 @@ public static partial class CausalityLineageModelBuilder
             ShowConnectedSystemChip = CausalityCauseWording.ShowConnectedSystemChip(cohort),
             RunKind = GetRunKind(cohort),
             Operation = OutcomeDisplayMap.GetHopOperation(cohort),
-            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId) : null,
+            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId, links) : null,
             Occurred = cohort.Members.Count > 0 ? cohort.Members.Min(m => m.Occurred) : default,
             Members = soleMember != null
                 ? []
                 : cohort.Members.Select(m => new CausalityLineageChainHopMember(
                     string.IsNullOrWhiteSpace(m.DisplayName) ? "Unnamed object" : m.DisplayName!,
-                    GetActivityItemHref(m, effectItemId))).ToList()
+                    GetActivityItemHref(m, effectItemId, links))).ToList()
         };
     }
+
+    /// <summary>
+    /// What a link to carry on past the walk's bound says (#2100).
+    /// </summary>
+    internal static string ContinueFromText(string? farthestName) =>
+        string.IsNullOrWhiteSpace(farthestName) ? "Continue from the last item" : $"Continue from {farthestName}";
 
     /// <summary>
     /// The kind of run that recorded a cause, where the hop's seam pins one: a derived import hop was
@@ -343,12 +365,12 @@ public static partial class CausalityLineageModelBuilder
     /// The href of the item that recorded a cause, or null where there is nothing useful to link to:
     /// the cause named no item, or named the very item being viewed.
     /// </summary>
-    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId)
+    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId, ICausalityLinks links)
     {
         if (member.RunProfileExecutionItemId is not { } itemId || itemId == Guid.Empty)
             return null;
 
-        return itemId == effectItemId ? null : $"/activity/item/{itemId}";
+        return itemId == effectItemId ? null : links.ItemHref(itemId);
     }
 
     /// <summary>
@@ -364,7 +386,12 @@ public static partial class CausalityLineageModelBuilder
             .ToList();
 
         var endings = state.EndingResolutions
-            .Select(r => new CausalityLineageEnding(r, CausalityCauseWording.Ending(r)!))
+            .Select(r => new CausalityLineageEnding(r, CausalityCauseWording.Ending(r)!)
+            {
+                Continuations = r == CausalChainResolution.DepthLimitReached
+                    ? state.Continuations.DistinctBy(c => c.Href).ToList()
+                    : []
+            })
             .ToList();
 
         // Later runs in the order they ran; a branch's ending (which has no time of its own) closes after them.
@@ -501,8 +528,8 @@ public static partial class CausalityLineageModelBuilder
     {
         if (state.IsPageRecord)
         {
-            string? href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
-                ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            var href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
+                ? context.Links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
             return new ColumnHead(
                 ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? "Connected System Object",
@@ -660,6 +687,11 @@ public static partial class CausalityLineageModelBuilder
         public List<(CausalityLineageChainHop Hop, int Sequence)> Hops { get; } = [];
 
         public List<CausalChainResolution> EndingResolutions { get; } = [];
+
+        /// <summary>
+        /// The single items the walk stopped at its bound on, to carry on from (#2100).
+        /// </summary>
+        public List<CausalityLineageContinuation> Continuations { get; } = [];
 
         /// <summary>
         /// True for an object only the consequences reached (#1811). Keyed by object rather than by system, so it is
