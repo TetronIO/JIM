@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -283,6 +284,174 @@ public class AttributeFlowPipelineTests
         var evaluation = AttributeFlowPipeline.EvaluateExport(Attributes(), mapping, source, _evaluator);
 
         Assert.That(evaluation.Values, Is.EqualTo(new object[] { " padded " }));
+    }
+
+    #endregion
+
+    #region Generated Values: the base expression, stopping before generation
+
+    private static string? Trim(string text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+
+    [Test]
+    public void ResolveGeneratedBase_OneTextValue_IsTheBaseAfterValueProcessing()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.Returned(" jsmith "), Trim);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Base));
+            Assert.That(generated.BaseValue, Is.EqualTo("jsmith"));
+            Assert.That(generated.UnprocessedBaseValue, Is.EqualTo(" jsmith "));
+        }
+    }
+
+    [Test]
+    public void ResolveGeneratedBase_NoValue_Waits()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.ReturnedNull(), Trim);
+
+        Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Waits));
+    }
+
+    [Test]
+    public void ResolveGeneratedBase_ValueProcessingLeavesNothing_Waits()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.Returned("   "), Trim);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Waits));
+            Assert.That(generated.BaseValue, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ResolveGeneratedBase_SeveralValues_IsGeneratedBaseNotSingleValueError()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.Returned(new[] { "a", "b" }), Trim);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Error));
+            Assert.That(generated.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.GeneratedBaseNotSingleValue));
+        }
+    }
+
+    [Test]
+    public void ResolveGeneratedBase_ValueWithNoTextForm_IsResultNotConvertibleError()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.Returned(new byte[] { 1, 2 }), Trim);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Error));
+            Assert.That(generated.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.ResultNotConvertible));
+            Assert.That(generated.UnconvertibleValue, Is.Not.Null);
+        }
+    }
+
+    private static IEnumerable<TestCaseData> SourcesSynchronisationPassesOn()
+    {
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned("jsmith")).SetName("Text");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned("   ")).SetName("Whitespace processed to nothing");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(42)).SetName("Number");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(Guid.NewGuid())).SetName("Guid");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc))).SetName("Date");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new[] { "a", "b" })).SetName("Several values");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new byte[] { 1, 2 })).SetName("Binary");
+        yield return new TestCaseData(ExpressionSourceEvaluation.ReturnedNull()).SetName("Null result");
+        yield return new TestCaseData(ExpressionSourceEvaluation.MissingInput(ExpressionSourceOutcome.NoValue, ["cs[\"sn\"]"])).SetName("Missing input, contribute no value");
+    }
+
+    [TestCaseSource(nameof(SourcesSynchronisationPassesOn))]
+    public void ResolveGeneratedBase_AnySourceSynchronisationPassesOn_GivesNoErrorTheEngineCannotRecord(ExpressionSourceEvaluation source)
+    {
+        // Synchronisation stops on the three failure outcomes before resolving a base (FailMapping records its own
+        // error; FailObject and a thrown Expression throw), so only a value or no value reaches ResolveGeneratedBase.
+        // Every error those can produce must map to an AttributeFlowError: GeneratedBaseError throws for any other
+        // reason, and that throw must never fire mid-run.
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(source, Trim);
+
+        if (generated.Outcome == GeneratedBaseOutcome.Error)
+            Assert.That(() => SyncEngine.GeneratedBaseError(generated, "Account Name", "expression"), Throws.Nothing);
+        else
+            Assert.That(generated.Outcome, Is.AnyOf(GeneratedBaseOutcome.Base, GeneratedBaseOutcome.Waits));
+    }
+
+    [TestCase(ExpressionSourceOutcome.MissingInputFailedMapping, AttributeFlowErrorReason.MissingInputFailedMapping)]
+    [TestCase(ExpressionSourceOutcome.MissingInputFailedObject, AttributeFlowErrorReason.MissingInputFailedObject)]
+    public void ResolveGeneratedBase_MissingInputFails_IsTheMatchingError(ExpressionSourceOutcome outcome, AttributeFlowErrorReason expected)
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(ExpressionSourceEvaluation.MissingInput(outcome, ["cs[\"sn\"]"]), Trim);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.Error));
+            Assert.That(generated.ErrorReason, Is.EqualTo(expected));
+        }
+    }
+
+    [Test]
+    public void ResolveGeneratedBase_ExpressionFailed_IsEvaluationFailedError()
+    {
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(
+            ExpressionSourceEvaluation.Failed(new ExpressionEvaluationException("boom")), Trim);
+
+        Assert.That(generated.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.EvaluationFailed));
+    }
+
+    [Test]
+    public void EvaluateGeneratedBaseInbound_NoBaseExpression_IsNoBaseExpression()
+    {
+        var target = new MetaverseAttribute { Id = 9, Name = "Employee Number", Type = AttributeDataType.Number };
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = target, Generation = new SyncRuleMappingGeneration() };
+
+        var generated = AttributeFlowPipeline.EvaluateGeneratedBaseInbound(new ConnectedSystemObject(), new ConnectedSystemObjectType(),
+            mapping, AttributeFlowPipeline.GeneratedBaseSource(mapping), _evaluator, metaverseAttributes: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generated.Outcome, Is.EqualTo(GeneratedBaseOutcome.NoBaseExpression));
+            Assert.That(generated.Source, Is.Null);
+        }
+    }
+
+    [Test]
+    public void EvaluateGeneratedBaseInbound_BaseExpression_AppliesTheMappingsValueProcessing()
+    {
+        var sn = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "sn", Type = AttributeDataType.Text };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [sn] };
+        var cso = new ConnectedSystemObject { TypeId = 1 };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = sn, AttributeId = 1, StringValue = " Smith " });
+        var target = new MetaverseAttribute { Id = 9, Name = "Account Name", Type = AttributeDataType.Text };
+        var mapping = new SyncRuleMapping
+        {
+            TargetMetaverseAttribute = target, Generation = new SyncRuleMappingGeneration(),
+            InboundValueProcessing = InboundValueProcessing.TrimWhitespace, CaseNormalisation = InboundCaseNormalisation.Lower
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = "cs[\"sn\"]" });
+
+        var generated = AttributeFlowPipeline.EvaluateGeneratedBaseInbound(cso, csoType, mapping, AttributeFlowPipeline.GeneratedBaseSource(mapping),
+            _evaluator, metaverseAttributes: null);
+
+        Assert.That(generated.BaseValue, Is.EqualTo("smith"));
+    }
+
+    [Test]
+    public void EvaluateGeneratedBaseExport_BaseExpression_AppliesNoValueProcessing()
+    {
+        var target = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "sAMAccountName", Type = AttributeDataType.Text };
+        var mapping = new SyncRuleMapping
+        {
+            TargetConnectedSystemAttribute = target, Generation = new SyncRuleMappingGeneration(),
+            InboundValueProcessing = InboundValueProcessing.TrimWhitespace
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = "mv[\"Last Name\"]" });
+
+        var generated = AttributeFlowPipeline.EvaluateGeneratedBaseExport(Attributes(("Last Name", " Smith ")), mapping,
+            AttributeFlowPipeline.GeneratedBaseSource(mapping), _evaluator);
+
+        Assert.That(generated.BaseValue, Is.EqualTo(" Smith "));
     }
 
     #endregion

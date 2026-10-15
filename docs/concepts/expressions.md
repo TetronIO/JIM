@@ -26,7 +26,7 @@ Expressions also decide what an **Object Matching Rule** compares, where an iden
 
 To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
-Expressions are also used by **example data generation templates** to construct a generated attribute's value from other attributes on the same object, for example building an email address whose domain is derived from a generated company name. Only the `mv` accessor applies in that context (generation builds Metaverse Objects directly, so there is no Connected System Object), but the same syntax and functions described below apply.
+Expressions are also used by **example data generation templates** to construct a generated attribute's value from other attributes on the same object, for example building an email address whose domain is derived from a generated company name. Only the `mv` accessor applies in that context (generation builds Metaverse Objects directly, so there is no Connected System Object), but the same syntax and functions described below apply. To try one before generating anything, test it with [`Test-JIMExampleDataExpression`](../powershell/example-data.md#test-jimexampledataexpression) or the REST API's `/api/v1/example-data/templates/{templateId}/test-expression`: give the template attribute and sample values for the attributes it reads, and see the value it would be generated as.
 
 ## Quick Examples
 
@@ -485,7 +485,7 @@ With both values supplied this produces `ada.lovelace@corp.local`. Without the s
 
 Before a target attribute is chosen, the expression is evaluated on its own, with each value as text, and an empty box is no value.
 
-The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow, and optionally a Connected System Object or Metaverse Object to load the values from; without them, the expression is evaluated on its own. Either way, `-AsOf` (`asOf` over REST) sets the time `Now()` and `Today()` return.
+The same test is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API's `/api/v1/synchronisation/test-expression`, for testing an expression from a script. Give the Synchronisation Rule and Attribute Flow to test the expression as that Attribute Flow, and optionally a Connected System Object or Metaverse Object to load the values from; without them, the expression is evaluated on its own. Either way, `-AsOf` (`asOf` over REST) sets the time `Now()` and `Today()` return. For a [Generated Value](../configuration/generated-values.md#testing-the-base-expression), the test stops at the base, as a synchronisation does.
 
 ### Validation
 

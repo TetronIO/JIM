@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2a, 2b and 2c complete)
+- **Status:** Doing (Phases 1 and 2 complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -82,9 +82,12 @@ Both modes: the match values, and optionally the lookup against the current Meta
 - **As built:** `ObjectMatchingServer.TestAsync` types samples through `TestSampleValues`, resolves them with the match-value resolver, and looks them up with `FindMatchingMetaverseObjectAsync` through a `ReadOnlySyncRepositoryGuard`. It then applies the join's own refusal of a Metaverse Object already joined from the Connected System, so the outcomes are would join, already joined, joined to another, no match and ambiguous (with candidates).
 - **Surfaces:** Try it in the Object Matching Rule editor (both modes, the draft as composed); `POST .../connected-systems/{id}/matching-rules/{ruleId}/test` and `.../sync-rules/{id}/matching-rules/{ruleId}/test` (saved rules); `Test-JIMMatchingRule`. The Scope tester's input records became the shared `AttributeSample` and `AttributeSampleDescriptor`, and the testers share one object picker (`TestObjectPicker`).
 
-#### Phase 2d: Generated Values and Example Data
+#### Phase 2d: Generated Values and Example Data ✅
 
 A Generated Value's base expression (through the Attribute Flow tester, stopping before generation) and Example Data template expressions over REST and PowerShell.
+
+- **As built (Generated Values):** `AttributeFlowPipeline.ResolveGeneratedBase` holds the checks a base must pass: one value, with a text form, after the mapping's inbound value processing; no value means wait. Both engine paths (`ProcessGeneratedMapping` on import, `StageGeneratedExportMapping` on export) and `AttributeFlowTester` now call it, replacing the two copies the engine carried. The tester branches on `mapping.Generation` and returns a `GeneratedBaseEvaluation` (base, waits, no base expression, or an error) in place of the ordinary evaluation, with its own "if an input has no value" outcomes. It never shows a candidate: which value is free needs the database (decision A1). The portal's Generated Value editor uses the full Attribute Flow test panel, which now reports its samples so the candidate preview still evaluates against them. REST: `generatedValue`, `baseOutcome` and `baseValue` on `test-expression`, whose expression may be omitted for a token-only mapping; PowerShell: `Test-JIMExpression -SyncRuleId -MappingId`, `-Expression` optional in that set.
+- **As built (Example Data):** `ExampleDataServer.TestAttributeExpression` types samples by the template attributes generated on the same object and evaluates through the same non-throwing core generation now uses (`EvaluateAttributeExpressionOutcome`); generation keeps its throwing wrapper. `POST /api/v1/example-data/templates/{templateId}/test-expression`; `Test-JIMExampleDataExpression`. No portal tester: #2055 scopes Example Data as "REST API and PowerShell now, the portal once authoring exists there" (decision B1).
 
 ### Phase 3: Validation on save everywhere
 

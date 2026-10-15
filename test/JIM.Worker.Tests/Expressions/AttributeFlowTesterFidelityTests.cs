@@ -484,4 +484,82 @@ public class AttributeFlowTesterFidelityTests
     }
 
     #endregion
+
+    #region Generated Values: the tester's base against the request synchronisation records
+
+    private ImportCase Generated(string expression, MissingInputBehaviour missingInputBehaviour = MissingInputBehaviour.ContributeNoValue,
+        InboundValueProcessing processing = InboundValueProcessing.TreatWhitespaceAsNoValue,
+        InboundCaseNormalisation caseNormalisation = InboundCaseNormalisation.None)
+    {
+        var scenario = Import(expression, Mv("Display Name"), missingInputBehaviour, processing, caseNormalisation);
+        scenario.Mapping.Generation = new SyncRuleMappingGeneration { SyncRuleMapping = scenario.Mapping };
+        return scenario;
+    }
+
+    /// <summary>What a real synchronisation records for a generated mapping: the generation request, or the errors.</summary>
+    private (PendingGeneratedValue? Request, List<AttributeFlowError> Errors) SynchroniseGenerated(
+        ImportCase scenario, params (string Attribute, Action<ConnectedSystemObjectAttributeValue> Set)[] values)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvType };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = CsoTypeId, ConnectedSystemId = 5, MetaverseObject = mvo };
+        foreach (var (attribute, set) in values)
+        {
+            var value = new ConnectedSystemObjectAttributeValue { Attribute = Cs(attribute), AttributeId = Cs(attribute).Id, ConnectedSystemObject = cso };
+            set(value);
+            cso.AttributeValues.Add(value);
+        }
+
+        var errors = _engine.FlowInboundAttributes(cso, scenario.Rule, [_csoType], _evaluator);
+        return (mvo.PendingGeneratedValues.SingleOrDefault(), errors);
+    }
+
+    [Test]
+    public void Test_GeneratedBaseWithValueProcessing_AgreesWithTheRecordedRequest()
+    {
+        var scenario = Generated("cs[\"givenName\"] + \" \"", processing: InboundValueProcessing.TrimWhitespace,
+            caseNormalisation: InboundCaseNormalisation.Lower);
+
+        var synchronised = SynchroniseGenerated(scenario, ("givenName", v => v.StringValue = "Priya"));
+        var tested = Test(scenario, CsInput("givenName", "Priya"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(synchronised.Request!.BaseValue, Is.EqualTo("priya"));
+            Assert.That(tested.GeneratedBase!.Outcome, Is.EqualTo(GeneratedBaseOutcome.Base));
+            Assert.That(tested.GeneratedBase!.BaseValue, Is.EqualTo(synchronised.Request.BaseValue));
+        }
+    }
+
+    [Test]
+    public void Test_GeneratedBaseInputAbsent_WaitsAsSynchronisationDoes()
+    {
+        var scenario = Generated("cs[\"givenName\"]");
+
+        var synchronised = SynchroniseGenerated(scenario);
+        var tested = Test(scenario);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(synchronised.Request!.BaseUnavailable, Is.True);
+            Assert.That(tested.GeneratedBase!.Outcome, Is.EqualTo(GeneratedBaseOutcome.Waits));
+        }
+    }
+
+    [Test]
+    public void Test_GeneratedBaseSeveralValues_FailsAsSynchronisationDoes()
+    {
+        var scenario = Generated("cs[\"mail\"]");
+
+        var synchronised = SynchroniseGenerated(scenario, ("mail", v => v.StringValue = "a@corp.local"), ("mail", v => v.StringValue = "b@corp.local"));
+        var tested = Test(scenario, CsInput("mail", "a@corp.local", "b@corp.local"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(synchronised.Request, Is.Null);
+            Assert.That(synchronised.Errors.Single().Kind, Is.EqualTo(AttributeFlowErrorKind.GeneratedBaseNotSingleValue));
+            Assert.That(tested.GeneratedBase!.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.GeneratedBaseNotSingleValue));
+        }
+    }
+
+    #endregion
 }

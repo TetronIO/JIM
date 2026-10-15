@@ -1493,3 +1493,45 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
         }
     }
 }
+
+Describe 'Test-JIMExampleDataExpression' {
+    It 'Posts the template attribute and samples to the template''s test-expression endpoint' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Value'; value = 'ada.lovelace' }
+            }
+
+            $result = Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Attributes @{ 'First Name' = 'Ada'; 'Last Name' = 'Lovelace' }
+
+            $script:capturedEndpoint | Should -Be '/api/v1/example-data/templates/4/test-expression'
+            $script:capturedBody.templateAttributeId | Should -Be 13
+            $script:capturedBody.attributes.'First Name' | Should -Be 'Ada'
+            $script:capturedBody.ContainsKey('expression') | Should -BeFalse
+            $result.Value | Should -Be 'ada.lovelace'
+        }
+    }
+
+    It 'Posts an expression to test in place of the saved one' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Value'; value = 'ADA' }
+            }
+
+            Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Expression 'Upper(mv["First Name"])' -Attributes @{ 'First Name' = 'Ada' } | Out-Null
+
+            $script:capturedBody.expression | Should -Be 'Upper(mv["First Name"])'
+        }
+    }
+
+    It 'Requires the template and the template attribute' {
+        { Test-JIMExampleDataExpression -TemplateId 4 -ErrorAction Stop } | Should -Throw
+    }
+}

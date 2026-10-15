@@ -788,21 +788,11 @@ public partial class SyncEngine
         mvo.PendingAttributeValueAdditions.RemoveAll(av => av.AttributeId == attributeId);
         mvo.PendingGeneratedValues.RemoveAll(p => p.AttributeId == attributeId);
 
-        var source = syncRuleMapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+        var source = AttributeFlowPipeline.GeneratedBaseSource(syncRuleMapping);
         if (source == null)
         {
             // No base expression: valid for Sequence and Random tokens (SyncRuleMappingGenerationValidator rule 3).
-            mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
-            {
-                Mapping = syncRuleMapping,
-                AttributeId = attributeId,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId,
-                SourceConnectedSystemObjectId = cso.Id,
-                SourceConnectedSystemObject = cso,
-                BaseValue = null,
-                BaseUnavailable = false
-            });
+            AddRequest(baseValue: null, baseUnavailable: false);
             return;
         }
 
@@ -815,73 +805,69 @@ public partial class SyncEngine
         if (evaluation == null)
             return;
 
-        // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated mapping, FR 29)
-        // or a null result: wait. NEVER ApplyNoValueOutcome here, unlike ProcessExpressionMapping: that clears an
-        // EXISTING value under Attribute Priority, and a committed generated value must never be recomputed or
-        // cleared by its inputs (FR 10) - "contribute no value" for a generated mapping means wait, not withdraw.
-        if (evaluation.Outcome == ExpressionSourceOutcome.NoValue)
+        // The checks a base must pass, shared with export staging and the tester (#2055): one value, with a text form,
+        // after the same inbound text processing (#843) an ordinary text expression mapping applies.
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(evaluation, AttributeFlowPipeline.GeneratedBaseTextProcessing(syncRuleMapping));
+        switch (generated.Outcome)
         {
-            mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
-            {
-                Mapping = syncRuleMapping,
-                AttributeId = attributeId,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId,
-                SourceConnectedSystemObjectId = cso.Id,
-                SourceConnectedSystemObject = cso,
-                BaseValue = null,
-                BaseUnavailable = true
-            });
-            return;
+            case GeneratedBaseOutcome.Base:
+                AddRequest(generated.BaseValue, baseUnavailable: false);
+                return;
+
+            // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated mapping, FR 29),
+            // a null result, or value processing that left nothing: wait. NEVER ApplyNoValueOutcome here, unlike
+            // ProcessExpressionMapping: that clears an EXISTING value under Attribute Priority, and a committed
+            // generated value must never be recomputed or cleared by its inputs (FR 10) - "contribute no value" for a
+            // generated mapping means wait, not withdraw.
+            case GeneratedBaseOutcome.Waits:
+                AddRequest(baseValue: null, baseUnavailable: true);
+                return;
+
+            case GeneratedBaseOutcome.Error:
+                errors?.Add(GeneratedBaseError(generated, syncRuleMapping.TargetMetaverseAttribute!.Name, source.Expression));
+                return;
+
+            default:
+                throw new InvalidOperationException($"Unexpected generated base outcome '{generated.Outcome}' for a mapping with a base expression.");
         }
 
-        if (ExpressionResultValues.IsCollection(evaluation.Result))
-        {
-            // A generated value's base must be a single text value: a uniqueness token is appended to exactly one
-            // candidate, so a collection of anything (#2179, not only a list of text) is a misconfiguration, not data
-            // to select from.
-            errors?.Add(new AttributeFlowError
-            {
-                Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
-                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
-                Expression = source.Expression
-            });
-            return;
-        }
-
-        // A single value in JIM's text form (#2153, N1); a Binary value has none, so it cannot be a base.
-        if (!ExpressionText.TryFormat(evaluation.Result, out var baseText))
-        {
-            errors?.Add(new AttributeFlowError
-            {
-                Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
-                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
-                TargetAttributeType = AttributeDataType.Text,
-                Expression = source.Expression,
-                Value = ExpressionText.Describe(evaluation.Result!)
-            });
-            return;
-        }
-
-        // Scalar result: apply the same inbound text processing (#843) an ordinary text expression mapping would.
-        // A generated mapping's target is always Text when it has a base expression
-        // (SyncRuleMappingGenerationValidator rule 4 forbids one on a Number target), so, unlike
-        // ProcessExpressionMapping, no non-text conversion path is needed here.
-        var processed = ApplyInboundTextProcessing(baseText,
-            syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation);
-
-        mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
+        void AddRequest(string? baseValue, bool baseUnavailable) => mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
         {
             Mapping = syncRuleMapping,
             AttributeId = attributeId,
             ContributedBySystemId = contributingSystemId,
             ContributedBySyncRuleId = contributingSyncRuleId,
             SourceConnectedSystemObjectId = cso.Id,
-                SourceConnectedSystemObject = cso,
-            BaseValue = processed,
-            BaseUnavailable = processed == null
+            SourceConnectedSystemObject = cso,
+            BaseValue = baseValue,
+            BaseUnavailable = baseUnavailable
         });
     }
+
+    /// <summary>
+    /// The <see cref="AttributeFlowError"/> a base that cannot be used records (#242): several values, or a value with
+    /// no text form. Nothing is generated for the attribute this pass. Missing-input and evaluation failures never get
+    /// here: they are handled before the base is resolved, as for any expression source.
+    /// </summary>
+    internal static AttributeFlowError GeneratedBaseError(GeneratedBaseEvaluation generated, string targetAttributeName, string? expression) =>
+        generated.ErrorReason switch
+        {
+            AttributeFlowErrorReason.GeneratedBaseNotSingleValue => new AttributeFlowError
+            {
+                Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
+                TargetAttributeName = targetAttributeName,
+                Expression = expression
+            },
+            AttributeFlowErrorReason.ResultNotConvertible => new AttributeFlowError
+            {
+                Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
+                TargetAttributeName = targetAttributeName,
+                TargetAttributeType = AttributeDataType.Text,
+                Expression = expression,
+                Value = generated.UnconvertibleValue
+            },
+            _ => throw new InvalidOperationException($"A generated base error of '{generated.ErrorReason}' is handled before the base is resolved.")
+        };
 
     /// <inheritdoc cref="Interfaces.ISyncEngine.ApplyGeneratedValue"/>
     public void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue)
