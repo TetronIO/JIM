@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -347,6 +348,34 @@ public class AttributeFlowPipelineTests
             Assert.That(generated.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.ResultNotConvertible));
             Assert.That(generated.UnconvertibleValue, Is.Not.Null);
         }
+    }
+
+    private static IEnumerable<TestCaseData> SourcesSynchronisationPassesOn()
+    {
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned("jsmith")).SetName("Text");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned("   ")).SetName("Whitespace processed to nothing");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(42)).SetName("Number");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(Guid.NewGuid())).SetName("Guid");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc))).SetName("Date");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new[] { "a", "b" })).SetName("Several values");
+        yield return new TestCaseData(ExpressionSourceEvaluation.Returned(new byte[] { 1, 2 })).SetName("Binary");
+        yield return new TestCaseData(ExpressionSourceEvaluation.ReturnedNull()).SetName("Null result");
+        yield return new TestCaseData(ExpressionSourceEvaluation.MissingInput(ExpressionSourceOutcome.NoValue, ["cs[\"sn\"]"])).SetName("Missing input, contribute no value");
+    }
+
+    [TestCaseSource(nameof(SourcesSynchronisationPassesOn))]
+    public void ResolveGeneratedBase_AnySourceSynchronisationPassesOn_GivesNoErrorTheEngineCannotRecord(ExpressionSourceEvaluation source)
+    {
+        // Synchronisation stops on the three failure outcomes before resolving a base (FailMapping records its own
+        // error; FailObject and a thrown Expression throw), so only a value or no value reaches ResolveGeneratedBase.
+        // Every error those can produce must map to an AttributeFlowError: GeneratedBaseError throws for any other
+        // reason, and that throw must never fire mid-run.
+        var generated = AttributeFlowPipeline.ResolveGeneratedBase(source, Trim);
+
+        if (generated.Outcome == GeneratedBaseOutcome.Error)
+            Assert.That(() => SyncEngine.GeneratedBaseError(generated, "Account Name", "expression"), Throws.Nothing);
+        else
+            Assert.That(generated.Outcome, Is.AnyOf(GeneratedBaseOutcome.Base, GeneratedBaseOutcome.Waits));
     }
 
     [TestCase(ExpressionSourceOutcome.MissingInputFailedMapping, AttributeFlowErrorReason.MissingInputFailedMapping)]
