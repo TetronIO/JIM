@@ -444,7 +444,8 @@
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
             { x => x.SetPassword, submission => SetPasswordAsync(state.ObjectId, displayName, submission) },
-            { x => x.StopTrying, connectedSystemId => CancelPasswordChangeAsync(state.ObjectId, connectedSystemId) }
+            { x => x.StopTrying, connectedSystemId => CancelPasswordChangeAsync(state.ObjectId, connectedSystemId) },
+            { x => x.ConfirmStopTrying, connectedSystemId => ConfirmStopTryingAsync(state.ObjectId, connectedSystemId) }
         };
 
         // The name only when there is one: an object with no display name would otherwise be titled with a
@@ -538,6 +539,12 @@
         if (MetaverseObject == null || state.PasswordActionRunning)
             return;
 
+        // Stopping a change that is a Connected System Object's first password (#2160) leaves that object without one,
+        // which is asked about first; an ordinary change stops at once, as it always has.
+        if (!await PasswordChangeCancellation.ConfirmAsync(DialogService,
+                state.QueuedPasswordChanges.FirstOrDefault(c => c.ConnectedSystemId == connectedSystemId)))
+            return;
+
         state.PasswordActionRunning = true;
         try
         {
@@ -568,6 +575,19 @@
     /// Cancels this person's queued change on one Connected System, attributed to the signed-in administrator.
     /// Shared by the tab's Stop trying action and the dialog's.
     /// </summary>
+    /// <summary>
+    /// Asked before the set-password dialog's Stop trying (#2160): read fresh, because the change the dialog has just
+    /// queued may have come to carry a Connected System Object's first password since the tab was read.
+    /// </summary>
+    private async Task<bool> ConfirmStopTryingAsync(Guid metaverseObjectId, int connectedSystemId)
+    {
+        PendingPasswordChangeHeader? queued;
+        using (var jim = JimFactory.Create())
+            queued = await PasswordChangeCancellation.FindQueuedAsync(jim, metaverseObjectId, connectedSystemId);
+
+        return await PasswordChangeCancellation.ConfirmAsync(DialogService, queued);
+    }
+
     private async Task<int> CancelPasswordChangeAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         using var jim = JimFactory.Create();

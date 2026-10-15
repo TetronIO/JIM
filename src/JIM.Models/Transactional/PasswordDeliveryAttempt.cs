@@ -16,11 +16,16 @@ namespace JIM.Models.Transactional;
 /// behaviour, or another part of the request such as enabling the account), so the delivery's Activity was completed
 /// with a warning. True for every other outcome.
 /// </param>
+/// <param name="StandIn">
+/// For a delivery, whether the password was an account's first password in place of its Initial Password, and how the
+/// Initial Password's promises about the account came out (#2160).
+/// </param>
 public sealed record PasswordDeliveryAttempt(
     PasswordDeliveryDisposition Disposition,
     AccountFlagBasis? Enablement = null,
     AccountFlagBasis? PasswordNeverExpires = null,
-    bool ExpiryBehaviourHonoured = true)
+    bool ExpiryBehaviourHonoured = true,
+    InitialPasswordStandIn StandIn = InitialPasswordStandIn.None)
 {
     /// <summary>The row stays in the queue, retrying or parked.</summary>
     public static PasswordDeliveryAttempt Kept { get; } = new(PasswordDeliveryDisposition.Kept);
@@ -32,6 +37,7 @@ public sealed record PasswordDeliveryAttempt(
     public static PasswordDeliveryAttempt Postponed { get; } = new(PasswordDeliveryDisposition.Postponed);
 
     /// <summary>The password was set and the row is removed.</summary>
-    public static PasswordDeliveryAttempt Delivered(AccountFlagsDecision flags, bool expiryBehaviourHonoured) =>
-        new(PasswordDeliveryDisposition.Delivered, flags.EnablementBasis, flags.PasswordNeverExpiresBasis, expiryBehaviourHonoured);
+    public static PasswordDeliveryAttempt Delivered(AccountFlagsDecision flags, bool expiryBehaviourHonoured,
+        InitialPasswordStandIn standIn = InitialPasswordStandIn.None) =>
+        new(PasswordDeliveryDisposition.Delivered, flags.EnablementBasis, flags.PasswordNeverExpiresBasis, expiryBehaviourHonoured, standIn);
 }

@@ -54,7 +54,9 @@ public class SyncRuleInitialPasswordResponse
     /// <summary>
     /// Whether the Connected System Object is enabled once the password is set. It applies only where no export has
     /// written the object's enabled state (such as userAccountControl) by the time the password is delivered; where
-    /// one has, the Attribute Flow decides. False leaves it as it was created.
+    /// one has, the Attribute Flow decides. False leaves it as it was created. It also applies, as does whether the
+    /// password never expires, when a password change already waiting for the person is delivered as the object's first
+    /// password instead of the Initial Password.
     /// </summary>
     public bool EnableAccount { get; set; }
 
@@ -201,7 +203,9 @@ public class UpdateSyncRuleInitialPasswordRequest
     /// <summary>
     /// Whether the account is enabled once the password is set. Applies only where no export has written the account's
     /// enabled state (such as <c>userAccountControl</c>) by the time the password is delivered; where one has, the
-    /// Attribute Flow decides. False leaves the account as it was created.
+    /// Attribute Flow decides. False leaves the account as it was created. It also applies, as does whether the password
+    /// never expires, when a password change already waiting for the person is delivered as the account's first
+    /// password instead of the Initial Password.
     /// </summary>
     public bool? EnableAccount { get; set; }
 

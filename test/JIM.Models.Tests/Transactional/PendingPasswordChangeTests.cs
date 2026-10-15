@@ -51,6 +51,24 @@ public class PendingPasswordChangeTests
         SyncRuleId = syncRuleId
     };
 
+    /// <summary>
+    /// An Initial Password as export staging writes it (#1697, #2160): no password of its own, the provisioning rule,
+    /// and the account it is the first password for.
+    /// </summary>
+    private static PendingPasswordChange Provisioned(Guid accountId, int syncRuleId, bool accountFlagsWrittenByExport, DateTime createdAt) => new()
+    {
+        MetaverseObjectId = Guid.NewGuid(),
+        ConnectedSystemId = 3,
+        ConnectedSystemObjectId = accountId,
+        ProvisionedConnectedSystemObjectId = accountId,
+        Origin = PendingPasswordChangeOrigin.Provisioned,
+        SyncRuleId = syncRuleId,
+        EnabledStateSetByAttributeFlow = accountFlagsWrittenByExport,
+        ActivityId = Guid.NewGuid(),
+        CreatedAt = createdAt,
+        ExpiresAt = createdAt.AddDays(7)
+    };
+
     [Test]
     public void NewChange_StartsPendingWithNoAttempts()
     {
@@ -835,26 +853,128 @@ public class PendingPasswordChangeTests
     }
 
     /// <summary>
-    /// An administrator's own password has nothing left to generate from, so the rule that would have generated
-    /// the provisioned row's password is cleared along with it.
+    /// Passwords replace each other; promises about the account carry forward (#2160). An administrator's reset
+    /// replacing an Initial Password still owed takes the password, the expiry and the enable choice, and keeps the
+    /// account's first-password promises: the rule they come from, the account they are for, and whether an export
+    /// wrote its flags. This replaces the behaviour pinned before #2160, which cleared the rule and with it the enable.
     /// </summary>
     [Test]
-    public void Supersede_ExplicitOverProvisioned_ClearsSyncRuleIdAndSetsThePassword()
+    public void Supersede_ExplicitOverALiveProvisionedRow_TakesThePasswordAndKeepsTheInitialPasswordsPromises()
     {
         var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
-        var change = Change();
-        change.Supersede(Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
-            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: 42));
+        var accountId = Guid.NewGuid();
+        var change = Provisioned(accountId, syncRuleId: 42, accountFlagsWrittenByExport: true, now);
 
-        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
-            TimeSpan.FromDays(7), now.AddMinutes(1), PendingPasswordChangeOrigin.Explicit, enableAccount: true));
+        var reset = Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1), PendingPasswordChangeOrigin.Explicit, enableAccount: true);
+        reset.ConnectedSystemObjectId = accountId;
+        change.Supersede(reset);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
-            Assert.That(change.SyncRuleId, Is.Null,
-                "The administrator's own password has nothing left to generate from.");
             Assert.That(change.EncryptedPassword, Is.EqualTo("$JIMPW$v1$reset"));
+            Assert.That(change.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+            Assert.That(change.EnableAccount, Is.True);
+            Assert.That(change.SyncRuleId, Is.EqualTo(42), "the rule whose promises the reset now carries");
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.EqualTo(accountId));
+            Assert.That(change.EnabledStateSetByAttributeFlow, Is.True);
+            Assert.That(change.CarriesInitialPassword, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// The reverse order of #2160: the Initial Password was queued, and the person's own password change arrived
+    /// before it landed. The person's password is delivered, with the Initial Password's promises about the account.
+    /// Every live state counts, a parked one included: the account is still owed its first password.
+    /// </summary>
+    [TestCase(PendingPasswordChangeStatus.Pending)]
+    [TestCase(PendingPasswordChangeStatus.Delivering)]
+    [TestCase(PendingPasswordChangeStatus.Parked)]
+    public void Supersede_ByAPropagatedChange_KeepsALiveRowsInitialPasswordPromises(PendingPasswordChangeStatus status)
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var accountId = Guid.NewGuid();
+        var change = Provisioned(accountId, syncRuleId: 42, accountFlagsWrittenByExport: true, now);
+        change.Status = status;
+
+        change.Supersede(Newer("$JIMPW$v1$propagated", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EncryptedPassword, Is.EqualTo("$JIMPW$v1$propagated"));
+            Assert.That(change.SyncRuleId, Is.EqualTo(42));
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.EqualTo(accountId));
+            Assert.That(change.EnabledStateSetByAttributeFlow, Is.True);
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// A change already standing in for the Initial Password, replaced by a newer one, passes the promises on again.
+    /// </summary>
+    [Test]
+    public void Supersede_OfAChangeCarryingAFirstPassword_PassesThePromisesOn()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var accountId = Guid.NewGuid();
+        var change = Change();
+        change.ExpiresAt = now.AddDays(1);
+        change.CarryInitialPassword(accountId, syncRuleId: 42, accountFlagsWrittenByExport: false, now.AddDays(7));
+
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.SyncRuleId, Is.EqualTo(42));
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.EqualTo(accountId));
+            Assert.That(change.EncryptedPassword, Is.EqualTo("$JIMPW$v1$newer"));
+        }
+    }
+
+    /// <summary>
+    /// An expired or cancelled row owes nothing any more: what replaces it carries its own promises, or none.
+    /// </summary>
+    [TestCase(PendingPasswordChangeStatus.Expired)]
+    [TestCase(PendingPasswordChangeStatus.Cancelled)]
+    public void Supersede_OfAnExpiredOrCancelledRow_DropsThePromises(PendingPasswordChangeStatus status)
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var change = Provisioned(Guid.NewGuid(), syncRuleId: 42, accountFlagsWrittenByExport: true, now);
+        change.Status = status;
+
+        change.Supersede(Newer("$JIMPW$v1$propagated", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.SyncRuleId, Is.Null);
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.Null);
+            Assert.That(change.EnabledStateSetByAttributeFlow, Is.False);
+            Assert.That(change.CarriesInitialPassword, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// A newer Initial Password (the account deleted and provisioned again) brings promises of its own, which win.
+    /// </summary>
+    [Test]
+    public void Supersede_ByAProvisionedChange_ReplacesThePromises()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var change = Provisioned(Guid.NewGuid(), syncRuleId: 42, accountFlagsWrittenByExport: true, now);
+        var reprovisionedAccount = Guid.NewGuid();
+
+        change.Supersede(Provisioned(reprovisionedAccount, syncRuleId: 43, accountFlagsWrittenByExport: false, now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.SyncRuleId, Is.EqualTo(43));
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.EqualTo(reprovisionedAccount));
+            Assert.That(change.EnabledStateSetByAttributeFlow, Is.False);
         }
     }
 
@@ -896,6 +1016,160 @@ public class PendingPasswordChangeTests
             Assert.That(change.IsProvisioned, Is.True);
             Assert.That(change.IsExplicit, Is.False);
             Assert.That(change.IsPropagated, Is.False);
+        }
+    }
+
+    #endregion
+
+    #region carrying an account's first password (#2160)
+
+    [Test]
+    public void CarryInitialPassword_KeepsTheChangesOwnPasswordAndTakesTheAccountsPromises()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var accountId = Guid.NewGuid();
+        var change = Change();
+        var activityId = change.ActivityId;
+        change.ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+        change.CreatedAt = now.AddHours(-1);
+        change.ExpiresAt = now.AddDays(6);
+
+        change.CarryInitialPassword(accountId, syncRuleId: 42, accountFlagsWrittenByExport: true, now.AddDays(7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EncryptedPassword, Is.EqualTo("$JIMPW$v1$ciphertext"));
+            Assert.That(change.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy),
+                "\"must change at next sign-in\" belongs to the password, never to the account's promises");
+            Assert.That(change.ActivityId, Is.EqualTo(activityId));
+            Assert.That(change.ConnectedSystemObjectId, Is.EqualTo(accountId), "a propagated change now has its account");
+            Assert.That(change.ProvisionedConnectedSystemObjectId, Is.EqualTo(accountId));
+            Assert.That(change.SyncRuleId, Is.EqualTo(42));
+            Assert.That(change.EnabledStateSetByAttributeFlow, Is.True);
+            Assert.That(change.CarriesInitialPassword, Is.True);
+            Assert.That(change.OwesInitialPassword, Is.True);
+            Assert.That(change.IsDue(now), Is.True, "the account now exists, so the change is due at once");
+        }
+    }
+
+    /// <summary>
+    /// A deliverer holding the change decided its flags without the promises, so its claim is taken back, as
+    /// <see cref="PendingPasswordChange.Supersede"/> does: its outcome write and its delete are guarded on the row
+    /// still being Delivering, and land nowhere. The password is delivered again, with the promises, on its own claim.
+    /// </summary>
+    [Test]
+    public void CarryInitialPassword_OnADeliveringRow_TakesTheClaimBack()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(1);
+        change.Claim("worker-1", now);
+
+        change.CarryInitialPassword(Guid.NewGuid(), syncRuleId: 42, accountFlagsWrittenByExport: false, now.AddDays(7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A change parked because the account did not exist yet, or because the target could not be reached until the
+    /// retries ran out, is released: the Create that provisioned the account has just proved both wrong. Its attempts
+    /// are reset, because they counted against circumstances that no longer hold.
+    /// </summary>
+    [TestCase(PasswordSetFailureReason.TargetObjectNotFound)]
+    [TestCase(PasswordSetFailureReason.Transient)]
+    public void CarryInitialPassword_OnARowParkedForAReasonTheAccountCures_ReleasesItAndResetsItsAttempts(PasswordSetFailureReason reason)
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(1);
+        change.Status = PendingPasswordChangeStatus.Parked;
+        change.FailureReason = reason;
+        change.TargetMessage = "The identity has no account in this Connected System yet.";
+        change.AttemptCount = 6;
+
+        change.CarryInitialPassword(Guid.NewGuid(), syncRuleId: 42, accountFlagsWrittenByExport: false, now.AddDays(7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.AttemptCount, Is.Zero);
+            Assert.That(change.FailureReason, Is.Null);
+            Assert.That(change.TargetMessage, Is.Null);
+            Assert.That(change.NextRetryAt, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A change waiting out a backoff for a missing account is due now; its attempts described a missing account and
+    /// are reset. One retrying a transient failure keeps its count, which still describes the target.
+    /// </summary>
+    [Test]
+    public void CarryInitialPassword_OnARowRetryingForAMissingAccount_MakesItDueAndResetsItsAttempts()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(1);
+        change.FailureReason = PasswordSetFailureReason.TargetObjectNotFound;
+        change.AttemptCount = 2;
+        change.NextRetryAt = now.AddMinutes(20);
+
+        change.CarryInitialPassword(Guid.NewGuid(), syncRuleId: 42, accountFlagsWrittenByExport: false, now.AddDays(7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.NextRetryAt, Is.Null);
+            Assert.That(change.AttemptCount, Is.Zero);
+            Assert.That(change.FailureReason, Is.Null);
+        }
+    }
+
+    [Test]
+    public void CarryInitialPassword_ExtendsButNeverShortensExpiresAt()
+    {
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var shortLived = Change();
+        shortLived.ExpiresAt = now.AddDays(1);
+        var longLived = Change();
+        longLived.ExpiresAt = now.AddDays(30);
+
+        shortLived.CarryInitialPassword(Guid.NewGuid(), 42, false, now.AddDays(7));
+        longLived.CarryInitialPassword(Guid.NewGuid(), 42, false, now.AddDays(7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(shortLived.ExpiresAt, Is.EqualTo(now.AddDays(7)));
+            Assert.That(longLived.ExpiresAt, Is.EqualTo(now.AddDays(30)));
+        }
+    }
+
+    /// <summary>
+    /// A propagated change is held while its Connected System's Password Synchronisation is switched off; one carrying
+    /// an account's first password is not, like the Initial Password it stands in for (decision D1).
+    /// </summary>
+    [Test]
+    public void IsHeldWhilePasswordSynchronisationIsOff_OnlyForAPropagatedChangeOwingNoFirstPassword()
+    {
+        var plain = Change();
+        var carrying = Change();
+        carrying.CarryInitialPassword(Guid.NewGuid(), 42, false, DateTime.UtcNow.AddDays(7));
+        var explicitSet = Change();
+        explicitSet.Origin = PendingPasswordChangeOrigin.Explicit;
+        var provisioned = Provisioned(Guid.NewGuid(), 42, false, DateTime.UtcNow);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plain.IsHeldWhilePasswordSynchronisationIsOff, Is.True);
+            Assert.That(carrying.IsHeldWhilePasswordSynchronisationIsOff, Is.False);
+            Assert.That(explicitSet.IsHeldWhilePasswordSynchronisationIsOff, Is.False);
+            Assert.That(provisioned.IsHeldWhilePasswordSynchronisationIsOff, Is.False);
+            Assert.That(provisioned.OwesInitialPassword, Is.True);
+            Assert.That(provisioned.CarriesInitialPassword, Is.False, "an Initial Password is the first password, it does not carry one");
         }
     }
 
