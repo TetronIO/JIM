@@ -56,7 +56,7 @@ Get-JIMPendingExport -Id <guid>
 | `Force` | `switch` | No (ListAll, AttributeChangesAll) |  | With `-All`, fetches every page, past the 1000-page limit. |
 | `Count` | `switch` | Yes (Count) |  | Returns how many Pending Exports there are, rather than the Pending Exports. |
 | `ChangeType` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed` or `Exported`. |
+| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
 
 ### Output
 

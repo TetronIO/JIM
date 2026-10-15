@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
 - ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
+- ✨ Scripts can list the expression functions, with each one's signature, parameters and an example, filtered by name or category: `Get-JIMExpressionFunction -Name '*Date*'`, or REST (`/api/v1/synchronisation/expression-functions`). (#2253)
 - ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
 - ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
 - ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
@@ -67,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
 - 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
@@ -105,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Get-JIMSyncRule` and the REST API now return an import Synchronisation Rule's out-of-scope action (**When objects fall out of scope** in the portal), which could be set over both but not read back.
+- 🐛 `Get-JIMPendingExport -Count -Status Parked` now counts the Pending Exports held back for a decision about a generated value; the cmdlet rejected `Parked` before.
 - 🐛 An External ID or reference containing the Turkish capital `İ` is now found by the lookups that compare in the database, instead of being missed and imported again as a new object. (#2051)
 - 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)

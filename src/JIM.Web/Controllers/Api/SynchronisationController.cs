@@ -6564,6 +6564,40 @@ public class SynchronisationController(
     #region Expression Testing
 
     /// <summary>
+    /// List the expression functions
+    /// </summary>
+    /// <remarks>
+    /// Every built-in function an expression can call, with its signature, parameters, what it returns, a description and
+    /// an example: the same list the expression editor's Insert function menu offers. Functions come back grouped by
+    /// category, in the order the Expressions reference lists them.
+    /// </remarks>
+    /// <param name="name">Only functions whose name contains this text, ignoring case.</param>
+    /// <param name="category">Only functions in this category.</param>
+    /// <returns>The matching functions.</returns>
+    /// <response code="200">The matching functions; empty when none match.</response>
+    /// <response code="400">The category is not one of the categories.</response>
+    /// <response code="401">Authentication required.</response>
+    [HttpGet("expression-functions", Name = "GetExpressionFunctions")]
+    [ProducesResponseType(typeof(IEnumerable<ExpressionFunctionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult GetExpressionFunctions([FromQuery] string? name = null, [FromQuery] ExpressionFunctionCategory? category = null)
+    {
+        var functions = ExpressionFunctionCatalogue.All.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var search = name.Trim();
+            functions = functions.Where(f => f.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (category is { } wanted)
+            functions = functions.Where(f => f.Category == wanted);
+
+        return Ok(functions.Select(ExpressionFunctionDto.FromFunction).ToList());
+    }
+
+    /// <summary>
     /// Test an expression with sample Attribute data
     /// </summary>
     /// <remarks>

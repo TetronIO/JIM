@@ -91,6 +91,18 @@ Describe 'Get-JIMPendingExport' {
         It 'Should have Search as an optional string parameter' {
             $command.Parameters['Search'].ParameterType.Name | Should -Be 'String'
         }
+
+        It 'Should accept every Pending Export status the API can filter by for -Status' {
+            # The API binds the status filter to PendingExportStatus by name, so the set must name every member.
+            $enumSource = Get-Content -Raw (Join-Path $PSScriptRoot '..' '..' 'JIM.Models' 'Transactional' 'PendingExportEnums.cs')
+            $enumBody = [regex]::Match($enumSource, 'public enum PendingExportStatus\s*\{(?<body>[^}]*)\}').Groups['body'].Value
+            $expected = [regex]::Matches($enumBody, '(?m)^\s*(?<name>[A-Za-z]+)\s*=\s*\d+') | ForEach-Object { $_.Groups['name'].Value }
+            $expected | Should -Not -BeNullOrEmpty
+
+            $validateSet = $command.Parameters['Status'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet.ValidValues | Sort-Object | Should -Be ($expected | Sort-Object)
+        }
     }
 
     Context 'Requires Connection' {
