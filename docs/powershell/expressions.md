@@ -1,13 +1,71 @@
 ---
 title: Expressions
-description: "The cmdlet that tests an expression against sample Metaverse and Connected System attribute values before a mapping uses it."
+description: "The cmdlets that list the built-in expression functions and test an expression against sample attribute values before a mapping uses it."
 type: reference
 audience: automation-author
 ---
 
 # Expressions
 
-Test Synchronisation Rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
+Look up the built-in expression functions, and test Synchronisation Rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
+
+## Get-JIMExpressionFunction
+
+Lists the built-in functions an expression can call, with each one's signature, parameters, what it returns, a description and an example: the same list the expression editor's **Insert function** menu offers in the portal.
+
+<!-- BEGIN GENERATED: Get-JIMExpressionFunction -->
+### Syntax
+
+```powershell
+Get-JIMExpressionFunction [[-Name] <string>] [-Category <string>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Name` | `string` | No |  | Only functions with this name, ignoring case. Can be given by position, as the first argument. Supports wildcards. |
+| `Category` | `string` | No |  | Only functions in this category. One of `Text`, `Pattern`, `Conditional`, `Conversion`, `Date`, `DistinguishedName`, `Password`, `MultiValued` or `AccountControl`. |
+
+### Output
+
+One object per function.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Name` | `string` | The name an expression calls it by, such as StartsWith. Function names are exact: an expression must use this case. |
+| `Category` | `string` | The group it belongs to. One of `Text`, `Pattern`, `Conditional`, `Conversion`, `Date`, `DistinguishedName`, `Password`, `MultiValued` or `AccountControl`. |
+| `CategoryName` | `string` | The group's name as the expression editor and the Expressions reference show it, such as "String Functions". |
+| `Signature` | `string` | How it is called, with optional parameters in square brackets, such as StartsWith(value, prefix[, ignoreCase]). |
+| `Parameters` | `object[]` | Its parameters in order; optional ones last. Each has `Name`, `Description` and `IsOptional`. |
+| `Returns` | `string` | What it returns, in a few words, such as "true or false". |
+| `Description` | `string` | What it does. May contain Markdown. |
+| `Example` | `string` | One call as an administrator would write it. |
+| `IsRepeatable` | `bool` | False where it returns a different value each time it is evaluated, such as Now and RandomPassword. An Attribute Flow whose expression calls one is warned about, since its value changes on every synchronisation. |
+<!-- END GENERATED: Get-JIMExpressionFunction -->
+
+### Examples
+
+```powershell title="Look up a function's signature and parameters"
+$function = Get-JIMExpressionFunction -Name 'RegexReplace'
+$function.Signature
+$function.Parameters | Select-Object Name, IsOptional, Description
+```
+
+```powershell title="Find functions by part of their name"
+Get-JIMExpressionFunction -Name '*Date*' | Select-Object Signature, Description
+```
+
+```powershell title="List one category"
+Get-JIMExpressionFunction -Category MultiValued | Format-Table Name, Returns, Example
+```
+
+```powershell title="Find functions that return a different value each time"
+# An Attribute Flow whose expression calls one of these gets a new value on every synchronisation.
+Get-JIMExpressionFunction | Where-Object { -not $_.IsRepeatable } | Select-Object Name, Description
+```
+
+Over REST, the same list is `GET /api/v1/synchronisation/expression-functions`, optionally narrowed with `name` (any part of the name, ignoring case) and `category`.
 
 ## Test-JIMExpression
 
