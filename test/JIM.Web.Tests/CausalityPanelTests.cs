@@ -10,6 +10,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Web.Causality;
+using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
@@ -69,6 +70,53 @@ public class CausalityPanelTests
         Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
         Assert.That(cut.FindAll(".outcome-strip .mud-chip"), Is.Not.Empty);
+    }
+
+    /// <summary>
+    /// The item page's panel offers the same Lineage in the Causality Explorer (#2100), where it can be followed in place;
+    /// the explorer itself, already there, does not offer it.
+    /// </summary>
+    [Test]
+    public void Render_ExplorerAddressGiven_OffersToOpenTheLineageInTheExplorer()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+
+        var withAddress = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, item)
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.ExplorerHref, $"/causality/items/{item.Id}"));
+        var withoutAddress = RenderPanel(item, CausalityTestData.NewJoinerContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withAddress.Find("a.jim-causality-open-explorer").GetAttribute("href"), Is.EqualTo($"/causality/items/{item.Id}"));
+            Assert.That(withAddress.Find("a.jim-causality-open-explorer").TextContent.Trim(), Is.EqualTo("Open in explorer"));
+            Assert.That(withoutAddress.FindAll("a.jim-causality-open-explorer"), Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// The Causality Explorer shows the Lineage alone (#2100): its own header already says what is in view, and the
+    /// Timeline and Table stay on the item page. A stored preference for another view must not pull it away either.
+    /// </summary>
+    [Test]
+    public void Render_LineageOnly_ShowsTheLineageWithNoBandOrViewSwitcher()
+    {
+        _preferences.StoredCausalityView = "timeline";
+
+        var cut = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, CausalityTestData.NewJoinerItem())
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.LineageOnly, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(".summary-sentence"), Is.Empty);
+            Assert.That(cut.HasComponent<SegmentedToggle<CausalityView>>(), Is.False);
+            Assert.That(cut.FindAll(".tl"), Is.Empty);
+            Assert.That(_preferences.CausalityViewWrites, Is.Empty);
+        }
     }
 
     [Test]

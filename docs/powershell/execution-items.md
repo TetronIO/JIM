@@ -1,6 +1,6 @@
 ---
 title: Execution Items
-description: "The cmdlets that read what happened to one object in a Run Profile execution, what caused it, and what it went on to cause."
+description: "The cmdlets that read what happened to one object in a Run Profile execution, what caused it, what it went on to cause, and every item about one object."
 type: reference
 audience: automation-author
 ---
@@ -17,6 +17,8 @@ Retrieves one execution item of a Run Profile activity: what happened to one obj
 
 With `-Causes` it returns what caused the item instead, and with `-Consequences` what the item went on to cause, in later runs as well as its own: the same story the [Lineage view](../configuration/causality.md) tells, one row per cohort.
 
+With `-ConnectedSystemId` and `-ConnectedSystemObjectId`, or with `-MetaverseObjectId`, it returns the object's causal timeline: every execution item about the object, newest first, each with its nearest cause in `Because`, as the [Causality Explorer](../configuration/causality.md#the-causality-explorer) lists them. Each row's `Id` is the item's own, so rows pipe straight back in for `-Causes` or `-Consequences`.
+
 <!-- BEGIN GENERATED: Get-JIMActivityExecutionItem -->
 ### Syntax
 
@@ -29,21 +31,40 @@ Get-JIMActivityExecutionItem -Id <guid> -Consequences
 
 # Causes
 Get-JIMActivityExecutionItem -Id <guid> -Causes
+
+# ConnectedSystemObjectTimelineAll
+Get-JIMActivityExecutionItem -ConnectedSystemId <int> -ConnectedSystemObjectId <guid> -All [-PageSize <int>] [-Force]
+
+# ConnectedSystemObjectTimeline
+Get-JIMActivityExecutionItem -ConnectedSystemId <int> -ConnectedSystemObjectId <guid> [-Page <int>] [-PageSize <int>]
+
+# MetaverseObjectTimelineAll
+Get-JIMActivityExecutionItem -MetaverseObjectId <guid> -All [-PageSize <int>] [-Force]
+
+# MetaverseObjectTimeline
+Get-JIMActivityExecutionItem -MetaverseObjectId <guid> [-Page <int>] [-PageSize <int>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes |  | The execution item to get. The rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes (Item, Consequences, Causes) |  | The execution item to get. The rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. Accepts pipeline input by property name. |
 | `Causes` | `switch` | Yes (Causes) |  | Return what caused the item instead, one row per cohort of causes. |
 | `Consequences` | `switch` | Yes (Consequences) |  | Return what the item went on to cause instead, one row per cohort of consequences. |
+| `ConnectedSystemId` | `int` | Yes (ConnectedSystemObjectTimelineAll, ConnectedSystemObjectTimeline) |  | The Connected System holding the Connected System Object whose timeline to return. |
+| `ConnectedSystemObjectId` | `guid` | Yes (ConnectedSystemObjectTimelineAll, ConnectedSystemObjectTimeline) |  | The Connected System Object whose timeline to return. `Get-JIMConnectedSystemObject` returns it as Id. |
+| `MetaverseObjectId` | `guid` | Yes (MetaverseObjectTimelineAll, MetaverseObjectTimeline) |  | The Metaverse Object whose timeline to return. `Get-JIMMetaverseObject` returns it as Id. |
+| `Page` | `int` | No (ConnectedSystemObjectTimeline, MetaverseObjectTimeline) | `1` | The page of the timeline to return, newest items first. At least 1. |
+| `PageSize` | `int` | No (ConnectedSystemObjectTimelineAll, ConnectedSystemObjectTimeline, MetaverseObjectTimelineAll, MetaverseObjectTimeline) | `50` | How many items each page of the timeline holds. From 1 to 100. |
+| `All` | `switch` | Yes (ConnectedSystemObjectTimelineAll, MetaverseObjectTimelineAll) |  | Return the whole timeline, fetching every page. Stops after 1000 pages with a warning unless `-Force` is given. |
+| `Force` | `switch` | No (ConnectedSystemObjectTimelineAll, MetaverseObjectTimelineAll) |  | Fetch past the 1000-page limit of `-All`. |
 
 ### Output
 
-Without a switch, the item. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step.
+Without a switch, the item. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's timeline, one row per execution item, newest first; where the deployment records no Metaverse Object changes, a Metaverse Object's timeline holds only what its joined Connected System Objects recorded, and a warning says so.
 
-**By default**:
+**With `-Id`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -111,6 +132,31 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `DueAt` | `datetime` | When the soonest outstanding work is due, in UTC: a retry, or a deletion becoming eligible. |
 | `Members` | `string[]` | The first consequences' names; `Get-JIMCausalCohortMember` pages through them all. |
 | `CohortKey` | `string` | The cohort's key, which `Get-JIMCausalCohortMember` pages its members with. |
+
+**With `-ConnectedSystemId` and `-ConnectedSystemObjectId`, or `-ConnectedSystemId` and `-ConnectedSystemObjectId` and `-All`, or `-MetaverseObjectId`, or `-MetaverseObjectId` and `-All`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The Run Profile Execution Item's id. |
+| `ActivityId` | `guid` | The Activity (run) the item belongs to. |
+| `Executed` | `datetime` | When the run executed (UTC). |
+| `TargetType` | `string` | What the run targeted. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject` or `PasswordSynchronisation`. |
+| `TargetName` | `string` | The run's name, typically the Run Profile's. |
+| `TargetContext` | `string` | Where the run happened, typically its Connected System's name. |
+| `ConnectedSystemId` | `int` | The Connected System the run was against, where it was against one. |
+| `RunType` | `string` | The kind of run: Full Import, Delta Synchronisation, Export and so on. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `ObjectChangeType` | `string` | What the item did to its object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `OutcomeSummary` | `string` | A short summary of the item's outcome, where one was recorded. |
+| `ErrorType` | `string` | The error the item ended in, or empty where it succeeded. One of `NotSet`, `AmbiguousMatch`, `CouldNotMatchObjectType`, `CouldNotJoinDueToExistingJoin`, `DuplicateImportedAttributes`, `MissingExternalIdAttributeValue`, `UnexpectedAttribute`, `UnresolvedReference`, `UnsupportedExternalIdAttributeType`, `ExportNotConfirmed`, `ExportConfirmationFailed`, `CsoCreationFailed`, `DuplicateObject`, `InvalidGeneratedExternalId`, `UnhandledError`, `ExpressionEvaluationError`, `ExpressionMissingInput`, `MultiValuedToSingleValued`, `DeltaImportFallbackToFullImport`, `ImportHashVerificationFailed`, `ImportAttributeValueError`, `ConnectorConfigurationError`, `CouldNotExportDueToExistingConnectedSystemObject`, `ClassMembershipRequirementsNotMet`, `GeneratedValueExhausted`, `GeneratedValueWidthExceeded`, `GeneratedValueCollisionUnresolved`, `UniqueValueAlreadyInUse`, `ObjectMatchingRuleFailed`, `ObjectTypeChanged`, `PasswordRequiredToEnableAccount`, `AmbiguousProvisioningMatch` or `ScopingCriterionFailed`. |
+| `DisplayName` | `string` | The name of the object the item was about, as recorded. |
+| `ObjectType` | `string` | The object's type, as recorded. |
+| `ExternalId` | `string` | The object's external ID, where it is a Connected System Object. |
+| `ConnectedSystemObjectId` | `guid` | The Connected System Object the item was about, where it was about one. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object the item was about, where it was about one. |
+| `Because` | `string` | The nearest cause in one plain-language line, exactly as the portal reads it: the first cause and how many more there are, or why there is none ("No earlier causes recorded", "What caused this is no longer retained"). |
+| `NearestCauses` | `object[]` | The item's nearest causes, grouped into cohorts; at most three, with NearestCauseCount giving the total. Empty where nothing earlier was recorded or retained. Only this first step is read, so the members' own causes are empty here; read the causes of the item with this row's Id for the full chain. Each has `EdgeType`, `ReasonCode`, `SourceImportChangeType`, `MetaverseChangeType`, `ConnectedSystemId`, `ConnectedSystemName`, `SyncRuleId`, `SyncRuleName`, `ObjectTypeName`, `ObjectTypePluralName`, `AttributeName`, `EffectSyncOutcomeId`, `MemberCount` and `Members`. |
+| `NearestCauseCount` | `int` | How many cohorts of nearest causes the item has in all. |
+| `Resolution` | `string` | How the item's causes end: Resolved where it has any, NoFurtherCauses where nothing earlier was recorded, or CauseNotRetained where history retention has since removed what caused it. One of `Resolved`, `NoFurtherCauses`, `CauseNotRetained` or `DepthLimitReached`. |
 <!-- END GENERATED: Get-JIMActivityExecutionItem -->
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
@@ -174,6 +220,17 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 ```powershell title="Show what caused an execution item"
 Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
     Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
+```
+
+```powershell title="List what happened to a Connected System Object, and why"
+Get-JIMActivityExecutionItem -ConnectedSystemId 3 -ConnectedSystemObjectId "c3d4e5f6-a7b8-9012-cdef-123456789012" |
+    Format-Table Executed, TargetName, ObjectChangeType, Because
+```
+
+```powershell title="Walk back from every deprovision of a Metaverse Object"
+Get-JIMActivityExecutionItem -MetaverseObjectId "d4e5f6a7-b8c9-0123-def0-234567890123" -All |
+    Where-Object ObjectChangeType -eq 'Deprovisioned' |
+    Get-JIMActivityExecutionItem -Causes
 ```
 
 ```powershell title="Show which consequences are still waiting, and on what"

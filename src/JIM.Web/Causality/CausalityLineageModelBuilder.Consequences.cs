@@ -7,7 +7,6 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -114,11 +113,21 @@ public static partial class CausalityLineageModelBuilder
             if (cohort.IsFurtherThanShown)
             {
                 _furtherThanShown = true;
+                // Carrying on from the farthest item the walk reached shows what followed from there (#2100). A cohort of
+                // several already links each member, so only a single item gets a link of its own.
+                var farthestItemId = cohort.MemberCount == 1
+                    ? cohort.Representative?.Id ?? cohort.Members.FirstOrDefault()?.RunProfileExecutionItemId
+                    : null;
+                var farthestName = cohort.Representative?.DisplayNameSnapshot ?? cohort.Members.FirstOrDefault()?.DisplayName;
                 Add(cohortObject, new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.FurtherThanShown,
                     Title = "This goes further than shown",
-                    Text = "Open the last item above to carry on from there."
+                    Text = farthestItemId != null
+                        ? "The walk stopped at the item above. Carry on from there to see what followed."
+                        : "The walk stopped at the items above. Carry on from any of them by its own link.",
+                    LinkText = farthestItemId != null ? ContinueFromText(farthestName) : null,
+                    LinkHref = farthestItemId is { } itemId ? context.Links.ItemHref(itemId) : null
                 });
             }
 
@@ -137,7 +146,7 @@ public static partial class CausalityLineageModelBuilder
             var model = CausalityModelBuilder.Build(representative, representativeContext, _livePendingExportIds, chain: QueueingChain(cohort));
             var runLabel = GetRunLabel(representative.Activity);
             var occurred = representative.Activity?.Executed ?? cohort.FirstOccurred;
-            var itemHref = cohort.MemberCount == 1 ? $"/activity/item/{representative.Id}" : null;
+            var itemHref = cohort.MemberCount == 1 ? context.Links.ItemHref(representative.Id) : null;
             var isConfirmation = cohort.HopKind == CausalConsequenceHopKind.Confirmation;
 
             var events = Flatten(model.Roots, parent: null)
@@ -200,7 +209,7 @@ public static partial class CausalityLineageModelBuilder
 
                 if (target.Kind == CausalityLineageColumnKind.Record)
                 {
-                    NameFromItem(target, cohort, representative, isReferring: removalObject != null, noun);
+                    NameFromItem(target, cohort, representative, isReferring: removalObject != null, noun, context.Links);
                     lastRecord = target;
                 }
 
@@ -374,7 +383,7 @@ public static partial class CausalityLineageModelBuilder
         /// account's id). A cohort of several is a role, headed by its exact count.
         /// </summary>
         private static void NameFromItem(ColumnState target, CausalConsequenceCohort cohort, ActivityRunProfileExecutionItem representative,
-            bool isReferring, CohortNoun noun)
+            bool isReferring, CohortNoun noun, ICausalityLinks links)
         {
             var isAboutTarget = isReferring || representative.Activity?.ConnectedSystemId == target.SystemId;
             if (!target.IsConsequenceObject || !isAboutTarget
@@ -404,7 +413,7 @@ public static partial class CausalityLineageModelBuilder
                 return;
 
             var href = representative.ConnectedSystemObjectId is { } csoId && target.SystemId is { } systemId
-                ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+                ? links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
 
             // The first item about the object names it; a later one (a confirming import, which often snapshots no type)
@@ -461,7 +470,11 @@ public static partial class CausalityLineageModelBuilder
                 CsoExternalId: representative.ExternalIdSnapshot,
                 CsoObjectTypeName: representative.ObjectTypeSnapshot,
                 MvoTypeName: context.MvoTypeName,
-                MvoTypePluralName: context.MvoTypePluralName);
+                MvoTypePluralName: context.MvoTypePluralName)
+            {
+                // A later run's item is read under the host's policy too, or its links would leave the explorer.
+                Links = context.Links
+            };
         }
 
         private CausalityLineageConsequenceSummary Summarise(CausalConsequences consequences)

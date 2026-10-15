@@ -32,6 +32,7 @@
         @{ Anchor = 'activity'; Home = 'configuration/activities.md'; TitleCase = $false }
         @{ Anchor = 'attribute-flow'; Home = 'configuration/attribute-mappings.md'; TitleCase = $true }
         @{ Anchor = 'attribute-priority'; Home = 'concepts/attribute-priority.md'; TitleCase = $true }
+        @{ Anchor = 'causality-explorer'; Home = 'configuration/causality.md'; TitleCase = $true }
         @{ Anchor = 'configuration-change-history'; Home = 'configuration/activities.md'; TitleCase = $true }
         @{ Anchor = 'configuration-change-preview'; Home = 'configuration/configuration-changes.md'; TitleCase = $true }
         @{ Anchor = 'connected-system'; Home = 'configuration/connected-systems.md'; TitleCase = $true }

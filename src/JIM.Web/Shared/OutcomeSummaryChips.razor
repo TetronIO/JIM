@@ -1,0 +1,64 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What an execution item did, as one chip per outcome with its count, and its error where it has one: the vocabulary
+   the Activity page's item list uses, shared with the Causality Explorer's object timeline (#2100) so an item reads the
+   same wherever it is listed. *@
+
+@if (_outcomes.Count > 0)
+{
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+        @foreach (var (outcomeType, count) in _outcomes)
+        {
+            <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
+                <MudChip T="string" Variant="Variant.Text"
+                         Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
+                         Class="jim-stat-chip">
+                    @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
+                </MudChip>
+            </MudTooltip>
+        }
+        @if (Error is { } errorType)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
+                @Helpers.GetErrorTypeChipLabel(errorType)
+            </MudChip>
+        }
+    </MudStack>
+}
+else if (Error is { } errorType)
+{
+    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
+        @Helpers.GetErrorTypeChipLabel(errorType)
+    </MudChip>
+}
+else
+{
+    <EmptyValue />
+}
+
+@code {
+    /// <summary>
+    /// The item's outcome summary, as recorded on it ("CsoAdded:1,Projected:1").
+    /// </summary>
+    [Parameter]
+    public string? OutcomeSummary { get; set; }
+
+    /// <summary>
+    /// The item's error, where it has one.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
+
+    private List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, int Count)> _outcomes = [];
+
+    private ActivityRunProfileExecutionItemErrorType? Error =>
+        ErrorType is { } errorType && errorType != ActivityRunProfileExecutionItemErrorType.NotSet ? errorType : null;
+
+    protected override void OnParametersSet()
+    {
+        _outcomes = Helpers.ParseOutcomeSummary(OutcomeSummary);
+    }
+}

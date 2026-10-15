@@ -74,7 +74,7 @@
     @if (Hop.ActivityItemHref != null)
     {
         <div class="ln-actions">
-            <a class="ln-link" href="@Hop.ActivityItemHref">View activity item</a>
+            <a class="ln-link" href="@Hop.ActivityItemHref">@Links.ItemLinkText</a>
         </div>
     }
 
@@ -93,7 +93,7 @@
                         <span class="ln-member-name">@member.DisplayName</span>
                         @if (member.ActivityItemHref != null)
                         {
-                            <a class="ln-link" href="@member.ActivityItemHref">View activity item</a>
+                            <a class="ln-link" href="@member.ActivityItemHref">@Links.ItemLinkText</a>
                         }
                     </li>
                 }
@@ -108,6 +108,12 @@
     /// </summary>
     [Parameter, EditorRequired]
     public CausalityLineageChainHop Hop { get; set; } = null!;
+
+    /// <summary>
+    /// The link policy the hop's addresses were written with, for what its item links say (#2100).
+    /// </summary>
+    [Parameter]
+    public ICausalityLinks Links { get; set; } = CausalityPageLinks.Instance;
 
     private bool _expanded;
 

@@ -83,11 +83,18 @@ public sealed record CausalityPageContext(
     string? SubjectMetaverseObjectName = null)
 {
     /// <summary>
-    /// The subject Metaverse Object's own page, where there is one to link: null for an object since deleted, and where
-    /// the type's plural name the route is keyed on is not known.
+    /// Where the panel's links go (#2100): the item page's own addresses unless the host says otherwise, as the
+    /// Causality Explorer does to re-centre on whatever is followed.
+    /// </summary>
+    public ICausalityLinks Links { get; init; } = CausalityPageLinks.Instance;
+
+    /// <summary>
+    /// The subject Metaverse Object's address under <see cref="Links"/>, where there is one to link: null for an object
+    /// since deleted, and where the policy cannot address it (on the item page, where the type's plural name the route
+    /// is keyed on is not known).
     /// </summary>
     public string? SubjectMetaverseObjectHref =>
-        SubjectMetaverseObjectId is { } id && id != DeletedMetaverseObjectId && !string.IsNullOrWhiteSpace(MvoTypePluralName)
-            ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, MvoTypePluralName)
+        SubjectMetaverseObjectId is { } id && id != DeletedMetaverseObjectId
+            ? Links.MetaverseObjectHref(id, MvoTypePluralName)
             : null;
 }
