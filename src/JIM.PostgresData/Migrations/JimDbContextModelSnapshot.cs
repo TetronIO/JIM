@@ -2065,6 +2065,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("CaseSensitive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("CompareAs")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ComparisonType")
                         .HasColumnType("integer");
 
@@ -2076,6 +2079,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<decimal?>("DecimalValue")
                         .HasColumnType("numeric");
+
+                    b.Property<string>("Expression")
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");

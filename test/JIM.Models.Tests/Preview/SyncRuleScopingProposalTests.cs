@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
 using System.Text.Json;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -105,6 +106,40 @@ public class SyncRuleScopingProposalTests
         var second = new SyncRuleScopingProposal([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.Any, criteria, [])]);
 
         Assert.That(first.DescribesSameScopeAs(second), Is.False);
+    }
+
+    [Test]
+    public void FromCurrentScope_ExpressionCriterion_CarriesItsExpressionAndCompareAsType()
+    {
+        var rule = new SyncRule { Direction = SyncRuleDirection.Import };
+        rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [new SyncRuleScopingCriteria
+            {
+                Expression = "Lower(cs[\"department\"])", CompareAs = AttributeDataType.Text,
+                ComparisonType = SearchComparisonType.Equals, StringValue = "finance"
+            }]
+        });
+
+        var criterion = SyncRuleScopingProposal.FromCurrentScope(rule).CriteriaGroups.Single().Criteria.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.EqualTo("Lower(cs[\"department\"])"));
+            Assert.That(criterion.CompareAs, Is.EqualTo(AttributeDataType.Text));
+        }
+    }
+
+    [TestCase("Upper(cs[\"department\"])", AttributeDataType.Text)]
+    [TestCase("Lower(cs[\"department\"])", AttributeDataType.Number)]
+    public void DescribesSameScopeAs_ExpressionOrCompareAsChanged_IsFalse(string expression, AttributeDataType compareAs)
+    {
+        static SyncRuleScopingProposal With(string expression, AttributeDataType compareAs) => new([new SyncRuleScopingCriteriaGroupProposal(
+            SearchGroupType.All, [new SyncRuleScopingCriterionProposal(null, null, SearchComparisonType.Equals, StringValue: "x",
+                Expression: expression, CompareAs: compareAs)], [])]);
+
+        Assert.That(With("Lower(cs[\"department\"])", AttributeDataType.Text).DescribesSameScopeAs(With(expression, compareAs)), Is.False);
     }
 
     [Test]

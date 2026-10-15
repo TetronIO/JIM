@@ -214,6 +214,133 @@ public class SynchronisationControllerScopingCriterionTests
             "a condition is exact unless the request says otherwise");
     }
 
+    // ── Expression criteria (#2054) ──────────────────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_Expression_ReplacesTheAttributeWithTheExpressionAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.MetaverseAttributeId = TextAttributeId;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest
+        {
+            Expression = "Lower(mv[\"Department\"])", CompareAs = "Text", ComparisonType = "StartsWith", StringValue = "fin"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.EqualTo("Lower(mv[\"Department\"])"));
+            Assert.That(criterion.CompareAs, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(criterion.MetaverseAttribute, Is.Null);
+            Assert.That(criterion.MetaverseAttributeId, Is.Null, "a stale id would make the criterion both");
+            Assert.That(criterion.IsValid(), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_AttributeAfterAnExpression_ClearsTheExpressionAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.MetaverseAttribute = null;
+        criterion.Expression = "Lower(mv[\"Department\"])";
+        criterion.CompareAs = AttributeDataType.Text;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest
+        {
+            MetaverseAttributeId = TextAttributeId, ComparisonType = "Equals", StringValue = "Sales"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.Null);
+            Assert.That(criterion.CompareAs, Is.Null);
+            Assert.That(criterion.IsValid(), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_ExpressionComparedAsADateAgainstARelativeDate_IsAppliedAsync()
+    {
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest
+        {
+            Expression = "ParseDate(mv[\"Department\"], \"yyyy-MM-dd\")", CompareAs = "DateTime", ComparisonType = "GreaterThan",
+            ValueMode = "Relative", RelativeCount = 30, RelativeUnit = "Days", RelativeDirection = "Ago"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.ValueMode, Is.EqualTo(DateCriteriaValueMode.Relative));
+            Assert.That(criterion.RelativeCount, Is.EqualTo(30));
+        }
+    }
+
+    [TestCase(null, "Compare")]
+    [TestCase("Reference", "Compare")]
+    [TestCase("NotAType", "Compare")]
+    public async Task UpdateScopingCriterionAsync_ExpressionWithoutAUsableCompareAs_ReturnsBadRequestAsync(string? compareAs, string expected)
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(BuildExportRuleWithCriterion());
+
+        var result = await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId, new CreateScopingCriterionRequest
+        {
+            Expression = "mv[\"Department\"]", CompareAs = compareAs, ComparisonType = "Equals", StringValue = "x"
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain(expected));
+    }
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_ExpressionAndAnAttribute_ReturnsBadRequestAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(BuildExportRuleWithCriterion());
+
+        var result = await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId, new CreateScopingCriterionRequest
+        {
+            MetaverseAttributeId = TextAttributeId, Expression = "mv[\"Department\"]", CompareAs = "Text", ComparisonType = "Equals", StringValue = "x"
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public void SyncRuleScopingCriteriaDto_FromExpressionCriterion_DescribesTheExpressionAndItsType()
+    {
+        var dto = SyncRuleScopingCriteriaDto.FromEntity(new SyncRuleScopingCriteria
+        {
+            Expression = "Lower(mv[\"Department\"])", CompareAs = AttributeDataType.Text, ComparisonType = SearchComparisonType.Equals, StringValue = "x"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Expression, Is.EqualTo("Lower(mv[\"Department\"])"));
+            Assert.That(dto.CompareAs, Is.EqualTo("Text"));
+            Assert.That(dto.AttributeDataType, Is.EqualTo("Text"));
+            Assert.That(dto.Notice, Is.Null);
+        }
+    }
+
+    [Test]
+    public void SyncRuleScopingCriteriaDto_FromExpressionComparedAgainstARelativeDate_SaysItCostsAFullPass()
+    {
+        var dto = SyncRuleScopingCriteriaDto.FromEntity(new SyncRuleScopingCriteria
+        {
+            Expression = "ParseDate(mv[\"Start\"], \"yyyy-MM-dd\")", CompareAs = AttributeDataType.DateTime,
+            ComparisonType = SearchComparisonType.GreaterThan, ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days, RelativeDirection = RelativeDateDirection.Ago
+        });
+
+        Assert.That(dto.Notice, Does.Contain("every").And.Contain("Temporal Scope Reconciliation"));
+    }
+
     /// <summary>
     /// Runs the update and inspects the criterion it applied the request to. Persisting the Synchronisation Rule is
     /// the application layer's concern and is covered elsewhere; this fixture's repository is not wired for it.

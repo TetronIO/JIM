@@ -152,7 +152,12 @@ public static class ConfigurationChangeClassifier
         ["decimalValue"] = B,
         ["dateTimeValue"] = B,
         ["boolValue"] = B,
-        ["guidValue"] = B
+        ["guidValue"] = B,
+        ["compareAs"] = B,
+        ["valueMode"] = B,
+        ["relativeCount"] = B,
+        ["relativeUnit"] = B,
+        ["relativeDirection"] = B
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemKeys = new(StringComparer.Ordinal)

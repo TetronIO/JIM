@@ -53,6 +53,10 @@ public enum SyncPreviewMessageCode
     /// join nor project it (or, matching before provisioning, neither join nor provision it), and would record an
     /// ObjectMatchingRuleFailed error naming the rule and the fault.</summary>
     ObjectMatchingRuleFailed,
+    /// <summary>A Scoping Criterion could not be evaluated for the object (#2054): its expression failed, computed a
+    /// value that cannot be compared as its type, or its pattern ran past its time limit. The real sync would record a
+    /// ScopingCriterionFailed error and leave the object untouched, so the preview evaluates nothing further.</summary>
+    ScopingCriterionFailed,
     /// <summary>Generated Value Forms (#2023): the generated value would be held back because a value built from it
     /// needs another input the object has no value for yet, so the candidate's values cannot be worked out and checked.
     /// Not a failure: the real synchronisation generates nothing for the attribute this time, and generates the value

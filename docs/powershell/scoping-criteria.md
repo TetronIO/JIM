@@ -38,7 +38,7 @@ By default, each top-level group, with the criteria and child groups inside it. 
 | `Id` | `int` | The ID of the group. |
 | `Type` | `string` | How the group combines what it contains: All is met when every criterion and child group in it is met, Any when at least one is. |
 | `Position` | `int` | Where the group sits among the groups beside it, used to order them; it does not change which objects are in scope. |
-| `Criteria` | `object[]` | The criteria in the group. Each has `Id`, `MetaverseAttributeId`, `MetaverseAttributeName`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName`, `AttributeDataType`, `ComparisonType`, `StringValue`, `IntValue`, `LongValue`, `DecimalValue`, `DateTimeValue`, `BoolValue`, `GuidValue`, `CaseSensitive`, `ValueMode`, `RelativeCount`, `RelativeUnit` and `RelativeDirection`. |
+| `Criteria` | `object[]` | The criteria in the group. Each has `Id`, `MetaverseAttributeId`, `MetaverseAttributeName`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName`, `Expression`, `CompareAs`, `AttributeDataType`, `Notice`, `ComparisonType`, `StringValue`, `IntValue`, `LongValue`, `DecimalValue`, `DateTimeValue`, `BoolValue`, `GuidValue`, `CaseSensitive`, `ValueMode`, `RelativeCount`, `RelativeUnit` and `RelativeDirection`. |
 | `ChildGroups` | `object[]` | The groups inside this one, each with what it contains. Each has `Id`, `Type`, `Position`, `Criteria` and `ChildGroups`. |
 | `SyncRuleId` | `int` | The ID of the Synchronisation Rule the group belongs to, so the group can be piped to the other scoping criteria cmdlets. |
 <!-- END GENERATED: Get-JIMScopingCriteria -->
@@ -195,6 +195,9 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttribu
 
 # ByCsName
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+
+# ByExpression
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -207,6 +210,8 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttribu
 | `MetaverseAttributeName` | `string` | Yes (ByMvName) |  | The name of the Metaverse attribute to test, instead of its ID. |
 | `ConnectedSystemAttributeId` | `int` | Yes (ByCsId) |  | The ID of the Connected System attribute to test. An import Synchronisation Rule's criteria test Connected System attributes. |
 | `ConnectedSystemAttributeName` | `string` | Yes (ByCsName) |  | The name of the Connected System attribute to test, instead of its ID. |
+| `Expression` | `string` | Yes (ByExpression) |  | An expression whose computed value the criterion compares, in place of an attribute. It reads the object the Synchronisation Rule scopes: cs["name"] on an import rule, mv["Name"] on an export rule. Use it to compare a value reshaped first, such as Lower(Trim(cs["department"])). Requires `-CompareAs`. |
+| `CompareAs` | `string` | Yes (ByExpression) |  | The type the expression's computed value is compared as, which decides the comparisons and the value parameter that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type stops that object with an error rather than deciding its scope. One of `Text`, `Number`, `LongNumber`, `Decimal`, `DateTime`, `Boolean` or `Guid`. |
 | `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when the attribute holds a value and none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in `-StringValue`, for Text attributes. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue`, `HasNoValue`, `MatchesPattern` or `NotMatchesPattern`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with, or the regular expression for MatchesPattern and NotMatchesPattern. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
@@ -233,7 +238,10 @@ With `-PassThru`, the criterion created; otherwise nothing.
 | `MetaverseAttributeName` | `string` | The name of the Metaverse attribute the criterion tests; empty on an import Synchronisation Rule's criterion. |
 | `ConnectedSystemAttributeId` | `int` | The ID of the Connected System attribute the criterion tests, on an import Synchronisation Rule's criterion; empty on an export one. |
 | `ConnectedSystemAttributeName` | `string` | The name of the Connected System attribute the criterion tests; empty on an export Synchronisation Rule's criterion. |
-| `AttributeDataType` | `string` | The tested attribute's data type, which decides which value property holds the value. |
+| `Expression` | `string` | The expression whose computed value the criterion tests, in place of an attribute; empty on an attribute criterion. It reads cs["..."] on an import Synchronisation Rule and mv["..."] on an export one. |
+| `CompareAs` | `string` | The type an expression's computed value is compared as (Text, Number, LongNumber, Decimal, DateTime, Boolean or Guid); empty on an attribute criterion. |
+| `AttributeDataType` | `string` | The tested attribute's data type, or an expression's Compare As type, which decides which value property holds the value. |
+| `Notice` | `string` | Something the administrator should know about the criterion as saved, or empty. Set when an expression is compared against a relative date, which makes every Temporal Scope Reconciliation evaluate every object of the type. |
 | `ComparisonType` | `string` | How the attribute is compared with the value: Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains, NotContains, LessThan, LessThanOrEquals, GreaterThan or GreaterThanOrEquals. |
 | `StringValue` | `string` | The value a Text attribute is compared with. |
 | `IntValue` | `int` | The value a Number attribute is compared with. |
@@ -323,6 +331,9 @@ Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Con
 
 # ByCsName
 Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+
+# ByExpression
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -336,6 +347,8 @@ Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Con
 | `MetaverseAttributeName` | `string` | Yes (ByMvName) |  | The name of the Metaverse attribute to test, instead of its ID. |
 | `ConnectedSystemAttributeId` | `int` | Yes (ByCsId) |  | The ID of the Connected System attribute to test. An import Synchronisation Rule's criteria test Connected System attributes. |
 | `ConnectedSystemAttributeName` | `string` | Yes (ByCsName) |  | The name of the Connected System attribute to test, instead of its ID. |
+| `Expression` | `string` | Yes (ByExpression) |  | An expression whose computed value the criterion compares, in place of an attribute. It reads the object the Synchronisation Rule scopes: cs["name"] on an import rule, mv["Name"] on an export rule. Use it to compare a value reshaped first, such as Lower(Trim(cs["department"])). Requires `-CompareAs`. |
+| `CompareAs` | `string` | Yes (ByExpression) |  | The type the expression's computed value is compared as, which decides the comparisons and the value parameter that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type stops that object with an error rather than deciding its scope. One of `Text`, `Number`, `LongNumber`, `Decimal`, `DateTime`, `Boolean` or `Guid`. |
 | `ComparisonType` | `string` | Yes |  | How the attribute is compared with the value. The Not forms are met when the attribute holds a value and none matches; the others when any value does. HasValue and HasNoValue test whether the attribute holds a value at all and take no value. MatchesPattern and NotMatchesPattern take a .NET regular expression in `-StringValue`, for Text attributes. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`, `HasValue`, `HasNoValue`, `MatchesPattern` or `NotMatchesPattern`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with, or the regular expression for MatchesPattern and NotMatchesPattern. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |

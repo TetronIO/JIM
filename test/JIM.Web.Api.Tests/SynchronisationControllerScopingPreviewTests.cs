@@ -287,6 +287,39 @@ public class SynchronisationControllerScopingPreviewTests
         }
     }
 
+    [Test]
+    public async Task StartScopingPreview_ExpressionCriterion_KeepsItsExpressionAndCompareAsTypeAsync()
+    {
+        // An expression criterion that lost its expression across the queue would read as one naming nothing.
+        var result = await _controller.StartSyncRuleScopingPreviewAsync(SyncRuleId, new StartSyncRuleScopingPreviewRequest
+        {
+            CriteriaGroups =
+            [
+                new SyncRuleScopingCriteriaGroupRequest
+                {
+                    Criteria =
+                    [
+                        new SyncRuleScopingCriterionRequest
+                        {
+                            Expression = "Lower(mv[\"Department\"])",
+                            CompareAs = AttributeDataType.Text,
+                            ComparisonType = SearchComparisonType.StartsWith,
+                            StringValue = "fin"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
+        var criterion = QueuedProposal().CriteriaGroups[0].Criteria[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.EqualTo("Lower(mv[\"Department\"])"));
+            Assert.That(criterion.CompareAs, Is.EqualTo(AttributeDataType.Text));
+        }
+    }
+
     private SyncRuleScopingProposal QueuedProposal()
     {
         var task = _queuedWorkerTasks.OfType<ConfigurationChangePreviewWorkerTask>().SingleOrDefault();

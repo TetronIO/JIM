@@ -7,7 +7,7 @@ function Set-JIMScopingCriterion {
         Replaces a criterion in a scoping criteria group.
 
     .DESCRIPTION
-        Replaces a criterion: its attribute, comparison and value are all set from what you give, as
+        Replaces a criterion: its attribute (or expression), comparison and value are all set from what you give, as
         New-JIMScopingCriterion would set them. Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER SyncRuleId
@@ -32,6 +32,16 @@ function Set-JIMScopingCriterion {
 
     .PARAMETER ConnectedSystemAttributeName
         The name of the Connected System attribute to test, instead of its ID.
+
+    .PARAMETER Expression
+        An expression whose computed value the criterion compares, in place of an attribute. It reads the object the
+        Synchronisation Rule scopes: cs["name"] on an import rule, mv["Name"] on an export rule. Use it to compare a
+        value reshaped first, such as Lower(Trim(cs["department"])). Requires -CompareAs.
+
+    .PARAMETER CompareAs
+        The type the expression's computed value is compared as, which decides the comparisons and the value parameter
+        that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type
+        stops that object with an error rather than deciding its scope.
 
     .PARAMETER ComparisonType
         How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
@@ -96,6 +106,12 @@ function Set-JIMScopingCriterion {
 
         Updates criterion 15 to match when AccountExpiry is on or before 7 days from now.
 
+    .EXAMPLE
+        Set-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15 -Expression 'Upper(Trim(mv["Department"]))' -CompareAs Text -ComparisonType Equals -StringValue 'FINANCE'
+
+        Updates criterion 15 to compare the Department with its spacing removed and in capitals, so ' Finance ' and
+        'finance' are both in scope.
+
     .LINK
         New-JIMScopingCriterion
         Get-JIMScopingCriteria
@@ -125,6 +141,14 @@ function Set-JIMScopingCriterion {
 
         [Parameter(Mandatory, ParameterSetName = 'ByCsName')]
         [string]$ConnectedSystemAttributeName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Expression,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
+        [ValidateSet('Text', 'Number', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Guid')]
+        [string]$CompareAs,
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
@@ -226,6 +250,11 @@ function Set-JIMScopingCriterion {
             $body.connectedSystemAttributeId = $attribute.id
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ByExpression') {
+            $body.expression = $Expression
+            $body.compareAs = $CompareAs
+        }
+
         if ($PSBoundParameters.ContainsKey('StringValue')) { $body.stringValue = $StringValue }
         if ($PSBoundParameters.ContainsKey('IntValue')) { $body.intValue = $IntValue }
         if ($PSBoundParameters.ContainsKey('LongValue')) { $body.longValue = $LongValue }
@@ -255,6 +284,12 @@ function Set-JIMScopingCriterion {
         if ($PSCmdlet.ShouldProcess("Criterion $CriterionId in Group $GroupId", "Update")) {
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria/$CriterionId" -Method 'PUT' -Body $body
+
+                # Something the administrator should know about the criterion as saved, such as an expression compared
+                # against a relative date costing a full pass on every Temporal Scope Reconciliation.
+                if ($result.notice) {
+                    Write-Warning $result.notice
+                }
                 if ($PassThru) {
                     $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -Force
                     $result | Add-Member -NotePropertyName 'GroupId' -NotePropertyValue $GroupId -PassThru -Force

@@ -13,6 +13,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -370,6 +371,69 @@ public class ConfigurationSnapshotServiceTests
         _repository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
         return connectedSystems;
     }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_ExpressionCriterion_CapturesItsExpressionAndCompareAsType()
+    {
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, Expression = "Lower(Trim(cs[\"department\"]))", CompareAs = AttributeDataType.Text,
+            ComparisonType = JIM.Models.Search.SearchComparisonType.StartsWith, StringValue = "fin"
+        });
+
+        var criterion = SnapshotCriterion(_service.CreateSnapshot(rule, HashKey));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(criterion, "expression")?.Value, Is.EqualTo("Lower(Trim(cs[\"department\"]))"));
+            Assert.That(Child(criterion, "compareAs")?.Value, Is.EqualTo(nameof(AttributeDataType.Text)));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_RelativeDateCriterion_CapturesItsRelativeValue()
+    {
+        // A relative-date criterion's meaning is its relative value; a snapshot without it would show no change when
+        // "within 30 days" becomes "within 90 days".
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, MetaverseAttributeId = 3, ComparisonType = JIM.Models.Search.SearchComparisonType.GreaterThan,
+            ValueMode = DateCriteriaValueMode.Relative, RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.Ago
+        });
+
+        var criterion = SnapshotCriterion(_service.CreateSnapshot(rule, HashKey));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(criterion, "valueMode")?.Value, Is.EqualTo(nameof(DateCriteriaValueMode.Relative)));
+            Assert.That(Child(criterion, "relativeCount")?.Value, Is.EqualTo("30"));
+            Assert.That(Child(criterion, "relativeUnit")?.Value, Is.EqualTo(nameof(RelativeDateUnit.Days)));
+            Assert.That(Child(criterion, "relativeDirection")?.Value, Is.EqualTo(nameof(RelativeDateDirection.Ago)));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_AbsoluteCriterion_RecordsNoValueMode()
+    {
+        // Snapshots taken before the value mode was captured hold no such key; an absolute criterion must not differ.
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, MetaverseAttributeId = 3, ComparisonType = SearchComparisonType.Equals, StringValue = "x"
+        });
+
+        Assert.That(Child(SnapshotCriterion(_service.CreateSnapshot(rule, HashKey)), "valueMode"), Is.Null);
+    }
+
+    private static SyncRule RuleWithCriterion(SyncRuleScopingCriteria criterion)
+    {
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup { Id = 5, Criteria = [criterion] });
+        return rule;
+    }
+
+    private static ConfigurationSnapshotNode SnapshotCriterion(ConfigurationSnapshot snapshot) =>
+        Child(Child(snapshot.Root, "objectScopingCriteriaGroups")!.Children![0], "criteria")!.Children!.Single();
 
     private static SyncRule RuleWithGeneratedMapping(params int[] excludedConnectedSystemIds)
     {
