@@ -363,6 +363,8 @@ Renames a Data Generation Template and/or replaces its Object Type configuration
 
 Supplying `-ObjectType` **replaces the template's entire Object Type graph**: every Object Type and attribute configuration not present in the supplied hashtables is removed. To add a single attribute without restating the rest, use [`Add-JIMExampleDataTemplateAttribute`](#add-jimexampledatatemplateattribute).
 
+Expressions are [checked when the template is saved](../concepts/expressions.md#validation), by this cmdlet, `New-JIMExampleDataTemplate` and `Add-JIMExampleDataTemplateAttribute` alike. A new or changed expression that does not parse, or reads `cs["..."]`, is refused. One reading an attribute the template does not generate, or a problem with an expression the save left as it was, is written as a warning and the template is saved.
+
 <!-- BEGIN GENERATED: Set-JIMExampleDataTemplate -->
 ### Syntax
 
