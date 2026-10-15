@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Object Matching Rules' Try it now takes typed and multi-valued values or a real object, and can show which Metaverse Object a synchronisation would join, or why it would not. Also via REST and `Test-JIMMatchingRule`. (#2055)
 - ✨ Testing a Generated Value now runs its base expression as a synchronisation does, through typed inputs and value processing, and shows the base generation would start from. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
 - ✨ Test an Example Data Template attribute's expression with sample values before generating anything, over REST or with `Test-JIMExampleDataExpression`. (#2055)
+- ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
@@ -72,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
 - 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)

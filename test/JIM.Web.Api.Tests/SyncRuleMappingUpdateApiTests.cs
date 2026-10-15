@@ -187,6 +187,8 @@ public class SyncRuleMappingUpdateApiTests
             new UpdateSyncRuleMappingRequest { Expression = "this is (not" });
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.StartWith("Invalid expression:"),
+            "the same message as the create path (#2055 Phase 3)");
         Assert.That(_expressionMapping.Sources[0].Expression, Is.EqualTo("cs[\"mail\"]"),
             "A rejected Expression must not have been written before the rejection.");
         _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
@@ -357,5 +359,51 @@ public class SyncRuleMappingUpdateApiTests
             new UpdateSyncRuleMappingRequest { MissingInputBehaviour = MissingInputBehaviour.FailObject });
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    private void GiveTheUserTypeOnlyMail() => _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(ObjectTypeId)).ReturnsAsync(
+        new ConnectedSystemObjectType
+        {
+            Id = ObjectTypeId,
+            Name = "user",
+            Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 20, Name = "mail", Type = AttributeDataType.Text }]
+        });
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_ExpressionReadingAnAttributeTheTypeDoesNotHave_ReturnsBadRequestNamingItAsync()
+    {
+        // Checked in the application layer on save (#2055 Phase 3), so the REST API refuses what the portal refuses.
+        GiveTheUserTypeOnlyMail();
+
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, ExpressionMappingId,
+            new UpdateSyncRuleMappingRequest { Expression = "Lower(cs[\"nosuch\"])" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("cs[\"nosuch\"]"));
+        }
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_OtherSettingOfAnAlreadyBrokenMapping_SavesAndReturnsTheProblemAsAWarningAsync()
+    {
+        // The stored expression already reads an attribute the type no longer has. Changing something else about the
+        // mapping leaves the expression as it was, so the save goes ahead and says so, rather than refusing.
+        GiveTheUserTypeOnlyMail();
+        _expressionMapping.Sources[0].Expression = "Lower(cs[\"nosuch\"])";
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingExpressionStatesAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new Dictionary<int, SyncRuleMappingExpressionState>
+            {
+                [ExpressionMappingId] = new(_expressionMapping.TargetMetaverseAttributeId, null, ["Lower(cs[\"nosuch\"])"])
+            });
+
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, ExpressionMappingId,
+            new UpdateSyncRuleMappingRequest { MissingInputBehaviour = MissingInputBehaviour.FailMapping });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = (SyncRuleMappingDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.Warnings, Has.One.Contains("cs[\"nosuch\"]"));
     }
 }

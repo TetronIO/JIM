@@ -294,7 +294,9 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Created Data Generation Template {Id} ({Name})", template.Id, LogSanitiser.Sanitise(template.Name));
 
         var created = await _application.ExampleData.GetTemplateAsync(template.Id);
-        return CreatedAtRoute("GetExampleDataTemplate", new { id = template.Id }, created == null ? null : ExampleDataTemplateDto.FromEntity(created));
+        var createdDto = created == null ? null : ExampleDataTemplateDto.FromEntity(created);
+        createdDto?.Warnings.AddRange(template.SaveWarnings);
+        return CreatedAtRoute("GetExampleDataTemplate", new { id = template.Id }, createdDto);
     }
 
     /// <summary>
@@ -379,7 +381,9 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Updated Data Generation Template {Id}", id);
 
         var updated = await _application.ExampleData.GetTemplateAsync(id) ?? template;
-        return Ok(ExampleDataTemplateDto.FromEntity(updated));
+        var updatedDto = ExampleDataTemplateDto.FromEntity(updated);
+        updatedDto.Warnings.AddRange(template.SaveWarnings);
+        return Ok(updatedDto);
     }
 
     /// <summary>

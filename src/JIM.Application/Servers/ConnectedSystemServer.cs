@@ -7306,6 +7306,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -7358,6 +7361,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -7409,6 +7415,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
         // can flush the change.
@@ -7507,6 +7516,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
         // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
         // created: its save would flush this tracked mapping's changes, and "before" must be the stored configuration.
@@ -9250,6 +9262,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // Every mapping's expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about, so the
+        // rule can always be disabled or a mapping removed. After the derived flow check, which clears save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.
@@ -9501,6 +9516,9 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // Every mapping's expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about, so the
+        // rule can always be disabled or a mapping removed. After the derived flow check, which clears save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.

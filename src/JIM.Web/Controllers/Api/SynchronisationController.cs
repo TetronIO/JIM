@@ -4845,7 +4845,10 @@ public class SynchronisationController(
             // Check if this is an expression-based source
             if (!string.IsNullOrWhiteSpace(sourceRequest.Expression))
             {
-                // Expression-based source - validate the expression
+                // Expression-based source: refuse one that does not parse before anything is built from it, with the
+                // documented "Invalid expression:" message. The application layer checks it again on save
+                // (AttributeFlowExpressionValidator, #2055 Phase 3); both use IExpressionEvaluator.Validate, and if the two
+                // ever disagree on whether an expression parses, the application layer's check is the one that holds.
                 var validationResult = _expressionEvaluator.Validate(sourceRequest.Expression);
                 if (!validationResult.IsValid)
                     return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
@@ -5015,8 +5018,10 @@ public class SynchronisationController(
         if (existing == null || (existing.SyncRule?.Id ?? existing.SyncRuleId) != syncRuleId)
             return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
-        // Validated here rather than in the application layer, so that a bad Expression is refused by the same
-        // evaluator, with the same message, as when the mapping was created.
+        // Refused here, before anything is applied to the stored mapping, by the same evaluator and with the same
+        // message as when the mapping was created. The application layer checks it again on save
+        // (AttributeFlowExpressionValidator, #2055 Phase 3); if the two ever disagree on whether an expression parses,
+        // the application layer's check is the one that holds.
         if (request.Expression != null)
         {
             var validationResult = _expressionEvaluator.Validate(request.Expression);
