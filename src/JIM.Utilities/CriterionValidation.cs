@@ -38,6 +38,11 @@ public static class CriterionValidation
 
         if (criterion.ValueMode == DateCriteriaValueMode.Relative)
         {
+            // Only a date can be compared against the clock; the REST boundary refuses the pair, and this is every
+            // other route to a save.
+            if (type != AttributeDataType.DateTime)
+                return $"A relative date can only be compared with a DateTime value; '{attributeName}' is compared as {type}.";
+
             return criterion.RelativeCount.HasValue && criterion.RelativeUnit.HasValue && criterion.RelativeDirection.HasValue
                 ? null
                 : "A relative criterion needs a count, a unit and a direction.";

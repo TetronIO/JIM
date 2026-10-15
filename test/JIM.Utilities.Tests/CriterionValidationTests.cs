@@ -34,6 +34,23 @@ public class CriterionValidationTests
         Assert.That(error, Does.StartWith(expected).And.Contain("HasNoValue"));
     }
 
+    [TestCase(AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Number)]
+    [TestCase(AttributeDataType.Boolean)]
+    public void Validate_RelativeDateOnATypeThatIsNotADate_IsRefused(AttributeDataType type)
+    {
+        // A relative date compares against the clock, which only a date can; the REST boundary refuses the pair, and so
+        // must every other route to a save (#2054: an expression criterion compared as Text with a stale Relative mode).
+        var criterion = Criterion(SearchComparisonType.Equals);
+        criterion.ValueMode = DateCriteriaValueMode.Relative;
+        criterion.RelativeCount = 30;
+        criterion.RelativeUnit = RelativeDateUnit.Days;
+        criterion.RelativeDirection = RelativeDateDirection.Ago;
+
+        Assert.That(CriterionValidation.Validate(criterion, type, CriterionContext.Scoping, "startDate"),
+            Does.Contain("relative").IgnoreCase.And.Contain("DateTime"));
+    }
+
     [TestCase(SearchComparisonType.HasValue)]
     [TestCase(SearchComparisonType.HasNoValue)]
     public void Validate_PresenceOperatorWithNoValue_IsValidOnEveryType(SearchComparisonType op)
@@ -85,7 +102,7 @@ public class CriterionValidationTests
     [Test]
     public void Validate_RelativeDateWithEveryField_IsValid()
     {
-        var criterion = Criterion(SearchComparisonType.LessThan);
+        var criterion = Criterion(SearchComparisonType.Equals);
         criterion.ValueMode = DateCriteriaValueMode.Relative;
         criterion.RelativeCount = 30;
         criterion.RelativeUnit = RelativeDateUnit.Days;
