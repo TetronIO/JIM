@@ -7,7 +7,7 @@ audience: administrator
 
 # Configuration Tests
 
-A configuration test case holds inputs, and what part of your configuration should give for them: an Attribute Flow's result, a Generated Value's base, whether an object is in a Synchronisation Rule's Scope, or an Object Matching Rule's match values. Running the cases after a change shows at once whether the change broke something that used to work, before a synchronisation runs on real objects. A case runs through the same code synchronisation runs, so a case cannot pass where a synchronisation would fail.
+A configuration test case holds inputs, and what part of your configuration should give for them: an Attribute Flow's result, a Generated Value's base, whether an object is in a Synchronisation Rule's Scope, or an Object Matching Rule's match values. Running the cases after a change shows at once whether the change broke something that used to work, before a synchronisation runs on real objects. A case runs through the same code synchronisation runs, so it gives the result a synchronisation would give for the same inputs. It cannot test what depends on other objects, such as which Generated Value is free or which Metaverse Object a match finds.
 
 Each case covers exactly one thing: one Attribute Flow, one Synchronisation Rule's Scope, or one Object Matching Rule. It is deleted with what it covers.
 
