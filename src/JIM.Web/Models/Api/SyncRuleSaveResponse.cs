@@ -50,7 +50,7 @@ public class SyncRuleSaveResponse : SyncRuleHeader
         var header = FromEntity(saved);
         var response = new SyncRuleSaveResponse
         {
-            Warnings = savedInstance.AttributeFlowRules.SelectMany(mapping => mapping.SaveWarnings).ToList(),
+            Warnings = savedInstance.AttributeFlowSaveWarnings.ToList(),
             DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList(),
             DeletionSourceWarning = deletionSourceWarning?.Message
         };

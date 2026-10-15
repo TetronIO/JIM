@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Object Matching Rules' Try it now takes typed and multi-valued values or a real object, and can show which Metaverse Object a synchronisation would join, or why it would not. Also via REST and `Test-JIMMatchingRule`. (#2055)
 - ✨ Testing a Generated Value now runs its base expression as a synchronisation does, through typed inputs and value processing, and shows the base generation would start from. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
 - ✨ Test an Example Data Template attribute's expression with sample values before generating anything, over REST or with `Test-JIMExampleDataExpression`. (#2055)
+- ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
@@ -72,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
 - 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
@@ -99,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🔄 The REST API returns every date attribute value in UTC, ending in `Z`, whatever the server's time zone, and expressions read every date in UTC, so joining one to text with `+` writes `Z` rather than the server's offset. (#2153)
+- 🔄 A Boolean attribute is always single-valued: no surface creates a multi-valued Boolean Metaverse Attribute, a schema refresh or type override makes a Boolean Connected System attribute single-valued, and SCIM no longer discovers `roles.primary` and its siblings. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 - 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
 - 🔄 Expression `StartsWith` and `EndsWith` now compare character by character, as `Eq` does, so a hidden character such as a soft hyphen, or an accented letter stored a different way, no longer counts as a match. (#2051)

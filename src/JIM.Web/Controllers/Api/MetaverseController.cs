@@ -40,6 +40,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     private readonly ILogger<MetaverseController> _logger = logger;
     private readonly JimApplication _application = application;
 
+    private const string TypeRequiredMessage =
+        "Type is required: Text, Number, LongNumber, Decimal, DateTime, Boolean, Guid, Binary or Reference.";
+
     /// <summary>
     /// List Metaverse Object Types
     /// </summary>
@@ -568,7 +571,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="request">The Attribute creation request.</param>
     /// <returns>The created Attribute details.</returns>
     /// <response code="201">Attribute created successfully.</response>
-    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="400">Invalid request or validation failed: for example, no Type, or a multi-valued Boolean (a Boolean attribute holds one value).</response>
     /// <response code="401">User not authenticated.</response>
     /// <response code="409">An attribute with the same name (compared case-insensitively) already exists.</response>
     [HttpPost("attributes", Name = "CreateAttribute")]
@@ -579,6 +582,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
     {
         _logger.LogInformation("Creating metaverse attribute: {Name}", LogSanitiser.Sanitise(request.Name));
+
+        // [Required] on a non-nullable enum never fails (an omitted Type binds to NotSet), so refuse it explicitly.
+        if (request.Type == AttributeDataType.NotSet)
+            return BadRequest(ApiErrorResponse.BadRequest(TypeRequiredMessage));
 
         // Enforce case-insensitive uniqueness (e.g. 'CostCentre' clashes with 'costCentre'). Names are stored as-is.
         if (!await _application.Metaverse.IsMetaverseAttributeNameUniqueAsync(request.Name))
@@ -608,10 +615,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         // Get the current API key for Activity attribution
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
-        else
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
+        try
+        {
+            if (apiKey != null)
+                await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
+            else
+                await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
+        }
+        catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
@@ -744,12 +758,13 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// While any Metaverse Object holds a stored value for the attribute, the only change allowed is widening it from
     /// single-valued to multi-valued with its data type unchanged; every stored value is kept. Any other change (a data
     /// type change, or multi-valued to single-valued) is refused with a 409 carrying the blocking impact, and nothing is
-    /// changed. Built-in attributes cannot be changed.
+    /// changed. Built-in attributes cannot be changed. A Boolean attribute holds one value, so changing to a
+    /// multi-valued Boolean is refused with a 400.
     /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
     /// <param name="request">The new type and plurality.</param>
     /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
-    /// <response code="400">Invalid request, or the attribute is built-in.</response>
+    /// <response code="400">Invalid request: no Type, a multi-valued Boolean, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
     /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed.</response>
     /// <response code="401">User not authenticated.</response>
@@ -763,6 +778,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogInformation("Changing schema of metaverse attribute: {Id}", id);
 
+        if (request.Type == AttributeDataType.NotSet)
+            return BadRequest(ApiErrorResponse.BadRequest(TypeRequiredMessage));
+
         var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
@@ -771,9 +789,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be changed."));
 
         var apiKey = await GetCurrentApiKeyAsync();
-        var impact = apiKey != null
-            ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
-            : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
+        AttributeSchemaChangeImpact impact;
+        try
+        {
+            impact = apiKey != null
+                ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
+                : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
+        }
+        catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, and a
         // refused change is never applied.

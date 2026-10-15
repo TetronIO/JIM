@@ -251,7 +251,8 @@ public class SynchronisationController(
     ///
     /// A data type override is accepted only where the Connector declares
     /// SupportsUserSelectedAttributeTypes, and only while the attribute is neither referenced by a
-    /// Synchronisation Rule nor holding values.
+    /// Synchronisation Rule nor holding values. A Boolean holds one value, so an override to Boolean also
+    /// makes the attribute single-valued.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
@@ -317,44 +318,26 @@ public class SynchronisationController(
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 
-        // Validate: the data type may only be overridden where the Connector says its schema cannot state
-        // one definitively, and only while nothing has been built on the type JIM inferred. A delimited file
-        // names no types at all; Oracle has a single numeric type, so NUMBER(10) may be a whole number, a
-        // counter or a fractional figure and only the administrator knows which (#1354).
-        if (request.Type.HasValue)
-        {
-            if (request.Type.Value == AttributeDataType.NotSet)
-            {
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds."));
-            }
-
-            // An absent Connector Definition is treated as not supporting the override: refusing a change
-            // JIM cannot justify is always safer than applying one it cannot check.
-            if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
-            {
-                _logger.LogWarning("Attempted to change the data type of attribute {AttributeId} on a Connector that does not support it", attributeId);
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
-                    "Connected System's own schema, so it cannot be overridden."));
-            }
-
-            if (request.Type.Value != attribute.Type &&
-                await _application.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(attribute))
-            {
-                _logger.LogWarning("Attempted to change the data type of referenced attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
-                    "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again."));
-            }
-        }
-
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact.
         // The type checked is the one the attribute will have, so a Type and a CaseExact sent together agree (#2051).
         if (request.CaseExact == true && (request.Type ?? attribute.Type) != AttributeDataType.Text)
         {
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact. Only text values compare with or without regard to case."));
+        }
+
+        // Validate and apply a data type override through the one rule set the portal's Schema tab shares
+        // (#1354): refused for NotSet, on a Connector whose schema states types definitively, and once the
+        // attribute is referenced or holds values. An override to Boolean also makes the attribute
+        // single-valued, since a Boolean holds one value (#2153). Nothing is persisted until the save below.
+        if (request.Type.HasValue)
+        {
+            var typeOverride = await _application.ConnectedSystems.OverrideAttributeTypeAsync(connectedSystem, attribute, request.Type.Value);
+            if (!typeOverride.Success)
+            {
+                _logger.LogWarning("Refused a data type override for attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+                return BadRequest(ApiErrorResponse.BadRequest(typeOverride.ErrorMessage!));
+            }
         }
 
         // Apply updates
@@ -368,16 +351,6 @@ public class SynchronisationController(
             // Recorded, not inferred from the value differing, for the same reason as a type override: a schema
             // refresh must leave the administrator's declaration alone even where it matches what was discovered.
             attribute.CaseExactSetByAdministrator = true;
-        }
-
-        if (request.Type.HasValue)
-        {
-            attribute.Type = request.Type.Value;
-
-            // Recorded, not inferred from the value being different: a schema refresh must leave this type
-            // alone even where the administrator happened to choose what discovery would have picked anyway,
-            // because the Connector's inference can change between releases.
-            attribute.TypeSetByAdministrator = true;
         }
 
         // Get the current API key for Activity attribution if authenticated via API key
@@ -4845,7 +4818,10 @@ public class SynchronisationController(
             // Check if this is an expression-based source
             if (!string.IsNullOrWhiteSpace(sourceRequest.Expression))
             {
-                // Expression-based source - validate the expression
+                // Expression-based source: refuse one that does not parse before anything is built from it, with the
+                // documented "Invalid expression:" message. The application layer checks it again on save
+                // (AttributeFlowExpressionValidator, #2055 Phase 3); both use IExpressionEvaluator.Validate, and if the two
+                // ever disagree on whether an expression parses, the application layer's check is the one that holds.
                 var validationResult = _expressionEvaluator.Validate(sourceRequest.Expression);
                 if (!validationResult.IsValid)
                     return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
@@ -5015,8 +4991,10 @@ public class SynchronisationController(
         if (existing == null || (existing.SyncRule?.Id ?? existing.SyncRuleId) != syncRuleId)
             return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
-        // Validated here rather than in the application layer, so that a bad Expression is refused by the same
-        // evaluator, with the same message, as when the mapping was created.
+        // Refused here, before anything is applied to the stored mapping, by the same evaluator and with the same
+        // message as when the mapping was created. The application layer checks it again on save
+        // (AttributeFlowExpressionValidator, #2055 Phase 3); if the two ever disagree on whether an expression parses,
+        // the application layer's check is the one that holds.
         if (request.Expression != null)
         {
             var validationResult = _expressionEvaluator.Validate(request.Expression);
