@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.Application.Staging;
@@ -141,7 +142,8 @@ internal static class AuxiliaryClassAttributeMerger
                 {
                     Name = attribute.Name,
                     Description = attribute.Description,
-                    AttributePlurality = attribute.AttributePlurality,
+                    // A Boolean holds one value wherever it is merged (#2153).
+                    AttributePlurality = AttributeDataTypeCapabilities.Constrain(attribute.Type, attribute.AttributePlurality),
                     Type = attribute.Type,
                     Writability = attribute.Writability,
 

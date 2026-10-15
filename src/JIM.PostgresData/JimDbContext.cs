@@ -927,6 +927,23 @@ public class JimDbContext : DbContext
             .HasForeignKey(ppc => ppc.SyncRuleId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // The account a row owes its first password (#2160): a Provisioned row's own account, or the account a waiting
+        // password change delivers its first password to in place of the Initial Password. Set null rather than cascade,
+        // like the row's own account: deleting the account ends the obligation, and the password change it was carrying
+        // stays to be delivered or to expire as any other would.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ProvisionedConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // What an export that writes an account's flags asks for: any first password still owed to the account, so the
+        // delivery leaves the flags to the Attribute Flow (#2064, #2160). Filtered because most rows owe none.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.ProvisionedConnectedSystemObjectId)
+            .HasFilter("\"ProvisionedConnectedSystemObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_PendingPasswordChanges_ProvisionedConnectedSystemObjectId");
+
         // What a provisioned row's delivery attempt asks for: the rule whose settings it generates from. Filtered
         // because most rows carry no rule at all, and an unfiltered index over a mostly-null column indexes
         // nothing useful.

@@ -707,34 +707,37 @@ public interface ISyncRepository
     /// sequence of historical ones. A person who changes their password twice must not have the older one
     /// delivered to a system that was briefly unavailable.
     /// </para>
+    /// <para>
+    /// Passwords replace each other; promises about the account carry forward (#2160). Where the existing row still
+    /// owes an account its first password and the newer change brings none, the obligation stays on the row (see
+    /// <see cref="PendingPasswordChange.Supersede"/>). One exception: a propagated change does not replace a first
+    /// password still owed on a Connected System whose Password Synchronisation is switched off, because it would be
+    /// the person's password reaching a paused system; the Initial Password wins, as at staging.
+    /// </para>
     /// </summary>
-    Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
+    /// <returns>The changes not queued because of that exception, so the caller can say so; empty otherwise.</returns>
+    Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
 
     /// <summary>
     /// Offers <see cref="PendingPasswordChangeOrigin.Provisioned"/> changes to the queue, one per newly
     /// provisioned account, coalescing on the same (Metaverse Object, Connected System) key as
-    /// <see cref="QueuePasswordChangesAsync"/> but under a narrower conflict clause (#1697): a provisioned row's
-    /// first password must never overwrite the person's real one.
+    /// <see cref="QueuePasswordChangesAsync"/> but under a narrower conflict clause (#1697, #2160): a provisioned row's
+    /// first password never overwrites a password change that can still reach the account.
     /// <para>
-    /// An existing row is replaced only when it carries nothing worth keeping: it is itself
-    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted and re-provisioned), or it
-    /// is <see cref="PendingPasswordChangeStatus.Expired"/> or <see cref="PendingPasswordChangeStatus.Cancelled"/>
-    /// (a dead password that must not block the account's first one). Anything else, a Pending, Delivering or
-    /// Parked row of Explicit or Propagated origin, is the person's real password already on its way, or waiting
-    /// on a person to fix it, and wins: the offered change is discarded.
-    /// </para>
-    /// <para>
-    /// A discard releases any propagated row found waiting on this exact account: its
-    /// <see cref="PendingPasswordChange.NextRetryAt"/> is cleared so a change that was held for the account to
-    /// exist is attempted on the very next delivery pass, now that it does.
+    /// Decided per account in one statement against the row already there, if any
+    /// (<see cref="ProvisionedPasswordStagingDisposition"/>): the Initial Password replaces a row that can deliver
+    /// nothing to this account (expired, cancelled, parked for a reason no attempt cures, held by a paused system, an
+    /// administrator's set whose account is gone or disjoined, a propagated change for another Object Type, or an earlier
+    /// Initial Password); and a live change that will reach the account (a propagated change for the targeted Object
+    /// Type, or an administrator's set naming it) is given the obligation instead and released to be delivered at once.
     /// </para>
     /// </summary>
     Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);
 
     /// <summary>
-    /// Records that an export has written the enabled state of these accounts (#2064), on each account's
-    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, whatever its status (a Cancelled row comes back on a
-    /// Retry): sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
+    /// Records that an export has written the enabled state of these accounts (#2064), on each row owing one of them its
+    /// first password (its <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, or a change carrying the first
+    /// password in its place, #2160), whatever its status (a Cancelled row comes back on a Retry): sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
     /// leaves the enabled state to the Attribute Flow rather than applying the provisioning Synchronisation Rule's
     /// Enable Account. Asked after an Update, or a Delete performed as a disable, whose Connector reported writing
     /// the enabled state: a leaver disabled, or an account disabled on deprovisioning, while its first password is

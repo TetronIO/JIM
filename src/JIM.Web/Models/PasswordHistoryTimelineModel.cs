@@ -78,6 +78,10 @@ public static class PasswordHistoryTimelineModel
     /// <param name="Scope">"on 3 Connected Systems" for an administrator's explicit choice of more than one account; null otherwise.</param>
     /// <param name="DotColour">The timeline dot: the worst state among the entry's systems.</param>
     /// <param name="Targets">One per Connected System, in the order they were first reached.</param>
+    /// <param name="Note">
+    /// For what export staging recorded about an Initial Password it did not queue (#2160), which reached no Connected
+    /// System itself: the record's own words, shown in place of chips. Null for every change.
+    /// </param>
     public sealed record Entry(
         Guid ActivityId,
         DateTime LocalTime,
@@ -87,7 +91,8 @@ public static class PasswordHistoryTimelineModel
         string? InitiatorTrail,
         string? Scope,
         Color DotColour,
-        IReadOnlyList<Target> Targets);
+        IReadOnlyList<Target> Targets,
+        string? Note = null);
 
     /// <summary>
     /// One Connected System's chip and, where it has one, its line of words.
@@ -188,6 +193,11 @@ public static class PasswordHistoryTimelineModel
         foreach (var row in ownedRows.Where(r => !seen.Contains(r.ConnectedSystemId)))
             targets.Add(FromRow(row, nowUtc));
 
+        // What export staging recorded about an Initial Password it did not queue (#2160) reached no Connected System of
+        // its own: carried by a change already waiting, which has its own entry, or not queued at all. It reads as a note
+        // in its own words, coloured by how it completed, never as a change that went nowhere.
+        var note = isProvisioned && targets.Count == 0 && !string.IsNullOrWhiteSpace(change.Message) ? change.Message!.Trim() : null;
+
         var explicitChange = change.Origin == PendingPasswordChangeOrigin.Explicit;
         var initiatorKnown = !string.IsNullOrWhiteSpace(change.InitiatedByName);
         var apiKey = change.InitiatedByType == ActivityInitiatorType.ApiKey;
@@ -200,8 +210,9 @@ public static class PasswordHistoryTimelineModel
             InitiatorName: initiatorKnown ? change.InitiatedByName : null,
             InitiatorTrail: initiatorKnown && apiKey ? "(API key)" : null,
             Scope: explicitChange && targets.Count > 1 ? $"on {targets.Count} Connected Systems" : null,
-            DotColour: WorstColour(targets),
-            Targets: targets);
+            DotColour: note == null ? WorstColour(targets) : NoteColour(change.Status),
+            Targets: targets,
+            Note: note);
     }
 
     /// <summary>
@@ -221,6 +232,16 @@ public static class PasswordHistoryTimelineModel
             return Color.Default;
         return Color.Success;
     }
+
+    /// <summary>
+    /// A note's dot: red where what it records went wrong, amber where it warns, grey otherwise.
+    /// </summary>
+    private static Color NoteColour(ActivityStatus status) => status switch
+    {
+        ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError => Color.Error,
+        ActivityStatus.CompleteWithWarning => Color.Warning,
+        _ => Color.Default
+    };
 
     private static Target FromRow(PendingPasswordChangeHeader row, DateTime nowUtc)
     {

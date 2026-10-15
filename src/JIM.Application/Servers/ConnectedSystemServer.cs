@@ -2802,17 +2802,23 @@ public partial class ConnectedSystemServer
                         // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
 
-                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        // The Boolean rule (#2153): the plurality follows the attribute's effective type, which is
+                        // the administrator's where they overrode it, so a Boolean is single-valued whatever the
+                        // Connected System declares.
+                        var effectivePlurality = AttributeDataTypeCapabilities.Constrain(
+                            existingAttribute.TypeSetByAdministrator ? existingAttribute.Type : schemaAttribute.Type,
+                            schemaAttribute.AttributePlurality);
+                        if (existingAttribute.AttributePlurality != effectivePlurality)
                         {
                             result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
                             {
                                 AttributeName = existingAttribute.Name,
                                 Aspect = SchemaAttributeChangeAspect.Plurality,
                                 OldValue = existingAttribute.AttributePlurality.ToString(),
-                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                                NewValue = effectivePlurality.ToString()
                             });
                         }
-                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
+                        existingAttribute.AttributePlurality = effectivePlurality;
 
                         // A refresh restates what the Connector discovered and leaves what the administrator
                         // decided, which is why Selected and IsExternalId are absent from this block. A data
@@ -2856,7 +2862,7 @@ public partial class ConnectedSystemServer
                         {
                             Name = schemaAttribute.Name,
                             Description = schemaAttribute.Description,
-                            AttributePlurality = schemaAttribute.AttributePlurality,
+                            AttributePlurality = AttributeDataTypeCapabilities.Constrain(schemaAttribute.Type, schemaAttribute.AttributePlurality),
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
@@ -2870,7 +2876,22 @@ public partial class ConnectedSystemServer
                 // declared one of them on the structural class itself wins: that attribute is now native, and the
                 // discovery pass above has already carried its row across.
                 foreach (var contributedAttribute in contributedAttributes.Where(a => !matchedAttributes.Contains(a)))
+                {
+                    // The capability rule reaches carried rows too (#2153): a Boolean is single-valued.
+                    var contributedPlurality = AttributeDataTypeCapabilities.Constrain(contributedAttribute.Type, contributedAttribute.AttributePlurality);
+                    if (contributedAttribute.AttributePlurality != contributedPlurality)
+                    {
+                        result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                        {
+                            AttributeName = contributedAttribute.Name,
+                            Aspect = SchemaAttributeChangeAspect.Plurality,
+                            OldValue = contributedAttribute.AttributePlurality.ToString(),
+                            NewValue = contributedPlurality.ToString()
+                        });
+                        contributedAttribute.AttributePlurality = contributedPlurality;
+                    }
                     connectedSystemObjectType.Attributes.Add(contributedAttribute);
+                }
 
                 if (addedAttributeNames.Count > 0)
                 {
@@ -2893,7 +2914,7 @@ public partial class ConnectedSystemServer
                     {
                         Name = a.Name,
                         Description = a.Description,
-                        AttributePlurality = a.AttributePlurality,
+                        AttributePlurality = AttributeDataTypeCapabilities.Constrain(a.Type, a.AttributePlurality),
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
@@ -6804,6 +6825,56 @@ public partial class ConnectedSystemServer
     public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
     {
         return await Application.Repository.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+    }
+
+    /// <summary>
+    /// Validates and applies an administrator's override of a Connected System attribute's data type, the one rule set
+    /// the portal's Schema tab and the REST API (and so PowerShell) share. The attribute is changed in memory only; the
+    /// caller persists it through its own audited save.
+    /// </summary>
+    /// <remarks>
+    /// The data type may only be overridden where the Connector says its schema cannot state one definitively, and
+    /// only while nothing has been built on the type JIM inferred. A delimited file names no types at all; Oracle has
+    /// a single numeric type, so NUMBER(10) may be a whole number, a counter or a fractional figure and only the
+    /// administrator knows which (#1354). By the Boolean rule (#2153) a Boolean holds one value, so an override to
+    /// Boolean also makes the attribute single-valued.
+    /// </remarks>
+    public async Task<AttributeTypeOverrideResult> OverrideAttributeTypeAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectTypeAttribute attribute,
+        AttributeDataType newType)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        if (newType == AttributeDataType.NotSet)
+            return AttributeTypeOverrideResult.Refused(
+                "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds.");
+
+        // An absent Connector Definition is treated as not supporting the override: refusing a change JIM cannot
+        // justify is always safer than applying one it cannot check.
+        if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
+            return AttributeTypeOverrideResult.Refused(
+                $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
+                "Connected System's own schema, so it cannot be overridden.");
+
+        if (newType != attribute.Type && await IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            return AttributeTypeOverrideResult.Refused(
+                $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
+                "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again.");
+
+        attribute.Type = newType;
+
+        // Recorded, not inferred from the value being different: a schema refresh must leave this type alone even
+        // where the administrator happened to choose what discovery would have picked anyway, because the
+        // Connector's inference can change between releases.
+        attribute.TypeSetByAdministrator = true;
+
+        var plurality = AttributeDataTypeCapabilities.Constrain(newType, attribute.AttributePlurality);
+        var madeSingleValued = plurality != attribute.AttributePlurality;
+        attribute.AttributePlurality = plurality;
+
+        return AttributeTypeOverrideResult.Applied(madeSingleValued);
     }
     #endregion
 

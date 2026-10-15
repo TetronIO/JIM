@@ -578,6 +578,7 @@ public partial class ActivityRepository : IActivityRepository
                 InitiatedByName = a.InitiatedByName,
                 InitiatedByType = a.InitiatedByType,
                 Message = a.Message,
+                Status = a.Status,
                 // The origin is the enum's name in TargetContext (#1635 for Explicit/Propagated, #1697 for
                 // Provisioned, written by ExportExecutionServer when an export stages a newly provisioned
                 // account's first password). Spelt out as string comparisons rather than Enum.Parse so it

@@ -222,7 +222,8 @@ public class UpdateConnectedSystemAttributeRequest
     public bool? IsSecondaryExternalId { get; set; }
 
     /// <summary>
-    /// Overrides the data type schema discovery inferred for this attribute.
+    /// Overrides the data type schema discovery inferred for this attribute. A <c>Boolean</c> holds one value, so
+    /// overriding to <c>Boolean</c> also makes the attribute single-valued.
     /// </summary>
     /// <remarks>
     /// Accepted only where the Connector declares that its schema cannot state a type definitively

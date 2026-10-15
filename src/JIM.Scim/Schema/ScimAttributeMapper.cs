@@ -25,7 +25,8 @@ namespace JIM.Scim.Schema;
 /// an Attribute Flow can be pointed at, which matters more for synchronisation than preserving the raw
 /// list shape.</item>
 /// <item>Any other complex attribute is flattened per sub-attribute (<c>name.givenName</c>), inheriting
-/// the parent's plurality.</item>
+/// the parent's plurality. Under a multi-valued parent a Boolean sub-attribute (<c>roles.primary</c>) is
+/// not emitted, since a Boolean holds one value.</item>
 /// <item>A simple attribute maps straight across.</item>
 /// </list>
 /// </summary>
@@ -116,8 +117,12 @@ public static class ScimAttributeMapper
 
         // Rules 3 and 4: flatten per sub-attribute, inheriting the parent's plurality. A sub-attribute is
         // only required when the parent is too: a required sub-attribute of an optional complex attribute
-        // binds only once the parent is being sent.
+        // binds only once the parent is being sent. A sub-attribute whose type cannot be multi-valued (a
+        // Boolean, such as roles.primary) is not emitted under a multi-valued parent: flattening decorrelates
+        // it from its entry, and as a single-valued Boolean it would report a surplus on every import of a
+        // resource whose entries' flags differ.
         return subAttributes
+            .Where(sub => !attribute.MultiValued || AttributeDataTypeCapabilities.SupportsMultiValued(MapType(sub.Type)))
             .Select(sub => Build(
                 sub,
                 $"{name}.{sub.Name}",

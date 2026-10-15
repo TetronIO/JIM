@@ -286,6 +286,74 @@ try {
         }
 
         # ─────────────────────────────────────────────────────────────────────────────────────
+        # Test: a password set on a parked account is its first password, with the rule's promises (#2160)
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        # An administrator sets a password on one of the parked accounts without saying whether to enable
+        # it. That password replaces the parked Initial Password, so it is the account's first password and
+        # carries what the rule's Initial Password promised: Enable Account is on, so the account is enabled.
+        # Without that carry, replacing the Initial Password would drop the promise and leave a new account
+        # disabled.
+        Write-TestSection "Test: a password set on a parked account delivers the Initial Password's promises"
+
+        $standInRow = $parkedRows | Select-Object -First 1
+        $standInPassword = 'Person-Chosen-2160-Kq7!'
+        Write-Host "  Setting a password on $($standInRow.metaverseObjectDisplayName)'s parked account, with no enable choice..." -ForegroundColor DarkGray
+        # Expires by the target's policy rather than must-change, so pwdLastSet becomes non-zero: that is how
+        # the account is found below, and it keeps the account out of Step 2's must-change search.
+        $standInResult = Set-JIMMetaverseObjectPassword -Id $standInRow.metaverseObjectId `
+            -ConnectedSystemId $config.LDAPSystemId `
+            -Password (ConvertTo-SecureString -String $standInPassword -AsPlainText -Force) `
+            -ExpiryBehaviour ExpiresAccordingToTargetPolicy -Wait 30 -Force
+        $standInTarget = @($standInResult.Targets) | Select-Object -First 1
+
+        Add-TestResult -Name "The password is set as the account's first password, enabled as the rule's Initial Password asks" `
+            -Passed ($standInTarget.State -eq 'Set' -and `
+                     $standInTarget.Message -like "*first password, in place of its Initial Password*" -and `
+                     $standInTarget.Message -like "*enabled as the Synchronisation Rule's Initial Password asks*") `
+            -Detail "State was '$($standInTarget.State)'; message was '$($standInTarget.Message)'."
+
+        $standInLeft = @(Get-JIMPendingPasswordChange -MetaverseObjectId $standInRow.metaverseObjectId -ConnectedSystemId $config.LDAPSystemId |
+            Where-Object { $_.status -in @('Pending', 'Delivering', 'Parked') })
+        Add-TestResult -Name "The parked Initial Password was replaced, not left to deliver over the person's password" `
+            -Passed ($standInLeft.Count -eq 0) `
+            -Detail "$($standInLeft.Count) row(s) still outstanding for this person: $(($standInLeft | ForEach-Object { "$($_.origin) $($_.status)" }) -join ', ')"
+
+        # The only account in the container with a password set: the others still wait on the parked rule.
+        $standInSearch = Invoke-LDAPSearch `
+            -ContainerName $DirectoryConfig.ContainerName `
+            -DirectoryConfig $DirectoryConfig `
+            -Server "localhost" `
+            -Port $DirectoryConfig.LdapSearchPort `
+            -Scheme $DirectoryConfig.LdapSearchScheme `
+            -BaseDN $DirectoryConfig.UserContainer `
+            -BindDN $DirectoryConfig.BindDN `
+            -BindPassword $DirectoryConfig.BindPassword `
+            -Filter "(&(objectClass=user)(!(pwdLastSet=0)))" `
+            -Attributes @("userAccountControl")
+        $standInAccount = @{}
+        $standInEntries = 0
+        foreach ($line in (Expand-LDIFFoldedLine -RawLdif (@($standInSearch) -join "`n"))) {
+            if ($line -match '^dn:\s*(.+)$') {
+                $standInEntries++
+                if ($standInEntries -eq 1) { $standInAccount['dn'] = $matches[1] }
+            }
+            elseif ($standInEntries -eq 1 -and $line -match '^userAccountControl:\s*(\d+)$') {
+                $standInAccount['uac'] = [int]$matches[1]
+            }
+        }
+
+        Add-TestResult -Name "Exactly one account has a password set, and it is enabled (ACCOUNTDISABLE is clear)" `
+            -Passed ($standInEntries -eq 1 -and $standInAccount.ContainsKey('uac') -and (($standInAccount['uac'] -band 0x2) -eq 0)) `
+            -Detail "$standInEntries account(s) found; userAccountControl was '$($standInAccount['uac'])' on '$($standInAccount['dn'])'."
+
+        if ($standInAccount.ContainsKey('dn')) {
+            $standInBind = Test-LDAPBind -BindDN $standInAccount['dn'] -BindPassword $standInPassword -DirectoryConfig $DirectoryConfig
+            Add-TestResult -Name "The account signs in with the password the administrator set" `
+                -Passed ($standInBind.Outcome -eq 'Success') `
+                -Detail "Bind as $($standInAccount['dn']): $($standInBind.Outcome). Directory said: $($standInBind.Output)"
+        }
+
+        # ─────────────────────────────────────────────────────────────────────────────────────
         # Test: correcting the rule releases every parked account to the Password Delivery Service
         # ─────────────────────────────────────────────────────────────────────────────────────
         Write-TestSection "Test: correcting the Synchronisation Rule releases the parked accounts"

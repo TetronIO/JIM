@@ -19,6 +19,10 @@ function Stop-JIMPendingPasswordChange {
         Applies to changes JIM has not finished with: Pending and Parked. An Expired or already Cancelled change
         is left alone rather than having its recorded outcome overwritten.
 
+        Cancelling a Connected System Object's first password, an Initial Password or a change carrying one (see
+        ProvisionedConnectedSystemObjectId on Get-JIMPendingPasswordChange), leaves that object without a password
+        from JIM, and not enabled as its Synchronisation Rule's Initial Password asks, until a password is set on it.
+
         Whatever it covers, this is one request and one Activity, however many changes are piped in.
 
     .PARAMETER Id

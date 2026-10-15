@@ -138,7 +138,8 @@ public class PasswordSynchronisationControllerQueueTests
         PasswordSetFailureReason? failureReason = null,
         DateTime? nextRetryAt = null,
         PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
-        int? syncRuleId = null)
+        int? syncRuleId = null,
+        Guid? provisionedConnectedSystemObjectId = null)
     {
         var change = new PendingPasswordChange
         {
@@ -155,7 +156,8 @@ public class PasswordSynchronisationControllerQueueTests
             ExpiresAt = DateTime.UtcNow.AddDays(7),
             ActivityId = Guid.NewGuid(),
             Origin = origin,
-            SyncRuleId = syncRuleId
+            SyncRuleId = syncRuleId,
+            ProvisionedConnectedSystemObjectId = provisionedConnectedSystemObjectId
         };
 
         await _syncRepo.QueuePasswordChangesAsync([change]);
@@ -225,6 +227,26 @@ public class PasswordSynchronisationControllerQueueTests
         }
     }
 
+    /// <summary>
+    /// A propagated change that is also a Connected System Object's first password (#2160) says which, and under which
+    /// Synchronisation Rule's Initial Password, so a script can warn before cancelling it, as the portal does.
+    /// </summary>
+    [Test]
+    public async Task Queue_ChangeCarryingAFirstPassword_NamesTheConnectedSystemObjectAndTheRuleAsync()
+    {
+        var account = Guid.NewGuid();
+        await SeedChangeAsync(_adaId, CorporateAdId, syncRuleId: 42, provisionedConnectedSystemObjectId: account);
+
+        var row = (await ListAsync()).Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.EqualTo(account));
+            Assert.That(row.SyncRuleId, Is.EqualTo(42));
+        }
+    }
+
     [Test]
     public async Task Queue_OrdinaryRow_CarriesNoSyncRuleIdAsync()
     {
@@ -236,6 +258,7 @@ public class PasswordSynchronisationControllerQueueTests
         {
             Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
             Assert.That(row.SyncRuleId, Is.Null);
+            Assert.That(row.ProvisionedConnectedSystemObjectId, Is.Null);
         }
     }
 

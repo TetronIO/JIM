@@ -17,7 +17,8 @@ function New-JIMMetaverseAttribute {
         The kind of value the attribute holds. Integer is the type JIM names Number.
 
     .PARAMETER AttributePlurality
-        Whether the attribute holds one value or many. SingleValued is the default.
+        Whether the attribute holds one value or many. A Boolean holds one value, so JIM refuses MultiValued for a
+        Boolean.
 
     .PARAMETER ObjectTypeIds
         The IDs of the Metaverse Object Types to bind the attribute to. It can also be bound later, with

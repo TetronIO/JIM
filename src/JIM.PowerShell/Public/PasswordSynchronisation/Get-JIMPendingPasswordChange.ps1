@@ -29,8 +29,14 @@ function Get-JIMPendingPasswordChange {
         Every change also carries an Origin: Explicit (an administrator's named set), Propagated (JIM carried
         it to every configured system after the person's own password change), or Provisioned (the first
         password for an account an export has just created). A Provisioned change carries SyncRuleId, the
-        Synchronisation Rule its password is generated from at each delivery attempt; SyncRuleId is $null for
-        every other origin.
+        Synchronisation Rule its password is generated from at each delivery attempt.
+
+        An Explicit or Propagated change can also be a Connected System Object's first password: it was already
+        waiting when JIM provisioned that object, or it replaced the object's Initial Password before it was
+        delivered. ProvisionedConnectedSystemObjectId names the object, and SyncRuleId the Synchronisation Rule
+        whose Initial Password settings for enabling the object and for whether its password never expires its
+        delivery applies; the change keeps its own password and expiry. Cancelling such a change leaves the object
+        without a password from JIM. Both are $null for a change that is no object's first password.
 
         No password is returned, in any form. The queued value is encrypted in the database and has no
         representation on this or any other surface.
@@ -112,6 +118,13 @@ function Get-JIMPendingPasswordChange {
         Lists the Connected Systems holding password changes because Password Synchronisation is switched off on
         them, and how many each is holding. Worth running before a change window closes: every one of these
         expires eventually, and switching the system back on is what delivers them.
+
+    .EXAMPLE
+        Get-JIMPendingPasswordChange -All |
+            Where-Object { $_.ProvisionedConnectedSystemObjectId -and $_.Origin -ne 'Provisioned' }
+
+        Lists the password changes that are also a Connected System Object's first password, which is worth
+        knowing before cancelling any of them.
 
     .LINK
         Resume-JIMPendingPasswordChange

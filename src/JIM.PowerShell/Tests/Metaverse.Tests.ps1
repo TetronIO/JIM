@@ -555,6 +555,36 @@ Describe 'New-JIMMetaverseAttribute' {
             $set.ValidValues | Should -Contain 'Decimal'
         }
     }
+
+    Context 'The Boolean rule' {
+
+        It 'Sends a multi-valued Boolean as asked and surfaces the API''s refusal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw 'JIM API error (400): A Boolean attribute holds one value, true or false, so it cannot be multi-valued.' }
+
+                { New-JIMMetaverseAttribute -Name 'isContractor' -Type Boolean -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be multi-valued*'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It 'Creates a single-valued Boolean by default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 7 } }
+
+                New-JIMMetaverseAttribute -Name 'isContractor' -Type Boolean -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+    }
 }
 
 Describe 'Set-JIMMetaverseAttribute' {
@@ -628,6 +658,21 @@ Describe 'Set-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Makes the attribute single-valued when -Type Boolean is given without -AttributePlurality' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Boolean -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+
         It 'Passes a widening to multi-valued through to the schema endpoint, keeping the current type' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -640,6 +685,21 @@ Describe 'Set-JIMMetaverseAttribute' {
                     $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
                     $Body.type -eq 'DateTime' -and $Body.attributePlurality -eq 'MultiValued' -and
                     $Body.changeReason -eq 'Widen after upgrade'
+                }
+            }
+        }
+
+        It 'Sends an explicit multi-valued Boolean as asked and surfaces the API''s refusal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { throw 'JIM API error (400): A Boolean attribute holds one value, true or false, so it cannot be multi-valued.' }
+
+                { Set-JIMMetaverseAttribute -Id 1 -Type Boolean -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be multi-valued*'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'MultiValued'
                 }
             }
         }

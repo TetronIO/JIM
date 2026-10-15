@@ -246,12 +246,14 @@ public class ExportExecutionServer
 
         // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
         // deployment would otherwise get a pair of zeroes on every export.
-        if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0 || result.InitialPasswordMarkingFailedCount > 0)
+        if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0 || result.InitialPasswordMarkingFailedCount > 0
+            || result.InitialPasswordsCarriedCount > 0)
         {
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
-                "recorded as owed an initial password, {FailedCount} that could not be recorded, {MarkingFailedCount} whose written " +
-                "enabled state could not be recorded on the password still owed",
-                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
+                "recorded as owed an initial password, {CarriedCount} given a password change already waiting for them as their first password, " +
+                "{FailedCount} that could not be recorded, {MarkingFailedCount} whose written enabled state could not be recorded on the password still owed",
+                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordsCarriedCount,
+                result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
         }
 
         // Only when it happened: most export runs meet no value already in use.
@@ -1771,6 +1773,7 @@ public class ExportExecutionServer
         into.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
         into.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
         into.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
+        into.InitialPasswordsCarriedCount += batchResult.InitialPasswordsCarriedCount;
         into.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
         into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
         into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
@@ -2676,8 +2679,10 @@ public class ExportExecutionServer
     /// <see cref="FlagExportsFollowedByAPasswordAsync"/>), rather than stamped onto the export when it was
     /// staged, so that switching the feature on reaches work already queued, and so that a deployment not using it
     /// writes no rows at all. Staging reuses that one lookup, so the accounts given a password are exactly the ones the
-    /// Connector was told one would follow (#2039). A live user-set or propagated password for the same person and
-    /// system wins over a provisioned row: the queue's own coalescing decides that, not this method.
+    /// Connector was told one would follow (#2039). A live user-set or propagated password change that will reach the
+    /// account is delivered as its first password instead, carrying the Initial Password's promises about the account
+    /// (#2160); the queue's own staging statement decides that, not this method, and every outcome is recorded on an
+    /// Activity.
     /// </para>
     /// <para>
     /// Failure is contained but not swallowed. The accounts exist in the Connected System and their exports are
@@ -2764,7 +2769,10 @@ public class ExportExecutionServer
                     ActivityId = Guid.NewGuid(),
                     // #2064: the Create wrote the account's enabled state, so an Attribute Flow decides it and the
                     // delivery leaves it alone (a pre-hire the flow creates disabled stays disabled).
-                    EnabledStateSetByAttributeFlow = accountsWithEnabledStateWritten.Contains(pe.ConnectedSystemObject!.Id)
+                    EnabledStateSetByAttributeFlow = accountsWithEnabledStateWritten.Contains(pe.ConnectedSystemObject!.Id),
+                    // #2160: the account this row owes its first password, which travels with the obligation should a
+                    // waiting password change be delivered in its place.
+                    ProvisionedConnectedSystemObjectId = pe.ConnectedSystemObject!.Id
                 });
             }
 
@@ -2781,46 +2789,96 @@ public class ExportExecutionServer
 
             var activities = new List<Activity>(outcomes.Count);
             var stagedCount = 0;
+            var carriedCount = 0;
             foreach (var outcome in outcomes)
             {
-                // A row already there carries the person's real password and won (#1697): nothing was written,
-                // and that row already has its own Activity, so this attempt gets none.
-                if (outcome.Disposition == ProvisionedPasswordStagingDisposition.Coalesced)
-                    continue;
-
                 var change = byRequestedId[outcome.RequestedId];
-                stagedCount++;
 
-                // A parent Activity for the change, mirroring what PasswordSynchronisationServer.SetPasswordAsync
-                // writes for an administrator's own set, but system-initiated and already complete: nobody is
-                // waiting at a screen for this to finish, because delivery happens on a later, unrelated pass.
-                activities.Add(new Activity
+                // System-initiated and already complete, mirroring what PasswordSynchronisationServer.SetPasswordAsync
+                // writes for an administrator's own set: nobody is waiting at a screen for this to finish, because
+                // delivery happens on a later, unrelated pass. Every outcome gets one (#2160), so an Initial Password
+                // that was not queued is never left unexplained.
+                var activity = new Activity
                 {
-                    Id = change.ActivityId,
+                    Id = outcome.Disposition is ProvisionedPasswordStagingDisposition.Inserted or ProvisionedPasswordStagingDisposition.Superseded
+                        ? change.ActivityId
+                        : Guid.NewGuid(),
                     TargetType = ActivityTargetType.PasswordSynchronisation,
                     TargetOperationType = ActivityTargetOperationType.SetPassword,
                     TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned),
                     TargetName = connectedSystemName,
                     MetaverseObjectId = change.MetaverseObjectId,
                     ConnectedSystemId = change.ConnectedSystemId,
-                    ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+                    ConnectedSystemObjectId = change.ProvisionedConnectedSystemObjectId,
                     InitiatedByType = ActivityInitiatorType.System,
                     InitiatedByName = "System",
                     Status = ActivityStatus.Complete,
                     Created = now,
                     Executed = now,
                     ExecutionTime = TimeSpan.Zero,
-                    TotalActivityTime = TimeSpan.Zero,
-                    Message = $"Initial password queued for delivery to {connectedSystemName}."
-                });
+                    TotalActivityTime = TimeSpan.Zero
+                };
+                activities.Add(activity);
+
+                switch (outcome.Disposition)
+                {
+                    case ProvisionedPasswordStagingDisposition.Coalesced:
+                        carriedCount++;
+                        activity.Message = InitialPasswordStagingMessages.Carried(connectedSystemName, outcome);
+                        break;
+
+                    default:
+                        stagedCount++;
+                        var replaced = InitialPasswordStagingMessages.ReplacedWaitingChange(connectedSystemName, outcome);
+                        activity.Message = replaced == null
+                            ? $"Initial password queued for delivery to {connectedSystemName}."
+                            : $"Initial password queued for delivery to {connectedSystemName}, in place of a password change for this person " +
+                              $"that was waiting there: {replaced}";
+                        if (replaced == null)
+                            break;
+
+                        // The person's own change lost this system: told so beneath its own record, where its other
+                        // systems' outcomes are, rather than vanishing from it.
+                        activity.Status = ActivityStatus.CompleteWithWarning;
+                        if (outcome.ExistingActivityId is { } replacedChangeActivityId)
+                        {
+                            var notSet = $"Password not set on {connectedSystemName}: replaced by the Initial Password of a Connected System Object " +
+                                         $"JIM has just provisioned there, because this change {replaced}";
+                            activities.Add(new Activity
+                            {
+                                Id = Guid.NewGuid(),
+                                ParentActivityId = replacedChangeActivityId,
+                                TargetType = ActivityTargetType.PasswordSynchronisation,
+                                TargetOperationType = ActivityTargetOperationType.SetPassword,
+                                TargetContext = connectedSystemName,
+                                TargetName = connectedSystemName,
+                                MetaverseObjectId = change.MetaverseObjectId,
+                                ConnectedSystemId = change.ConnectedSystemId,
+                                ConnectedSystemObjectId = change.ProvisionedConnectedSystemObjectId,
+                                InitiatedByType = ActivityInitiatorType.System,
+                                InitiatedByName = "System",
+                                Status = ActivityStatus.CompleteWithError,
+                                Message = notSet,
+                                ErrorMessage = notSet,
+                                Created = now,
+                                Executed = now,
+                                ExecutionTime = TimeSpan.Zero,
+                                TotalActivityTime = TimeSpan.Zero
+                            });
+                        }
+
+                        break;
+                }
             }
 
+            result.InitialPasswordsCarriedCount += carriedCount;
             if (activities.Count > 0)
                 await repository.CreateActivitiesAsync(activities);
 
             result.InitialPasswordsStagedCount += stagedCount;
-            Log.Debug("StageInitialPasswordsForBatchAsync: Staged initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}",
-                stagedCount, provisionedAccounts[0].ConnectedSystemId);
+            Log.Debug("StageInitialPasswordsForBatchAsync: Staged initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}, " +
+                "and gave {Carried} a password change already waiting for them as their first password",
+                stagedCount, provisionedAccounts[0].ConnectedSystemId, carriedCount);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

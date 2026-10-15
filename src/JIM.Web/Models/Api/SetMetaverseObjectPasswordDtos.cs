@@ -56,11 +56,13 @@ public class SetMetaverseObjectPasswordRequest
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether to enable each named account as its password is set. Omitted leaves the accounts as they are, except
-    /// for an Active Directory account whose enable JIM held back until it had a password, which the password
-    /// enables as its Attribute Flow asks. Accepted only with <see cref="ConnectedSystemObjectIds"/>: a propagated
-    /// password enables no other account, because it reaches accounts an administrator may have disabled on purpose.
-    /// False is refused with a 400: setting a password never disables an account.
+    /// Whether to enable each named account as its password is set. Omitted leaves the accounts as they are, with two
+    /// exceptions: an Active Directory account whose enable JIM held back until it had a password, which the password
+    /// enables as its Attribute Flow asks; and an account still waiting for its first password, which the set then is,
+    /// enabled as its Synchronisation Rule's Initial Password says. Accepted only with
+    /// <see cref="ConnectedSystemObjectIds"/>: a propagated password enables no account other than those two kinds,
+    /// because it reaches accounts an administrator may have disabled on purpose. False is refused with a 400: setting a
+    /// password never disables an account.
     /// </summary>
     public bool? EnableAccount { get; set; }
 

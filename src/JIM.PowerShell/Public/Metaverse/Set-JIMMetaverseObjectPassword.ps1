@@ -19,7 +19,11 @@ function Set-JIMMetaverseObjectPassword {
         Every configured system. Omit -ConnectedSystemId and the password goes to every Connected System
         configured for Password Synchronisation in which the person has an account, including systems that are
         switched off (held until switched on) and systems where the account does not exist yet (delivered once it
-        does). This is the event case: the person's password changed somewhere, and the rest should hold it. By
+        does). This is the event case: the person's password changed somewhere, and the rest should hold it. A
+        password that reaches an account still waiting for its first password is delivered as that first password,
+        with its Synchronisation Rule's Initial Password settings for enabling the account and for whether its
+        password never expires; where Password Synchronisation is switched off on that system, the account's Initial
+        Password is delivered instead and the change is not queued there. By
         default expiry is left to each system's own policy, since a password the person chose should not demand
         they choose another, and the command returns as soon as the change is recorded. To set a password on
         every account the person has regardless of configuration, name the systems:
@@ -81,10 +85,11 @@ function Set-JIMMetaverseObjectPassword {
 
     .PARAMETER EnableAccount
         Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
-        except for an Active Directory account whose enable JIM held back until it had a password, which the
-        password enables as its Attribute Flow asks. Only available with -ConnectedSystemId: a password propagated to
-        every configured system enables no other account, because it reaches accounts an administrator may have
-        disabled on purpose.
+        with two exceptions: an Active Directory account whose enable JIM held back until it had a password, which
+        the password enables as its Attribute Flow asks; and an account still waiting for its first password, which
+        the password then is, enabled as its Synchronisation Rule's Initial Password says. Only available with
+        -ConnectedSystemId: a password propagated to every configured system enables no account other than those two
+        kinds, because it reaches accounts an administrator may have disabled on purpose.
 
     .PARAMETER Wait
         How many seconds, from 0 to 30, to wait for the systems to answer before returning. Defaults to 10 with

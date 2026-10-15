@@ -68,10 +68,12 @@ public class PendingPasswordChange
     public Guid? ConnectedSystemObjectId { get; set; }
 
     /// <summary>
-    /// The Synchronisation Rule whose initial-password settings decide the password for a
-    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Null for every other origin, and set to null by
-    /// the database when the rule is deleted: no navigation property, matching the other foreign keys on this
-    /// entity.
+    /// The Synchronisation Rule whose Initial Password this row delivers the account's first password under, or null
+    /// where the row owes no account a first password. For a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row
+    /// the rule also generates the password; for a change carrying the account's first password in place of its
+    /// Initial Password (#2160, <see cref="CarriesInitialPassword"/>) it contributes only its promises about the
+    /// account (<see cref="InitialPasswordAccountFlags"/>), read fresh at each attempt. Set to null by the database when
+    /// the rule is deleted: no navigation property, matching the other foreign keys on this entity.
     /// </summary>
     public int? SyncRuleId { get; set; }
 
@@ -108,14 +110,16 @@ public class PendingPasswordChange
     public PendingPasswordChangeOrigin Origin { get; set; } = PendingPasswordChangeOrigin.Propagated;
 
     /// <summary>
-    /// Whether to enable the account as the password is set, or null to leave it as it is.
+    /// Whether to enable the account as the password is set, or null for no choice.
     /// <para>
     /// Carried only by an <see cref="PendingPasswordChangeOrigin.Explicit"/> change, and read only for one: the
     /// administrator who named the account made this decision with it. A propagated change never decides to enable
     /// an account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
-    /// as a side effect of somebody changing their password elsewhere would undo that silently. The one enable any
-    /// delivery completes is the one JIM itself withheld until a password existed (#2039), because that is what the
-    /// account's Attribute Flow asked for; <c>AccountFlagsPolicy</c> holds the whole precedence (#2064).
+    /// as a side effect of somebody changing their password elsewhere would undo that silently. Null leaves the
+    /// account's enabled state as it is, with two exceptions: an enable JIM itself withheld until a password existed
+    /// (#2039) is completed, because that is what the account's Attribute Flow asked for; and an account still owed its
+    /// first password follows its provisioning Synchronisation Rule's Enable Account (#2160).
+    /// <c>AccountFlagsPolicy</c> holds the whole precedence (#2064).
     /// </para>
     /// </summary>
     public bool? EnableAccount { get; set; }
@@ -130,10 +134,11 @@ public class PendingPasswordChange
     /// still applied. The name predates the second flag and is kept because the column is persisted;
     /// <c>AccountFlagsPolicy</c> calls it what it means there, whether the account's flags were written by an export.
     /// <para>
-    /// Meaningful only for a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Set when the row is staged,
-    /// from the Create that provisioned the account, and set again by any later export that writes the attribute
-    /// while the password is still owed (a leaver disabled, or an account disabled on deprovisioning), so a late
-    /// delivery never re-enables it. Recorded rather than inferred at delivery, because nothing else can tell an
+    /// Meaningful only for a row owing an account its first password (<see cref="OwesInitialPassword"/>): an Initial
+    /// Password, or a change carrying the account's first password in its place (#2160). Set when the obligation is
+    /// staged, from the Create that provisioned the account, and set again by any later export that writes the
+    /// attribute while the password is still owed (a leaver disabled, or an account disabled on deprovisioning), so a
+    /// late delivery never re-enables it. Recorded rather than inferred at delivery, because nothing else can tell an
     /// account the flow created disabled from one the directory created disabled by default.
     /// </para>
     /// <para>
@@ -142,6 +147,24 @@ public class PendingPasswordChange
     /// </para>
     /// </summary>
     public bool EnabledStateSetByAttributeFlow { get; set; }
+
+    /// <summary>
+    /// The account this row owes its first password (#2160), or null where it owes none.
+    /// <para>
+    /// Set on every <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, to the account its export provisioned;
+    /// and on a propagated or explicit change that is delivered as that account's first password instead: one already
+    /// waiting when the account was provisioned, which staging gives the obligation rather than queue an Initial
+    /// Password over the person's own password, or one that replaced the Initial Password before it landed. Such a
+    /// change keeps its own password, expiry and Activity, and its delivery carries the Initial Password's promises
+    /// about the account, under <see cref="SyncRuleId"/>, provided it reaches this account.
+    /// </para>
+    /// <para>
+    /// Tied to one account so the promises can never enable a different one: a propagated change re-resolves its
+    /// account on every attempt. Set to null by the database when the account is deleted, which ends the obligation
+    /// with it. It stays when the rule is deleted, and the delivery then says the rule no longer sets one.
+    /// </para>
+    /// </summary>
+    public Guid? ProvisionedConnectedSystemObjectId { get; set; }
 
     public PendingPasswordChangeStatus Status { get; set; } = PendingPasswordChangeStatus.Pending;
 
@@ -252,6 +275,29 @@ public class PendingPasswordChange
     /// passwords (<see cref="PendingPasswordChangeOrigin.Propagated"/>), as opposed to an account named on the row.
     /// </summary>
     public bool IsPropagated => Origin == PendingPasswordChangeOrigin.Propagated;
+
+    /// <summary>
+    /// Whether this row owes an account its first password: it is the account's Initial Password, or a change
+    /// delivered in its place (#2160). Judged on the origin as well as on
+    /// <see cref="ProvisionedConnectedSystemObjectId"/>, so a Provisioned row written without the account (an older
+    /// writer, or a fixture) still has its enabled state's mark read before its rule enables anything.
+    /// </summary>
+    public bool OwesInitialPassword => IsProvisioned || ProvisionedConnectedSystemObjectId.HasValue;
+
+    /// <summary>
+    /// Whether this is a propagated or explicit change delivered as an account's first password in place of its
+    /// Initial Password (#2160): the change's own password, with the Initial Password's promises about the account.
+    /// </summary>
+    public bool CarriesInitialPassword => !IsProvisioned && ProvisionedConnectedSystemObjectId.HasValue;
+
+    /// <summary>
+    /// Whether a Connected System whose Password Synchronisation is switched off holds this change rather than
+    /// delivering it: a propagated change owing no account its first password. An explicit set and an Initial Password
+    /// are delivered whatever the system's configuration says (decision D1), because their account is already decided,
+    /// and so is a change carrying an account's first password (#2160), like the Initial Password it stands in for.
+    /// Staging never gives the obligation to a held change: the Initial Password wins over one instead.
+    /// </summary>
+    public bool IsHeldWhilePasswordSynchronisationIsOff => IsPropagated && !CarriesInitialPassword;
 
     /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
@@ -385,32 +431,49 @@ public class PendingPasswordChange
     /// </para>
     /// <para>
     /// Everything the newer change says about the password it carries comes across: its origin, its enable
-    /// decision, whether an export set the account's enabled state, and the account it names, as well as the value
-    /// and the expiry behaviour. Coalescing is by
-    /// identity and system whatever the origin (#1635); an administrator's reset replaces a propagated change
-    /// that was still waiting, and a later propagated change replaces the reset.
+    /// decision, and the account it names, as well as the value and the expiry behaviour. Coalescing is by identity
+    /// and system whatever the origin (#1635); an administrator's reset replaces a propagated change that was still
+    /// waiting, and a later propagated change replaces the reset.
     /// </para>
     /// <para>
-    /// The Synchronisation Rule follows the same rule: an explicit set replacing a provisioned row clears it,
-    /// because the administrator's own password has nothing left to generate from; a provisioned row replacing
-    /// an expired propagated one sets it, because the new row is the one that knows how to generate its password.
+    /// Passwords replace each other; promises about the account carry forward (#2160). Where this row still owes an
+    /// account its first password (it is live: Pending, Delivering or Parked) and the newer change brings no first
+    /// password of its own, the obligation stays: the account it is for (<see cref="ProvisionedConnectedSystemObjectId"/>),
+    /// the rule whose promises apply (<see cref="SyncRuleId"/>) and whether an export wrote the account's flags
+    /// (<see cref="EnabledStateSetByAttributeFlow"/>). The newer change is then delivered as the account's first
+    /// password. Otherwise those three come from the newer change: a re-provisioned account's Initial Password brings
+    /// its own, and anything replacing an expired or cancelled row brings none.
+    /// </para>
+    /// <para>
+    /// <c>SyncRepository.QueuePasswordChangesAsync</c> applies the same rule in SQL, and also declines to let a
+    /// propagated change replace a first password owed on a system whose Password Synchronisation is switched off.
     /// </para>
     /// </summary>
-    /// <param name="newer">
-    /// The change taking this row over. Its <see cref="CreatedAt"/> is the instant of the supersession and its
-    /// <see cref="ExpiresAt"/> the new window; the row's identity and coalescing key are untouched.
-    /// </param>
     public void Supersede(PendingPasswordChange newer)
     {
         ArgumentNullException.ThrowIfNull(newer);
+
+        // Judged before anything is replaced: whether this row is live and owes an account its first password.
+        var keepsObligation = KeepsInitialPasswordObligationOver(newer);
+        var owedAccount = ProvisionedConnectedSystemObjectId ?? (IsProvisioned ? ConnectedSystemObjectId : null);
 
         EncryptedPassword = newer.EncryptedPassword;
         ExpiryBehaviour = newer.ExpiryBehaviour;
         Origin = newer.Origin;
         EnableAccount = newer.EnableAccount;
-        EnabledStateSetByAttributeFlow = newer.EnabledStateSetByAttributeFlow;
         ConnectedSystemObjectId = newer.ConnectedSystemObjectId;
-        SyncRuleId = newer.SyncRuleId;
+
+        if (keepsObligation)
+        {
+            ProvisionedConnectedSystemObjectId = owedAccount;
+        }
+        else
+        {
+            ProvisionedConnectedSystemObjectId = newer.ProvisionedConnectedSystemObjectId;
+            SyncRuleId = newer.SyncRuleId;
+            EnabledStateSetByAttributeFlow = newer.EnabledStateSetByAttributeFlow;
+        }
+
         ActivityId = newer.ActivityId;
         CreatedAt = newer.CreatedAt;
         ExpiresAt = newer.ExpiresAt;
@@ -425,6 +488,64 @@ public class PendingPasswordChange
 
         // A newer password replaces whatever the deliverer was holding. Its outcome write is guarded on the row
         // still being Delivering, so it lands nowhere; the new password is delivered on its own claim.
+        ClearClaim();
+    }
+
+    /// <summary>
+    /// Whether this row's obligation to deliver an account's first password survives <paramref name="newer"/> replacing
+    /// its password (#2160): it owes one, it is still live, and the newer change brings no first password of its own.
+    /// </summary>
+    public bool KeepsInitialPasswordObligationOver(PendingPasswordChange newer)
+    {
+        ArgumentNullException.ThrowIfNull(newer);
+
+        return OwesInitialPassword
+               && (ProvisionedConnectedSystemObjectId ?? ConnectedSystemObjectId).HasValue
+               && Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked
+               && !newer.OwesInitialPassword;
+    }
+
+    /// <summary>
+    /// Gives this waiting change the obligation to deliver a newly provisioned account's first password (#2160): the
+    /// in-memory twin of the attach in <c>SyncRepository.StageProvisionedPasswordChangesAsync</c>, which staging runs
+    /// instead of queueing an Initial Password over the person's own password.
+    /// <para>
+    /// The change keeps its password, origin, expiry, enable choice and Activity: passwords replace each other, and
+    /// this one is the newest. It takes the Initial Password's promises about the account: the account, the rule, and
+    /// whether the Create wrote the account's flags. A propagated change also takes the account, which now exists.
+    /// </para>
+    /// <para>
+    /// It becomes due at once. A claim is taken back, as <see cref="Supersede"/> takes it back, because the deliverer
+    /// holding it decided the account's flags without the promises; its guarded outcome write and delete land nowhere,
+    /// and the password is delivered again on a claim of its own. A park the new account cures (the account missing,
+    /// or the target unreachable until the retries ran out; the Create has just proved both wrong) is released, and
+    /// attempts made against a missing account are reset. The window is extended to the Initial Password's, never
+    /// shortened.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The account just provisioned.</param>
+    /// <param name="syncRuleId">The provisioning Synchronisation Rule whose Initial Password the change stands in for.</param>
+    /// <param name="accountFlagsWrittenByExport">Whether the Create wrote the account's flags (#2064).</param>
+    /// <param name="expiresAt">When the Initial Password would have stopped being worth delivering.</param>
+    public void CarryInitialPassword(Guid connectedSystemObjectId, int syncRuleId, bool accountFlagsWrittenByExport, DateTime expiresAt)
+    {
+        EnabledStateSetByAttributeFlow = accountFlagsWrittenByExport
+                                         || (ProvisionedConnectedSystemObjectId == connectedSystemObjectId && EnabledStateSetByAttributeFlow);
+        ProvisionedConnectedSystemObjectId = connectedSystemObjectId;
+        SyncRuleId = syncRuleId;
+        ConnectedSystemObjectId = connectedSystemObjectId;
+        if (expiresAt > ExpiresAt)
+            ExpiresAt = expiresAt;
+
+        if (Status == PendingPasswordChangeStatus.Parked || FailureReason == PasswordSetFailureReason.TargetObjectNotFound)
+        {
+            AttemptCount = 0;
+            FailureReason = null;
+            TargetMessage = null;
+        }
+
+        Status = PendingPasswordChangeStatus.Pending;
+        NextRetryAt = null;
         ClearClaim();
     }
 

@@ -127,7 +127,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
         IReadOnlyList<MetaverseObjectAccount>? accounts = null,
         PasswordPolicyReconciliation? reconciliation = null,
         TimeSpan? deliveryWait = null,
-        Func<PasswordSetSubmission, Task<PasswordQueueResult>>? setPassword = null)
+        Func<PasswordSetSubmission, Task<PasswordQueueResult>>? setPassword = null,
+        Func<int, Task<bool>>? confirmStopTrying = null)
     {
         accounts ??= allowSelection ? _accounts : [_accounts[0]];
 
@@ -141,7 +142,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
             { x => x.Reconcile, (IReadOnlyList<MetaverseObjectAccount> _) => reconciliation ?? Reconciliation() },
             { x => x.GeneratePassword, (PasswordGenerationPolicy _) => { _generateCalls++; return $"{GeneratedPassword}-{_generateCalls}"; } },
             { x => x.SetPassword, setPassword ?? Queue },
-            { x => x.StopTrying, (int connectedSystemId) => { _stopped.Add(connectedSystemId); return Task.CompletedTask; } }
+            { x => x.StopTrying, (int connectedSystemId) => { _stopped.Add(connectedSystemId); return Task.CompletedTask; } },
+            { x => x.ConfirmStopTrying, confirmStopTrying ?? (_ => Task.FromResult(true)) }
         };
 
         var provider = Render<MudDialogProvider>();
@@ -981,6 +983,40 @@ public class SetPasswordDialogTests : JimComponentTestContext
             {
                 Assert.That(_stopped, Is.EqualTo(new[] { _accounts[1].ConnectedSystemId }), "stop trying is for that Connected System alone");
                 Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[1].GetAttribute("data-state"), Is.EqualTo("Cancelled"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Stop trying is asked about first where the host says so (#2160: the change is a Connected System Object's first
+    /// password, and cancelling it leaves that object without one). Declined, nothing is stopped and the row still
+    /// reads as being retried.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_StopTryingDeclined_StopsNothing()
+    {
+        var asked = new List<int>();
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Retrying, "Connection refused", PasswordSetFailureReason.Transient, DateTime.UtcNow.AddMinutes(5)));
+        var provider = ShowDialog(allowSelection: true, confirmStopTrying: connectedSystemId =>
+        {
+            asked.Add(connectedSystemId);
+            return Task.FromResult(false);
+        });
+        Click(provider, SelectAllMarker);
+        Generate(provider);
+        SubmitAndSettle(provider);
+
+        Click(provider, StopTryingMarker);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(asked, Is.EqualTo(new[] { _accounts[1].ConnectedSystemId }));
+                Assert.That(_stopped, Is.Empty);
+                Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[1].GetAttribute("data-state"), Is.EqualTo("Retrying"));
             }
         });
     }
