@@ -75,10 +75,15 @@ public class MetaverseObjectType : IAuditable
     public List<PredefinedSearch> PredefinedSearches { get; set; } = null!;
 
     /// <summary>
+    /// The Deletion Rule a new Object Type starts with, whichever surface creates it.
+    /// </summary>
+    public const MetaverseObjectDeletionRule DefaultDeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+
+    /// <summary>
     /// Determines when Metaverse Objects of this type should be automatically deleted.
     /// Default is WhenLastConnectorDisconnected, meaning objects are deleted when all connectors are removed.
     /// </summary>
-    public MetaverseObjectDeletionRule DeletionRule { get; set; } = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+    public MetaverseObjectDeletionRule DeletionRule { get; set; } = DefaultDeletionRule;
 
     /// <summary>
     /// Optional grace period before a scheduled deletion is executed.
