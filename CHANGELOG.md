@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
 - ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
+- ✨ Scripts can list the expression functions, with each one's signature, parameters and an example, filtered by name or category: `Get-JIMExpressionFunction -Name '*Date*'`, or REST (`/api/v1/synchronisation/expression-functions`). (#2253)
 - ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
 - ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
 - ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
