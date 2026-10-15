@@ -136,6 +136,7 @@ nav:
       - Scoping Criteria: configuration/scoping-criteria.md
       - Object Matching Rules: configuration/object-matching-rules.md
       - Attribute Mappings: configuration/attribute-mappings.md
+      - Configuration Tests: configuration/configuration-tests.md
       - Generated Values: configuration/generated-values.md
       - Generated Values in Target Systems: configuration/generated-values-in-target-systems.md
       - Deriving Metaverse Attributes: configuration/derived-attributes.md

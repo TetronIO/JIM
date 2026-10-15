@@ -104,6 +104,8 @@ The **Test this scope** panel at the foot of the Scope tab answers whether one o
 - **Run as of**<br /> Relative dates resolve against the date and time you choose (UTC), or the current time when you leave it empty. Use it to check a leaver rule on the day it should let go.
 - **Result**<br /> Whether the object is in scope, each group and criterion with what the object held, and when the outcome next changes as time passes, the values staying the same. For example, a leave date of 1 November under *after* `30 days ago` reports that the object leaves scope at midnight UTC on 1 December.
 
+To keep a test and run it again after later changes, choose **Save as test case**; see [Configuration Tests](configuration-tests.md).
+
 Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint, which test the saved criteria.
 
 ## Previewing a scope change
