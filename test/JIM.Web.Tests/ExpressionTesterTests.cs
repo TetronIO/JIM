@@ -339,4 +339,61 @@ public class ExpressionTesterTests : JimComponentTestContext
     }
 
 #endregion
+
+    #region A Generated Value (#2055 Phase 2d): the base expression, stopping before generation
+
+    private static Flow GeneratedFlow(string baseExpression)
+    {
+        var flow = ImportFlow(baseExpression, AttributeDataType.Text, MissingInputBehaviour.ContributeNoValue);
+        flow.Mapping.Generation = new SyncRuleMappingGeneration();
+        flow.Mapping.CaseNormalisation = InboundCaseNormalisation.Lower;
+        return flow;
+    }
+
+    [Test]
+    public async Task ExpressionTester_GeneratedValue_ShowsTheBaseGenerationWouldStartFromAsync()
+    {
+        var cut = RenderFlow(GeneratedFlow("cs[\"givenName\"]"));
+
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+        ClickRunTest(cut);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindComponents<MudAlert>(), Is.Empty, "a base is not an input error");
+            Assert.That(cut.FindAll("[data-testid=generated-base]").Select(e => e.TextContent.Trim()), Is.EqualTo(new[] { "priya" }));
+        }
+    }
+
+    [Test]
+    public async Task ExpressionTester_GeneratedValueSeveralValues_ShowsTheErrorAsync()
+    {
+        var cut = RenderFlow(GeneratedFlow("cs[\"mail\"]"));
+        var mail = cut.FindComponents<TestInputValueEditor>().Single(e => e.Instance.Label == "cs[\"mail\"]").Instance.State;
+        await cut.InvokeAsync(() => { mail.Pending = "a@corp.local"; mail.AddPending(); mail.Pending = "b@corp.local"; mail.AddPending(); });
+
+        ClickRunTest(cut);
+
+        Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error));
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowInputEdited_ReportsTheSampleValuesAsync()
+    {
+        // The Generated Value editor's candidate preview evaluates against these same samples.
+        IReadOnlyDictionary<string, string?>? reported = null;
+        var flow = GeneratedFlow("cs[\"givenName\"]");
+        var cut = Render<ExpressionTester>(p => p
+            .Add(c => c.Expression, flow.Source.Expression)
+            .Add(c => c.SyncRule, flow.Rule)
+            .Add(c => c.Mapping, flow.Mapping)
+            .Add(c => c.Source, flow.Source)
+            .Add(c => c.SampleValuesChanged, values => reported = values));
+
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+
+        Assert.That(reported?["cs[\"givenName\"]"], Is.EqualTo("Priya"));
+    }
+
+    #endregion
 }

@@ -19,9 +19,15 @@ function Test-JIMExpression {
         attribute's type apply in turn. Outcome then says whether the target would be given values, no value,
         or an error, and ValueLines gives the values it would hold.
 
+        An Attribute Flow that generates its value (a Generated Value) is tested as far as its base expression
+        and stops before generation, as a synchronisation does: generation needs the database to know which
+        values are taken. GeneratedValue is then $true, and BaseOutcome and BaseValue say what generation would
+        be given in place of Outcome and ValueLines.
+
     .PARAMETER Expression
         The expression to test.
         Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
+        It can be left out only for a Generated Value with no base expression, which generates its value from a sequence or random token alone.
 
     .PARAMETER MvAttributes
         A hashtable of sample Metaverse attribute values.
@@ -52,7 +58,8 @@ function Test-JIMExpression {
         The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester
         shows it, one value per line. With an Attribute Flow, Outcome, OutcomeDescription and ValueLines say what
         a synchronisation would give the target attribute, Inputs lists the values each input was given, and
-        IfInputHasNoValue says what each input's absence would do.
+        IfInputHasNoValue says what each input's absence would do. For a Generated Value, BaseOutcome and BaseValue
+        take the place of Outcome and ValueLines.
 
     .EXAMPLE
         Test-JIMExpression -Expression '"Hello, " + mv["Display Name"] + "!"' -MvAttributes @{ "Display Name" = "John Doe" }
@@ -92,6 +99,13 @@ function Test-JIMExpression {
         Tests what Attribute Flow 42 would give an object on 15 January 2027, when its leave date has passed.
 
     .EXAMPLE
+        Test-JIMExpression -Expression 'Left(cs["givenName"], 1) + cs["sn"]' -SyncRuleId 12 -MappingId 43 -CsAttributes @{ "givenName" = "John"; "sn" = "Smith" }
+
+        Tests the base expression of Attribute Flow 43, a Generated Value: BaseValue is the base generation would add its
+        uniqueness token to, after the Attribute Flow's value processing. Which value is free is decided when a
+        synchronisation runs.
+
+    .EXAMPLE
         Test-JIMExpression -Expression 'RandomPassword(16, true)'
 
         Tests random password generation (result will vary on each run).
@@ -108,7 +122,8 @@ function Test-JIMExpression {
     [CmdletBinding(DefaultParameterSetName = 'Expression')]
     [OutputType('JIM.TestExpressionResponse')]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = 'Expression')]
+        [Parameter(Position = 0, ParameterSetName = 'AttributeFlow')]
         [string]$Expression,
 
         [Parameter()]
@@ -140,9 +155,10 @@ function Test-JIMExpression {
             return
         }
 
-        # Build request body
-        $body = @{
-            expression = $Expression
+        # Build request body. A Generated Value with no base expression is tested without one.
+        $body = @{}
+        if ($PSBoundParameters.ContainsKey('Expression')) {
+            $body.expression = $Expression
         }
 
         if ($MvAttributes) {

@@ -6621,7 +6621,10 @@ public class SynchronisationController(
     {
         _logger.LogDebug("Testing expression: {Expression}", LogSanitiser.Sanitise(request.Expression));
 
-        if (string.IsNullOrWhiteSpace(request.Expression))
+        // A Generated Value with no base expression has nothing to type, so the expression may be omitted for one;
+        // the Attribute Flow path decides.
+        var testsAttributeFlow = request.SyncRuleId.HasValue && request.MappingId.HasValue;
+        if (string.IsNullOrWhiteSpace(request.Expression) && !testsAttributeFlow)
             return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
 
         if (request.SyncRuleId.HasValue != request.MappingId.HasValue)
@@ -6631,7 +6634,9 @@ public class SynchronisationController(
             return BadRequest(ApiErrorResponse.BadRequest("Values can be loaded from an object only when testing the expression as an Attribute Flow: give syncRuleId and mappingId too."));
 
         // First validate the expression syntax
-        var validationResult = _expressionEvaluator.Validate(request.Expression);
+        var validationResult = string.IsNullOrWhiteSpace(request.Expression)
+            ? ExpressionValidationResult.Success()
+            : _expressionEvaluator.Validate(request.Expression);
         if (!validationResult.IsValid)
         {
             return Ok(new TestExpressionResponse
@@ -6687,8 +6692,13 @@ public class SynchronisationController(
         if (target.Name == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Attribute Flow {mappingId} has no target attribute to test against."));
 
+        // Only a Generated Value with no base expression (its token alone) can be tested without one.
+        var generated = mapping.Generation != null;
+        if (string.IsNullOrWhiteSpace(request.Expression) && !(generated && AttributeFlowPipeline.GeneratedBaseSource(mapping) == null))
+            return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
+
         // The expression under test takes the Attribute Flow's own Missing Input Behaviour.
-        var source = new SyncRuleMappingSource
+        var source = string.IsNullOrWhiteSpace(request.Expression) ? null : new SyncRuleMappingSource
         {
             Expression = request.Expression,
             MissingInputBehaviour = mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression))?.MissingInputBehaviour
@@ -6728,13 +6738,18 @@ public class SynchronisationController(
                 .ToList()
         };
 
-        if (tested.Evaluation is not { } evaluation)
+        if (tested.InputErrors.Count > 0)
         {
             response.IsValid = false;
             response.InputErrors = tested.InputErrors;
             response.ErrorMessage = string.Join(" ", tested.InputErrors);
             return Ok(response);
         }
+
+        if (tested.GeneratedBase is { } generatedBase)
+            return Ok(DescribeGeneratedBase(response, tested, generatedBase, mapping.Generation!, target.Name));
+
+        var evaluation = tested.Evaluation!;
 
         var description = AttributeFlowTester.Describe(evaluation, target.Name);
         var expressionResult = evaluation.Source.Result;
@@ -6760,6 +6775,40 @@ public class SynchronisationController(
             })
             .ToList();
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Fills an Attribute Flow test's response for a Generated Value (#242): what its base expression gives generation,
+    /// the test having stopped before generation as synchronisation does.
+    /// </summary>
+    private static TestExpressionResponse DescribeGeneratedBase(TestExpressionResponse response, AttributeFlowTestResult tested,
+        GeneratedBaseEvaluation generatedBase, SyncRuleMappingGeneration generation, string targetName)
+    {
+        var description = AttributeFlowTester.DescribeGeneratedBase(generatedBase, generation, targetName);
+        var expressionResult = generatedBase.Source?.Result;
+        response.GeneratedValue = true;
+        response.IsValid = generatedBase.Outcome != GeneratedBaseOutcome.Error;
+        response.BaseOutcome = generatedBase.Outcome;
+        response.BaseValue = generatedBase.BaseValue;
+        response.ErrorReason = generatedBase.ErrorReason;
+        response.OutcomeDescription = description;
+        response.ErrorMessage = generatedBase.Outcome == GeneratedBaseOutcome.Error ? description : null;
+        response.MissingInputs = generatedBase.Source?.MissingInputs.Count > 0 ? generatedBase.Source.MissingInputs : null;
+        response.Result = expressionResult;
+        response.ResultLines = expressionResult != null ? ExpressionText.ToDisplayLines(expressionResult) : null;
+        response.ResultType = expressionResult?.GetType().Name;
+        response.ValueProcessingSteps = tested.ValueProcessing?.Steps;
+        response.ValueProcessingChanged = tested.ValueProcessing?.Changed;
+        response.IfInputHasNoValue = tested.GeneratedBaseIfInputHasNoValue
+            .Select(absent => new TestExpressionAbsentInputDto
+            {
+                Input = absent.Accessor,
+                BaseOutcome = absent.GeneratedBase.Outcome,
+                ErrorReason = absent.GeneratedBase.ErrorReason,
+                OutcomeDescription = AttributeFlowTester.DescribeGeneratedBase(absent.GeneratedBase, generation, targetName)
+            })
+            .ToList();
+        return response;
     }
 
     /// <summary>

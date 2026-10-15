@@ -798,9 +798,16 @@ public class TestExpressionAbsentInputDto
     public string Input { get; set; } = null!;
 
     /// <summary>
-    /// What the target attribute would then be given.
+    /// What the target attribute would then be given. Null for an Attribute Flow that generates its value; see
+    /// <c>BaseOutcome</c>.
     /// </summary>
-    public AttributeFlowOutcome Outcome { get; set; }
+    public AttributeFlowOutcome? Outcome { get; set; }
+
+    /// <summary>
+    /// For an Attribute Flow that generates its value, what its base expression would then give generation: a base,
+    /// a wait, or an error. Null for any other Attribute Flow.
+    /// </summary>
+    public GeneratedBaseOutcome? BaseOutcome { get; set; }
 
     /// <summary>
     /// Why that outcome is an error; null when it is not.
@@ -916,4 +923,23 @@ public class TestExpressionResponse
     /// Flow was given and its sample values could be used.
     /// </summary>
     public IReadOnlyList<TestExpressionAbsentInputDto>? IfInputHasNoValue { get; set; }
+
+    /// <summary>
+    /// True when the Attribute Flow generates its value (a Generated Value). The test then stops before generation, as
+    /// synchronisation does: <c>BaseOutcome</c> and <c>BaseValue</c> say what generation would be given, and
+    /// <c>Outcome</c> is not set. Set only when an Attribute Flow was given.
+    /// </summary>
+    public bool? GeneratedValue { get; set; }
+
+    /// <summary>
+    /// For a Generated Value, what its base expression gives generation: a base, a wait (no value yet), no base
+    /// expression (the token alone is generated), or an error.
+    /// </summary>
+    public GeneratedBaseOutcome? BaseOutcome { get; set; }
+
+    /// <summary>
+    /// For a Generated Value, the base the uniqueness token would be added to, after value processing. Set only when
+    /// <c>BaseOutcome</c> is Base. Which candidate is free is decided when synchronisation runs.
+    /// </summary>
+    public string? BaseValue { get; set; }
 }

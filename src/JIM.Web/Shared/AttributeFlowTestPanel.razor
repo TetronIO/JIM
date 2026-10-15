@@ -14,12 +14,25 @@
 @* Tests an Attribute Flow as a Synchronisation would run it (#2055): typed inputs from the schema, several values for a
    multi-valued attribute, "No value" distinct from empty text, values loaded from a real object, and a trace of each
    step of the pipeline synchronisation runs. *@
-<MudText Typo="Typo.subtitle2" Class="mt-5">Test this Attribute Flow</MudText>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-    Give each attribute the Expression reads a value, or load them from an object, and see what a Synchronisation would
-    do: each value is read as its attribute's type, and the result goes through this Attribute Flow's Missing Input
-    Behaviour, value processing and conversion to @_targetName.
-</MudText>
+@if (Generating)
+{
+    <MudText Typo="Typo.subtitle2" Class="mt-5">Test the base expression</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Give each attribute the base expression reads a value, or load them from an object, and see the base a
+        Synchronisation would generate @_targetName from: each value is read as its attribute's type, and the result goes
+        through this Attribute Flow's Missing Input Behaviour and value processing. The test stops there, because which
+        value is free is decided when a Synchronisation runs.
+    </MudText>
+}
+else
+{
+    <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Attribute Flow</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Give each attribute the Expression reads a value, or load them from an object, and see what a Synchronisation would
+        do: each value is read as its attribute's type, and the result goes through this Attribute Flow's Missing Input
+        Behaviour, value processing and conversion to @_targetName.
+    </MudText>
+}
 
 <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
                  AriaLabel="Where the values come from" Dense="true" />
@@ -57,7 +70,7 @@ else
                     <td style="min-width: 16rem">
                         @if (descriptor is { Type: { } type, Plurality: { } plurality })
                         {
-                            <TestInputValueEditor Label="@accessor" Type="type" Plurality="plurality" State="state" OnChanged="ClearResult" />
+                            <TestInputValueEditor Label="@accessor" Type="type" Plurality="plurality" State="state" OnChanged="InputsChangedAsync" />
                         }
                         else
                         {
@@ -67,7 +80,7 @@ else
                     <td>
                         @if (descriptor.InSchema)
                         {
-                            <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValue(state, v))" Dense="true"
+                            <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValueAsync(state, v))" Dense="true"
                                          aria-label="@($"{accessor} has no value")" />
                         }
                     </td>
@@ -93,7 +106,7 @@ else
     </MudAlert>
 }
 
-@if (_result is { Evaluation: null } inputProblem)
+@if (_result is { InputErrors.Count: > 0 } inputProblem)
 {
     <MudAlert Severity="Severity.Error" Class="mt-3">
         @foreach (var inputError in inputProblem.InputErrors)
@@ -208,6 +221,98 @@ else
     }
 }
 
+@if (_result is { GeneratedBase: { } generated } testedBase)
+{
+    var baseSource = generated.Source;
+    <MudPaper Outlined="true" Class="pa-3 mt-3">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">What a Synchronisation would do</MudText>
+        <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
+            <tbody>
+                <tr>
+                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">1. Base expression returned</td>
+                    <td>
+                        @switch (baseSource?.Outcome)
+                        {
+                            case ExpressionSourceOutcome.Result:
+                                @foreach (var line in ExpressionText.ToDisplayLines(baseSource.Result))
+                                {
+                                    <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @baseSource.Result!.GetType().Name</MudText>
+                                break;
+                            case ExpressionSourceOutcome.NoValue when baseSource.MissingInputs.Count == 0:
+                                <EmptyValue />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">No value</MudText>
+                                break;
+                            case ExpressionSourceOutcome.EvaluationFailed:
+                                <MudText Typo="Typo.body2">Failed: @baseSource.EvaluationException?.Message</MudText>
+                                break;
+                            case null:
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">No base expression</MudText>
+                                break;
+                            default:
+                                <MudText Typo="Typo.body2">Not evaluated: no value for @string.Join(", ", baseSource.MissingInputs)</MudText>
+                                break;
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">2. Value processing</td>
+                    <td><MudText Typo="Typo.body2">@DescribeBaseValueProcessing(testedBase, generated)</MudText></td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">3. Base for generation</td>
+                    <td>
+                        @if (generated.Outcome == GeneratedBaseOutcome.Base)
+                        {
+                            <MudText Typo="Typo.body1" Class="jim-expression-output" data-testid="generated-base">@generated.BaseValue</MudText>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td class="mud-text-secondary" style="vertical-align: top">4. Result</td>
+                    <td>
+                        @if (generated.Outcome == GeneratedBaseOutcome.Error)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.DescribeGeneratedBase(generated, Mapping.Generation!, _targetName)</MudAlert>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBase(generated, Mapping.Generation!, _targetName)</MudText>
+                        }
+                    </td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+
+    @if (testedBase.GeneratedBaseIfInputHasNoValue.Count > 0)
+    {
+        <MudPaper Outlined="true" Class="pa-3 mt-3">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">If an input has no value</MudText>
+            <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
+                <tbody>
+                    @foreach (var absentOutcome in testedBase.GeneratedBaseIfInputHasNoValue)
+                    {
+                        <tr @key="absentOutcome.Accessor">
+                            <td style="width: 13rem; vertical-align: top"><code>@absentOutcome.Accessor</code></td>
+                            <td style="width: 7rem; vertical-align: top">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
+                                         Color="@BaseOutcomeColour(absentOutcome.GeneratedBase.Outcome)">@BaseOutcomeLabel(absentOutcome.GeneratedBase.Outcome)</MudChip>
+                            </td>
+                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBase(absentOutcome.GeneratedBase, Mapping.Generation!, _targetName)</MudText></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+}
+
 @code {
     /// <summary>
     /// The Expression to test, as typed in the editor.
@@ -232,6 +337,18 @@ else
     /// </summary>
     [Parameter, EditorRequired]
     public SyncRuleMappingSource Source { get; set; } = null!;
+
+    /// <summary>
+    /// Raised as the inputs are edited or loaded, with each input's value as text (its first value, or null for no
+    /// value), keyed by accessor. The Generated Value editor's candidate preview evaluates against these same samples.
+    /// </summary>
+    [Parameter]
+    public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
+
+    /// <summary>
+    /// Whether the Attribute Flow generates its value: the test then stops at the base, as a Synchronisation does.
+    /// </summary>
+    private bool Generating => Mapping.Generation != null;
 
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
@@ -284,10 +401,18 @@ else
         return state;
     }
 
-    private void SetNoValue(TestInputState state, bool noValue)
+    private async Task SetNoValueAsync(TestInputState state, bool noValue)
     {
         state.NoValue = noValue;
+        await InputsChangedAsync();
+    }
+
+    private async Task InputsChangedAsync()
+    {
         ClearResult();
+        if (SampleValuesChanged.HasDelegate)
+            await SampleValuesChanged.InvokeAsync(_inputs.ToDictionary(input => input.Accessor,
+                input => StateOf(input.Accessor) is { NoValue: false, Values: [var first, ..] } ? first : null, StringComparer.Ordinal));
     }
 
     private void SetAsOf(DateTime? asOf)
@@ -322,7 +447,7 @@ else
         foreach (var input in loaded)
             StateOf(input.Accessor).Load(input.Values.Select(ToEditableText));
 
-        ClearResult();
+        await InputsChangedAsync();
     }
 
     /// <summary>
@@ -379,6 +504,33 @@ else
         var steps = string.Join(", then ", processing.Steps.Select(StepLabel));
         return $"{steps}: {(processing.Changed ? "changed the value" : "unchanged")}";
     }
+
+    private static string DescribeBaseValueProcessing(AttributeFlowTestResult tested, GeneratedBaseEvaluation generated)
+    {
+        if (tested.ValueProcessing is not { } processing)
+            return generated.UnprocessedBaseValue == null ? "Nothing to process" : "Not applied: value processing applies on import only";
+
+        if (processing.Steps.Count == 0)
+            return "None set";
+
+        var steps = string.Join(", then ", processing.Steps.Select(StepLabel));
+        return $"{steps}: {(processing.Changed ? "changed the value" : "unchanged")}";
+    }
+
+    private static string BaseOutcomeLabel(GeneratedBaseOutcome outcome) => outcome switch
+    {
+        GeneratedBaseOutcome.Base => "Base",
+        GeneratedBaseOutcome.Waits => "Waits",
+        GeneratedBaseOutcome.NoBaseExpression => "Token only",
+        _ => "Error"
+    };
+
+    private static Color BaseOutcomeColour(GeneratedBaseOutcome outcome) => outcome switch
+    {
+        GeneratedBaseOutcome.Base => Color.Success,
+        GeneratedBaseOutcome.Error => Color.Error,
+        _ => Color.Default
+    };
 
     private static string StepLabel(AttributeFlowValueProcessingStep step) => step switch
     {
