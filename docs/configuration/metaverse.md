@@ -134,7 +134,7 @@ Alongside JIM's built-in attributes (which are read-only and cannot be deleted),
 
 ### Widening an attribute to multi-valued
 
-A Connected System sometimes holds several values for something you first modelled as single-valued: a directory attribute that turns out to be multi-valued, say. Widen the Metaverse Attribute to multi-valued and every value a Metaverse Object already holds is kept, so there is nothing to clear first. The next synchronisation flows every value its sources hold. A single-valued attribute in a Connected System that the attribute flows to still receives one value, exactly as before.
+A Connected System sometimes holds several values for something you first modelled as single-valued: a directory attribute that turns out to be multi-valued, say. Widen the Metaverse Attribute to multi-valued and every value a Metaverse Object already holds is kept, so there is nothing to clear first. The next synchronisation flows every value its sources hold. A single-valued Connected System attribute it flows to still receives one value, exactly as before.
 
 - **Portal**<br /> In the attribute's edit dialog, choose **Multi-valued** for **Plurality**. While values exist, **Data Type** stays locked, and so does **Plurality** on an attribute that is already multi-valued; each says why beneath it.
 - **REST API**<br /> `PATCH /api/v1/metaverse/attributes/{id}/schema` with the attribute's current type and a plurality of `MultiValued`. A refused change answers `409 Conflict` with the number of Metaverse Objects holding values, and changes nothing.
