@@ -140,9 +140,9 @@ public class ExampleDataTemplateDto
     public List<ExampleDataTemplateObjectTypeDto> ObjectTypes { get; set; } = new();
 
     /// <summary>
-    /// What the create or update that returned this template had to say about its expressions without refusing it
-    /// (#2055 Phase 3): an expression reading an attribute the template does not generate, or a problem with one the
-    /// update left as it was. Empty on every read.
+    /// What the create or update that returned this template had to say about its expressions without refusing it: an
+    /// expression reading an attribute the template does not generate, or a problem with one the update left as it was.
+    /// Empty on every read.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 

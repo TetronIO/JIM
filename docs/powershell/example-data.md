@@ -252,6 +252,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 | `LastUpdated` | `datetime` | When the template was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the template. |
 | `ObjectTypes` | `object[]` | The Object Types the template generates objects for. Each has `Id`, `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `ObjectsToCreate` and `TemplateAttributes`. |
+| `Warnings` | `string[]` | What the create or update that returned this template had to say about its expressions without refusing it: an expression reading an attribute the template does not generate, or a problem with one the update left as it was. Empty on every read. |
 <!-- END GENERATED: Get-JIMExampleDataTemplate -->
 
 ### Examples
