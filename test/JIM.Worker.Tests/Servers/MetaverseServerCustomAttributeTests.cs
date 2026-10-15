@@ -401,6 +401,88 @@ public class MetaverseServerCustomAttributeTests
         _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(attribute), Times.Once);
     }
 
+    /// <summary>
+    /// The one schema change stored values do not block (#2153, D3): same type, single-valued to multi-valued. Every
+    /// value held is still a valid member of the wider set, so the change goes through the same audited path as any
+    /// other schema change.
+    /// </summary>
+    [Test]
+    public async Task ChangeMetaverseAttributeSchemaAsync_WideningWithStoredValues_AppliesThroughAuditedPathAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "dSCorePropagationData", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(77);
+        _metaverseRepo.Setup(r => r.UpdateMetaverseAttributeAsync(attribute)).Returns(Task.CompletedTask);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+            42, AttributeDataType.DateTime, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy(), "Widen after upgrade");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.True);
+            Assert.That(impact.BlockedByValues, Is.False);
+            Assert.That(impact.TotalObjectsWithValues, Is.EqualTo(77));
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.DateTime));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(_createdActivities.Where(a =>
+                    a.TargetType == ActivityTargetType.MetaverseAttribute &&
+                    a.TargetOperationType == ActivityTargetOperationType.Update &&
+                    a.TargetName == "dSCorePropagationData"),
+                Has.Exactly(1).Items, "the widening is audited like any other schema change");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    /// <summary>
+    /// Every change other than the lossless widening stays blocked by stored values, and nothing is written or audited.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Number, AttributePlurality.SingleValued, TestName = "Refuses a type change")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Number, AttributePlurality.MultiValued, TestName = "Refuses a type change while widening")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, AttributeDataType.Text, AttributePlurality.SingleValued, TestName = "Refuses multi-valued to single-valued")]
+    [TestCase(AttributeDataType.DateTime, AttributePlurality.MultiValued, AttributeDataType.Text, AttributePlurality.MultiValued, TestName = "Refuses a type change on a multi-valued attribute")]
+    public async Task ChangeMetaverseAttributeSchemaAsync_AnyOtherChangeWithStoredValues_RefusesAndWritesNothingAsync(
+        AttributeDataType currentType, AttributePlurality currentPlurality, AttributeDataType newType, AttributePlurality newPlurality)
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = currentType, AttributePlurality = currentPlurality };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(3);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(42, newType, newPlurality, TestUtilities.GetInitiatedBy());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.False);
+            Assert.That(impact.BlockedByValues, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.False);
+            Assert.That(attribute.Type, Is.EqualTo(currentType), "a refused change must leave the attribute as it was");
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(currentPlurality));
+            Assert.That(_createdActivities, Is.Empty);
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task EvaluateAttributeSchemaChangeAsync_ReportsTheCurrentAndProposedSchemaAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(5);
+
+        var impact = await _jim.Metaverse.EvaluateAttributeSchemaChangeAsync(attribute, AttributeDataType.Text, AttributePlurality.MultiValued);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.CurrentType, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(impact.CurrentPlurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(impact.ProposedType, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(impact.ProposedPlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(impact.TotalObjectsWithValues, Is.EqualTo(5));
+            Assert.That(impact.IsLosslessWidening, Is.True);
+            Assert.That(impact.Applied, Is.False, "evaluating changes nothing");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
     [Test]
     public async Task ChangeMetaverseAttributeSchemaAsync_WithBuiltIn_ThrowsAsync()
     {

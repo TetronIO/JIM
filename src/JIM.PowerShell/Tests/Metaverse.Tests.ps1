@@ -628,6 +628,36 @@ Describe 'Set-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Passes a widening to multi-valued through to the schema endpoint, keeping the current type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'DateTime'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -AttributePlurality MultiValued -ChangeReason 'Widen after upgrade' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'DateTime' -and $Body.attributePlurality -eq 'MultiValued' -and
+                    $Body.changeReason -eq 'Widen after upgrade'
+                }
+            }
+        }
+
+        It 'Surfaces a refused schema change as an error and sends nothing further' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -like '*/schema' } { throw 'Response status code does not indicate success: 409 (Conflict).' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -notlike '*/schema' } { $null }
+
+                { Set-JIMMetaverseAttribute -Id 1 -AttributePlurality SingleValued -Name 'Renamed' -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*409*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' }
+            }
+        }
+
         It 'Sends -Type Decimal to the schema endpoint verbatim (no alias normalisation)' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

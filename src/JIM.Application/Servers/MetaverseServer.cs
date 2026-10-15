@@ -965,10 +965,11 @@ public partial class MetaverseServer
     }
 
     /// <summary>
-    /// Evaluates the impact of changing a Metaverse Attribute's data type or plurality without making any change.
-    /// Any stored value across the Metaverse hard-blocks the change.
+    /// Evaluates the impact of changing a Metaverse Attribute to a proposed data type and plurality without making any
+    /// change. While any Metaverse Object holds a value, only a lossless widening (same type, single-valued to
+    /// multi-valued) is allowed; <see cref="AttributeSchemaChangeImpact.BlockedByValues"/> reports any other change.
     /// </summary>
-    public async Task<AttributeSchemaChangeImpact> EvaluateAttributeSchemaChangeAsync(MetaverseAttribute attribute)
+    public async Task<AttributeSchemaChangeImpact> EvaluateAttributeSchemaChangeAsync(MetaverseAttribute attribute, AttributeDataType proposedType, AttributePlurality proposedPlurality)
     {
         ArgumentNullException.ThrowIfNull(attribute);
 
@@ -978,13 +979,18 @@ public partial class MetaverseServer
             AttributeId = attribute.Id,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
+            CurrentType = attribute.Type,
+            CurrentPlurality = attribute.AttributePlurality,
+            ProposedType = proposedType,
+            ProposedPlurality = proposedPlurality,
             TotalObjectsWithValues = total
         };
     }
 
     /// <summary>
-    /// Changes a custom Metaverse Attribute's data type and/or plurality through the audited path. Refused (no change)
-    /// while any Metaverse Object holds a stored value; the returned impact reports the block. Built-in attributes
+    /// Changes a custom Metaverse Attribute's data type and/or plurality through the audited path. While any Metaverse
+    /// Object holds a stored value, only a lossless widening (same type, single-valued to multi-valued) is applied;
+    /// any other change is refused with no change made, and the returned impact reports the block. Built-in attributes
     /// cannot be changed.
     /// </summary>
     /// <returns>The evaluated impact; <see cref="AttributeSchemaChangeImpact.Applied"/> is true when the change was applied.</returns>
@@ -1005,11 +1011,16 @@ public partial class MetaverseServer
         if (attribute.BuiltIn)
             throw new InvalidOperationException($"Cannot change the type or plurality of built-in Metaverse Attribute '{attribute.Name}'.");
 
-        var impact = await EvaluateAttributeSchemaChangeAsync(attribute);
+        var impact = await EvaluateAttributeSchemaChangeAsync(attribute, newType, newPlurality);
 
-        // Stored values hard-block a type/plurality change; make no change and report via the impact.
+        // Stored values block every change except a lossless widening (same type, single-valued to multi-valued);
+        // make no change and report the refusal via the impact.
         if (impact.BlockedByValues)
             return impact;
+
+        if (impact.TotalObjectsWithValues > 0)
+            Log.Information("ChangeMetaverseAttributeSchemaAsync: widening Metaverse Attribute {AttributeId} to multi-valued while {ObjectCount} Metaverse Object(s) hold values",
+                attribute.Id, impact.TotalObjectsWithValues);
 
         attribute.Type = newType;
         attribute.AttributePlurality = newPlurality;
