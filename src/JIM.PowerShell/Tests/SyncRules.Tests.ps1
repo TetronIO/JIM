@@ -631,6 +631,22 @@ Describe 'Set-JIMSyncRule' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
+
+    Context 'Save warnings (#2055 Phase 3)' {
+
+        It 'Writes each save warning, so disabling a rule with a broken Attribute Flow says what is broken' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $brokenFlow = "The expression for 'Display Name' reads cs[""surname""], which is not an attribute of 'user', so it never has a value."
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Users'; Warnings = @($brokenFlow) } }
+
+                Set-JIMSyncRule -Id 5 -Disable -Confirm:$false -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $saveWarnings | Should -HaveCount 1
+                $saveWarnings[0].Message | Should -Be $brokenFlow
+            }
+        }
+    }
 }
 
 Describe 'Remove-JIMSyncRule' {

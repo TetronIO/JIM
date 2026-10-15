@@ -100,6 +100,35 @@ public partial class ExpressionFunctionCatalogueTests
         }
     }
 
+    /// <summary>The functions whose result is one of their arguments, so its type depends on what they are given.</summary>
+    private static readonly string[] FunctionsReturningAnArgument = ["Coalesce", "IIF", "Min", "Max", "Where"];
+
+    [Test]
+    public void Catalogue_OnlyAFunctionReturningOneOfItsArgumentsDeclaresAnUnknownResultType()
+    {
+        // Saving refuses a result its target can never hold (#2055 Phase 3), and that check reads this type. A function
+        // left Unknown is never checked, so Unknown is kept for the functions whose result really is an argument.
+        var unknown = ExpressionFunctionCatalogue.All.Where(f => f.ResultType == ExpressionResultType.Unknown).Select(f => f.Name);
+
+        Assert.That(unknown, Is.EquivalentTo(FunctionsReturningAnArgument));
+    }
+
+    [TestCase("text", ExpressionResultType.Text)]
+    [TestCase("several values", ExpressionResultType.Text)]
+    [TestCase("true or false", ExpressionResultType.Boolean)]
+    [TestCase("a whole number", ExpressionResultType.Number)]
+    [TestCase("a long number", ExpressionResultType.LongNumber)]
+    [TestCase("a decimal number", ExpressionResultType.Decimal)]
+    [TestCase("a date", ExpressionResultType.DateTime)]
+    public void Catalogue_EveryResultTypeAgreesWithWhatTheReferenceSaysItReturns(string returns, ExpressionResultType expected)
+    {
+        var functions = ExpressionFunctionCatalogue.All.Where(f => f.Returns == returns).ToList();
+
+        Assert.That(functions, Is.Not.Empty);
+        foreach (var function in functions)
+            Assert.That(function.ResultType, Is.EqualTo(expected), function.Name);
+    }
+
     [Test]
     public void NonRepeatableFunctionDetector_FindsEveryFunctionTheCatalogueMarksNonRepeatable()
     {

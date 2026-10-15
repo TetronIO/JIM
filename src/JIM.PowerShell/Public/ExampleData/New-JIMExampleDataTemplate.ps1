@@ -96,6 +96,12 @@ function New-JIMExampleDataTemplate {
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates" -Method 'POST' -Body $body
                 Write-Verbose "Created Data Generation Template: $($response.id)"
 
+                # What the save said about the template's expressions without refusing it (#2055 Phase 3): each
+                # written as the server phrased it.
+                foreach ($saveWarning in @($response.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
+
                 if ($PassThru) {
                     $response
                 }

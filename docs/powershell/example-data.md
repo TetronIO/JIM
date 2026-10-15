@@ -252,6 +252,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 | `LastUpdated` | `datetime` | When the template was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the template. |
 | `ObjectTypes` | `object[]` | The Object Types the template generates objects for. Each has `Id`, `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `ObjectsToCreate` and `TemplateAttributes`. |
+| `Warnings` | `string[]` | What the create or update that returned this template had to say about its expressions without refusing it: an expression reading an attribute the template does not generate, or a problem with one the update left as it was. Empty on every read. |
 <!-- END GENERATED: Get-JIMExampleDataTemplate -->
 
 ### Examples
@@ -362,6 +363,8 @@ New-JIMExampleDataTemplate -Name "Demo Organisation" -ObjectType @(
 Renames a Data Generation Template and/or replaces its Object Type configuration. Built-in templates cannot be updated.
 
 Supplying `-ObjectType` **replaces the template's entire Object Type graph**: every Object Type and attribute configuration not present in the supplied hashtables is removed. To add a single attribute without restating the rest, use [`Add-JIMExampleDataTemplateAttribute`](#add-jimexampledatatemplateattribute).
+
+Expressions are [checked when the template is saved](../concepts/expressions.md#validation), by this cmdlet, `New-JIMExampleDataTemplate` and `Add-JIMExampleDataTemplateAttribute` alike. A new or changed expression that does not parse, or reads `cs["..."]`, is refused. One reading an attribute the template does not generate, or a problem with an expression the save left as it was, is written as a warning and the template is saved.
 
 <!-- BEGIN GENERATED: Set-JIMExampleDataTemplate -->
 ### Syntax

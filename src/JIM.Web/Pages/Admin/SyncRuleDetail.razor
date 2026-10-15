@@ -887,6 +887,7 @@ else if (_syncRule != null)
             case true when isSyncRuleNew:
                 Snackbar.Add("Synchronisation Rule created.", Severity.Success);
                 ReportSequenceSkips();
+                ReportSaveWarnings();
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
@@ -897,6 +898,7 @@ else if (_syncRule != null)
                 _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
+                ReportSaveWarnings();
                 if (_attributeFlowTab != null)
                     await _attributeFlowTab.RefreshDerivedFlowStepsAsync();
                 break;
@@ -912,6 +914,17 @@ else if (_syncRule != null)
     /// <see cref="JIM.Models.Logic.SyncRuleMappingGeneration.SequenceSkippedAhead"/> by
     /// <c>CreateOrUpdateSyncRuleAsync</c>). A no-op when the save touched no such mapping.
     /// </summary>
+    /// <summary>
+    /// After the whole-rule save, one snackbar per warning it raised about the Attribute Flows: a problem with an
+    /// expression the save left as it was (#2055 Phase 3), or a derived flow calling a non-repeatable function (#1750).
+    /// The same list the REST API returns as <c>warnings</c> and PowerShell writes as warnings.
+    /// </summary>
+    private void ReportSaveWarnings()
+    {
+        foreach (var warning in _syncRule?.AttributeFlowSaveWarnings ?? [])
+            Snackbar.Add(warning, Severity.Warning);
+    }
+
     private void ReportSequenceSkips()
     {
         if (_syncRule == null)

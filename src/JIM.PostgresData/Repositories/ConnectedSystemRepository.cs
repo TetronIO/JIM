@@ -7509,6 +7509,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToDictionaryAsync(m => m.Id, m => m.KeepUnique);
     }
 
+    public async Task<Dictionary<int, SyncRuleMappingExpressionState>> GetSyncRuleMappingExpressionStatesAsync(IReadOnlyCollection<int> mappingIds)
+    {
+        if (mappingIds.Count == 0)
+            return [];
+
+        // Read-only comparison input, so no tracking: a caller holding the mapping tracked has already changed it, and a
+        // tracked query would hand back those changed instances rather than what is stored.
+        var ids = mappingIds.ToList();
+        var stored = await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => ids.Contains(m.Id))
+            .Select(m => new
+            {
+                m.Id,
+                m.TargetMetaverseAttributeId,
+                m.TargetConnectedSystemAttributeId,
+                Expressions = m.Sources.OrderBy(s => s.Order).Select(s => s.Expression).ToList()
+            })
+            .ToListAsync();
+
+        return stored.ToDictionary(m => m.Id,
+            m => new SyncRuleMappingExpressionState(m.TargetMetaverseAttributeId, m.TargetConnectedSystemAttributeId, m.Expressions));
+    }
+
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)
     {
         var row = await Repository.Database.SyncRules

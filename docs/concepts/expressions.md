@@ -230,7 +230,7 @@ These use .NET [regular expressions](https://learn.microsoft.com/dotnet/standard
 | `ToFileTime(date)` | Convert a date, or ISO 8601 text, to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
 | `FromFileTime(filetime)` | Convert an Active Directory FILETIME back to a date | `FromFileTime(cs["accountExpires"])` |
 
-`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. The value then changes on every synchronisation and, from an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), can be exported every time, so JIM warns when you save an Attribute Flow that calls one (it still saves it).
 
 ### Dates and Numbers as Text
 
@@ -489,7 +489,16 @@ The same test is available outside the portal, over [`Test-JIMExpression`](../po
 
 ### Validation
 
-JIM validates expressions when you save a Synchronisation Rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is. The tester reports the same errors, so a malformed expression is caught while you are writing it.
+JIM checks an Attribute Flow's expressions when you save it, in the portal, the REST API and PowerShell alike, and refuses one that:
+
+- does not parse, or calls a function there is none of;
+- reads the wrong side: an export Attribute Flow reading `cs["..."]`, which it never has;
+- reads an attribute the object type does not have, so that input never has a value;
+- returns a type its target can never hold, where that is known before it runs: for example `HasValue(...)`, which returns true or false, flowing to a DateTime attribute. Only an expression whose outermost call is a built-in function has a known type, so anything else is left to the tester.
+
+The portal shows the reason under the field as you type, from the same check. A [non-repeatable function](#date-functions) is allowed, with a warning.
+
+The check applies in full to an Attribute Flow you add, or whose expression or target you change. One that a save leaves as it was is never refused: its problems come back as warnings instead (a snackbar in the portal, `warnings` in the REST API's response, and a PowerShell warning). So you can always disable a Synchronisation Rule, or remove an Attribute Flow, while another one is broken. An Example Data Template's expressions are checked the same way; one reading an attribute the template does not generate is only a warning, because a template is built an attribute at a time.
 
 Common errors:
 
