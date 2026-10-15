@@ -230,6 +230,7 @@
         'Set-JIMExampleDataTemplate',
 
         # Expressions
+        'Get-JIMExpressionFunction',
         'Test-JIMExpression',
 
         # History
