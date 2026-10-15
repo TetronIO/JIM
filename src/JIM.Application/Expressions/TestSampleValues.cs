@@ -52,7 +52,7 @@ internal static class TestSampleValues
         return typedValues;
     }
 
-    private static bool TryConvertSample(object sample, AttributeDataType type, out object typed)
+    internal static bool TryConvertSample(object sample, AttributeDataType type, out object typed)
     {
         typed = null!;
         switch (type)

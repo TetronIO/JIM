@@ -39,6 +39,39 @@ public class ObjectMatchingServer
     #region public methods
 
     /// <summary>
+    /// Types <paramref name="inputs"/> from <paramref name="objectType"/>'s schema and resolves <paramref name="rule"/>'s
+    /// match values from them, with no lookup: the part of a test that needs no database, shared by
+    /// <see cref="TestAsync"/> and the saved test case runner (#2055 Phase 4).
+    /// </summary>
+    /// <param name="attributeValues">The typed inputs, as the values a Connected System Object would hold.</param>
+    internal static ObjectMatchingTestResult TestMatchValues(
+        MatchValueResolver matchValueResolver,
+        ObjectMatchingRule rule,
+        ConnectedSystemObjectType objectType,
+        IReadOnlyList<AttributeSample> inputs,
+        out List<ConnectedSystemObjectAttributeValue> attributeValues)
+    {
+        var errors = new List<string>();
+        attributeValues = [];
+        foreach (var input in inputs.Where(input => input.Values.Count > 0))
+        {
+            var attribute = objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase));
+            if (attribute == null)
+            {
+                errors.Add($"cs[\"{input.AttributeName}\"] has a value, but '{objectType.Name}' has no attribute of that name, so the rule would never see one.");
+                continue;
+            }
+
+            attributeValues.AddRange(TestSampleValues.Typed($"cs[\"{attribute.Name}\"]", input.Values, attribute.Type, attribute.AttributePlurality, errors)
+                .Select(typed => TestSampleValues.ToConnectedSystemValue(attribute, typed)));
+        }
+
+        return errors.Count > 0
+            ? new ObjectMatchingTestResult { InputErrors = errors }
+            : new ObjectMatchingTestResult { Resolution = matchValueResolver.Resolve(rule, attributeValues, objectType) };
+    }
+
+    /// <summary>
     /// The attributes <paramref name="rule"/> reads from an object of <paramref name="objectType"/>, each once: its
     /// source attribute, or each attribute of the type its Expression reads. The inputs an Object Matching test takes
     /// (#2055).
@@ -96,27 +129,9 @@ public class ObjectMatchingServer
         ArgumentNullException.ThrowIfNull(objectType);
         ArgumentNullException.ThrowIfNull(inputs);
 
-        var errors = new List<string>();
-        var attributeValues = new List<ConnectedSystemObjectAttributeValue>();
-        foreach (var input in inputs.Where(input => input.Values.Count > 0))
-        {
-            var attribute = objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, input.AttributeName, StringComparison.OrdinalIgnoreCase));
-            if (attribute == null)
-            {
-                errors.Add($"cs[\"{input.AttributeName}\"] has a value, but '{objectType.Name}' has no attribute of that name, so the rule would never see one.");
-                continue;
-            }
-
-            attributeValues.AddRange(TestSampleValues.Typed($"cs[\"{attribute.Name}\"]", input.Values, attribute.Type, attribute.AttributePlurality, errors)
-                .Select(typed => TestSampleValues.ToConnectedSystemValue(attribute, typed)));
-        }
-
-        if (errors.Count > 0)
-            return new ObjectMatchingTestResult { InputErrors = errors };
-
-        var resolution = _matchValueResolver.Resolve(rule, attributeValues, objectType);
-        if (!lookUp || resolution.Kind != MatchValueResolutionKind.Values)
-            return new ObjectMatchingTestResult { Resolution = resolution };
+        var matchValues = TestMatchValues(_matchValueResolver, rule, objectType, inputs, out var attributeValues);
+        if (!lookUp || matchValues.Resolution is not { Kind: MatchValueResolutionKind.Values } resolution)
+            return matchValues;
 
         if (rule.MetaverseObjectType == null)
             throw new ArgumentException("A lookup needs the rule's Metaverse Object Type.", nameof(rule));

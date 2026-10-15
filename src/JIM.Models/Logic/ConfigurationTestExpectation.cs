@@ -20,4 +20,20 @@ public sealed record ConfigurationTestExpectation(
     /// The values expected; empty unless <see cref="Kind"/> is <see cref="ConfigurationTestExpectationKind.Values"/>.
     /// </summary>
     public IReadOnlyList<string> Values { get; init; } = Values ?? [];
+
+    /// <summary>
+    /// Equal when they expect the same outcome, the same values in the same stated order, and the same order rule.
+    /// </summary>
+    public bool Equals(ConfigurationTestExpectation? other) =>
+        other is not null && Kind == other.Kind && InOrder == other.InOrder && Values.SequenceEqual(other.Values, StringComparer.Ordinal);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(InOrder);
+        foreach (var value in Values)
+            hash.Add(value, StringComparer.Ordinal);
+        return hash.ToHashCode();
+    }
 }
