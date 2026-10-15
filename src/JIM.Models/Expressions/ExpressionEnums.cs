@@ -277,3 +277,32 @@ public enum ExpressionFunctionCategory
     /// <summary>Active Directory userAccountControl flags.</summary>
     AccountControl
 }
+
+/// <summary>
+/// The type of value an expression function returns (#2055 Phase 3), named as the attribute type it suits. A function
+/// given a Multi-Valued attribute returns one such value per value it is given, so this is the type of each value, not
+/// how many there are. Saving refuses an expression whose outermost call returns a type its target can never hold.
+/// </summary>
+public enum ExpressionResultType
+{
+    /// <summary>Not known until it runs: the function returns one of its arguments (<c>Coalesce</c>, <c>IIF</c>).</summary>
+    Unknown,
+
+    /// <summary>Text.</summary>
+    Text,
+
+    /// <summary>A whole number that fits a Number attribute.</summary>
+    Number,
+
+    /// <summary>A whole number that may need a Long Number attribute.</summary>
+    LongNumber,
+
+    /// <summary>A decimal number.</summary>
+    Decimal,
+
+    /// <summary>A date and time.</summary>
+    DateTime,
+
+    /// <summary>True or false.</summary>
+    Boolean
+}

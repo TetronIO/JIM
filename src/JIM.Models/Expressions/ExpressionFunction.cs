@@ -12,6 +12,8 @@ namespace JIM.Models.Expressions;
 /// <param name="Category">The reference section and editor group it belongs to.</param>
 /// <param name="Parameters">Its parameters in order; optional ones last.</param>
 /// <param name="Returns">What it returns, in a few words, such as "true or false".</param>
+/// <param name="ResultType">The type of each value it returns, which saving checks against the target (#2055 Phase 3);
+/// Unknown only where it returns one of its arguments.</param>
 /// <param name="Description">What it does, as the reference states it. May contain Markdown links.</param>
 /// <param name="Example">One call as an administrator would write it.</param>
 /// <param name="IsRepeatable">False where it returns a different value each time it is evaluated (<c>Now</c>,
@@ -21,6 +23,7 @@ public sealed record ExpressionFunction(
     ExpressionFunctionCategory Category,
     IReadOnlyList<ExpressionFunctionParameter> Parameters,
     string Returns,
+    ExpressionResultType ResultType,
     string Description,
     string Example,
     bool IsRepeatable = true)
