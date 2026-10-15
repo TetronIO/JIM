@@ -1254,6 +1254,38 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// List the causal timeline for a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Returns every Run Profile Execution Item about the object, newest first, each with its nearest recorded cause:
+    /// the same list the Causality Explorer shows for it. Works for a deleted object too, through the records its
+    /// deletion left. Each row's <c>id</c> is the execution item's, so its full causes and consequences are one call
+    /// away on the Activities endpoints.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A page of the object's causal timeline, with the object it describes.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/causal-timeline", Name = "GetConnectedSystemObjectCausalTimeline")]
+    [ProducesResponseType(typeof(CausalTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectCausalTimelineAsync(int connectedSystemId, Guid csoId, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested causal timeline for CSO {CsoId} in Connected System {SystemId}", csoId, connectedSystemId);
+
+        var timeline = await _application.Activities.GetCausalTimelineAsync(
+            new CausalTimelineSubject(CausalTimelineSubjectKind.ConnectedSystemObject, csoId), pagination.Page, pagination.PageSize);
+
+        // The header covers the object live and deleted alike, so it is what decides whether the object exists; checking
+        // its Connected System keeps the route honest, as change history's does.
+        if (timeline.Header == null || timeline.Header.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
+
+        return Ok(CausalTimelineDto.FromModel(timeline));
+    }
+
+    /// <summary>
     /// List Attribute Values for a Connected System Object
     /// </summary>
     /// <remarks>
@@ -1583,6 +1615,30 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
 
         return Ok(PendingExportDetailDto.FromDetailResult(result));
+    }
+
+    /// <summary>
+    /// List the runs that queued a Pending Export
+    /// </summary>
+    /// <remarks>
+    /// Returns the synchronisation runs that staged the Pending Export, newest first, each as the execution item that
+    /// staged it with its nearest recorded cause: why the change is waiting to be exported. Runs whose records history
+    /// retention has since removed are counted in <c>notRetainedCount</c> rather than listed.
+    /// </remarks>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the Pending Export.</param>
+    /// <returns>The runs that queued the Pending Export.</returns>
+    [HttpGet("pending-exports/{pendingExportId:guid}/queued-by", Name = "GetPendingExportQueuedBy")]
+    [ProducesResponseType(typeof(CausalQueuedByDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportQueuedByAsync(Guid pendingExportId)
+    {
+        _logger.LogTrace("Requested queueing runs for Pending Export: {PendingExportId}", pendingExportId);
+        var queuedBy = await _application.Activities.GetPendingExportQueuedByAsync(pendingExportId);
+        if (queuedBy == null)
+            return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
+
+        return Ok(CausalQueuedByDto.FromModel(queuedBy));
     }
 
     /// <summary>

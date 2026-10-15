@@ -1,37 +1,37 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Reflection;
+using System;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Causality;
-using JIM.Web.Pages;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Regression coverage for the Run Profile Execution Item detail page's causality page-context
-/// wiring. <see cref="CausalityPageContext.ConnectedSystemId"/>/<see cref="CausalityPageContext.ConnectedSystemName"/>
-/// must describe the Connected System the Run Profile executed against (the Activity's system), while
-/// <see cref="CausalityPageContext.CsoConnectedSystemId"/>/<see cref="CausalityPageContext.CsoConnectedSystemName"/>
-/// must independently describe the item's Connected System Object's own system. These normally
-/// coincide, but diverge for cross-system cascades, e.g. a Full Sync on system A provisioning or
-/// exporting to a Connected System Object on system B: the run and record identities must each stay
-/// correct for their own consumers (see <see cref="CausalityPageContext"/> for the full list).
+/// What the causality panel is given for an execution item (#2100), read by <see cref="CausalityItemLoader"/> for the
+/// item page and the Causality Explorer alike.
 /// </summary>
 /// <remarks>
-/// This page has no existing bUnit render harness (it depends on IJimApplicationFactory,
-/// NavigationManager and [Authorize]/cascading auth state, none of which any page-level test in this
-/// project sets up yet), so the field-to-context mapping is exercised directly via reflection over
-/// the page's private state rather than a full render. The async resolution in OnParametersSetAsync
-/// (which chooses between reusing the already-loaded header and issuing a fresh lookup) is data
-/// plumbing over an already-tested repository call and is covered by build + runtime verification,
-/// not by this suite.
+/// <para>
+/// The page context's two Connected System identities must not be confused.
+/// <see cref="CausalityPageContext.ConnectedSystemId"/>/<see cref="CausalityPageContext.ConnectedSystemName"/> describe
+/// the Connected System the Run Profile executed against (the Activity's system), while
+/// <see cref="CausalityPageContext.CsoConnectedSystemId"/>/<see cref="CausalityPageContext.CsoConnectedSystemName"/>
+/// independently describe the item's Connected System Object's own system. These normally coincide, but diverge for
+/// cross-system cascades, e.g. a Full Sync on system A provisioning or exporting to a Connected System Object on system
+/// B: the run and record identities must each stay correct for their own consumers (see
+/// <see cref="CausalityPageContext"/> for the full list).
+/// </para>
+/// <para>
+/// These tests began on the item page, most of them reaching its private state by reflection because the page had no
+/// render harness; the logic they pin moved here with the loader, unchanged, and so did they.
+/// </para>
 /// </remarks>
 [TestFixture]
-public class ActivityRunProfileExecutionItemDetailTests
+public class CausalityItemLoaderTests
 {
     [Test]
     public void ShowsCausality_ExportHeldForADecision_ShowsTheBandThoughNothingWasRecorded()
@@ -42,25 +42,27 @@ public class ActivityRunProfileExecutionItemDetailTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ActivityRunProfileExecutionItemDetail.ShowsCausality(held), Is.True);
-            Assert.That(ActivityRunProfileExecutionItemDetail.ShowsCausality(failed), Is.False, "an item with nothing recorded and an ordinary error has no story to tell");
+            Assert.That(CausalityItemLoader.ShowsCausality(held), Is.True);
+            Assert.That(CausalityItemLoader.ShowsCausality(failed), Is.False, "an item with nothing recorded and an ordinary error has no story to tell");
         }
     }
 
     [Test]
-    public void BuildCausalityPageContext_RunSystemDiffersFromObjectSystem_UsesRunSystem()
+    public void BuildContext_RunSystemDiffersFromObjectSystem_UsesRunSystem()
     {
         // Arrange: a cross-system cascade, e.g. a Full Sync on Yellowstone APAC (the run's system)
         // producing an execution item for a Connected System Object that lives on Glitterband EMEA.
         var runSystem = new ConnectedSystemHeader { Id = 1, Name = "Yellowstone APAC" };
         var objectSystem = new ConnectedSystemHeader { Id = 2, Name = "Glitterband EMEA" };
-
-        var page = new ActivityRunProfileExecutionItemDetail();
-        SetPrivateField(page, "_runConnectedSystemHeader", runSystem);
-        SetPrivateField(page, "_connectedSystemHeader", objectSystem);
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem(),
+            RunConnectedSystem = runSystem,
+            RecordConnectedSystem = objectSystem
+        };
 
         // Act
-        var context = InvokeBuildCausalityPageContext(page);
+        var context = CausalityItemLoader.BuildContext(data);
 
         // Assert: ConnectedSystemId/Name name the run's system, not the object's own system...
         Assert.That(context.ConnectedSystemId, Is.EqualTo(runSystem.Id));
@@ -72,17 +74,19 @@ public class ActivityRunProfileExecutionItemDetailTests
     }
 
     [Test]
-    public void BuildCausalityPageContext_RunSystemSameAsObjectSystem_UsesSharedSystem()
+    public void BuildContext_RunSystemSameAsObjectSystem_UsesSharedSystem()
     {
         // Arrange: the common case, where the run executed directly against the object's own system.
-        var sharedSystem = new ConnectedSystemHeader { Id = 3, Name = "Yellowstone APAC" };
-
-        var page = new ActivityRunProfileExecutionItemDetail();
-        SetPrivateField(page, "_runConnectedSystemHeader", sharedSystem);
-        SetPrivateField(page, "_connectedSystemHeader", sharedSystem);
+        var sharedSystem = new ConnectedSystemHeader { Id = 1, Name = "Yellowstone APAC" };
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem(),
+            RunConnectedSystem = sharedSystem,
+            RecordConnectedSystem = sharedSystem
+        };
 
         // Act
-        var context = InvokeBuildCausalityPageContext(page);
+        var context = CausalityItemLoader.BuildContext(data);
 
         // Assert
         Assert.That(context.ConnectedSystemId, Is.EqualTo(sharedSystem.Id));
@@ -92,19 +96,21 @@ public class ActivityRunProfileExecutionItemDetailTests
     }
 
     [Test]
-    public void BuildCausalityPageContext_RunSystemUnresolved_DegradesToNullRatherThanObjectSystem()
+    public void BuildContext_RunSystemUnresolved_DegradesToNullRatherThanObjectSystem()
     {
         // Arrange: the run's Connected System could not be resolved (e.g. an Activity with no
         // ConnectedSystemId). The panel must degrade to null rather than silently falling back to
         // the object's own system, per CausalityPageContext's documented "degrade gracefully" contract.
         var objectSystem = new ConnectedSystemHeader { Id = 2, Name = "Glitterband EMEA" };
-
-        var page = new ActivityRunProfileExecutionItemDetail();
-        SetPrivateField(page, "_connectedSystemHeader", objectSystem);
-        // _runConnectedSystemHeader deliberately left unset (null).
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem(),
+            // The run's system deliberately left unset (null).
+            RecordConnectedSystem = objectSystem
+        };
 
         // Act
-        var context = InvokeBuildCausalityPageContext(page);
+        var context = CausalityItemLoader.BuildContext(data);
 
         // Assert: the run identity degrades to null...
         Assert.That(context.ConnectedSystemId, Is.Null);
@@ -115,27 +121,29 @@ public class ActivityRunProfileExecutionItemDetailTests
     }
 
     [Test]
-    public void BuildCausalityPageContext_ExportScopeReviewItem_NamesTheMetaverseObjectAndNoRecord()
+    public void BuildContext_ExportScopeReviewItem_NamesTheMetaverseObjectAndNoRecord()
     {
         // The item has no Connected System Object. Its name snapshot is the Metaverse Object's, and the record system the
         // page resolves for it is the run's; passing either as a record made the panel invent a source object (#1982).
         var metaverseObjectId = Guid.NewGuid();
-        var page = new ActivityRunProfileExecutionItemDetail();
-        SetPrivateField(page, "_activityRunProfileExecutionItem", new ActivityRunProfileExecutionItem
+        var data = new CausalityItemData
         {
-            ObjectChangeType = ObjectChangeType.ExportScopeReview,
-            MetaverseObjectId = metaverseObjectId,
-            DisplayNameSnapshot = "Carol Ng",
-            ObjectTypeSnapshot = "Person"
-        });
-        SetPrivateField(page, "_runConnectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
-        SetPrivateField(page, "_connectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
-        SetPrivateField(page, "_identityHeader", new JIM.Models.Core.DTOs.MetaverseObjectHeader
-        {
-            Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People", CachedDisplayName = "Carol Ng"
-        });
+            Item = new ActivityRunProfileExecutionItem
+            {
+                ObjectChangeType = ObjectChangeType.ExportScopeReview,
+                MetaverseObjectId = metaverseObjectId,
+                DisplayNameSnapshot = "Carol Ng",
+                ObjectTypeSnapshot = "Person"
+            },
+            RunConnectedSystem = new ConnectedSystemHeader { Id = 1, Name = "HR" },
+            RecordConnectedSystem = new ConnectedSystemHeader { Id = 1, Name = "HR" },
+            IdentityHeader = new JIM.Models.Core.DTOs.MetaverseObjectHeader
+            {
+                Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People", CachedDisplayName = "Carol Ng"
+            }
+        };
 
-        var context = InvokeBuildCausalityPageContext(page);
+        var context = CausalityItemLoader.BuildContext(data);
 
         using (Assert.EnterMultipleScope())
         {
@@ -144,6 +152,23 @@ public class ActivityRunProfileExecutionItemDetailTests
             Assert.That(context.CsoDisplayName, Is.Null);
             Assert.That(context.CsoConnectedSystemId, Is.Null);
             Assert.That(context.CsoObjectTypeName, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The context carries the host's link policy (#2100): the explorer's, where it read the item, so every link the panel
+    /// writes re-centres the explorer; the item page's own otherwise.
+    /// </summary>
+    [Test]
+    public void BuildContext_CarriesTheHostsLinkPolicy()
+    {
+        var item = new ActivityRunProfileExecutionItem();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(new CausalityItemData { Item = item, Links = TestCausalityLinks.Instance }.Context.Links,
+                Is.SameAs(TestCausalityLinks.Instance));
+            Assert.That(new CausalityItemData { Item = item }.Context.Links, Is.SameAs(CausalityPageLinks.Instance));
         }
     }
 
@@ -168,7 +193,7 @@ public class ActivityRunProfileExecutionItemDetailTests
             ]
         };
 
-        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(metaverseObjectId));
+        Assert.That(CausalityItemLoader.ResolveIdentityId(item), Is.EqualTo(metaverseObjectId));
     }
 
     [Test]
@@ -188,30 +213,6 @@ public class ActivityRunProfileExecutionItemDetailTests
             ]
         };
 
-        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(projectedId));
-    }
-
-    private static Guid? InvokeResolveIdentityId(ActivityRunProfileExecutionItem item)
-    {
-        var method = typeof(ActivityRunProfileExecutionItemDetail)
-            .GetMethod("ResolveIdentityId", BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.That(method, Is.Not.Null, "Expected private static method 'ResolveIdentityId' to exist on the page.");
-        return (Guid?)method!.Invoke(null, [item]);
-    }
-
-    private static void SetPrivateField(ActivityRunProfileExecutionItemDetail target, string fieldName, object? value)
-    {
-        var field = typeof(ActivityRunProfileExecutionItemDetail)
-            .GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.That(field, Is.Not.Null, $"Expected private field '{fieldName}' to exist on the page.");
-        field!.SetValue(target, value);
-    }
-
-    private static CausalityPageContext InvokeBuildCausalityPageContext(ActivityRunProfileExecutionItemDetail target)
-    {
-        var method = typeof(ActivityRunProfileExecutionItemDetail)
-            .GetMethod("BuildCausalityPageContext", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.That(method, Is.Not.Null, "Expected private method 'BuildCausalityPageContext' to exist on the page.");
-        return (CausalityPageContext)method!.Invoke(target, null)!;
+        Assert.That(CausalityItemLoader.ResolveIdentityId(item), Is.EqualTo(projectedId));
     }
 }
