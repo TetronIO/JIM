@@ -139,6 +139,20 @@ public class SyncRuleUpdateDatabaseTests
     }
 
     [Test]
+    public async Task GetSyncRuleHeadersAsync_ImportRule_ReturnsItsInboundOutOfScopeActionAsync()
+    {
+        // The list projection builds its headers itself, so it must carry every setting FromEntity does; a value it
+        // leaves out reads as the enum's zero value (RemainJoined), the opposite of a new rule's Disconnect.
+        var ids = await SeedAsync();
+        var ruleId = await CreatePersistedImportRuleAsync(ids);
+
+        await using var ctx = NewContext();
+        var headers = await NewJimApplication(ctx).ConnectedSystems.GetSyncRuleHeadersAsync();
+
+        Assert.That(headers.Single(h => h.Id == ruleId).InboundOutOfScopeAction, Is.EqualTo(InboundOutOfScopeAction.Disconnect));
+    }
+
+    [Test]
     public async Task CreateOrUpdateSyncRuleAsync_DisableExistingRuleSameContext_PersistsAsync()
     {
         var ids = await SeedAsync();

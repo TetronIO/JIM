@@ -122,7 +122,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (existingByPluralName != null)
             return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{request.PluralName}' already exists."));
 
-        var deletionRule = request.DeletionRule ?? MetaverseObjectDeletionRule.Manual;
+        var deletionRule = request.DeletionRule ?? MetaverseObjectType.DefaultDeletionRule;
 
         // Deletion rule settings share their validation with Update; on create the request's trigger
         // list is both the requested and the effective set (there is no stored state to fall back to).
