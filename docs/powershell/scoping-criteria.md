@@ -447,7 +447,7 @@ Test-JIMScope [-SyncRuleId] <int> -MetaverseObjectId <guid> [-Attributes <hashta
 
 ### Output
 
-Whether the object would be in scope (Outcome), the scoping criteria as they evaluated (Explanation, the same tree the portal's Scope tab shows), the values tested for each compared attribute (Inputs) and when the outcome would next change (NextChange). When the values cannot be used, IsValid is `$false` and InputErrors says why.
+Whether the object would be in scope (Outcome), the scoping criteria as they evaluated (Explanation, the same tree the portal's Scope tab shows; an expression criterion also gives its Expression, the attributes it read as ExpressionInputs, and a FailureReason when it could not be evaluated), the values tested for each compared attribute (Inputs) and when the outcome would next change (NextChange). When the values cannot be used, IsValid is `$false` and InputErrors says why.
 
 | Property | Type | Description |
 |----------|------|-------------|
