@@ -613,6 +613,61 @@ Get-JIMActivity -Id $result.ActivityId
 
 ---
 
+## Test-JIMExampleDataExpression
+
+Tests the expression an Example Data Template attribute generates its value with, against sample values for the attributes it reads, by the same evaluation generating objects runs. Nothing is generated. Each sample is read as the type of the template attribute that generates it on the same object; `Outcome` says whether the attribute would be generated as a value, without one, or whether generating objects from the template would fail. Give `-Expression` to try an edit before saving it. Find a template attribute's ID with [`Get-JIMExampleDataTemplate`](#get-jimexampledatatemplate).
+
+<!-- BEGIN GENERATED: Test-JIMExampleDataExpression -->
+### Syntax
+
+```powershell
+Test-JIMExampleDataExpression [-TemplateId] <int> [-TemplateAttributeId] <int> [-Expression <string>] [-Attributes <hashtable>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `TemplateId` | `int` | Yes |  | The ID of the Example Data Template the attribute belongs to. Can be given by position, as the first argument. |
+| `TemplateAttributeId` | `int` | Yes |  | The ID of the template attribute whose expression to test. `Get-JIMExampleDataTemplate` lists each object type's template attributes with their IDs. Can be given by position, as the second argument. |
+| `Expression` | `string` | No |  | An expression to test in place of the template attribute's saved one, so an edit can be tried before it is saved. When left out, the attribute's own expression is tested. |
+| `Attributes` | `hashtable` | No |  | A hashtable of sample values for the attributes the expression reads, keyed by Metaverse attribute name. `$null` is no value and an array gives the attribute several values. |
+
+### Output
+
+What generating objects would give the attribute from the sample values. Value is the generated value in JIM's text form, OutcomeDescription says what would happen in one sentence, Inputs lists the attributes the expression reads with their types and the values they were given, and InputsNotGenerated names any it reads that the template does not generate, which never have a value.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsValid` | `bool` | True when the sample values could be used and the expression gives the attribute a value or no value; false for an input error or an expression that would fail generation. |
+| `Attribute` | `string` | The Metaverse attribute the template attribute generates. |
+| `Expression` | `string` | The expression tested. |
+| `Outcome` | `string` | What the attribute would be given: a value, no value, or an error. Not set when the sample values could not be used. One of `Value`, `NoValue` or `Error`. |
+| `ErrorReason` | `string` | Why the outcome is an error. Set only when `Outcome` is Error. One of `EvaluationFailed`, `SeveralValues` or `NoTextForm`. |
+| `Value` | `string` | The value the attribute would be generated as, in JIM's text form. Set only when `Outcome` is Value. |
+| `OutcomeDescription` | `string` | What generating objects would do, in one sentence. Not set when the sample values could not be used. |
+| `ErrorMessage` | `string` | Why the test failed: the input errors, or the outcome description for an expression that would fail generation. |
+| `InputErrors` | `string[]` | Why the sample values could not be used, one message each. When present the expression was not evaluated. |
+| `Inputs` | `object[]` | The attributes the expression reads that the template generates on the same object, with their types and the values they were given. Each has `Attribute`, `Type`, `Plurality` and `ValueLines`. |
+| `InputsNotGenerated` | `string[]` | The attributes the expression reads that the template does not generate on the object, so they never have a value when objects are generated. |
+<!-- END GENERATED: Test-JIMExampleDataExpression -->
+
+### Examples
+
+```powershell title="Test a template attribute's expression with sample values"
+Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Attributes @{ 'First Name' = 'Ada'; 'Last Name' = 'Lovelace' }
+```
+
+```powershell title="Try an edited expression before saving it"
+Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Expression 'Lower(Left(mv["First Name"], 1) + mv["Last Name"])' -Attributes @{ 'First Name' = 'Ada'; 'Last Name' = 'Lovelace' }
+```
+
+```powershell title="Show only the generated value"
+(Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Attributes @{ 'First Name' = 'Ada'; 'Last Name' = 'Lovelace' }).Value
+```
+
+---
+
 ## Building a template end to end
 
 Create a Data Generation Template with one attribute inline, add a second attribute to it, then generate the data:

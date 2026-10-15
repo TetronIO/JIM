@@ -237,6 +237,22 @@ public class SyncEngineGeneratedMappingTests
     }
 
     [Test]
+    public void FlowInboundAttributes_BaseExpressionThrows_ThrowsTheExpressionErrorNotAnInternalOne()
+    {
+        // The third failure the source step stops on (with FailMapping and FailObject above): it never reaches
+        // ResolveGeneratedBase, so GeneratedBaseError's guard for a failure outcome cannot fire mid-run.
+        var target = TargetAttr();
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = JoinedCso(mvo, givenName: "Ada");
+        var syncRule = GeneratedRule(GeneratedMapping(target, baseExpression: "Lower(cs[\"givenName\"]).Substring(99)"));
+
+        Assert.That(() => _engine.FlowInboundAttributes(cso, syncRule, [CsoType()], _evaluator),
+            Throws.TypeOf<SyncExpressionEvaluationException>());
+
+        Assert.That(mvo.PendingGeneratedValues, Is.Empty);
+    }
+
+    [Test]
     public void FlowInboundAttributes_ExpressionReturnsNull_RecordsBaseUnavailable()
     {
         var target = TargetAttr();

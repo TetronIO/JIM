@@ -5,6 +5,8 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Servers;
+using JIM.Application.Expressions;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -417,6 +419,91 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Deleted Data Generation Template {Id}", id);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Test an Example Data Template attribute's expression
+    /// </summary>
+    /// <remarks>
+    /// Evaluates the template attribute's expression, or the one given in its place, against sample values for the
+    /// attributes it reads, by the same evaluation generating objects runs. Each sample is read as the type of the
+    /// template attribute that generates it on the same object, and <c>outcome</c> says whether the attribute would be
+    /// generated as a value, without one, or whether generation would fail. Nothing is generated.
+    /// </remarks>
+    /// <param name="templateId">The template the attribute belongs to.</param>
+    /// <param name="request">The template attribute, the expression to test in place of its own, and the sample values.</param>
+    /// <response code="200">The expression was evaluated, or the sample values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">The template attribute has no expression, and none was given.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The template or template attribute was not found.</response>
+    [HttpPost("templates/{templateId:int}/test-expression", Name = "TestExampleDataExpression")]
+    [ProducesResponseType(typeof(TestExampleDataExpressionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestExpressionAsync(int templateId, [FromBody] TestExampleDataExpressionRequest request)
+    {
+        _logger.LogDebug("Testing the expression of template attribute {AttributeId} on Example Data Template {TemplateId}",
+            request.TemplateAttributeId, templateId);
+
+        var template = await _application.ExampleData.GetTemplateAsync(templateId);
+        if (template == null)
+            return NotFound(ApiErrorResponse.NotFound($"Example Data Template with ID {templateId} not found."));
+
+        var found = template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes.Select(attribute => (ObjectType: objectType, Attribute: attribute)))
+            .FirstOrDefault(pair => pair.Attribute.Id == request.TemplateAttributeId);
+        if (found.Attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Template attribute with ID {request.TemplateAttributeId} not found on Example Data Template {templateId}."));
+
+        var attributeName = found.Attribute.MetaverseAttribute?.Name;
+        if (attributeName == null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Template attribute {request.TemplateAttributeId} generates no Metaverse attribute, so it has no expression to test."));
+
+        var expression = string.IsNullOrWhiteSpace(request.Expression) ? found.Attribute.Expression : request.Expression;
+        if (string.IsNullOrWhiteSpace(expression))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Template attribute {request.TemplateAttributeId} ('{attributeName}') has no expression; give one to test in its place."));
+
+        var samples = TestExpressionSampleValues.ToAttributeSamples(request.Attributes).ToList();
+        var tested = _application.ExampleData.TestAttributeExpression(found.ObjectType, found.Attribute, expression, samples);
+
+        var response = new TestExampleDataExpressionResponse
+        {
+            Attribute = attributeName,
+            Expression = expression,
+            InputErrors = tested.InputErrors,
+            InputsNotGenerated = tested.InputsNotGenerated,
+            Inputs = tested.Inputs
+                .Select(input => new AttributeSampleDto
+                {
+                    Attribute = input.AttributeName,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = samples
+                        .Where(sample => string.Equals(sample.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(sample => sample.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (tested.Evaluation is not { } evaluation)
+        {
+            response.IsValid = false;
+            response.ErrorMessage = string.Join(" ", tested.InputErrors);
+            return Ok(response);
+        }
+
+        var description = ExampleDataServer.DescribeExpressionOutcome(evaluation, attributeName);
+        response.IsValid = evaluation.Outcome != ExampleDataExpressionOutcome.Error;
+        response.Outcome = evaluation.Outcome;
+        response.ErrorReason = evaluation.ErrorReason;
+        response.Value = evaluation.Value;
+        response.OutcomeDescription = description;
+        response.ErrorMessage = evaluation.Outcome == ExampleDataExpressionOutcome.Error ? description : null;
+        return Ok(response);
     }
 
     /// <summary>
