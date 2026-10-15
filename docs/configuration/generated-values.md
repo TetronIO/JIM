@@ -53,7 +53,7 @@ The base expression is an ordinary [expression](attribute-mappings.md#expression
 - the Attribute Flow's value processing;
 - the base generation would start from, with what happens to it.
 
-The test stops there. Which value is free is decided when a Synchronisation runs, so it never shows a candidate; the preview below it shows the candidates the token would give. An input with no value shows that generation waits (condition 2 above), and a base expression that returns several values, or a value with no text, shows the error a Synchronisation would record.
+The test stops there. Which value is free is decided when a Synchronisation runs, so it never shows a candidate; the preview below it shows the candidates the token would give. An input with no value shows what the mapping's [Missing Input Behaviour](attribute-mappings.md#missing-input-behaviour) does: by default generation waits (condition 2 above), and a mapping set to fail shows the error a Synchronisation would record. A base expression that returns several values, or a value with no text, also shows the error a Synchronisation would record.
 
 Over the REST API and PowerShell, test the Attribute Flow with [`Test-JIMExpression`](../powershell/expressions.md#test-jimexpression) `-SyncRuleId` and `-MappingId`: `GeneratedValue` is `$true`, and `BaseOutcome` and `BaseValue` say what generation would be given.
 
