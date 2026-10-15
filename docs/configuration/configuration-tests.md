@@ -76,6 +76,19 @@ JIM keeps a case's values out of everything else: they are never written to a lo
 
 Adding, changing or deleting a test case is recorded in the Configuration History of what owns it: the Synchronisation Rule, or the Connected System for a Simple mode Object Matching Rule. These changes are cosmetic: a test case changes nothing that synchronises. When deleting an Attribute Flow, an Object Matching Rule or a Synchronisation Rule deletes the cases covering it, the history entry lists the cases that went with it.
 
+## Limits
+
+A test case is refused when it is larger than these, in the portal, the REST API and PowerShell alike. The message names the limit and, for an input, which one.
+
+| Limit | Most allowed |
+|---|---|
+| Name | 200 characters |
+| Description | 2,000 characters |
+| Inputs | 100 per case |
+| Values | 100 per input, and 100 expected values |
+| Value length | 4,000 characters, for an input value or an expected value |
+| Input attribute name | 400 characters |
+
 ## Related
 
 - [Expressions](../concepts/expressions.md#testing-an-expression): testing an Attribute Flow's expression as you write it

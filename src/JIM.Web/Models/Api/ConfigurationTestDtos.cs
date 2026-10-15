@@ -218,6 +218,7 @@ public class UpdateConfigurationTestCaseRequest
     /// <summary>
     /// A new description. Left out (or null), it stays as it is; an empty string clears it.
     /// </summary>
+    [StringLength(ConfigurationTestCase.MaxDescriptionLength)]
     public string? Description { get; set; }
 
     /// <summary>
@@ -268,6 +269,10 @@ public abstract class ConfigurationTestCaseContentRequest
     [StringLength(ConfigurationTestCase.MaxNameLength, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// A longer description, of up to 2,000 characters.
+    /// </summary>
+    [StringLength(ConfigurationTestCase.MaxDescriptionLength)]
     public string? Description { get; set; }
 
     /// <summary>

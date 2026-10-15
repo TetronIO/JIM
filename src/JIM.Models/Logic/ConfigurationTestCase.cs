@@ -26,6 +26,32 @@ public class ConfigurationTestCase : IAuditable
     /// </summary>
     public const int MaxNameLength = 200;
 
+    /// <summary>
+    /// The longest description a test case may have.
+    /// </summary>
+    public const int MaxDescriptionLength = 2_000;
+
+    /// <summary>
+    /// The most inputs a test case may give. Every case is read and hashed into each snapshot of what owns it, so its
+    /// size is bounded where it enters, on every surface.
+    /// </summary>
+    public const int MaxInputs = 100;
+
+    /// <summary>
+    /// The most values one input may hold, and the most values a case may expect.
+    /// </summary>
+    public const int MaxValues = 100;
+
+    /// <summary>
+    /// The longest an input's or an expected value may be, in characters.
+    /// </summary>
+    public const int MaxValueLength = 4_000;
+
+    /// <summary>
+    /// The longest an input's attribute name may be.
+    /// </summary>
+    public const int MaxAttributeNameLength = 400;
+
     // The stored-JSON conventions (MvoDeletionPolicySnapshot, ConfigurationSnapshotService): camelCase, enums as text.
     private static readonly JsonSerializerOptions SerialiserOptions = new()
     {
@@ -155,6 +181,8 @@ public class ConfigurationTestCase : IAuditable
             return "A test case needs a name.";
         if (Name.Length > MaxNameLength)
             return $"A test case's name can be at most {MaxNameLength} characters.";
+        if (Description?.Length > MaxDescriptionLength)
+            return $"A test case's description can be at most {MaxDescriptionLength:N0} characters.";
 
         var references = (SyncRuleMappingId.HasValue ? 1 : 0) + (SyncRuleId.HasValue ? 1 : 0) + (ObjectMatchingRuleId.HasValue ? 1 : 0);
         if (references > 1)
@@ -185,13 +213,27 @@ public class ConfigurationTestCase : IAuditable
             return $"Expected values are given only when expecting Values, not {expectation.Kind}.";
         if (expectation.Kind != ConfigurationTestExpectationKind.Values && expectation.InOrder)
             return $"An expected order is given only when expecting Values, not {expectation.Kind}.";
+        if (expectation.Values.Count > MaxValues)
+            return $"A test case can expect at most {MaxValues} values; this one expects {expectation.Values.Count}.";
+        if (expectation.Values.Any(value => value.Length > MaxValueLength))
+            return $"Each expected value can be at most {MaxValueLength:N0} characters.";
+
+        var inputs = Inputs;
+        if (inputs.Count > MaxInputs)
+            return $"A test case can give at most {MaxInputs} inputs; this one gives {inputs.Count}.";
 
         var readsBothSides = covered == ConfigurationTestCaseCoverage.AttributeFlow;
         var seen = new HashSet<(ExpressionInputSource?, string)>();
-        foreach (var input in Inputs)
+        foreach (var input in inputs)
         {
             if (string.IsNullOrWhiteSpace(input.AttributeName))
                 return "Each test input needs an attribute name.";
+            if (input.AttributeName.Length > MaxAttributeNameLength)
+                return $"An input's attribute name can be at most {MaxAttributeNameLength} characters.";
+            if (input.Values.Count > MaxValues)
+                return $"The input '{input.AttributeName}' has {input.Values.Count} values; an input can hold at most {MaxValues}.";
+            if (input.Values.Any(value => value.Length > MaxValueLength))
+                return $"A value of the input '{input.AttributeName}' is longer than {MaxValueLength:N0} characters, the most a value can be.";
             if (readsBothSides && input.Source == null)
                 return $"The input '{input.AttributeName}' needs a side to read it from: cs for the Connected System Object, mv for the Metaverse Object.";
             if (!readsBothSides && input.Source != null)

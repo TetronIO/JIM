@@ -209,6 +209,66 @@ public class ConfigurationTestsControllerTests
         _testRepository.Verify(r => r.CreateTestCaseAsync(It.IsAny<ConfigurationTestCase>()), Times.Never);
     }
 
+    private static IEnumerable<TestCaseData> RequestsOverALimit()
+    {
+        var tooLong = new string('x', ConfigurationTestCase.MaxValueLength + 1);
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.Description = new string('x', ConfigurationTestCase.MaxDescriptionLength + 1)), "description")
+            .SetName("CreateAsync_DescriptionOverTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.CsAttributes =
+                Enumerable.Range(0, ConfigurationTestCase.MaxInputs + 1).ToDictionary(i => $"a{i}", _ => (object?)Json("\"x\""))), "inputs")
+            .SetName("CreateAsync_MoreInputsThanTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.CsAttributes = new Dictionary<string, object?>
+            {
+                ["mail"] = Json(JsonSerializer.Serialize(Enumerable.Range(0, ConfigurationTestCase.MaxValues + 1).Select(i => $"v{i}")))
+            }), "mail")
+            .SetName("CreateAsync_InputWithMoreValuesThanTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.CsAttributes = new Dictionary<string, object?>
+            {
+                ["sn"] = Json(JsonSerializer.Serialize(tooLong))
+            }), "sn")
+            .SetName("CreateAsync_InputValueOverTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.CsAttributes = new Dictionary<string, object?>
+            {
+                [new string('a', ConfigurationTestCase.MaxAttributeNameLength + 1)] = Json("\"x\"")
+            }), "attribute name")
+            .SetName("CreateAsync_InputAttributeNameOverTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.Expectation = new ConfigurationTestExpectationDto
+            {
+                Kind = ConfigurationTestExpectationKind.Values,
+                Values = Enumerable.Range(0, ConfigurationTestCase.MaxValues + 1).Select(i => (object?)Json($"\"v{i}\"")).ToList()
+            }), "expect")
+            .SetName("CreateAsync_MoreExpectedValuesThanTheLimit_IsABadRequest");
+        yield return new TestCaseData((Action<CreateConfigurationTestCaseRequest>)(r => r.Expectation = new ConfigurationTestExpectationDto
+            {
+                Kind = ConfigurationTestExpectationKind.Values,
+                Values = [Json(JsonSerializer.Serialize(tooLong))]
+            }), "expected value")
+            .SetName("CreateAsync_ExpectedValueOverTheLimit_IsABadRequest");
+    }
+
+    [TestCaseSource(nameof(RequestsOverALimit))]
+    public async Task CreateAsync_OverALimit_IsABadRequestNamingItAsync(Action<CreateConfigurationTestCaseRequest> exceed, string named)
+    {
+        var request = new CreateConfigurationTestCaseRequest
+        {
+            Name = "Surname upper-cased",
+            Kind = ConfigurationTestCaseKind.AttributeFlow,
+            SyncRuleMappingId = MappingId,
+            CsAttributes = new Dictionary<string, object?> { ["sn"] = Json("\"Bloggs\"") },
+            Expectation = new ConfigurationTestExpectationDto { Kind = ConfigurationTestExpectationKind.Values, Values = [Json("\"BLOGGS\"")] }
+        };
+        exceed(request);
+
+        var result = await _controller.CreateAsync(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain(named));
+        }
+        _testRepository.Verify(r => r.CreateTestCaseAsync(It.IsAny<ConfigurationTestCase>()), Times.Never);
+    }
+
     [Test]
     public async Task UpdateAsync_Exists_ReplacesItsContentAndKeepsWhatItCoversAsync()
     {

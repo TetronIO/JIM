@@ -1571,6 +1571,10 @@ public class JimDbContext : DbContext
             .HasMaxLength(ConfigurationTestCase.MaxNameLength);
 
         modelBuilder.Entity<ConfigurationTestCase>()
+            .Property(c => c.Description)
+            .HasMaxLength(ConfigurationTestCase.MaxDescriptionLength);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_ConfigurationTestCases_CoversWhatItsKindTests",
                 "(\"Kind\" IN (0, 1) AND \"SyncRuleMappingId\" IS NOT NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NULL) OR " +

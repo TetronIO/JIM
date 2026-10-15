@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using NUnit.Framework;
@@ -252,6 +253,92 @@ public class ConfigurationTestCaseTests
         testCase.Inputs = [new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, " ", ["x"])];
 
         Assert.That(testCase.DescribeInvalidity(), Does.Contain("attribute name"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_DescriptionTooLong_SaysHowLongItMayBe()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Description = new string('x', ConfigurationTestCase.MaxDescriptionLength + 1);
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain(ConfigurationTestCase.MaxDescriptionLength.ToString("N0")).And.Contain("description"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_TooManyInputs_SaysHowManyItMayHave()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Inputs = Enumerable.Range(0, ConfigurationTestCase.MaxInputs + 1)
+            .Select(i => new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, $"attribute{i}", ["x"]))
+            .ToList();
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain(ConfigurationTestCase.MaxInputs.ToString()).And.Contain("inputs"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_InputWithTooManyValues_NamesIt()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Inputs = [new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, "mail",
+            Enumerable.Range(0, ConfigurationTestCase.MaxValues + 1).Select(i => $"v{i}").ToList())];
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("mail").And.Contain(ConfigurationTestCase.MaxValues.ToString()));
+    }
+
+    [Test]
+    public void DescribeInvalidity_InputValueTooLong_NamesIt()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Inputs = [new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, "sn", [new string('x', ConfigurationTestCase.MaxValueLength + 1)])];
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("sn").And.Contain(ConfigurationTestCase.MaxValueLength.ToString("N0")));
+    }
+
+    [Test]
+    public void DescribeInvalidity_InputAttributeNameTooLong_IsRefused()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Inputs = [new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, new string('a', ConfigurationTestCase.MaxAttributeNameLength + 1), ["x"])];
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain(ConfigurationTestCase.MaxAttributeNameLength.ToString()).And.Contain("attribute name"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_TooManyExpectedValues_SaysHowManyItMayExpect()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values,
+            Enumerable.Range(0, ConfigurationTestCase.MaxValues + 1).Select(i => $"v{i}").ToList());
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("expect").And.Contain(ConfigurationTestCase.MaxValues.ToString()));
+    }
+
+    [Test]
+    public void DescribeInvalidity_ExpectedValueTooLong_IsRefused()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values, [new string('x', ConfigurationTestCase.MaxValueLength + 1)]);
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("expected value").And.Contain(ConfigurationTestCase.MaxValueLength.ToString("N0")));
+    }
+
+    [Test]
+    public void DescribeInvalidity_EverythingAtItsLimit_IsWellFormed()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.Description = new string('x', ConfigurationTestCase.MaxDescriptionLength);
+        // Each limit reached on its own: as many inputs as allowed, one holding as many values as allowed, one value
+        // and one attribute name as long as allowed.
+        var inputs = Enumerable.Range(1, ConfigurationTestCase.MaxInputs - 1)
+            .Select(i => new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, $"a{i}", ["x"]))
+            .ToList();
+        inputs.Add(new ConfigurationTestInput(ExpressionInputSource.ConnectedSystem, new string('n', ConfigurationTestCase.MaxAttributeNameLength),
+            [.. Enumerable.Range(0, ConfigurationTestCase.MaxValues - 1).Select(i => $"v{i}"), new string('v', ConfigurationTestCase.MaxValueLength)]));
+        testCase.Inputs = inputs;
+        testCase.Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values,
+            [.. Enumerable.Range(0, ConfigurationTestCase.MaxValues - 1).Select(i => $"v{i}"), new string('v', ConfigurationTestCase.MaxValueLength)]);
+
+        Assert.That(testCase.DescribeInvalidity(), Is.Null);
     }
 
     [TestCase(ConfigurationTestCaseKind.AttributeFlow, true, false, false)]

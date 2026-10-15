@@ -19,7 +19,7 @@ namespace JIM.PostgresData.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
+                    Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     Kind = table.Column<int>(type: "integer", nullable: false),
                     SyncRuleMappingId = table.Column<int>(type: "integer", nullable: true),
                     SyncRuleId = table.Column<int>(type: "integer", nullable: true),
