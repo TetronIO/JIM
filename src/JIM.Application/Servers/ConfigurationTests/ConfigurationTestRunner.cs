@@ -51,7 +51,7 @@ public sealed class ConfigurationTestRunner
         var source = generated
             ? AttributeFlowPipeline.GeneratedBaseSource(mapping)
             : mapping.Sources.OrderBy(s => s.Order).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
-        var ranAsOfNow = testCase.RunAsOfUtc == null && NonRepeatableFunctionDetector.Find(source?.Expression).Count > 0;
+        var ranAsOfNow = testCase.RunAsOfUtc == null && ReadsTheClock(source);
 
         var problems = new List<string>();
         if (generated && mapping.Generation == null)
@@ -122,7 +122,7 @@ public sealed class ConfigurationTestRunner
             throw new ArgumentException($"A {testCase.Kind} test case does not test a Scope.", nameof(testCase));
 
         var asOf = testCase.RunAsOfUtc ?? nowUtc;
-        var ranAsOfNow = testCase.RunAsOfUtc == null && ScopeReadsTheClock(syncRule.ObjectScopingCriteriaGroups);
+        var ranAsOfNow = testCase.RunAsOfUtc == null && ScopeReadsTheClock(syncRule);
 
         var problems = MissingInputs(testCase.Inputs, ScopeTester.DescribeInputs(syncRule)
             .Select(input => ((ExpressionInputSource?)null, input.AttributeName, $"'{input.AttributeName}'"))).ToList();
@@ -337,8 +337,24 @@ public sealed class ConfigurationTestRunner
             .Select(input => input.AttributeName);
     }
 
-    private static bool ScopeReadsTheClock(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+    /// <summary>
+    /// Whether an Attribute Flow's Expression (or a Generated Value's base) reads the clock, so its result depends on
+    /// the instant it runs as of.
+    /// </summary>
+    public static bool ReadsTheClock(SyncRuleMappingSource? source) => NonRepeatableFunctionDetector.Find(source?.Expression).Count > 0;
+
+    /// <summary>
+    /// Whether a Synchronisation Rule's scoping criteria depend on the instant they are evaluated as of: a relative
+    /// date criterion, or a criterion Expression that reads the clock.
+    /// </summary>
+    public static bool ScopeReadsTheClock(SyncRule syncRule)
+    {
+        ArgumentNullException.ThrowIfNull(syncRule);
+        return GroupsReadTheClock(syncRule.ObjectScopingCriteriaGroups);
+    }
+
+    private static bool GroupsReadTheClock(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
         groups.Any(group => group.Criteria.Any(criterion => criterion.ValueMode == DateCriteriaValueMode.Relative ||
                                                              NonRepeatableFunctionDetector.Find(criterion.Expression).Count > 0) ||
-                            ScopeReadsTheClock(group.ChildGroups));
+                            GroupsReadTheClock(group.ChildGroups));
 }

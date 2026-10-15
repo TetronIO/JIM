@@ -1,0 +1,354 @@
+@using JIM.Application.Expressions
+@using JIM.Application.Servers.Scoping
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Synchronisation Rule's saved configuration test cases (its Tests tab), or a Connected System's Simple mode
+   Object Matching Rules' (its Object Matching tab) (#2055 Phase 4): run them, add one, edit or delete one. Everything
+   is read and saved through a fresh application, so a run tests the configuration as saved and a save never touches
+   the page's change-tracked edits. Results are shown until the next run and never stored. *@
+
+<MudPaper Outlined="true" Class="@($"pa-4 {Class}")" data-testid="jim-test-cases-panel">
+    <div class="d-flex align-center flex-wrap gap-2">
+        <MudText Typo="Typo.h6" Class="flex-grow-1">Test cases</MudText>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunAllAsync"
+                   Disabled="@(_testCases.Count == 0 || _running)" data-testid="jim-test-cases-run-all">Run all</MudButton>
+        @if (_coverageOptions.Count > 0)
+        {
+            <MudMenu Label="New test case" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                     data-testid="jim-test-cases-new">
+                @foreach (var option in _coverageOptions)
+                {
+                    var chosen = option;
+                    <MudMenuItem OnClick="@(() => NewAsync(chosen))">@chosen.Label</MudMenuItem>
+                }
+            </MudMenu>
+        }
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+        @(ConnectedSystem != null
+            ? "Each case gives an Object Matching Rule inputs and says what match values it should give. Runs test the rules as saved."
+            : "Each case gives this Synchronisation Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.")
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mt-4" />
+    }
+    else if (_testCases.Count == 0)
+    {
+        <TableEmptyState Icon="@Icons.Material.Outlined.FactCheck" PrimaryText="No test cases yet"
+                         SecondaryText="@(ConnectedSystem != null
+                             ? "Save one from an Object Matching Rule's Try it, or create one here."
+                             : "Save one from a tester on the Scope, Matching or Attribute Flow tab, or create one here.")" />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Class="mt-4" Style="overflow-x: auto">
+            <thead>
+                <tr><th>Name</th><th>Tests</th><th>Expects</th><th class="jim-fill-column">Result</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var testCase in _testCases)
+                {
+                    var current = testCase;
+                    _results.TryGetValue(current.Id, out var result);
+                    <tr @key="current.Id" data-testid="jim-test-case-row">
+                        <td class="jim-nowrap">@current.Name</td>
+                        <td class="jim-nowrap">@Coverage(current)</td>
+                        <td><OneLineText Text="@ConfigurationTestCaseDisplay.DescribeExpectation(current.Expectation)" /></td>
+                        <td class="jim-fill-column">
+                            @if (result != null)
+                            {
+                                <div class="jim-one-line-list">
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(result.Status)" Class="ma-0 mr-2"
+                                             data-testid="jim-test-case-status">@StatusLabel(result.Status)</MudChip>
+                                    <span class="jim-one-line-list-value"><OneLineText Text="@result.Summary" /></span>
+                                    @if (result.RanAsOfNow)
+                                    {
+                                        <MudTooltip Arrow="true" Placement="Placement.Top"
+                                                    Text="This configuration reads the clock and the case has no run-as-of time, so it ran as of now and can give a different result tomorrow.">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Class="ml-1" />
+                                        </MudTooltip>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Not run</MudText>
+                            }
+                        </td>
+                        <td class="jim-nowrap">
+                            <MudTooltip Text="Run" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" OnClick="@(() => RunAsync([current]))"
+                                               Disabled="_running" aria-label="@($"Run {current.Name}")" />
+                            </MudTooltip>
+                            <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditAsync(current))"
+                                               aria-label="@($"Edit {current.Name}")" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteAsync(current))"
+                                               aria-label="@($"Delete {current.Name}")" />
+                            </MudTooltip>
+                        </td>
+                    </tr>
+                    @if (result is { Problems.Count: > 1 })
+                    {
+                        <tr>
+                            <td colspan="5">
+                                @foreach (var problem in result.Problems)
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@problem</MudText>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// The Synchronisation Rule whose cases to show: its Scope's, its Attribute Flows' and its own Object Matching
+    /// Rules'. Only its id is read; the rule is loaded again as saved.
+    /// </summary>
+    [Parameter]
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Connected System whose Simple mode Object Matching Rules' cases to show, instead of a Synchronisation Rule's.
+    /// Its Object Types are read with their rules.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystem? ConnectedSystem { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// A coverage the administrator can add a new case for.
+    /// </summary>
+    private sealed record CoverageOption(string Label, ConfigurationTestCase Template);
+
+    private List<ConfigurationTestCase> _testCases = [];
+    private readonly Dictionary<int, ConfigurationTestRunResult> _results = [];
+    private List<CoverageOption> _coverageOptions = [];
+    private SyncRule? _savedRule;
+    private List<ObjectMatchingRule> _matchingRules = [];
+    private Dictionary<int, ConnectedSystemObjectType> _objectTypes = [];
+    private bool _loading = true;
+    private bool _running;
+
+    private (int? SyncRuleId, int? ConnectedSystemId)? _loadedFor;
+
+    // Loads once for what the panel shows, not on every render of the page around it.
+    protected override async Task OnParametersSetAsync()
+    {
+        var showing = (SyncRuleId, ConnectedSystem?.Id);
+        if (_loadedFor == showing)
+            return;
+        _loadedFor = showing;
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Reloads the cases and the configuration they cover, as saved. The page calls it after a save, so a case's
+    /// inputs are laid against what the configuration reads now.
+    /// </summary>
+    public async Task LoadAsync()
+    {
+        _loading = true;
+        using var jim = JimFactory.Create();
+        if (SyncRuleId is { } syncRuleId)
+        {
+            _savedRule = await jim.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+            _matchingRules = _savedRule?.ObjectMatchingRules.ToList() ?? [];
+            if (_savedRule?.ConnectedSystemObjectType is { } objectType)
+                _objectTypes = new Dictionary<int, ConnectedSystemObjectType> { [objectType.Id] = objectType };
+            _testCases = (await jim.ConfigurationTests.GetTestCasesAsync(syncRuleId: syncRuleId)).ToList();
+        }
+        else if (ConnectedSystem != null)
+        {
+            _matchingRules = [];
+            _objectTypes = [];
+            foreach (var objectType in ConnectedSystem.ObjectTypes ?? [])
+            {
+                if (await jim.ConnectedSystems.GetObjectTypeAsync(objectType.Id) is not { } loaded)
+                    continue;
+                _objectTypes[loaded.Id] = loaded;
+                foreach (var rule in objectType.ObjectMatchingRules.Where(r => r.SyncRuleId == null && r.Id > 0))
+                    if (await jim.ConnectedSystems.GetObjectMatchingRuleAsync(rule.Id) is { } saved)
+                        _matchingRules.Add(saved);
+            }
+            _testCases = (await jim.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(ConnectedSystem.Id)).ToList();
+        }
+
+        _coverageOptions = BuildCoverageOptions();
+        foreach (var gone in _results.Keys.Where(id => _testCases.All(c => c.Id != id)).ToList())
+            _results.Remove(gone);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private List<CoverageOption> BuildCoverageOptions()
+    {
+        var options = new List<CoverageOption>();
+        if (_savedRule is { } rule)
+        {
+            options.Add(new CoverageOption("Scope", Template(ConfigurationTestCaseKind.Scope, syncRuleId: rule.Id)));
+            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.Id > 0))
+            {
+                var generated = mapping.Generation != null;
+                var source = generated ? AttributeFlowPipeline.GeneratedBaseSource(mapping) : mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+                if (source == null)
+                    continue;
+                var kind = generated ? ConfigurationTestCaseKind.GeneratedValue : ConfigurationTestCaseKind.AttributeFlow;
+                var template = Template(kind, mappingId: mapping.Id);
+                options.Add(new CoverageOption(ConfigurationTestCaseDisplay.DescribeCoverage(template, rule, []), template));
+            }
+        }
+
+        foreach (var matchingRule in _matchingRules.Where(r => r.IsValid()))
+        {
+            var template = Template(ConfigurationTestCaseKind.ObjectMatchingRule, matchingRuleId: matchingRule.Id);
+            options.Add(new CoverageOption(ConfigurationTestCaseDisplay.DescribeCoverage(template, _savedRule, _matchingRules), template));
+        }
+
+        return options;
+    }
+
+    private static ConfigurationTestCase Template(ConfigurationTestCaseKind kind, int? syncRuleId = null, int? mappingId = null, int? matchingRuleId = null) => new()
+    {
+        Kind = kind,
+        SyncRuleId = syncRuleId,
+        SyncRuleMappingId = mappingId,
+        ObjectMatchingRuleId = matchingRuleId,
+        Expectation = new ConfigurationTestExpectation(ConfigurationTestCase.ExpectationsFor(kind)[0], kind == ConfigurationTestCaseKind.Scope ? null : [])
+    };
+
+    private string Coverage(ConfigurationTestCase testCase) => ConfigurationTestCaseDisplay.DescribeCoverage(testCase, _savedRule, _matchingRules);
+
+    /// <summary>
+    /// The inputs the configuration <paramref name="testCase"/> covers reads now, as saved.
+    /// </summary>
+    private IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> SlotsFor(ConfigurationTestCase testCase)
+    {
+        switch (testCase.Kind)
+        {
+            case ConfigurationTestCaseKind.Scope when _savedRule != null:
+                return ScopeTester.DescribeInputs(_savedRule)
+                    .Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality))
+                    .ToList();
+
+            case ConfigurationTestCaseKind.AttributeFlow or ConfigurationTestCaseKind.GeneratedValue when _savedRule != null:
+            {
+                var mapping = _savedRule.AttributeFlowRules.FirstOrDefault(m => m.Id == testCase.SyncRuleMappingId);
+                var source = mapping == null ? null
+                    : mapping.Generation != null ? AttributeFlowPipeline.GeneratedBaseSource(mapping)
+                    : mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+                return AttributeFlowTester.DescribeInputs(_savedRule, source?.Expression)
+                    .Where(input => input is { Type: not null, Plurality: not null })
+                    .Select(input => new ConfigurationTestCaseDisplay.InputSlot(input.Source, input.AttributeName, input.Type!.Value, input.Plurality!.Value))
+                    .ToList();
+            }
+
+            case ConfigurationTestCaseKind.ObjectMatchingRule:
+            {
+                var rule = _matchingRules.FirstOrDefault(r => r.Id == testCase.ObjectMatchingRuleId);
+                var objectType = rule?.SyncRuleId != null
+                    ? _savedRule?.ConnectedSystemObjectType
+                    : rule?.ConnectedSystemObjectTypeId is { } typeId ? _objectTypes.GetValueOrDefault(typeId) : null;
+                if (rule == null || objectType == null)
+                    return [];
+                using var jim = JimFactory.Create();
+                return jim.ObjectMatching.DescribeTestInputs(rule, objectType)
+                    .Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality))
+                    .ToList();
+            }
+
+            default:
+                return [];
+        }
+    }
+
+    private async Task NewAsync(CoverageOption option)
+    {
+        var testCase = Template(option.Template.Kind, option.Template.SyncRuleId, option.Template.SyncRuleMappingId, option.Template.ObjectMatchingRuleId);
+        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, option.Label, SlotsFor(testCase)) is { } saved)
+        {
+            await LoadAsync();
+            await RunAsync([_testCases.FirstOrDefault(c => c.Id == saved.Id) ?? saved]);
+        }
+    }
+
+    private async Task EditAsync(ConfigurationTestCase testCase)
+    {
+        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, Coverage(testCase), SlotsFor(testCase)) is { } saved)
+        {
+            await LoadAsync();
+            await RunAsync([_testCases.FirstOrDefault(c => c.Id == saved.Id) ?? saved]);
+        }
+    }
+
+    private async Task DeleteAsync(ConfigurationTestCase testCase)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete test case?", $"Delete the test case '{testCase.Name}'? Nothing it tests changes.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        using (var jim = JimFactory.Create())
+        {
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.ConfigurationTests.DeleteTestCaseAsync(testCase, user);
+        }
+
+        Snackbar.Add($"Deleted test case '{testCase.Name}'.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private Task RunAllAsync() => RunAsync(_testCases);
+
+    private async Task RunAsync(IReadOnlyList<ConfigurationTestCase> testCases)
+    {
+        _running = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            foreach (var result in await jim.ConfigurationTests.RunAsync(testCases))
+                _results[result.TestCaseId] = result;
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private static string StatusLabel(ConfigurationTestStatus status) => status switch
+    {
+        ConfigurationTestStatus.Passed => "Passed",
+        ConfigurationTestStatus.Failed => "Failed",
+        ConfigurationTestStatus.NeedsReview => "Needs review",
+        _ => "Error"
+    };
+
+    private static Color StatusColour(ConfigurationTestStatus status) => status switch
+    {
+        ConfigurationTestStatus.Passed => Color.Success,
+        ConfigurationTestStatus.Failed => Color.Error,
+        ConfigurationTestStatus.NeedsReview => Color.Warning,
+        _ => Color.Error
+    };
+}

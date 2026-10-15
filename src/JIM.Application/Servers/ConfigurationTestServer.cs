@@ -51,6 +51,12 @@ public class ConfigurationTestServer
         return await Application.Repository.ConfigurationTests.GetAllTestCasesAsync();
     }
 
+    /// <summary>
+    /// The cases covering a Connected System's Simple mode Object Matching Rules: those its Object Matching tab shows.
+    /// </summary>
+    public async Task<IReadOnlyList<ConfigurationTestCase>> GetSimpleModeMatchingTestCasesAsync(int connectedSystemId) =>
+        await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(connectedSystemId);
+
     #endregion
 
     #region Create, update, delete
@@ -94,11 +100,10 @@ public class ConfigurationTestServer
     {
         ArgumentNullException.ThrowIfNull(testCase);
         var stored = await Application.Repository.ConfigurationTests.GetTestCaseAsync(testCase.Id)
-            ?? throw new ArgumentException($"There is no configuration test case {testCase.Id}.", nameof(testCase));
+            ?? throw new ArgumentException($"There is no configuration test case {testCase.Id}.");
         if (stored.Kind != testCase.Kind || stored.SyncRuleMappingId != testCase.SyncRuleMappingId ||
             stored.SyncRuleId != testCase.SyncRuleId || stored.ObjectMatchingRuleId != testCase.ObjectMatchingRuleId)
-            throw new ArgumentException("A test case keeps what it covers and what it tests; to test something else, create another test case.",
-                nameof(testCase));
+            throw new ArgumentException("A test case keeps what it covers and what it tests; to test something else, create another test case.");
 
         var owner = await EnsureWorkableAsync(testCase);
         testCase.Created = stored.Created;
@@ -118,7 +123,7 @@ public class ConfigurationTestServer
     {
         ArgumentNullException.ThrowIfNull(testCase);
         var owner = await ResolveOwnerAsync(testCase)
-            ?? throw new ArgumentException($"Configuration test case {testCase.Id} covers nothing that exists.", nameof(testCase));
+            ?? throw new ArgumentException($"Configuration test case {testCase.Id} covers nothing that exists.");
 
         var activity = NewActivity(testCase, owner, ActivityTargetOperationType.Delete);
         await createActivity(activity);
@@ -134,18 +139,16 @@ public class ConfigurationTestServer
     private async Task<Owner> EnsureWorkableAsync(ConfigurationTestCase testCase)
     {
         if (testCase.DescribeInvalidity() is { } invalid)
-            throw new ArgumentException(invalid, nameof(testCase));
+            throw new ArgumentException(invalid);
 
         if (testCase.SyncRuleMappingId is { } mappingId)
         {
             var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(mappingId)
-                ?? throw new ArgumentException($"There is no Attribute Flow {mappingId} for the test case to cover.", nameof(testCase));
+                ?? throw new ArgumentException($"There is no Attribute Flow {mappingId} for the test case to cover.");
             if (testCase.Kind == ConfigurationTestCaseKind.GeneratedValue && mapping.Generation == null)
-                throw new ArgumentException("A Generated Value test case covers an Attribute Flow that generates a value; this one does not, so test it as an Attribute Flow.",
-                    nameof(testCase));
+                throw new ArgumentException("A Generated Value test case covers an Attribute Flow that generates a value; this one does not, so test it as an Attribute Flow.");
             if (testCase.Kind == ConfigurationTestCaseKind.AttributeFlow && mapping.Generation != null)
-                throw new ArgumentException("This Attribute Flow generates a value, so its base is what to test; test it as a Generated Value.",
-                    nameof(testCase));
+                throw new ArgumentException("This Attribute Flow generates a value, so its base is what to test; test it as a Generated Value.");
         }
 
         return await ResolveOwnerAsync(testCase)
@@ -154,7 +157,7 @@ public class ConfigurationTestServer
                 ConfigurationTestCaseKind.Scope => $"There is no Synchronisation Rule {testCase.SyncRuleId} for the test case to cover.",
                 ConfigurationTestCaseKind.ObjectMatchingRule => $"There is no Object Matching Rule {testCase.ObjectMatchingRuleId} for the test case to cover.",
                 _ => $"There is no Attribute Flow {testCase.SyncRuleMappingId} for the test case to cover."
-            }, nameof(testCase));
+            });
     }
 
     private static Activity NewActivity(ConfigurationTestCase testCase, Owner owner, ActivityTargetOperationType operation)

@@ -88,6 +88,13 @@ else
     }
 }
 
+@* Simple mode's rules are the Connected System's own, so their saved test cases are listed here (#2055 Phase 4); in
+   Advanced mode they are on each Synchronisation Rule's Tests tab. *@
+@if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem && ConnectedSystem.ObjectTypes is { Count: > 0 })
+{
+    <ConfigurationTestCasesPanel @ref="_testCasesPanel" ConnectedSystem="ConnectedSystem" Class="mt-6" />
+}
+
 @* Mode Switch Dialog *@
 <MudDialog @bind-Visible="_modeSwitchDialogVisible" Options="_dialogOptions">
     <TitleContent>
@@ -177,6 +184,11 @@ else
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The test cases panel, reloaded when a rule is added or deleted so it can offer, or stop listing, the rule.
+    /// </summary>
+    private ConfigurationTestCasesPanel? _testCasesPanel;
 
     // Object Matching Rules
     private int _selectedMatchingRuleTabIndex;
@@ -376,6 +388,8 @@ else
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
+            if (_testCasesPanel != null)
+                await _testCasesPanel.LoadAsync();
             StateHasChanged();
         }
         catch (InvalidDataException ex)
@@ -413,6 +427,8 @@ else
 
             Snackbar.Add("Matching rule has been deleted.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
+            if (_testCasesPanel != null)
+                await _testCasesPanel.LoadAsync();
             StateHasChanged();
         }
         catch (Exception ex)
