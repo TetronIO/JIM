@@ -330,6 +330,35 @@ Describe 'Set-JIMConnectedSystemAttribute' {
 
     # Whether an attribute's values are case-exact is offered on every Connector (#2051), so the switch is on the
     # Single set; the bulk hashtable carries it as caseExact like any other property.
+    Context 'Data type override' {
+
+        It 'Sends -Type Boolean to the attribute endpoint, which makes the attribute single-valued' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3; type = 'Boolean'; attributePlurality = 'SingleValued'; typeSetByAdministrator = $true } }
+
+                $result = Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Type Boolean -PassThru -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/1/object-types/2/attributes/3' -and
+                    $Body.type -eq 'Boolean' -and -not $Body.ContainsKey('attributePlurality')
+                }
+                $result.attributePlurality | Should -Be 'SingleValued'
+            }
+        }
+
+        It 'Surfaces the API''s refusal of a type override' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw "JIM API error (400): The 'JIM LDAP Connector' Connector states each attribute's data type from the Connected System's own schema, so it cannot be overridden." }
+
+                { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Type Boolean -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be overridden*'
+            }
+        }
+    }
+
     Context 'Case-exact declaration' {
 
         It 'Sends caseExact true when -CaseExact $true is given' {

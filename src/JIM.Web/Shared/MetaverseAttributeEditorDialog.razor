@@ -35,7 +35,7 @@
                               Disabled="@ReadOnly" />
 
                 <div class="d-flex gap-4">
-                    <MudSelect @bind-Value="_type" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
+                    <MudSelect @bind-Value="_type" @bind-Value:after="OnTypeChanged" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
                                Required="true" RequiredError="A data type is required." Class="flex-grow-1"
                                Disabled="@(ReadOnly || TypeLocked)" HelperText="@TypeHelperText()">
                         @foreach (var type in _selectableTypes)
@@ -46,7 +46,7 @@
                     <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
                                Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || PluralityLocked)" HelperText="@PluralityHelperText()">
                         <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
-                        <MudSelectItem Value="AttributePlurality.MultiValued">Multi-valued</MudSelectItem>
+                        <MudSelectItem Value="AttributePlurality.MultiValued" Disabled="@(!AttributeDataTypeCapabilities.SupportsMultiValued(_type))">Multi-valued</MudSelectItem>
                     </MudSelect>
                 </div>
 
@@ -287,6 +287,15 @@
     }
 
     /// <summary>
+    /// The Boolean rule: a Boolean attribute holds one value, so choosing a type that cannot be multi-valued resets
+    /// a multi-valued choice to single-valued (the Multi-valued option is disabled while it stays chosen).
+    /// </summary>
+    private void OnTypeChanged()
+    {
+        _plurality = AttributeDataTypeCapabilities.Constrain(_type, _plurality);
+    }
+
+    /// <summary>
     /// True when Metaverse Objects hold values for the attribute being edited. While they do, the only schema change
     /// JIM allows is a lossless widening: the same data type, single-valued to multi-valued.
     /// </summary>
@@ -299,10 +308,12 @@
 
     /// <summary>
     /// Plurality stays open while values exist only where multi-valued would be a lossless widening of the attribute
-    /// as saved, i.e. a single-valued attribute. Choosing single-valued again is simply no change.
+    /// as saved, i.e. a single-valued attribute whose type can be multi-valued. Choosing single-valued again is simply
+    /// no change.
     /// </summary>
     private bool PluralityLocked => HoldsValues &&
-        !AttributeSchemaChangeImpact.IsLosslessWideningChange(_originalType, _originalPlurality, _originalType, AttributePlurality.MultiValued);
+        (!AttributeDataTypeCapabilities.SupportsMultiValued(_originalType) ||
+         !AttributeSchemaChangeImpact.IsLosslessWideningChange(_originalType, _originalPlurality, _originalType, AttributePlurality.MultiValued));
 
     private string ValuesHeldPhrase() => _valuesCount == 1
         ? "1 Metaverse Object holds a value"
@@ -314,7 +325,13 @@
 
     private string? PluralityHelperText()
     {
-        if (ReadOnly || !HoldsValues)
+        if (ReadOnly)
+            return null;
+
+        if (!AttributeDataTypeCapabilities.SupportsMultiValued(_type))
+            return "A Boolean attribute holds one value, so it is always single-valued.";
+
+        if (!HoldsValues)
             return null;
 
         return PluralityLocked

@@ -12,8 +12,9 @@ function Set-JIMMetaverseAttribute {
         - Name, RenderingHint and StandardMappings are updated together via the attribute endpoint.
         - Type and AttributePlurality are updated via the dedicated schema endpoint, which needs
           both, so supplying either sends both (the unspecified one is read from the attribute's
-          current schema). While any Metaverse Object holds a value for the attribute, the only
-          schema change JIM allows is widening it from SingleValued to MultiValued with its type
+          current schema, except that -Type Boolean alone sends SingleValued, since a Boolean holds
+          one value). While any Metaverse Object holds a value for the attribute, the only schema
+          change JIM allows is widening it from SingleValued to MultiValued with its type
           unchanged; every value is kept. Any other schema change is refused until the values are
           cleared.
 
@@ -34,12 +35,13 @@ function Set-JIMMetaverseAttribute {
 
     .PARAMETER Type
         A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while
-        any Metaverse Object holds a value for the attribute.
+        any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without
+        -AttributePlurality also makes the attribute single-valued.
 
     .PARAMETER AttributePlurality
         Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute,
         JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to
-        SingleValued.
+        SingleValued, and refuses MultiValued for a Boolean.
 
     .PARAMETER StandardMappings
         The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a
@@ -187,7 +189,15 @@ function Set-JIMMetaverseAttribute {
                 } else {
                     $current.type
                 }
-                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $AttributePlurality } else { $current.attributePlurality }
+                # A Boolean holds one value, so a change to Boolean that names no plurality makes the attribute
+                # single-valued, as the portal does; an explicit multi-valued Boolean is sent and JIM refuses it.
+                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) {
+                    $AttributePlurality
+                } elseif ($typeValue -eq 'Boolean') {
+                    'SingleValued'
+                } else {
+                    $current.attributePlurality
+                }
 
                 $schemaBody = @{
                     type               = $typeValue

@@ -315,6 +315,59 @@ public class ScimAttributeFlatteningTests
             Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Binary));
         }
     }
+
+    [Test]
+    public void Flatten_MultiValuedComplexWithABooleanSubAttribute_DoesNotEmitTheBoolean()
+    {
+        // The Boolean rule (#2153): flattening decorrelates "primary" from its entry, and as a single-valued
+        // Boolean it would report a surplus on every import of a resource whose entries' flags differ. The
+        // entry's other sub-attributes still flatten.
+        var roles = new ScimSchemaAttribute
+        {
+            Name = "roles",
+            Type = ScimAttributeTypes.Complex,
+            MultiValued = true,
+            SubAttributes = [Simple("value", ScimAttributeTypes.String), Simple("display", ScimAttributeTypes.String), Simple("primary", ScimAttributeTypes.Boolean)]
+        };
+
+        var flattened = ScimAttributeMapper.Flatten(roles, ScimUrns.User);
+
+        Assert.That(flattened.Select(a => a.Name).ToList(), Is.EqualTo(new[] { "roles.value", "roles.display" }));
+    }
+
+    [Test]
+    public void Flatten_SingleValuedComplexWithABooleanSubAttribute_StillEmitsIt()
+    {
+        // A single-valued complex attribute's Boolean holds one value, so it is kept.
+        var account = new ScimSchemaAttribute
+        {
+            Name = "account",
+            Type = ScimAttributeTypes.Complex,
+            SubAttributes = [Simple("name", ScimAttributeTypes.String), Simple("locked", ScimAttributeTypes.Boolean)]
+        };
+
+        var flattened = ScimAttributeMapper.Flatten(account, ScimUrns.User);
+
+        Assert.That(flattened.Select(a => a.Name).ToList(), Is.EqualTo(new[] { "account.name", "account.locked" }));
+    }
+
+    [Test]
+    public void FlattenSchema_CoreUser_EmitsNoMultiValuedBoolean()
+    {
+        // roles.primary, entitlements.primary and x509Certificates.primary were the core schema's three.
+        var flattened = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flattened.Where(a => a.Type == AttributeDataType.Boolean && a.AttributePlurality == AttributePlurality.MultiValued).Select(a => a.Name), Is.Empty);
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("roles.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("entitlements.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("x509Certificates.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Contain("roles.value"));
+            Assert.That(flattened.Select(a => a.Name), Does.Contain("emails.primary"),
+                "A canonical-type primary slot is a single-valued selector, not a decorrelated flag, so it stays.");
+        }
+    }
     #endregion
 
     #region references

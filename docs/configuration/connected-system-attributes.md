@@ -39,6 +39,8 @@ The Attribute Flow editor marks an export mapping whose target is set on creatio
 
 Every discovered attribute is recorded with a JIM data type, shown in the Schema tab's **Type** column. An Attribute Flow requires its source and target to be the same type, so this is what decides which Metaverse Attributes an attribute can be mapped to.
 
+A Boolean attribute is always single-valued, as it is in the [Metaverse](metaverse.md#attributes): where a Connected System declares a Boolean multi-valued, JIM records it single-valued.
+
 Most of the time the Connected System states its type unambiguously and JIM records it. A directory's schema and a SCIM service provider's schema are both definitive, so their attribute types are fixed and cannot be changed.
 
 ### When the source cannot say
@@ -69,6 +71,8 @@ The attribute's **Description** states the source column type it was built from 
 
 This is how an Oracle `NUMBER(10)` employee identifier is pointed at the built-in `Employee Number` Metaverse Attribute, which is a Number. Use the built-in attributes wherever they fit: a custom attribute created only to work around a type is one no other Connected System will match on.
 
+Overriding a multi-valued attribute to Boolean also makes it single-valued, because a Boolean holds one value. The portal says so when you confirm the change, and the REST API and PowerShell return the attribute single-valued.
+
 !!! warning "Set the type before you build on it"
     An override is refused once the attribute is referenced by a Synchronisation Rule or already holds values, because changing it then would reinterpret data that was imported under the previous type. If you need to change it later, remove the references, or clear the Connected System Objects, first.
 
@@ -82,7 +86,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeI
 
 The same field is available on the REST API's attribute update, `PUT api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`.
 
-An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
+An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. The plurality follows the type you chose, so an attribute you overrode to Boolean stays single-valued. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
 
 !!! note "Existing Connected Systems"
     Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.

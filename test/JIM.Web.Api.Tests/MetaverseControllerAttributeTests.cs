@@ -164,6 +164,29 @@ public class MetaverseControllerAttributeTests
     }
 
     [Test]
+    public async Task CreateAttributeAsync_MultiValuedBoolean_ReturnsBadRequestNamingTheRuleAsync()
+    {
+        var result = await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest
+        {
+            Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Is.EqualTo(AttributeDataTypeCapabilities.MultiValuedBooleanRule));
+        _mv.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateAttributeAsync_TypeNotSet_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest { Name = "costCentre", Type = AttributeDataType.NotSet });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
     public async Task CreateAttributeAsync_WithObjectTypeIds_BindsOnCreationAsync()
     {
         MetaverseAttribute? captured = null;
@@ -415,6 +438,30 @@ public class MetaverseControllerAttributeTests
             Assert.That(impact.ProposedPlurality, Is.EqualTo(AttributePlurality.SingleValued));
             Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
         }
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_ToMultiValuedBoolean_ReturnsBadRequestNamingTheRuleAsync()
+    {
+        Attr(1);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Is.EqualTo(AttributeDataTypeCapabilities.MultiValuedBooleanRule));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_TypeNotSet_ReturnsBadRequestAsync()
+    {
+        Attr(1);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.NotSet, AttributePlurality = AttributePlurality.SingleValued });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
     }
 

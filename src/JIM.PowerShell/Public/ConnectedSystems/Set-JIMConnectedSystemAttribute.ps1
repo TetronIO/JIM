@@ -38,8 +38,8 @@ function Set-JIMConnectedSystemAttribute {
         Replaces the data type inferred from the schema. Accepted only where the Connector says its schema cannot
         state a type for certain: a delimited file names no types, and Oracle has one numeric type, so a NUMBER
         column may be a whole number, a counter or a fractional figure. Refused once a Synchronisation Rule uses the
-        attribute or it holds values. Integer is the Number data type, as in New-JIMMetaverseAttribute. Cannot be
-        set with -AttributeUpdates.
+        attribute or it holds values. Integer is the Number data type, as in New-JIMMetaverseAttribute. A Boolean
+        holds one value, so Boolean also makes the attribute single-valued. Cannot be set with -AttributeUpdates.
 
     .PARAMETER CaseExact
         Whether the attribute's values are case-exact: $true when values differing only in case identify different
