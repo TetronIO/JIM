@@ -28,6 +28,9 @@ Get-JIMPendingExport -ConnectedSystemId <int> -Count [-ChangeType <string>] [-St
 # ListAll
 Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force]
 
+# QueuedBy
+Get-JIMPendingExport -Id <guid> -QueuedBy
+
 # AttributeChangesAll
 Get-JIMPendingExport -Id <guid> -AttributeName <string> -All [-Search <string>] [-PageSize <int>] [-Force]
 
@@ -43,7 +46,8 @@ Get-JIMPendingExport -Id <guid>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes (List, Count, ListAll) |  | The ID of the Connected System. Accepts pipeline input by property name. |
-| `Id` | `guid` | Yes (AttributeChangesAll, AttributeChanges, ById) |  | The ID of the Pending Export to get. |
+| `Id` | `guid` | Yes (QueuedBy, AttributeChangesAll, AttributeChanges, ById) |  | The ID of the Pending Export to get. Accepts pipeline input by property name. |
+| `QueuedBy` | `switch` | Yes (QueuedBy) |  | Return the runs that queued the Pending Export instead. Pending Exports listed by `Get-JIMPendingExport` can be piped straight in. |
 | `AttributeName` | `string` | Yes (AttributeChangesAll, AttributeChanges) |  | With `-Id`, gets the value changes for this attribute a page at a time, for a multi-valued attribute such as member whose changes the Pending Export read by ID cuts short. |
 | `Search` | `string` | No (List, ListAll, AttributeChangesAll, AttributeChanges) |  | Returns only the Pending Exports whose target object, source Metaverse Object or error matches this text; or with `-AttributeName`, only the changes whose value matches it. |
 | `Page` | `int` | No (List, AttributeChanges) | `1` | The page to get. At least 1. |
@@ -56,7 +60,7 @@ Get-JIMPendingExport -Id <guid>
 
 ### Output
 
-The Pending Exports, the one Pending Export, its value changes for `-AttributeName`, or with `-Count` how many there are.
+The Pending Exports, the one Pending Export, its value changes for `-AttributeName`, or with `-Count` how many there are. With `-QueuedBy`, one row per run that queued the Pending Export, newest first; a warning says when runs are no longer retained, or when earlier ones may be missing.
 
 **With `-ConnectedSystemId`, or `-ConnectedSystemId` and `-All`**:
 
@@ -130,6 +134,31 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `SyncRuleName` | `string` | Snapshot of the contributing Synchronisation Rule's name at staging time. |
 
 **With `-Count`**: an `int`.
+
+**With `-QueuedBy`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The Run Profile Execution Item's id. |
+| `ActivityId` | `guid` | The Activity (run) the item belongs to. |
+| `Executed` | `datetime` | When the run executed (UTC). |
+| `TargetType` | `string` | What the run targeted. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject` or `PasswordSynchronisation`. |
+| `TargetName` | `string` | The run's name, typically the Run Profile's. |
+| `TargetContext` | `string` | Where the run happened, typically its Connected System's name. |
+| `ConnectedSystemId` | `int` | The Connected System the run was against, where it was against one. |
+| `RunType` | `string` | The kind of run: Full Import, Delta Synchronisation, Export and so on. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `ObjectChangeType` | `string` | What the item did to its object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `OutcomeSummary` | `string` | A short summary of the item's outcome, where one was recorded. |
+| `ErrorType` | `string` | The error the item ended in, or empty where it succeeded. One of `NotSet`, `AmbiguousMatch`, `CouldNotMatchObjectType`, `CouldNotJoinDueToExistingJoin`, `DuplicateImportedAttributes`, `MissingExternalIdAttributeValue`, `UnexpectedAttribute`, `UnresolvedReference`, `UnsupportedExternalIdAttributeType`, `ExportNotConfirmed`, `ExportConfirmationFailed`, `CsoCreationFailed`, `DuplicateObject`, `InvalidGeneratedExternalId`, `UnhandledError`, `ExpressionEvaluationError`, `ExpressionMissingInput`, `MultiValuedToSingleValued`, `DeltaImportFallbackToFullImport`, `ImportHashVerificationFailed`, `ImportAttributeValueError`, `ConnectorConfigurationError`, `CouldNotExportDueToExistingConnectedSystemObject`, `ClassMembershipRequirementsNotMet`, `GeneratedValueExhausted`, `GeneratedValueWidthExceeded`, `GeneratedValueCollisionUnresolved`, `UniqueValueAlreadyInUse`, `ObjectMatchingRuleFailed`, `ObjectTypeChanged`, `PasswordRequiredToEnableAccount`, `AmbiguousProvisioningMatch` or `ScopingCriterionFailed`. |
+| `DisplayName` | `string` | The name of the object the item was about, as recorded. |
+| `ObjectType` | `string` | The object's type, as recorded. |
+| `ExternalId` | `string` | The object's external ID, where it is a Connected System Object. |
+| `ConnectedSystemObjectId` | `guid` | The Connected System Object the item was about, where it was about one. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object the item was about, where it was about one. |
+| `Because` | `string` | The nearest cause in one plain-language line, exactly as the portal reads it: the first cause and how many more there are, or why there is none ("No earlier causes recorded", "What caused this is no longer retained"). |
+| `NearestCauses` | `object[]` | The item's nearest causes, grouped into cohorts; at most three, with NearestCauseCount giving the total. Empty where nothing earlier was recorded or retained. Only this first step is read, so the members' own causes are empty here; read the causes of the item with this row's Id for the full chain. Each has `EdgeType`, `ReasonCode`, `SourceImportChangeType`, `MetaverseChangeType`, `ConnectedSystemId`, `ConnectedSystemName`, `SyncRuleId`, `SyncRuleName`, `ObjectTypeName`, `ObjectTypePluralName`, `AttributeName`, `EffectSyncOutcomeId`, `MemberCount` and `Members`. |
+| `NearestCauseCount` | `int` | How many cohorts of nearest causes the item has in all. |
+| `Resolution` | `string` | How the item's causes end: Resolved where it has any, NoFurtherCauses where nothing earlier was recorded, or CauseNotRetained where history retention has since removed what caused it. One of `Resolved`, `NoFurtherCauses`, `CauseNotRetained` or `DepthLimitReached`. |
 <!-- END GENERATED: Get-JIMPendingExport -->
 
 ### Examples
@@ -150,12 +179,18 @@ Get-JIMPendingExport -ConnectedSystemId 3 -All
 Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
+```powershell title="See which synchronisation runs queued a Pending Export, and why"
+Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -QueuedBy |
+    Format-Table Executed, TargetName, TargetContext, Because
+```
+
 ```powershell title="Page through member additions on a group export"
 Get-JIMPendingExport -Id "a1b2c3d4-..." -AttributeName "member" -Page 1 -PageSize 100
 ```
 
 ### Notes
 
+- `-QueuedBy` rows have the same shape as an object's causal timeline in [`Get-JIMActivityExecutionItem`](execution-items.md), and their `Id` is the execution item's own, so they pipe straight into `Get-JIMActivityExecutionItem -Causes`. See [the Causality Explorer](../configuration/causality.md#the-causality-explorer).
 - For large multi-valued attribute changes (adding hundreds of members to a group, say), use `-AttributeName` to page through the individual changes rather than loading them all at once.
 - With `-Id`, `UnresolvedReferences` lists each reference change not yet written, with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object is in this Connected System but has no anchor yet) or `NotInTargetSystem` (it has no Connected System Object here). See [Unresolved reference handling on export](../configuration/unresolved-references.md#on-export).
 - `ValueSources` names where each attribute's queued value came from: an expression, chained mapping or generated value (`IsComputed` is `$true`), or the single Metaverse attribute it was read from, with that attribute's current `Origin`.

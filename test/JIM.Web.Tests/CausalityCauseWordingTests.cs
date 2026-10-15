@@ -36,6 +36,46 @@ public class CausalityCauseWordingTests
         };
     }
 
+    // ─── Nearest cause, as plain text (#2100) ───
+
+    [Test]
+    public void NearestCauseText_OneCohort_IsItsSentence()
+    {
+        var cohort = ReferenceRemovalCohort(1);
+        cohort.Members[0] = new CausalChainMember { DisplayName = "Tina Adams" };
+        var nearest = new CausalNearestCauses { Cohorts = [cohort], TotalCohortCount = 1 };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"), Is.EqualTo(
+            "Tina Adams was deleted, so they were removed from Project Diamond's Static Members"));
+    }
+
+    [Test]
+    public void NearestCauseText_SeveralCohorts_SaysHowManyMoreTheFirstStandsFor()
+    {
+        var nearest = new CausalNearestCauses { Cohorts = [ReferenceRemovalCohort(10)], TotalCohortCount = 3 };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"), Is.EqualTo(
+            "10 Users were deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"));
+    }
+
+    [Test]
+    public void NearestCauseText_NoCausesBecauseTheyWereNotRetained_SaysSoRatherThanThatThereWereNone()
+    {
+        var nearest = new CausalNearestCauses { Resolution = CausalChainResolution.CauseNotRetained };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"),
+            Is.EqualTo("What caused this is no longer retained"));
+    }
+
+    [Test]
+    public void NearestCauseText_NoCausesRecorded_SaysNoneWereRecorded()
+    {
+        var nearest = new CausalNearestCauses { Resolution = CausalChainResolution.NoFurtherCauses };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"),
+            Is.EqualTo("No earlier causes recorded"));
+    }
+
     [Test]
     public void Sentence_ReferenceRemovalCohortOfMany_CountsTheCausesAndNamesTheRelationship()
     {

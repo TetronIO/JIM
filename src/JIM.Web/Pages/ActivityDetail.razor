@@ -957,44 +957,7 @@
                         <MudText Typo="Typo.button">Outcomes</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @{
-                            var outcomes = Helpers.ParseOutcomeSummary(context.Item.OutcomeSummary);
-                            var itemErrorType = context.Item.ErrorType;
-                            var hasError = itemErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet;
-                        }
-                        @if (outcomes.Count > 0)
-                        {
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                @foreach (var (outcomeType, count) in outcomes)
-                                {
-                                    <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Variant="Variant.Text"
-                                                 Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
-                                                 Class="jim-stat-chip">
-                                            @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
-                                        </MudChip>
-                                    </MudTooltip>
-                                }
-                                @if (hasError)
-                                {
-                                    var errorType = itemErrorType!.Value;
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                        @Helpers.GetErrorTypeChipLabel(errorType)
-                                    </MudChip>
-                                }
-                            </MudStack>
-                        }
-                        else if (hasError)
-                        {
-                            var errorType = itemErrorType!.Value;
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                @Helpers.GetErrorTypeChipLabel(errorType)
-                            </MudChip>
-                        }
-                        else
-                        {
-                            <EmptyValue />
-                        }
+                        <OutcomeSummaryChips OutcomeSummary="@context.Item.OutcomeSummary" ErrorType="@context.Item.ErrorType" />
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>

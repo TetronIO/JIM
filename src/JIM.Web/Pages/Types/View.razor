@@ -62,13 +62,19 @@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged"
                       ActivePanelSlugChanged="OnActiveTabSlugChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
         <Header Context="headerContext">
+            <MudSpacer />
             @if (_activeTabIndex == 0)
             {
-                <MudSpacer />
                 @* Which view of the details: a choice of view, so the segmented control, not a button group. *@
                 <SegmentedToggle TValue="string" Options="@DetailViewModes" Value="@_detailViewMode"
                                  ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="Details view" Class="my-auto me-2" />
             }
+            @* Opens the Causality Explorer on this object (#2100): what happened to it across its joined Connected System
+               Objects' runs as well as its own, newest first, and why. Beside the tabs because the page has no action
+               row of its own, and on every tab because it is about the object rather than any one view of it. *@
+            <MudButton Variant="Variant.Outlined" DropShadow="false" StartIcon="@Icons.Material.Filled.Hub"
+                       Href="@($"/causality/metaverse-objects/{MetaverseObject.Id}")" Class="my-auto me-2 jim-nowrap flex-none"
+                       data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
         </Header>
         <ChildContent>
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">

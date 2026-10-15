@@ -55,18 +55,27 @@
                 }
             </div>
         }
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
-                              IsSpeculative="_model.IsSpeculative"
-                              AfterThisRunPills="_lineageModel?.Consequences?.Pills"
-                              OnAfterThisRunSelected="AfterThisRunSelected">
-            <Actions>
-                @if (AvailableViews.Count > 1)
-                {
-                    <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
-                                     AriaLabel="Causality view" Class="seg" />
-                }
-            </Actions>
-        </CausalitySummaryBand>
+        @if (!LineageOnly)
+        {
+            <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                                  IsSpeculative="_model.IsSpeculative"
+                                  AfterThisRunPills="_lineageModel?.Consequences?.Pills"
+                                  OnAfterThisRunSelected="AfterThisRunSelected">
+                <Actions>
+                    @if (ExplorerHref != null)
+                    {
+                        <MudButton Variant="Variant.Outlined" DropShadow="false"
+                                   StartIcon="@Icons.Material.Filled.Hub" Href="@ExplorerHref"
+                                   Class="jim-causality-open-explorer">Open in explorer</MudButton>
+                    }
+                    @if (AvailableViews.Count > 1)
+                    {
+                        <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
+                                         AriaLabel="Causality view" Class="seg" />
+                    }
+                </Actions>
+            </CausalitySummaryBand>
+        }
 
         <div class="canvas-wrap">
             @switch (_view)
@@ -129,7 +138,14 @@
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline, CausalityView.Table];
 
-    private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
+    /// <summary>
+    /// The Lineage alone, for the Causality Explorer (#2100); see <see cref="LineageOnly"/>.
+    /// </summary>
+    private static readonly IReadOnlyList<CausalityView> LineageOnlyViews = [CausalityView.Lineage];
+
+    private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true
+        ? SpeculativeViews
+        : LineageOnly ? LineageOnlyViews : RecordedViews;
 
     private IReadOnlyList<SegmentedToggleOption<CausalityView>> ViewOptions =>
         AvailableViews.Select(view => new SegmentedToggleOption<CausalityView>(view, GetViewLabel(view))).ToList();
@@ -231,6 +247,20 @@
     [Parameter]
     public Func<string, int, string?, Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?>>? LoadConsequenceMembers { get; set; }
 
+    /// <summary>
+    /// Shows the Lineage alone, as the Causality Explorer does (#2100): no summary band, since the explorer's own header
+    /// says what is in view, and no view switcher, since the Timeline and Table stay on the item page.
+    /// </summary>
+    [Parameter]
+    public bool LineageOnly { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for this item (#2100), where the host offers to follow its Lineage there in place;
+    /// null where it does not, as the explorer itself does not.
+    /// </summary>
+    [Parameter]
+    public string? ExplorerHref { get; set; }
+
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalityLineageModel? _lineageModel;
@@ -309,7 +339,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        // The explorer shows the Lineage whatever the reader last chose on an item page, and leaves that choice alone.
+        if (!firstRender || LineageOnly)
             return;
 
         // No try/catch needed: the preference service swallows JS interop unavailability internally

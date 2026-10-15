@@ -2056,8 +2056,17 @@ public partial class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
+    /// The item types an import records, which are what the source-import hop looks for on a record's timeline. Shared
+    /// by the per-item reads and the batched one (<see cref="GetLatestImportEventsForItemsAsync"/>), which must agree.
+    /// </summary>
+    private static readonly ObjectChangeType[] SourceImportChangeTypes =
+        [ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted];
+
+    /// <summary>
     /// The latest import-side event among <paramref name="candidateRecords"/> at or before the given
     /// Activity time, excluding the asking item: the shared shape of the causal walk's two timeline keys.
+    /// Between two imports in one run, the higher id, so the answer is the same on every read and matches the
+    /// batched read's.
     /// </summary>
     private async Task<CausalSourceImportEvent?> GetLatestImportEventAsync(
         IQueryable<ActivityRunProfileExecutionItem> candidateRecords, DateTime atOrBeforeActivityExecuted,
@@ -2066,11 +2075,10 @@ public partial class ActivityRepository : IActivityRepository
         return await candidateRecords
             .AsNoTracking()
             .Where(r => r.Id != excludeRunProfileExecutionItemId
-                && (r.ObjectChangeType == ObjectChangeType.Added
-                    || r.ObjectChangeType == ObjectChangeType.Updated
-                    || r.ObjectChangeType == ObjectChangeType.Deleted)
+                && SourceImportChangeTypes.Contains(r.ObjectChangeType)
                 && r.Activity.Executed <= atOrBeforeActivityExecuted)
             .OrderByDescending(r => r.Activity.Executed)
+            .ThenByDescending(r => r.Id)
             .Select(r => new CausalSourceImportEvent
             {
                 RunProfileExecutionItemId = r.Id,

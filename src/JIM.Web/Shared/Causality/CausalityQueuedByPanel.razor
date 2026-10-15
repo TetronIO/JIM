@@ -1,0 +1,100 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Pending Export's Queued by panel (#2100): the runs that staged it, newest first, each with what it did and its
+   nearest recorded cause, and Explore to open the Causality Explorer on that run's item. Where it cannot name every
+   run, it says so; where it names none, it says why. *@
+
+<MudCard Outlined="true" Elevation="0" Class="jim-causality-queued">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Queued by</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (QueuedBy.Rows.Count > 0)
+        {
+            <MudText Class="mud-text-secondary mb-2">The runs that staged changes into this Pending Export, newest first, and why each did.</MudText>
+            <MudSimpleTable Dense="true" Elevation="0" Hover="true">
+                <thead>
+                    <tr>
+                        <th>Run</th>
+                        <th>What it did</th>
+                        <th>Because</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in QueuedBy.Rows)
+                    {
+                        var executedLocal = row.Entry.Executed.ToLocalTime();
+                        <tr class="jim-causality-queued-row" @key="row.Entry.RunProfileExecutionItemId">
+                            <td class="jim-nowrap">
+                                <div>@(row.Entry.ActivityTargetName ?? "A run")</div>
+                                <div class="mud-text-secondary jim-causality-timeline-system">
+                                    @(row.Entry.ActivityTargetContext is { } systemName ? $"{systemName} · " : null)<span title="@executedLocal.ToFriendlyDate()">@executedLocal.ToRelativeTime()</span>
+                                </div>
+                            </td>
+                            <td><OutcomeSummaryChips OutcomeSummary="@row.Entry.OutcomeSummary" ErrorType="@row.Entry.ErrorType" /></td>
+                            <td><CausalityNearestCause NearestCauses="row.NearestCauses" EffectName="@row.Entry.DisplayName" /></td>
+                            <td class="jim-nowrap">
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="jim-causality-explore"
+                                           StartIcon="@Icons.Material.Filled.Hub"
+                                           Href="@CausalityTrail.Empty.Href(new CausalityFocus(CausalityFocusKind.Item, row.Entry.RunProfileExecutionItemId))">
+                                    Explore
+                                </MudButton>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else if (QueuedBy.NotRetainedCount == 0)
+        {
+            <div class="jim-causality-queued-empty">
+                <MudText><strong>No run is recorded as staging this Pending Export</strong></MudText>
+                <MudText Class="mud-text-secondary">
+                    It was queued before JIM recorded which run queues each change, or by a path that records no execution
+                    item. Its attribute changes are still exactly what will be exported.
+                </MudText>
+            </div>
+        }
+        @if (NotRetainedNote() is { } notRetained)
+        {
+            <div class="jim-causality-queued-note">@notRetained</div>
+        }
+        @if (QueuedBy.EarlierRunsMayBeOmitted)
+        {
+            <div class="jim-causality-queued-note">@OmittedNote</div>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private const string OmittedNote =
+        "A Pending Export keeps the most recent runs that staged it, so earlier runs may not be listed.";
+
+    /// <summary>
+    /// The runs that staged the Pending Export.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalQueuedBy QueuedBy { get; set; } = null!;
+
+    /// <summary>
+    /// What to say about staging runs whose items history retention has removed, counted rather than dropped.
+    /// </summary>
+    private string? NotRetainedNote()
+    {
+        var count = QueuedBy.NotRetainedCount;
+        if (count == 0)
+            return null;
+
+        var runs = count == 1 ? "1 run" : $"{count} runs";
+        return QueuedBy.Rows.Count > 0
+            ? $"{count} earlier {(count == 1 ? "run" : "runs")} also staged it, whose items are no longer retained."
+            : $"{runs} staged it, whose items are no longer retained.";
+    }
+}
