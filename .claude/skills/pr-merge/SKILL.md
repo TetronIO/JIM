@@ -187,6 +187,14 @@ gh api repos/TetronIO/JIM/pulls/<n>/comments/<comment-databaseId>/replies -f bod
 gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=<thread-id>
 ```
 
+In Claude Code on the web GraphQL is refused, so use the relay's routes instead; they key a thread by its first comment's id, which is the id `Watch-PullRequest.ps1` prints:
+
+```bash
+gh api repos/TetronIO/JIM/pulls/<n>/ccr/review_threads                        # resolved, path, line, comment_ids
+gh api repos/TetronIO/JIM/pulls/<n>/comments/<comment-id>/replies -f body='...'
+gh api -X POST repos/TetronIO/JIM/pulls/<n>/ccr/comments/<comment-id>/resolve
+```
+
 When you push a fix, reply naming the commit, then resolve. To ask for a fresh docs review after more commits, remove and re-add the `docs-review` label; it raises nothing an earlier run raised.
 
 ## Wait for the merge to land
