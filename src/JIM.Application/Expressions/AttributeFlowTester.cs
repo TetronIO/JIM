@@ -453,13 +453,13 @@ public static class AttributeFlowTester
         {
             GeneratedBaseOutcome.Base when generation.TokenKind == GeneratedValueTokenKind.OnlyIfTaken =>
                 $"{target} would be generated from the base '{generated.BaseValue}': the base itself if no other object holds it, otherwise " +
-                $"with {token} added. Which is free is decided when synchronisation runs.",
+                $"with {token} added. Which is free is decided when a Synchronisation runs.",
 
             GeneratedBaseOutcome.Base =>
-                $"{target} would be generated from the base '{generated.BaseValue}' with {token} added when synchronisation runs.",
+                $"{target} would be generated from the base '{generated.BaseValue}' with {token} added when a Synchronisation runs.",
 
             GeneratedBaseOutcome.NoBaseExpression =>
-                $"{target} has no base expression, so it would be generated from {token} alone when synchronisation runs.",
+                $"{target} has no base expression, so it would be generated from {token} alone when a Synchronisation runs.",
 
             GeneratedBaseOutcome.Waits when generated.Source?.MissingInputs.Count > 0 =>
                 $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Contribute no value, so {waits}.",
