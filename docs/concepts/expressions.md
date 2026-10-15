@@ -20,7 +20,7 @@ Within a Synchronisation Rule, expressions are used in:
 - **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System. An export expression produces one value or several; one value written to a Multi-Valued attribute replaces every value the attribute holds (see [Multi-valued attributes](../configuration/attribute-mappings.md#multi-valued-attributes)).
 - **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the Metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
-- **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
+- **Scoping filters**<br /> Compare a value reshaped from the object, in place of an attribute, to decide whether it is in scope for a Synchronisation Rule: see [Comparing a computed value](../configuration/scoping-criteria.md#comparing-a-computed-value).
 
 Expressions also decide what an **Object Matching Rule** compares, where an identifier differs in format between systems: see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression).
 
