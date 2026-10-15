@@ -37,25 +37,18 @@
                 <div class="d-flex gap-4">
                     <MudSelect @bind-Value="_type" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
                                Required="true" RequiredError="A data type is required." Class="flex-grow-1"
-                               Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
+                               Disabled="@(ReadOnly || TypeLocked)" HelperText="@TypeHelperText()">
                         @foreach (var type in _selectableTypes)
                         {
                             <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
                         }
                     </MudSelect>
                     <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
-                               Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
+                               Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || PluralityLocked)" HelperText="@PluralityHelperText()">
                         <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
                         <MudSelectItem Value="AttributePlurality.MultiValued">Multi-valued</MudSelectItem>
                     </MudSelect>
                 </div>
-
-                @if (!ReadOnly && _isEdit && _schemaLocked)
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        Data Type and Plurality are locked because @_valuesCount Metaverse Object(s) hold a stored value for this attribute. Clear the values first to change the schema.
-                    </MudAlert>
-                }
 
                 @if (_plurality == AttributePlurality.MultiValued)
                 {
@@ -236,7 +229,6 @@
 
     private string? _nameError;
     private bool _checkingName;
-    private bool _schemaLocked;
     private int _valuesCount;
 
     // Original values (edit) to detect what actually changed.
@@ -282,9 +274,8 @@
 
             if (!ReadOnly)
             {
-                // Lock the schema fields when stored values would block a change.
-                var schemaImpact = await jim.Metaverse.EvaluateAttributeSchemaChangeAsync(Attribute);
-                _schemaLocked = schemaImpact.BlockedByValues;
+                // Stored values decide which schema changes are allowed; see TypeLocked and PluralityLocked.
+                var schemaImpact = await jim.Metaverse.EvaluateAttributeSchemaChangeAsync(Attribute, Attribute.Type, Attribute.AttributePlurality);
                 _valuesCount = schemaImpact.TotalObjectsWithValues;
             }
         }
@@ -293,6 +284,42 @@
             var types = await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
             _objectTypes = types?.OrderBy(t => t.Name).ToList() ?? new List<MetaverseObjectType>();
         }
+    }
+
+    /// <summary>
+    /// True when Metaverse Objects hold values for the attribute being edited. While they do, the only schema change
+    /// JIM allows is a lossless widening: the same data type, single-valued to multi-valued.
+    /// </summary>
+    private bool HoldsValues => _isEdit && _valuesCount > 0;
+
+    /// <summary>
+    /// A data type change is never a widening, so stored values always lock the type.
+    /// </summary>
+    private bool TypeLocked => HoldsValues;
+
+    /// <summary>
+    /// Plurality stays open while values exist only where multi-valued would be a lossless widening of the attribute
+    /// as saved, i.e. a single-valued attribute. Choosing single-valued again is simply no change.
+    /// </summary>
+    private bool PluralityLocked => HoldsValues &&
+        !AttributeSchemaChangeImpact.IsLosslessWideningChange(_originalType, _originalPlurality, _originalType, AttributePlurality.MultiValued);
+
+    private string ValuesHeldPhrase() => _valuesCount == 1
+        ? "1 Metaverse Object holds a value"
+        : $"{_valuesCount:N0} Metaverse Objects hold values";
+
+    private string? TypeHelperText() => ReadOnly || !TypeLocked
+        ? null
+        : $"Locked because {ValuesHeldPhrase()} for this attribute, and a different data type would invalidate them.";
+
+    private string? PluralityHelperText()
+    {
+        if (ReadOnly || !HoldsValues)
+            return null;
+
+        return PluralityLocked
+            ? $"Locked because {ValuesHeldPhrase()} for this attribute, and single-valued could not keep them all."
+            : "Can be widened to multi-valued; every value already held is kept.";
     }
 
     private static string StandardLabel(AttributeStandard standard) => standard switch
@@ -527,9 +554,9 @@
         if (_type != _originalType || _plurality != _originalPlurality)
         {
             var impact = await jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(attributeId, _type, _plurality, user, changeReason);
-            if (impact.BlockedByValues)
+            if (!impact.Applied)
             {
-                Snackbar.Add($"Cannot change the schema: {impact.TotalObjectsWithValues} object(s) hold a stored value. Clear them first.", Severity.Error);
+                Snackbar.Add($"Cannot change the schema: {impact.TotalObjectsWithValues:N0} Metaverse Object(s) hold a stored value, and only a widening to multi-valued keeps them.", Severity.Error);
                 return;
             }
         }
