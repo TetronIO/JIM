@@ -154,6 +154,31 @@ public class SchemaRefreshAuxiliaryClassTests
     }
 
     [Test]
+    public void MergeSchema_ContributedMultiValuedBoolean_IsCarriedAcrossSingleValuedAndReportedAsAPluralityChange()
+    {
+        // A row an auxiliary class contributed before the Boolean rule (#2153) existed is carried across as the same
+        // row, and the rule still applies to it: it becomes single-valued, and the refresh says so.
+        var connectedSystem = BuildConnectedSystem();
+        var contributed = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 98, Name = "isShared", ClassName = "posixAccount",
+            Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        Person(connectedSystem).Attributes!.Add(contributed);
+
+        var result = ConnectedSystemServer.MergeSchemaIntoConnectedSystem(connectedSystem, BuildDiscoveredSchema());
+
+        var carried = Person(connectedSystem).Attributes!.Single(attribute => attribute.Name == "isShared");
+        var change = result.ChangedAttributes.GetValueOrDefault("inetOrgPerson")?.SingleOrDefault(c => c.AttributeName == "isShared");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(carried.Id, Is.EqualTo(98));
+            Assert.That(carried.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(change?.Aspect, Is.EqualTo(JIM.Models.Staging.DTOs.SchemaAttributeChangeAspect.Plurality));
+        }
+    }
+
+    [Test]
     public void MergeSchema_DoesNotReportAContributedAttributeAsRemoved()
     {
         // It is not in the discovered schema and never will be, so a naive comparison calls it removed on every

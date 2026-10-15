@@ -17,7 +17,9 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// The Metaverse Attribute editor's schema locks (#2153, D3). While Metaverse Objects hold values for the attribute,
+/// The Metaverse Attribute editor's plurality rules (#2153). The Boolean rule (S2): a Boolean attribute holds one
+/// value, so while Boolean is the chosen data type the dialog offers no multi-valued plurality, and choosing Boolean
+/// resets a multi-valued choice to single-valued. The schema locks (S3, D3): While Metaverse Objects hold values for the attribute,
 /// the only schema change JIM allows is widening it from single-valued to multi-valued with its type unchanged, so the
 /// dialog unlocks exactly that: Plurality on a single-valued attribute. Data Type stays locked, as does Plurality on an
 /// attribute that is already multi-valued, and each locked control says why.
@@ -32,6 +34,7 @@ public class MetaverseAttributeEditorDialogTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _metaverseRepository = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.Metaverse).Returns(_metaverseRepository.Object);
+        _metaverseRepository.Setup(r => r.GetMetaverseObjectTypesAsync(It.IsAny<bool>())).ReturnsAsync([]);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
@@ -46,6 +49,15 @@ public class MetaverseAttributeEditorDialogTests : JimComponentTestContext
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
         provider.InvokeAsync(() => MetaverseAttributeEditorDialog.ShowAsync(dialogService, attribute, readOnly));
+        provider.WaitForState(() => provider.FindComponents<MudSelect<AttributePlurality>>().Count > 0);
+        return provider;
+    }
+
+    private IRenderedComponent<MudDialogProvider> OpenCreateDialog()
+    {
+        var provider = Render<MudDialogProvider>();
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        provider.InvokeAsync(() => dialogService.ShowAsync<MetaverseAttributeEditorDialog>("New Metaverse Attribute"));
         provider.WaitForState(() => provider.FindComponents<MudSelect<AttributePlurality>>().Count > 0);
         return provider;
     }
@@ -124,6 +136,98 @@ public class MetaverseAttributeEditorDialogTests : JimComponentTestContext
                 Assert.That(PluralitySelect(provider).GetState(x => x.Value), Is.EqualTo(AttributePlurality.MultiValued));
                 Assert.That(PluralitySelect(provider).Disabled, Is.False, "the administrator can still change their mind");
                 Assert.That(TypeSelect(provider).Disabled, Is.True, "widening keeps the type, so the type stays locked");
+            }
+        });
+    }
+
+    // MudBlazor's MUD0012 analyzer forbids external reads of a two-way-bound parameter (Value/Disabled); reading a
+    // component's own parameters is the bUnit pattern test/CLAUDE.md prescribes, so it is suppressed narrowly here.
+#pragma warning disable MUD0012
+
+    private static async Task ChooseTypeAsync(IRenderedComponent<MudDialogProvider> provider, AttributeDataType type)
+    {
+        var typeSelect = provider.FindComponent<MudSelect<AttributeDataType>>();
+        await provider.InvokeAsync(() => typeSelect.Instance.ValueChanged.InvokeAsync(type));
+    }
+
+    private static async Task ChoosePluralityAsync(IRenderedComponent<MudDialogProvider> provider, AttributePlurality plurality)
+    {
+        var pluralitySelect = provider.FindComponent<MudSelect<AttributePlurality>>();
+        await provider.InvokeAsync(() => pluralitySelect.Instance.ValueChanged.InvokeAsync(plurality));
+    }
+
+    private static bool MultiValuedOptionDisabled(IRenderedComponent<MudDialogProvider> provider) =>
+        provider.FindComponent<MudSelect<AttributePlurality>>()
+            .FindComponents<MudSelectItem<AttributePlurality>>()
+            .Single(i => i.Instance.Value == AttributePlurality.MultiValued)
+            .Instance.Disabled;
+
+    [Test]
+    public async Task ChoosingBoolean_AfterMultiValued_ResetsPluralityToSingleValuedAsync()
+    {
+        var provider = OpenCreateDialog();
+        await ChoosePluralityAsync(provider, AttributePlurality.MultiValued);
+
+        await ChooseTypeAsync(provider, AttributeDataType.Boolean);
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.FindComponent<MudSelect<AttributePlurality>>().Instance.Value, Is.EqualTo(AttributePlurality.SingleValued)));
+    }
+
+    [Test]
+    public async Task ChoosingBoolean_DisablesTheMultiValuedOptionAsync()
+    {
+        var provider = OpenCreateDialog();
+
+        await ChooseTypeAsync(provider, AttributeDataType.Boolean);
+
+        provider.WaitForAssertion(() => Assert.That(MultiValuedOptionDisabled(provider), Is.True));
+    }
+
+    [Test]
+    public async Task ChoosingAnotherTypeAfterBoolean_ReEnablesTheMultiValuedOptionAsync()
+    {
+        var provider = OpenCreateDialog();
+        await ChooseTypeAsync(provider, AttributeDataType.Boolean);
+
+        await ChooseTypeAsync(provider, AttributeDataType.DateTime);
+
+        provider.WaitForAssertion(() => Assert.That(MultiValuedOptionDisabled(provider), Is.False));
+    }
+
+    [Test]
+    public void DefaultTextType_OffersTheMultiValuedOption()
+    {
+        var provider = OpenCreateDialog();
+
+        Assert.That(MultiValuedOptionDisabled(provider), Is.False);
+    }
+
+    [Test]
+    public async Task ChoosingBoolean_ExplainsWhyThePluralityIsFixedAsync()
+    {
+        var provider = OpenCreateDialog();
+        Assert.That(provider.FindComponent<MudSelect<AttributePlurality>>().Instance.HelperText, Is.Null.Or.Empty);
+
+        await ChooseTypeAsync(provider, AttributeDataType.Boolean);
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.FindComponent<MudSelect<AttributePlurality>>().Instance.HelperText, Is.Not.Null.And.Not.Empty));
+    }
+
+#pragma warning restore MUD0012
+
+    [Test]
+    public void SingleValuedBooleanWithValues_LocksPluralityBecauseABooleanCannotBeWidened()
+    {
+        var provider = OpenEditor(AttributeDataType.Boolean, AttributePlurality.SingleValued, objectsWithValues: 12);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(PluralitySelect(provider).Disabled, Is.True, "a Boolean holds one value, so there is nothing to widen to");
+                Assert.That(PluralitySelect(provider).HelperText, Is.Not.Null.And.Not.Empty);
             }
         });
     }

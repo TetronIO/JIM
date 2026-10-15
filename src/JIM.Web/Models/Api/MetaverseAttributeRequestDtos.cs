@@ -20,13 +20,14 @@ public class CreateMetaverseAttributeRequest
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The data type of the attribute.
+    /// The data type of the attribute. Required; <c>NotSet</c> is refused.
     /// </summary>
     [Required]
     public AttributeDataType Type { get; set; }
 
     /// <summary>
-    /// Whether the attribute is single-valued or multi-valued.
+    /// Whether the attribute is single-valued or multi-valued. Defaults to <c>SingleValued</c>. A <c>Boolean</c>
+    /// attribute holds one value, so <c>MultiValued</c> is refused for it.
     /// </summary>
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
@@ -82,13 +83,13 @@ public class UpdateMetaverseAttributeRequest
 public class ChangeMetaverseAttributeSchemaRequest
 {
     /// <summary>
-    /// The new data type.
+    /// The new data type. Required; <c>NotSet</c> is refused.
     /// </summary>
     [Required]
     public AttributeDataType Type { get; set; }
 
     /// <summary>
-    /// The new plurality.
+    /// The new plurality. A <c>Boolean</c> attribute holds one value, so <c>MultiValued</c> is refused for it.
     /// </summary>
     [Required]
     public AttributePlurality AttributePlurality { get; set; }
