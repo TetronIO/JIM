@@ -514,6 +514,68 @@ public class SyncRuleScopingPreviewAdapterTests
         }
     }
 
+    // ── Expression criteria (#2054) ──────────────────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExpressionProposal_IsEvaluatedAgainstEachObjectAsync()
+    {
+        // Narrowing to departments starting "fin", however they are cased or padded: Sales leaves scope.
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Sales");
+
+        var deltas = await EvaluateAsync(ExpressionProposal("Lower(Trim(cs[\"department\"]))", SearchComparisonType.StartsWith, "fin"));
+
+        Assert.That(deltas.Select(d => d.TransitionType),
+            Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExpressionThatCannotBeComparedForAnObject_ReportsTheObjectWouldFailAsync()
+    {
+        // "Sales" is not a number, so the run would stop this object rather than decide its scope; the preview
+        // says so instead of failing as a whole.
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Sales");
+
+        var proposal = new SyncRuleScopingProposal([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.All,
+            [new SyncRuleScopingCriterionProposal(null, null, SearchComparisonType.GreaterThan, IntValue: 5,
+                Expression: "cs[\"department\"]", CompareAs: AttributeDataType.Number)], [])]);
+
+        var deltas = await EvaluateAsync(proposal);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Is.EqualTo(new[] { ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail }));
+            Assert.That(deltas[0].NewValue, Does.Contain("Sales"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportExpressionProposal_ReadsMetaverseAttributesByNameAsync()
+    {
+        // The Metaverse Object stream carries values without their attribute entities; the expression reads them by
+        // name, so the walk must supply them. Read as no value, Sales would leave scope and be deleted.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var mvo = GivenMvoWithTargetObject("Sales");
+        mvo.AttributeValues.Single().Attribute = null!;
+
+        var deltas = await EvaluateAsync(ExpressionProposal("Upper(mv[\"Department\"])", SearchComparisonType.Equals, "SALES"));
+
+        Assert.That(deltas, Is.Empty, "Sales is in scope under both, so nothing changes");
+    }
+
+    [Test]
+    public async Task ValidateAsync_ExpressionCriterion_IsNotReportedAsNamingNoAttributeAsync()
+    {
+        GivenRuleScopedToSales(_rule);
+
+        var findings = await NewAdapter().ValidateAsync(Context(ExpressionProposal("Lower(cs[\"department\"])", SearchComparisonType.Equals, "sales")));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
     // ── Contract ─────────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
@@ -551,6 +613,10 @@ public class SyncRuleScopingPreviewAdapterTests
 
     private SyncRuleScopingProposal ProposalScopedTo(string department) =>
         new([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.All, [CriterionFor(department)], [])]);
+
+    private static SyncRuleScopingProposal ExpressionProposal(string expression, SearchComparisonType comparison, string text) =>
+        new([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.All,
+            [new SyncRuleScopingCriterionProposal(null, null, comparison, StringValue: text, Expression: expression, CompareAs: AttributeDataType.Text)], [])]);
 
     private SyncRuleScopingProposal ProposalScopedToAnyOf(params string[] departments) =>
         new([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.Any, [.. departments.Select(CriterionFor)], [])]);

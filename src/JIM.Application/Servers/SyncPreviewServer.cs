@@ -93,7 +93,19 @@ public class SyncPreviewServer
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
         await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, [metaverseObjectId]);
 
-        var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+        OutboundPreviewResult outbound;
+        try
+        {
+            outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // The run stops this object's exports with a ScopingCriterionFailed error rather than deciding its scope
+            // (#2054): nothing is provisioned, updated or deprovisioned for it.
+            result.Errors.Add(ScopingCriterionFailedMessage(ex, null));
+            return result;
+        }
+
         ComposeOutbound(result, outbound);
         BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, BuildConnectedSystemNameLookup(cache));
 
@@ -765,6 +777,34 @@ public class SyncPreviewServer
         bool refreshCacheForWorkingMvo,
         bool asTheRunWould)
     {
+        try
+        {
+            return await PreviewCsoCoreUnguardedAsync(cso, context, refreshCacheForWorkingMvo, asTheRunWould);
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // A scope deeper in the chain could not be decided (a survivor's import scope, or an export rule's): the
+            // run records a ScopingCriterionFailed error for the object rather than acting on a guess (#2054), so the
+            // preview reports that error in place of an outcome.
+            var failed = new SyncPreviewResult();
+            failed.Errors.Add(ScopingCriterionFailedMessage(ex, context.ConnectedSystemId));
+            return failed;
+        }
+    }
+
+    private static SyncPreviewMessage ScopingCriterionFailedMessage(ScopingCriterionFailedException ex, int? connectedSystemId) => new()
+    {
+        Code = SyncPreviewMessageCode.ScopingCriterionFailed,
+        Detail = ex.Message,
+        ConnectedSystemId = connectedSystemId
+    };
+
+    private async Task<SyncPreviewResult> PreviewCsoCoreUnguardedAsync(
+        ConnectedSystemObject cso,
+        CsoPreviewContext context,
+        bool refreshCacheForWorkingMvo,
+        bool asTheRunWould)
+    {
         var result = new SyncPreviewResult();
         var connectedSystemId = context.ConnectedSystemId;
         var guardedRepository = context.GuardedRepository;
@@ -839,10 +879,21 @@ public class SyncPreviewServer
 
         // Scope is per rule (#1199): an unscoped rule is in scope; a CSO out of scope of every scoped rule
         // stops the chain exactly as the real processor's out-of-scope handling would.
-        var inScopeRules = importRules
-            .Where(sr => sr.ObjectScopingCriteriaGroups.Count == 0
-                || Application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sr))
-            .ToList();
+        List<SyncRule> inScopeRules;
+        try
+        {
+            inScopeRules = importRules
+                .Where(sr => sr.ObjectScopingCriteriaGroups.Count == 0
+                    || Application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sr))
+                .ToList();
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // The run records a ScopingCriterionFailed error and leaves the object untouched (#2054), so nothing
+            // after scoping happens either.
+            result.Errors.Add(ScopingCriterionFailedMessage(ex, connectedSystemId));
+            return result;
+        }
         if (inScopeRules.Count == 0 && importRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
             var outOfScopeAction = _syncEngine.DetermineOutOfScopeAction(cso, importRules);

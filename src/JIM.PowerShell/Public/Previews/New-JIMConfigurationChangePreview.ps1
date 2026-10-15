@@ -172,7 +172,8 @@ function New-JIMConfigurationChangePreview {
         criterion names one attribute by id (ConnectedSystemAttributeId on an import rule,
         MetaverseAttributeId on an export rule), a ComparisonType, and the value to compare against in the
         field matching the attribute's data type (StringValue, IntValue, LongValue, DecimalValue,
-        DateTimeValue, BoolValue or GuidValue).
+        DateTimeValue, BoolValue or GuidValue). To compare a computed value instead, a criterion gives an
+        Expression and the type to compare it as in CompareAs, and no attribute id.
 
         Mandatory, and an empty array is a valid and deliberate value: it proposes removing every criterion,
         which hands the rule every object of its type. That is the widest change the Scope tab can make, so

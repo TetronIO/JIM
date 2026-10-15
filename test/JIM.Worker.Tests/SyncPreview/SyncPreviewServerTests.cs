@@ -328,6 +328,32 @@ public class SyncPreviewServerTests
     }
 
     [Test]
+    public async Task PreviewSyncForMvoAsync_ExportScopeCannotBeDecided_ReportsTheErrorTheRunWouldRecordAsync()
+    {
+        // The run stops the object's exports with a ScopingCriterionFailed error rather than deciding its scope
+        // (#2054); the preview says so instead of failing.
+        var (mvo, _, exportRule, _, _) = ArrangeOutboundFixture(csoStoredEmployeeId: null);
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = "\"not a number\"",
+            CompareAs = AttributeDataType.Number,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            IntValue = 5
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        var result = await Jim.SyncPreview.PreviewSyncForMvoAsync(mvo.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Errors.Select(e => e.Code), Does.Contain(SyncPreviewMessageCode.ScopingCriterionFailed));
+            Assert.That(result.Outbound.ObjectsToUpdate, Is.Zero, "nothing is exported for an object whose scope is unknown");
+            Assert.That(PendingExportsData, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task PreviewSyncForMvoAsync_NoTargetPresence_ReportsProvisioningWithANestedPendingExportNodeAsync()
     {
         // Arrange - remove the joined target object so the provisioning path is taken
@@ -634,6 +660,33 @@ public class SyncPreviewServerTests
             Assert.That(withTheRule.Inbound!.WouldProject, Is.True, "the added rule is evaluated, so the object would project");
             Assert.That(withTheRule.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id), Is.True);
             Assert.That(cso.MetaverseObjectId, Is.Null, "and the preview still writes nothing");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeCannotBeDecided_ReportsTheErrorTheRunWouldRecordAndStopsTheChainAsync()
+    {
+        // An expression criterion whose value cannot be compared as a Number (#2054): the run stops the object with a
+        // ScopingCriterionFailed error rather than deciding its scope, and the preview says so instead of failing.
+        var (cso, importRule, _) = ArrangeInboundFixture();
+        importRule.ProjectToMetaverse = true;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = "\"not a number\"",
+            CompareAs = AttributeDataType.Number,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            IntValue = 5
+        });
+        importRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Errors.Select(e => e.Code), Does.Contain(SyncPreviewMessageCode.ScopingCriterionFailed));
+            Assert.That(result.Errors.Single(e => e.Code == SyncPreviewMessageCode.ScopingCriterionFailed).Detail, Does.Contain("not a number"));
+            Assert.That(result.Inbound?.WouldProject ?? false, Is.False, "the run would neither project nor join the object");
         }
     }
 
