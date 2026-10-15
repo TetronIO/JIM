@@ -66,10 +66,18 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
         ArgumentNullException.ThrowIfNull(mapping);
 
         var problems = new List<AttributeFlowExpressionProblem>();
-        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "this Attribute Flow";
+
+        // A caller may supply the target by id alone, so it is found on its object type rather than set on the mapping.
+        var metaverseTarget = mapping.TargetMetaverseAttribute ??
+            metaverseObjectType?.Attributes.FirstOrDefault(a => a.Id == mapping.ResolveTargetMetaverseAttributeId());
+        var connectedSystemTarget = mapping.TargetConnectedSystemAttribute ??
+            connectedSystemObjectType?.Attributes.FirstOrDefault(a => a.Id == mapping.ResolveTargetConnectedSystemAttributeId());
+        var isExport = direction == SyncRuleDirection.Export;
+        var target = (Name: (isExport ? connectedSystemTarget?.Name : metaverseTarget?.Name) ?? "this Attribute Flow",
+            Type: isExport ? connectedSystemTarget?.Type : metaverseTarget?.Type);
 
         foreach (var source in mapping.Sources.Where(s => !string.IsNullOrWhiteSpace(s.Expression)).OrderBy(s => s.Order))
-            problems.AddRange(Validate(source.Expression!, mapping, direction, targetName, connectedSystemObjectType, metaverseObjectType));
+            problems.AddRange(Validate(source.Expression!, mapping, isExport, target, connectedSystemObjectType, metaverseObjectType));
 
         return problems;
     }
@@ -77,11 +85,12 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
     private IEnumerable<AttributeFlowExpressionProblem> Validate(
         string expression,
         SyncRuleMapping mapping,
-        SyncRuleDirection direction,
-        string targetName,
+        bool isExport,
+        (string Name, AttributeDataType? Type) target,
         ConnectedSystemObjectType? connectedSystemObjectType,
         MetaverseObjectType? metaverseObjectType)
     {
+        var targetName = target.Name;
         var parsed = expressionEvaluator.Validate(expression);
         if (!parsed.IsValid)
         {
@@ -92,7 +101,6 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
         }
 
         var inputs = ExpressionInputResolver.Resolve(expression);
-        var isExport = direction == SyncRuleDirection.Export;
         var readsMetaverseOnImport = !isExport && inputs.Any(i => i.Source == ExpressionInputSource.Metaverse);
 
         foreach (var input in inputs)
@@ -121,8 +129,7 @@ public sealed class AttributeFlowExpressionValidator(IExpressionEvaluator expres
         }
 
         // A Generated Value's base has a token added to it as text; the generation validator owns the target's type.
-        var targetType = isExport ? mapping.TargetConnectedSystemAttribute?.Type : mapping.TargetMetaverseAttribute?.Type;
-        if (mapping.Generation == null && targetType is { } type &&
+        if (mapping.Generation == null && target.Type is { } type &&
             ExpressionResultTypeCheck.DescribeProblem(expression, type, targetName) is { } mismatch)
         {
             yield return Problem(AttributeFlowExpressionProblemKind.ResultTypeMismatch, mismatch);
