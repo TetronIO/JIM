@@ -8621,7 +8621,7 @@ public partial class ConnectedSystemServer
         {
             var type = syncRule.MetaverseObjectType is { Attributes.Count: > 0 } loaded
                 ? loaded
-                : await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(syncRule.MetaverseObjectTypeId, false);
+                : await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(syncRule.MetaverseObjectTypeId, includeChildObjects: true);
             attributeNames = type?.Attributes.Select(a => a.Name).ToList() ?? [];
             objectTypeName = type?.Name ?? syncRule.MetaverseObjectType?.Name ?? "the Metaverse Object Type";
         }

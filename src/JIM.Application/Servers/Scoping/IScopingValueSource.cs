@@ -35,4 +35,14 @@ internal interface IScopingValueSource
     /// import rule or <c>mv["..."]</c> on an export rule, read exactly as Attribute Flow reads them.
     /// </summary>
     ExpressionContext ExpressionContext(DateTime nowUtc);
+
+    /// <summary>The side an expression criterion reads on this object: <c>cs["..."]</c> or <c>mv["..."]</c>.</summary>
+    ExpressionInputSource ExpressionSide { get; }
+
+    /// <summary>
+    /// Whether the scoped object type has an attribute of this name (ignoring case, as expressions do); null when no
+    /// schema is available to say. An expression input naming no attribute must not read as "no value" (#2054): a
+    /// renamed or removed attribute would then decide scope on a name that no longer means anything.
+    /// </summary>
+    bool? IsInSchema(string attributeName);
 }

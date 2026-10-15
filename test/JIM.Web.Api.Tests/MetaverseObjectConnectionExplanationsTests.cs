@@ -238,11 +238,17 @@ public class MetaverseObjectConnectionExplanationsTests
         // An expression criterion (#2054) reads its inputs by name, which the criteria-only value loads cannot supply:
         // the explanation must read the whole object on each side, or every expression would see no value.
         var cso = Joined(PayrollId, "Payroll", EmployeeTypeId, "employee");
+        // Neither the objects nor the lean rule load carry their type's attributes, which an expression's inputs are
+        // checked against: the explanation loads the scoped types' schemas itself.
         var fullCso = new ConnectedSystemObject
         {
             Id = cso.Id, ConnectedSystemId = PayrollId, TypeId = EmployeeTypeId,
-            Type = new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee", Attributes = [PayrollDepartment] }
+            Type = new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee" }
         };
+        _connectedSystems.Setup(r => r.GetObjectTypeAsync(EmployeeTypeId))
+            .ReturnsAsync(new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee", Attributes = [PayrollDepartment] });
+        _metaverse.Setup(r => r.GetMetaverseObjectTypeAsync(PersonTypeId, true))
+            .ReturnsAsync(new MetaverseObjectType { Id = PersonTypeId, Name = "Person", Attributes = [Department] });
         fullCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = PayrollDepartment, AttributeId = PayrollDepartment.Id, StringValue = " FINANCE ", ConnectedSystemObject = fullCso });
         _connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(PayrollId, cso.Id)).ReturnsAsync(fullCso);
         var fullMvo = new MetaverseObject { Id = _mvoId, Type = new MetaverseObjectType { Id = PersonTypeId, Name = "Person" } };

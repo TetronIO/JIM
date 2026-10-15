@@ -229,17 +229,21 @@ internal static class ScopingEvaluator
         var expected = new ScopingValue(criterion.StringValue, criterion.IntValue, criterion.LongValue, criterion.DecimalValue,
             boundary, criterion.BoolValue, criterion.GuidValue);
 
-        List<ScopingValue> computed;
-        string? failure;
-        try
+        // An input naming no attribute of the scoped type (renamed or removed since the rule was saved) would read as
+        // no value and could take the object out of scope on a name that no longer means anything; stop it instead.
+        List<ScopingValue> computed = [];
+        var failure = DescribeUnknownInput(expression, source);
+        if (failure == null)
         {
-            var result = expressions.Evaluate(expression, source.ExpressionContext(nowUtc));
-            failure = TryReadComputedValues(result, type, out computed);
-        }
-        catch (ExpressionEvaluationException ex)
-        {
-            computed = [];
-            failure = $"Its expression could not be evaluated: {ex.Message}";
+            try
+            {
+                var result = expressions.Evaluate(expression, source.ExpressionContext(nowUtc));
+                failure = TryReadComputedValues(result, type, out computed);
+            }
+            catch (ExpressionEvaluationException ex)
+            {
+                failure = $"Its expression could not be evaluated: {ex.Message}";
+            }
         }
 
         CriterionVerdict verdict = default;
@@ -303,6 +307,29 @@ internal static class ScopingEvaluator
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// Why the expression cannot be trusted to read this object's attributes, or null when every attribute it reads on
+    /// the scoped side is one the object type has.
+    /// </summary>
+    private static string? DescribeUnknownInput<TSource>(string expression, TSource source)
+        where TSource : struct, IScopingValueSource
+    {
+        foreach (var input in ExpressionInputResolver.ResolveCached(expression).Where(input => input.Source == source.ExpressionSide))
+        {
+            switch (source.IsInSchema(input.AttributeName))
+            {
+                case null:
+                    return $"Its expression reads {input.Accessor}, but the object type's attributes were not available to confirm the " +
+                           "attribute exists, so a missing value could not be told apart from a missing attribute.";
+                case false:
+                    return $"Its expression reads {input.Accessor}, which is not an attribute of the object type; it may have been " +
+                           "renamed or removed since the rule was saved. Update the expression.";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

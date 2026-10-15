@@ -198,6 +198,8 @@ public class SyncRuleScopingProposalMaterialiserTests
         Enabled = true,
         ConnectedSystemId = 1,
         ConnectedSystemObjectTypeId = 2,
+        // Loaded with its attributes, as every rule loader gives it: an expression criterion checks its inputs against it.
+        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 2, Name = "person", Attributes = ConnectedSystemAttributes() },
         MetaverseObjectTypeId = 4
     };
 

@@ -541,7 +541,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             ?? (await _application.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId))?.Attributes
             ?? [];
         var metaverseAttributes = rule.MetaverseObjectType?.Attributes
-            ?? (await _application.Metaverse.GetMetaverseObjectTypeAsync(rule.MetaverseObjectTypeId, false))?.Attributes
+            ?? (await _application.Metaverse.GetMetaverseObjectTypeAsync(rule.MetaverseObjectTypeId, true))?.Attributes
             ?? [];
 
         return SyncRuleScopingProposalMaterialiser.Materialise(rule, proposal, connectedSystemAttributes, metaverseAttributes);

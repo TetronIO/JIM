@@ -61,7 +61,10 @@ public class ConnectedSystemServerScopingExpressionSaveTests
         _csRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
         _csRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.GetObjectTypeAsync(_person.Id)).ReturnsAsync(_person);
-        _mvRepo.Setup(r => r.GetMetaverseObjectTypeAsync(_mvPerson.Id, It.IsAny<bool>())).ReturnsAsync(_mvPerson);
+        // Only the overload with its attributes answers: the other returns the type without them.
+        _mvRepo.Setup(r => r.GetMetaverseObjectTypeAsync(_mvPerson.Id, true)).ReturnsAsync(_mvPerson);
+        _mvRepo.Setup(r => r.GetMetaverseObjectTypeAsync(_mvPerson.Id, false))
+            .ReturnsAsync(new MetaverseObjectType { Id = _mvPerson.Id, Name = _mvPerson.Name });
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>())).ReturnsAsync(0);
@@ -101,6 +104,17 @@ public class ConnectedSystemServerScopingExpressionSaveTests
         var ex = Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
 
         Assert.That(ex!.Message, Does.Contain("export"));
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WorkableExportExpression_IsCheckedAgainstTheTypesAttributesAndSavedAsync()
+    {
+        var rule = ImportRule("Upper(mv[\"Department\"])");
+        rule.Direction = SyncRuleDirection.Export;
+
+        await BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
+
+        _csRepo.Verify(r => r.CreateSyncRuleAsync(rule), Times.Once);
     }
 
     [Test]

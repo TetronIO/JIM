@@ -11,7 +11,7 @@ namespace JIM.Application.Servers.Scoping;
 /// <summary>
 /// A Connected System Object as an import rule's scoping reads it.
 /// </summary>
-internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSystemObject) : IScopingValueSource
+internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSystemObject, IReadOnlyCollection<ConnectedSystemObjectTypeAttribute>? schema = null) : IScopingValueSource
 {
     public bool TryGetAttribute(SyncRuleScopingCriteria criterion, out int attributeId, out AttributeDataType type, out string name)
     {
@@ -65,4 +65,19 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
         {
             NowUtc = nowUtc
         };
+
+    public ExpressionInputSource ExpressionSide => ExpressionInputSource.ConnectedSystem;
+
+    /// <remarks>
+    /// The schema is the rule's object type where the caller supplies it (loaded with its attributes on every
+    /// synchronisation path), else the object's own type.
+    /// </remarks>
+    public bool? IsInSchema(string attributeName)
+    {
+        var attributes = schema is { Count: > 0 } ? schema : (IReadOnlyCollection<ConnectedSystemObjectTypeAttribute>?)connectedSystemObject.Type?.Attributes;
+        if (attributes is not { Count: > 0 })
+            return null;
+
+        return attributes.Any(attribute => string.Equals(attribute.Name, attributeName, StringComparison.OrdinalIgnoreCase));
+    }
 }

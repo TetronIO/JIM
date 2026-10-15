@@ -119,6 +119,41 @@ public class ScopingExpressionCriteriaTests
         Assert.That(ex!.Message, Does.Contain("could not be evaluated"));
     }
 
+    [Test]
+    public void ImportRule_ExpressionReadsAnAttributeTheTypeDoesNotHave_StopsTheObjectRatherThanReadingNoValue()
+    {
+        // costCentre was renamed or removed after the rule was saved. Read as no value it would meet Has No Value and
+        // scope the object on a name that no longer means anything; it must stop the object instead.
+        var rule = ImportRule(Criterion("Trim(cs[\"costCentre\"])", AttributeDataType.Text, SearchComparisonType.HasNoValue));
+
+        var ex = Assert.Throws<ScopingCriterionFailedException>(() => _scoping.IsCsoInScopeForImportRule(Cso((Department, "Finance")), rule));
+
+        Assert.That(ex!.Message, Does.Contain("cs[\"costCentre\"]"));
+    }
+
+    [Test]
+    public void ImportRule_SchemaComesFromTheRulesObjectTypeWhenTheObjectCarriesNone()
+    {
+        // On the synchronisation path the rule's object type is loaded with its attributes; the object's may not be.
+        var rule = ImportRule(Criterion("Lower(cs[\"department\"])", AttributeDataType.Text, SearchComparisonType.Equals, stringValue: "finance"));
+        rule.ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "person", Attributes = [Department, StartDate, Groups] };
+        var cso = Cso((Department, "Finance"));
+        cso.Type = null!;
+
+        Assert.That(_scoping.IsCsoInScopeForImportRule(cso, rule), Is.True);
+    }
+
+    [Test]
+    public void ImportRule_NoSchemaAvailableAnywhere_StopsTheObject()
+    {
+        // Without a schema an absent attribute and a renamed one look the same, so the criterion cannot be trusted.
+        var rule = ImportRule(Criterion("Trim(cs[\"department\"])", AttributeDataType.Text, SearchComparisonType.HasNoValue));
+        var cso = Cso();
+        cso.Type = null!;
+
+        Assert.Throws<ScopingCriterionFailedException>(() => _scoping.IsCsoInScopeForImportRule(cso, rule));
+    }
+
     #endregion
 
     #region Export (mv["..."])
@@ -133,10 +168,26 @@ public class ScopingExpressionCriteriaTests
             Type = SearchGroupType.All,
             Criteria = [Criterion("Upper(mv[\"Department\"])", AttributeDataType.Text, SearchComparisonType.Equals, stringValue: "FINANCE")]
         });
-        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User" } };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User", Attributes = [MvDepartment] } };
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = MvDepartment, AttributeId = MvDepartment.Id, StringValue = department, MetaverseObject = mvo });
 
         Assert.That(_scoping.IsMvoInScopeForExportRule(mvo, rule), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ExportRule_ExpressionReadsAnAttributeTheTypeDoesNotHave_StopsTheObject()
+    {
+        var rule = new SyncRule { Name = "AD Export", Direction = SyncRuleDirection.Export };
+        rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [Criterion("mv[\"Cost Centre\"]", AttributeDataType.Text, SearchComparisonType.HasNoValue)]
+        });
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User", Attributes = [MvDepartment] } };
+
+        var ex = Assert.Throws<ScopingCriterionFailedException>(() => _scoping.IsMvoInScopeForExportRule(mvo, rule));
+
+        Assert.That(ex!.Message, Does.Contain("mv[\"Cost Centre\"]"));
     }
 
     #endregion

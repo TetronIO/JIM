@@ -50,6 +50,8 @@ public partial class MetaverseServer
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        await AttachScopedSchemasAsync(rules, header.TypeId);
+
         var joinedSystemIds = joinedObjects.Select(cso => cso.ConnectedSystemId).ToHashSet();
         var rulesOnJoinedSystems = rules.Where(r => joinedSystemIds.Contains(r.ConnectedSystemId)).ToList();
         var notConnectedRules = includeNotConnected
@@ -175,6 +177,32 @@ public partial class MetaverseServer
             conflict.ExistingObjectTypeName, connectedSystemName),
         Scoping = scoping
     };
+
+    /// <summary>
+    /// Gives each rule with an expression criterion its scoped object type with that type's attributes (#2054). The rules
+    /// are loaded as a lean projection, and an expression's inputs are checked against the scoped type's attributes:
+    /// without them every expression criterion would read as one that cannot be evaluated.
+    /// </summary>
+    private async Task AttachScopedSchemasAsync(List<SyncRule> rules, int metaverseObjectTypeId)
+    {
+        var expressionRules = rules.Where(ScopingEvaluationServer.HasExpressionCriteria).ToList();
+        if (expressionRules.Count == 0)
+            return;
+
+        if (expressionRules.Any(r => r.Direction == SyncRuleDirection.Export))
+        {
+            var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, includeChildObjects: true);
+            foreach (var rule in expressionRules.Where(r => r.Direction == SyncRuleDirection.Export))
+                rule.MetaverseObjectType = metaverseObjectType ?? rule.MetaverseObjectType;
+        }
+
+        foreach (var typeRules in expressionRules.Where(r => r.Direction == SyncRuleDirection.Import).GroupBy(r => r.ConnectedSystemObjectTypeId))
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(typeRules.Key);
+            foreach (var rule in typeRules)
+                rule.ConnectedSystemObjectType = objectType ?? rule.ConnectedSystemObjectType;
+        }
+    }
 
     /// <summary>
     /// Loads every joined object's values for the attributes its import rules' criteria compare, in one read.

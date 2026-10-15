@@ -77,7 +77,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo), nowUtc ?? DateTime.UtcNow, _expressions);
+        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc ?? DateTime.UtcNow, _expressions);
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ public class ScopingEvaluationServer
         if (exportRule.Direction != SyncRuleDirection.Export)
             throw new ArgumentException($"Synchronisation Rule {exportRule.Id} is not an export rule.", nameof(exportRule));
 
-        return Explain(exportRule, new MvoScopingValueSource(mvo), nowUtc);
+        return Explain(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc);
     }
 
     #endregion
@@ -118,7 +118,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(importRule, new CsoScopingValueSource(cso), nowUtc ?? DateTime.UtcNow, _expressions);
+        return ScopingEvaluator.IsInScope(importRule, new CsoScopingValueSource(cso, importRule.ConnectedSystemObjectType?.Attributes), nowUtc ?? DateTime.UtcNow, _expressions);
     }
 
     /// <summary>
@@ -130,7 +130,7 @@ public class ScopingEvaluationServer
         if (importRule.Direction != SyncRuleDirection.Import)
             throw new ArgumentException($"Synchronisation Rule {importRule.Id} is not an import rule.", nameof(importRule));
 
-        return Explain(importRule, new CsoScopingValueSource(cso), nowUtc);
+        return Explain(importRule, new CsoScopingValueSource(cso, importRule.ConnectedSystemObjectType?.Attributes), nowUtc);
     }
 
     #endregion
