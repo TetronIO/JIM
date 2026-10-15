@@ -45,6 +45,18 @@ The base expression is an ordinary [expression](attribute-mappings.md#expression
 
 **Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It also forgets the attribute's [retired values](#retired-values), so those numbers can be issued again; the confirmation says how many, and links to the list, before you commit. It changes no existing value and exports nothing; numbers still held when the counter reaches them are skipped, however many there are (see **Sequences** above). The action is recorded as an Activity, whose message includes how many retired values were forgotten.
 
+## Testing the base expression
+
+**Test the base expression**, under the base expression in the editor, runs it as a Synchronisation would. Give each attribute it reads a value, or load them from an object, and see:
+
+- what the expression returns;
+- the Attribute Flow's value processing;
+- the base generation would start from, with what happens to it.
+
+The test stops there. Which value is free is decided when a Synchronisation runs, so it never shows a candidate; the preview below it shows the candidates the token would give. An input with no value shows what the mapping's [Missing Input Behaviour](attribute-mappings.md#missing-input-behaviour) does: by default generation waits (condition 2 above), and a mapping set to fail shows the error a Synchronisation would record. A base expression that returns several values, or a value with no text, also shows the error a Synchronisation would record.
+
+Over the REST API and PowerShell, test the Attribute Flow with [`Test-JIMExpression`](../powershell/expressions.md#test-jimexpression) `-SyncRuleId` and `-MappingId`: `GeneratedValue` is `$true`, and `BaseOutcome` and `BaseValue` say what generation would be given.
+
 ## Checking and correcting values in target systems
 
 Before choosing a value, JIM can ask a target system whether the value is already in use there, and when a target still refuses a value as taken, JIM corrects it for you. See [Generated Values in Target Systems](generated-values-in-target-systems.md).

@@ -245,6 +245,20 @@ public class GeneratedExportMappingEngineTests
     }
 
     [Test]
+    public void ComputeAttributeValueChanges_GeneratedMappingBaseExpressionThrows_ThrowsTheExpressionErrorNotAnInternalOne()
+    {
+        // The third failure the source step stops on (with FailMapping and FailObject above): it never reaches
+        // ResolveGeneratedBase, so GeneratedBaseError's guard for a failure outcome cannot fire mid-run.
+        BuildGeneratedMapping("Lower(mv[\"EmployeeId\"]).Substring(99)", MissingInputBehaviour.ContributeNoValue);
+        var mvo = BuildMvoWithEmployeeId("E123");
+
+        Assert.That(() => _engine.ComputeAttributeValueChanges(
+                mvo, _exportRule, changedAttributes: [], changeType: PendingExportChangeType.Update,
+                existingCso: null, csoAttributeCache: null, out _),
+            Throws.TypeOf<SyncExpressionEvaluationException>());
+    }
+
+    [Test]
     public void ComputeAttributeValueChanges_NoNetChangeCacheShowsSameValue_StillStagesTheMarkedChange()
     {
         // Decision 6: no-net-change detection cannot decide a pending generation (the value is unknown at

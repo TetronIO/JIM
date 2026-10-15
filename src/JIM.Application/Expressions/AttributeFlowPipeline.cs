@@ -179,6 +179,127 @@ public static class AttributeFlowPipeline
     }
 
     /// <summary>
+    /// What a Generated Value's base expression (#242) gives generation, from the first half of the pipeline: the base
+    /// the uniqueness token is added to, a wait, or an error. Synchronisation and the tester both stop here, before
+    /// generation, which needs the database.
+    /// </summary>
+    /// <remarks>
+    /// A base must be one value with a text form: the token is added to exactly one candidate, so a collection of
+    /// anything is a misconfiguration rather than data to choose from, and a Binary value has no text to add it to. No
+    /// value, and value processing that leaves nothing, mean wait: a value already generated is kept, never recomputed
+    /// or cleared by its inputs.
+    /// </remarks>
+    /// <param name="processText">The mapping's text processing for the base (import only); a value it collapses to
+    /// null means wait. Null applies none.</param>
+    public static GeneratedBaseEvaluation ResolveGeneratedBase(ExpressionSourceEvaluation source, Func<string, string?>? processText)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        switch (source.Outcome)
+        {
+            case ExpressionSourceOutcome.NoValue:
+                return new GeneratedBaseEvaluation { Outcome = GeneratedBaseOutcome.Waits, Source = source };
+            case ExpressionSourceOutcome.MissingInputFailedMapping:
+                return Error(AttributeFlowErrorReason.MissingInputFailedMapping);
+            case ExpressionSourceOutcome.MissingInputFailedObject:
+                return Error(AttributeFlowErrorReason.MissingInputFailedObject);
+            case ExpressionSourceOutcome.EvaluationFailed:
+                return Error(AttributeFlowErrorReason.EvaluationFailed);
+        }
+
+        if (ExpressionResultValues.IsCollection(source.Result))
+            return Error(AttributeFlowErrorReason.GeneratedBaseNotSingleValue);
+
+        if (!ExpressionText.TryFormat(source.Result, out var text))
+        {
+            return new GeneratedBaseEvaluation
+            {
+                Outcome = GeneratedBaseOutcome.Error, ErrorReason = AttributeFlowErrorReason.ResultNotConvertible, Source = source,
+                UnconvertibleValue = ExpressionText.Describe(source.Result!)
+            };
+        }
+
+        var processed = text == null || processText == null ? text : processText(text);
+        return new GeneratedBaseEvaluation
+        {
+            Outcome = processed == null ? GeneratedBaseOutcome.Waits : GeneratedBaseOutcome.Base,
+            Source = source,
+            BaseValue = processed,
+            UnprocessedBaseValue = text
+        };
+
+        GeneratedBaseEvaluation Error(AttributeFlowErrorReason reason) =>
+            new() { Outcome = GeneratedBaseOutcome.Error, ErrorReason = reason, Source = source };
+    }
+
+    /// <summary>
+    /// A Generated Value's base for an import Attribute Flow: the <c>cs[...]</c> view built from
+    /// <paramref name="connectedSystemObject"/> as synchronisation builds it, the base expression's Missing Input
+    /// Behaviour and result, and the mapping's inbound value processing. A mapping with no base expression (a Sequence
+    /// or Random token alone) has nothing to evaluate.
+    /// </summary>
+    /// <param name="source">The base expression source (<see cref="GeneratedBaseSource"/>, or an unsaved edit of it);
+    /// null when the mapping has none.</param>
+    /// <param name="metaverseAttributes">The Metaverse Object's effective values, for a Metaverse-Derived Attribute
+    /// Flow only; null for the ordinary inbound pass.</param>
+    /// <param name="nowUtc">See <see cref="EvaluateSource"/>.</param>
+    public static GeneratedBaseEvaluation EvaluateGeneratedBaseInbound(
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource? source,
+        IExpressionEvaluator expressionEvaluator,
+        IDictionary<string, object?>? metaverseAttributes,
+        DateTime? nowUtc = null)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        if (string.IsNullOrWhiteSpace(source?.Expression))
+            return new GeneratedBaseEvaluation { Outcome = GeneratedBaseOutcome.NoBaseExpression };
+
+        var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType);
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc);
+        return ResolveGeneratedBase(evaluated, GeneratedBaseTextProcessing(mapping));
+    }
+
+    /// <summary>
+    /// A Generated Value's base for an export Attribute Flow, against the Metaverse Object's <c>mv[...]</c> view.
+    /// Export applies no value processing.
+    /// </summary>
+    /// <param name="source">See <see cref="EvaluateGeneratedBaseInbound"/>.</param>
+    /// <param name="nowUtc">See <see cref="EvaluateSource"/>.</param>
+    public static GeneratedBaseEvaluation EvaluateGeneratedBaseExport(
+        IDictionary<string, object?> metaverseAttributes,
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource? source,
+        IExpressionEvaluator expressionEvaluator,
+        DateTime? nowUtc = null)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseAttributes);
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        if (string.IsNullOrWhiteSpace(source?.Expression))
+            return new GeneratedBaseEvaluation { Outcome = GeneratedBaseOutcome.NoBaseExpression };
+
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes: null, metaverseAttributes, nowUtc);
+        return ResolveGeneratedBase(evaluated, processText: null);
+    }
+
+    /// <summary>
+    /// A generated mapping's base expression source: its first source with an Expression, or null when it has none,
+    /// which a Sequence or Random token allows.
+    /// </summary>
+    public static SyncRuleMappingSource? GeneratedBaseSource(SyncRuleMapping mapping) =>
+        mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+
+    /// <summary>
+    /// The mapping's inbound text processing (#843) for a generated base. A base expression is only allowed on a Text
+    /// target, so it always applies.
+    /// </summary>
+    public static Func<string, string?> GeneratedBaseTextProcessing(SyncRuleMapping mapping) =>
+        value => SyncEngine.ApplyInboundTextProcessing(value, mapping.InboundValueProcessing, mapping.CaseNormalisation);
+
+    /// <summary>
     /// The type an export Expression's values are converted to for a target of <paramref name="targetType"/>: a
     /// Reference takes the reference's text, staged as text exactly as it always has been; every other type its own.
     /// </summary>

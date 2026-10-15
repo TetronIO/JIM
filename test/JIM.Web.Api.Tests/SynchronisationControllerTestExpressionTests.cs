@@ -469,4 +469,82 @@ public class SynchronisationControllerTestExpressionTests
     }
 
     #endregion
+
+    #region A Generated Value (#2055 Phase 2d): the base expression, stopping before generation
+
+    private static void Generate(SyncRule rule, GeneratedValueTokenKind tokenKind = GeneratedValueTokenKind.OnlyIfTaken, bool withBase = true)
+    {
+        var mapping = rule.AttributeFlowRules.Single();
+        mapping.Generation = new SyncRuleMappingGeneration { TokenKind = tokenKind };
+        mapping.InboundValueProcessing = InboundValueProcessing.TrimWhitespace;
+        mapping.CaseNormalisation = InboundCaseNormalisation.Lower;
+        if (!withBase)
+            mapping.Sources.Clear();
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_GeneratedValue_ReturnsTheBaseAndNoAttributeFlowOutcomeAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, MissingInputBehaviour.ContributeNoValue, (_, _, rule) => Generate(rule));
+
+        var response = Ok(await controller.TestExpressionAsync(FlowRequest("cs[\"givenName\"]",
+            new Dictionary<string, object?> { ["givenName"] = " Priya " })));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.IsValid, Is.True, response.ErrorMessage);
+            Assert.That(response.GeneratedValue, Is.True);
+            Assert.That(response.BaseOutcome, Is.EqualTo(GeneratedBaseOutcome.Base));
+            Assert.That(response.BaseValue, Is.EqualTo("priya"));
+            Assert.That(response.Outcome, Is.Null, "a generated value has no ordinary Attribute Flow outcome");
+            Assert.That(response.ValueProcessingChanged, Is.True);
+            Assert.That(response.OutcomeDescription, Does.Contain("priya"));
+            Assert.That(response.IfInputHasNoValue!.Single().BaseOutcome, Is.EqualTo(GeneratedBaseOutcome.Waits));
+            Assert.That(response.IfInputHasNoValue!.Single().Outcome, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_GeneratedValueSeveralValues_IsNotValidWithTheReasonAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, MissingInputBehaviour.ContributeNoValue, (_, _, rule) => Generate(rule));
+        var json = JsonSerializer.Deserialize<Dictionary<string, object?>>("{\"mail\": [\"a@corp.local\", \"b@corp.local\"]}");
+
+        var response = Ok(await controller.TestExpressionAsync(FlowRequest("cs[\"mail\"]", json)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.IsValid, Is.False);
+            Assert.That(response.BaseOutcome, Is.EqualTo(GeneratedBaseOutcome.Error));
+            Assert.That(response.ErrorReason, Is.EqualTo(AttributeFlowErrorReason.GeneratedBaseNotSingleValue));
+            Assert.That(response.ErrorMessage, Is.Not.Empty);
+        }
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_GeneratedValueWithNoBaseExpressionAndNoExpressionGiven_SaysTheTokenAloneIsGeneratedAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text, arrange: (_, _, rule) => Generate(rule, GeneratedValueTokenKind.Sequence, withBase: false));
+
+        var response = Ok(await controller.TestExpressionAsync(new TestExpressionRequest { SyncRuleId = SyncRuleId, MappingId = MappingId }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.IsValid, Is.True, response.ErrorMessage);
+            Assert.That(response.BaseOutcome, Is.EqualTo(GeneratedBaseOutcome.NoBaseExpression));
+            Assert.That(response.OutcomeDescription, Does.Contain("sequence"));
+        }
+    }
+
+    [Test]
+    public async Task TestExpressionAsync_NoExpressionForAnOrdinaryAttributeFlow_IsBadRequestAsync()
+    {
+        var controller = ControllerWithFlow(AttributeDataType.Text);
+
+        var result = await controller.TestExpressionAsync(new TestExpressionRequest { SyncRuleId = SyncRuleId, MappingId = MappingId });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
 }
