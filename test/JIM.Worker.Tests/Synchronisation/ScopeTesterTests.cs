@@ -37,7 +37,8 @@ public class ScopeTesterTests
                 new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "department", Type = AttributeDataType.Text },
                 new ConnectedSystemObjectTypeAttribute { Id = 12, Name = "leaveDate", Type = AttributeDataType.DateTime },
                 new ConnectedSystemObjectTypeAttribute { Id = 13, Name = "startDate", Type = AttributeDataType.DateTime },
-                new ConnectedSystemObjectTypeAttribute { Id = 14, Name = "grade", Type = AttributeDataType.Number }
+                new ConnectedSystemObjectTypeAttribute { Id = 14, Name = "grade", Type = AttributeDataType.Number },
+                new ConnectedSystemObjectTypeAttribute { Id = 15, Name = "contractEnd", Type = AttributeDataType.Text }
             ]
         };
         _mvType = new MetaverseObjectType
@@ -306,6 +307,85 @@ public class ScopeTesterTests
 
         Assert.That(result.NextChange, Is.Null);
     }
+
+    #endregion
+
+    #region Expression criteria
+
+    [Test]
+    public void DescribeInputs_ExpressionCriterion_ListsTheAttributesTheExpressionReads()
+    {
+        // The expression names its attribute in another case; attribute names in expressions ignore case.
+        var rule = ImportRule(All(Expression("Lower(cs[\"DEPARTMENT\"]) + cs[\"contractEnd\"]", AttributeDataType.Text,
+            SearchComparisonType.StartsWith, "fin"), Cs("grade", SearchComparisonType.GreaterThan, number: 3)));
+
+        var inputs = ScopeTester.DescribeInputs(rule);
+
+        Assert.That(inputs.Select(i => i.AttributeName), Is.EqualTo(new[] { "department", "contractEnd", "grade" }));
+    }
+
+    [Test]
+    public void DescribeInputs_ExportRuleExpression_DescribesTheMetaverseAttributesItReads()
+    {
+        var rule = ExportRule(All(Expression("Upper(mv[\"Department\"])", AttributeDataType.Text, SearchComparisonType.Equals, "FINANCE")));
+
+        var inputs = ScopeTester.DescribeInputs(rule);
+
+        Assert.That(inputs.Single(), Is.EqualTo(new AttributeSampleDescriptor("Department", AttributeDataType.Text, AttributePlurality.SingleValued)));
+    }
+
+    [TestCase(" Finance ", ScopingRuleOutcome.InScope)]
+    [TestCase("Facilities", ScopingRuleOutcome.OutOfScope)]
+    public void Test_ExpressionCriterion_ComparesTheValueComputedFromTheSamples(string department, ScopingRuleOutcome expected)
+    {
+        var rule = ImportRule(All(Expression("Lower(Trim(cs[\"department\"]))", AttributeDataType.Text, SearchComparisonType.StartsWith, "fin")));
+
+        var result = ScopeTester.Test(rule, [Input("department", department)], AsOf);
+
+        Assert.That(result.Explanation!.Outcome, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Test_RelativeExpressionDateCriterion_NextChangeComesFromTheComputedDate()
+    {
+        // The contract end is held as text; the expression reads it as a date. In scope while it is later than 30 days
+        // ago, so 1 November leaves the window at midnight on 1 December.
+        var rule = ImportRule(All(new SyncRuleScopingCriteria
+        {
+            Expression = "ParseDate(cs[\"contractEnd\"], \"yyyy-MM-dd\")", CompareAs = AttributeDataType.DateTime,
+            ComparisonType = SearchComparisonType.GreaterThan, ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days, RelativeDirection = RelativeDateDirection.Ago
+        }));
+
+        var result = ScopeTester.Test(rule, [Input("contractEnd", "2026-11-01")], AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Explanation!.Outcome, Is.EqualTo(ScopingRuleOutcome.InScope));
+            Assert.That(result.NextChange, Is.EqualTo(new ScopeChange(new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc), ScopingRuleOutcome.OutOfScope)));
+        }
+    }
+
+    [Test]
+    public void InputsFromConnectedSystemObject_ExpressionCriterion_TakesTheValuesOfTheAttributesItReads()
+    {
+        var rule = ImportRule(All(Expression("Lower(cs[\"department\"])", AttributeDataType.Text, SearchComparisonType.Equals, "finance")));
+        var cso = new ConnectedSystemObject { TypeId = _csoType.Id };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 11, Attribute = _csoType.Attributes[0], StringValue = "Finance" });
+
+        var inputs = ScopeTester.InputsFromConnectedSystemObject(cso, rule);
+
+        Assert.That(inputs.Single(), Is.EqualTo(new AttributeSample("department", ["Finance"])).Using<AttributeSample>(
+            (a, b) => a.AttributeName == b.AttributeName && a.Values.SequenceEqual(b.Values)));
+    }
+
+    private static SyncRuleScopingCriteria Expression(string expression, AttributeDataType compareAs, SearchComparisonType comparison, string text) => new()
+    {
+        Expression = expression,
+        CompareAs = compareAs,
+        ComparisonType = comparison,
+        StringValue = text
+    };
 
     #endregion
 

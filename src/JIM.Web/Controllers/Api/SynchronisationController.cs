@@ -5615,7 +5615,34 @@ public class SynchronisationController(
             return ($"Invalid comparison type '{request.ComparisonType}'.", false);
 
         AttributeDataType attributeType;
-        if (syncRule.Direction == SyncRuleDirection.Export)
+        if (!string.IsNullOrWhiteSpace(request.Expression))
+        {
+            // An expression criterion (#2054): the expression itself is validated when the rule is saved, against the
+            // scoped type's schema.
+            if (request.MetaverseAttributeId.HasValue || request.ConnectedSystemAttributeId.HasValue)
+                return ("Provide either an attribute or an Expression, not both.", false);
+
+            // A name only: Enum.TryParse also accepts a number, which would let any integer through as a type.
+            if (string.IsNullOrWhiteSpace(request.CompareAs) ||
+                int.TryParse(request.CompareAs, out _) ||
+                !Enum.TryParse<AttributeDataType>(request.CompareAs, true, out var compareAs) ||
+                compareAs is AttributeDataType.NotSet or AttributeDataType.Reference or AttributeDataType.Binary)
+                return ($"CompareAs must be one of Text, Number, LongNumber, Decimal, DateTime, Boolean or Guid with an Expression; " +
+                        $"'{request.CompareAs}' is not.", false);
+
+            criterion.Expression = request.Expression;
+            criterion.CompareAs = compareAs;
+            criterion.MetaverseAttribute = null;
+            criterion.MetaverseAttributeId = null;
+            criterion.ConnectedSystemAttribute = null;
+            criterion.ConnectedSystemAttributeId = null;
+            attributeType = compareAs;
+        }
+        else if (!string.IsNullOrWhiteSpace(request.CompareAs))
+        {
+            return ("CompareAs applies only to an Expression; an attribute is compared as its own type.", false);
+        }
+        else if (syncRule.Direction == SyncRuleDirection.Export)
         {
             if (!request.MetaverseAttributeId.HasValue)
                 return ("MetaverseAttributeId is required for export Synchronisation Rules.", false);
@@ -5627,6 +5654,8 @@ public class SynchronisationController(
 
             criterion.MetaverseAttribute = mvAttribute;
             criterion.ConnectedSystemAttribute = null;
+            criterion.Expression = null;
+            criterion.CompareAs = null;
             attributeType = mvAttribute.Type;
         }
         else
@@ -5641,6 +5670,8 @@ public class SynchronisationController(
 
             criterion.ConnectedSystemAttribute = csAttribute;
             criterion.MetaverseAttribute = null;
+            criterion.Expression = null;
+            criterion.CompareAs = null;
             attributeType = csAttribute.Type;
         }
 

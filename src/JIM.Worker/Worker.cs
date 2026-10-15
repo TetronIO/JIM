@@ -803,8 +803,12 @@ public class Worker : BackgroundService
                                             afterUtc = await taskJim.Scheduler.GetTemporalScopeReconciliationWatermarkAsync(newWorkerTask.ScheduleExecutionId.Value);
 
                                         var reconciliationResult = await taskJim.ScopeReconciliation.ReconcileAsync(afterUtc, DateTime.UtcNow);
-                                        newWorkerTask.Activity.Message = null;
-                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        // The cost of any full pass, and any object left undecided (#2054); null otherwise.
+                                        newWorkerTask.Activity.Message = reconciliationResult.Describe();
+                                        if (reconciliationResult.UndecidableObjects > 0)
+                                            await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
+                                        else
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
 
                                         Log.Information("ExecuteAsync: Temporal Scope Reconciliation completed in {ExecutionTime}: {RulesEvaluated} rule(s), {InboundFlagged} inbound + {OutboundFlagged} outbound object(s) flagged for scope review.",
                                             newWorkerTask.Activity.ExecutionTime, reconciliationResult.RulesEvaluated, reconciliationResult.InboundFlagged, reconciliationResult.OutboundFlagged);

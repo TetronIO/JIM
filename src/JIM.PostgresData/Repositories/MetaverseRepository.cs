@@ -1060,6 +1060,15 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region Metaverse Objects
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetMetaverseObjectIdsOfTypeAsync(int metaverseObjectTypeId) =>
+        await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mvo => mvo.Type.Id == metaverseObjectTypeId)
+            .OrderBy(mvo => mvo.Id)
+            .Select(mvo => mvo.Id)
+            .ToListAsync();
+
     public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
     {
         var idList = ids as IReadOnlyCollection<Guid> ?? ids.ToList();

@@ -8,7 +8,7 @@ using JIM.Models.Search;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// One scoping criterion: an attribute compared with a value.
+/// One scoping criterion: an attribute, or the value an expression computes, compared with a value.
 /// </summary>
 public class SyncRuleScopingCriteriaDto
 {
@@ -41,9 +41,28 @@ public class SyncRuleScopingCriteriaDto
     public string? ConnectedSystemAttributeName { get; set; }
 
     /// <summary>
-    /// The tested attribute's data type, which decides which value property holds the value.
+    /// The expression whose computed value the criterion tests, in place of an attribute; null on an attribute
+    /// criterion. It reads cs["..."] on an import Synchronisation Rule and mv["..."] on an export one.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type an expression's computed value is compared as (Text, Number, LongNumber, Decimal, DateTime, Boolean or
+    /// Guid); null on an attribute criterion.
+    /// </summary>
+    public string? CompareAs { get; set; }
+
+    /// <summary>
+    /// The tested attribute's data type, or an expression's Compare As type, which decides which value property holds
+    /// the value.
     /// </summary>
     public string AttributeDataType { get; set; } = null!;
+
+    /// <summary>
+    /// Something the administrator should know about the criterion as saved, or null. Set when an expression is compared
+    /// against a relative date, which makes every Temporal Scope Reconciliation evaluate every object of the type.
+    /// </summary>
+    public string? Notice { get; set; }
 
     /// <summary>
     /// How the attribute is compared with the value: Equals, NotEquals, StartsWith, NotStartsWith, EndsWith,
@@ -137,7 +156,14 @@ public class SyncRuleScopingCriteriaDto
         };
 
         // Set attribute info based on which one is set
-        if (entity.MetaverseAttribute != null)
+        if (entity.IsExpression)
+        {
+            dto.Expression = entity.Expression;
+            dto.CompareAs = entity.CompareAs?.ToString();
+            dto.AttributeDataType = entity.CompareAs?.ToString() ?? "Unknown";
+            dto.Notice = entity.NeedsFullReconciliationPass ? SyncRuleScopingCriteria.FullReconciliationPassNotice : null;
+        }
+        else if (entity.MetaverseAttribute != null)
         {
             dto.MetaverseAttributeId = entity.MetaverseAttribute.Id;
             dto.MetaverseAttributeName = entity.MetaverseAttribute.Name;
@@ -243,9 +269,24 @@ public class UpdateScopingCriteriaGroupRequest
 /// Request DTO for creating a new scoping criterion within a group.
 /// For export Synchronisation Rules, provide MetaverseAttributeId.
 /// For import Synchronisation Rules, provide ConnectedSystemAttributeId.
+/// To compare a computed value instead, provide Expression and CompareAs and no attribute.
 /// </summary>
 public class CreateScopingCriterionRequest
 {
+    /// <summary>
+    /// An expression whose computed value the criterion compares, in place of an attribute: cs["..."] reads the
+    /// Connected System Object on an import Synchronisation Rule, mv["..."] the Metaverse Object on an export one.
+    /// Requires CompareAs, and excludes MetaverseAttributeId and ConnectedSystemAttributeId.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type the expression's computed value is compared as, which decides the operators and value properties that
+    /// apply: Text, Number, LongNumber, Decimal, DateTime, Boolean or Guid. Required with Expression; not allowed
+    /// without it.
+    /// </summary>
+    public string? CompareAs { get; set; }
+
     /// <summary>
     /// The Metaverse Attribute ID to evaluate (for export Synchronisation Rules).
     /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.

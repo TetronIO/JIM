@@ -44,6 +44,7 @@ public partial class ConnectedSystemServer
     internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
 
     private readonly ObjectMatchingRuleValidator _objectMatchingRuleValidator = new(new DynamicExpressoEvaluator());
+    private readonly ScopingCriterionExpressionValidator _scopingCriterionExpressionValidator = new(new DynamicExpressoEvaluator());
 
     internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
@@ -8673,6 +8674,52 @@ public partial class ConnectedSystemServer
             ValidateScopingGroupOperators(group);
     }
 
+    /// <summary>
+    /// Refuses an expression scoping criterion that could never be evaluated for objects of the rule's scoped type
+    /// (#2054); see <see cref="ScopingCriterionExpressionValidator"/>. The scoped type's attributes are loaded when the
+    /// rule carries the type without them.
+    /// </summary>
+    private async Task ValidateScopingCriteriaExpressionsAsync(SyncRule syncRule)
+    {
+        var expressionCriteria = AllScopingCriteria(syncRule.ObjectScopingCriteriaGroups).Where(c => c.IsExpression).ToList();
+        if (expressionCriteria.Count == 0)
+            return;
+
+        var exporting = syncRule.Direction == SyncRuleDirection.Export;
+        List<string> attributeNames;
+        string objectTypeName;
+        if (exporting)
+        {
+            var type = syncRule.MetaverseObjectType is { Attributes.Count: > 0 } loaded
+                ? loaded
+                : await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(syncRule.MetaverseObjectTypeId, includeChildObjects: true);
+            attributeNames = type?.Attributes.Select(a => a.Name).ToList() ?? [];
+            objectTypeName = type?.Name ?? syncRule.MetaverseObjectType?.Name ?? "the Metaverse Object Type";
+        }
+        else
+        {
+            var type = syncRule.ConnectedSystemObjectType is { Attributes.Count: > 0 } loaded
+                ? loaded
+                : await Application.Repository.ConnectedSystems.GetObjectTypeAsync(syncRule.ConnectedSystemObjectTypeId);
+            attributeNames = type?.Attributes.Select(a => a.Name).ToList() ?? [];
+            objectTypeName = type?.Name ?? syncRule.ConnectedSystemObjectType?.Name ?? "the Connected System Object Type";
+        }
+
+        var problem = expressionCriteria
+            .Select(criterion => (Criterion: criterion,
+                Problem: _scopingCriterionExpressionValidator.DescribeProblem(criterion, syncRule.Direction, attributeNames, objectTypeName)))
+            .FirstOrDefault(found => found.Problem != null);
+        if (problem.Problem == null)
+            return;
+
+        var message = $"Scoping criterion on '{problem.Criterion.Expression}' cannot be saved: {problem.Problem}";
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
+    private static IEnumerable<SyncRuleScopingCriteria> AllScopingCriteria(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+        groups.SelectMany(group => group.Criteria.Concat(AllScopingCriteria(group.ChildGroups)));
+
     private static void ValidateScopingGroupOperators(SyncRuleScopingCriteriaGroup group)
     {
         foreach (var criterion in group.Criteria)
@@ -9258,6 +9305,8 @@ public partial class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+        // ...and any expression criterion that could never be evaluated (#2054).
+        await ValidateScopingCriteriaExpressionsAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
@@ -9507,6 +9556,8 @@ public partial class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+        // ...and any expression criterion that could never be evaluated (#2054).
+        await ValidateScopingCriteriaExpressionsAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.

@@ -103,6 +103,15 @@ internal static class SyncRuleScopingProposalMaterialiser
             RelativeDirection = proposal.RelativeDirection
         };
 
+        // An expression criterion reads the object by attribute name when it is evaluated, so there is no attribute
+        // entity to attach (#2054).
+        if (proposal.IsExpression)
+        {
+            criterion.Expression = proposal.Expression;
+            criterion.CompareAs = proposal.CompareAs;
+            return criterion;
+        }
+
         if (proposal.ConnectedSystemAttributeId is { } connectedSystemAttributeId)
         {
             if (!connectedSystemAttributesById.TryGetValue(connectedSystemAttributeId, out var connectedSystemAttribute))
@@ -132,7 +141,7 @@ internal static class SyncRuleScopingProposalMaterialiser
         }
 
         throw new InvalidOperationException(
-            "A proposed scoping criterion names no attribute. A criterion with nothing to read cannot be evaluated, " +
-            "and evaluating around it would report a wider scope than the proposal describes.");
+            "A proposed scoping criterion names no attribute and holds no expression. A criterion with nothing to read " +
+            "cannot be evaluated, and evaluating around it would report a wider scope than the proposal describes.");
     }
 }

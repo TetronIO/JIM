@@ -103,6 +103,7 @@ public static class ScopeTester
 
         var scoping = new ScopingEvaluationServer();
         Func<DateTime, ScopingExplanation> explainAt;
+        Func<SyncRuleScopingCriteria, IReadOnlyList<DateTime>> computedDatesOf;
         if (exporting)
         {
             var metaverseObject = new MetaverseObject { Type = syncRule.MetaverseObjectType ?? new MetaverseObjectType() };
@@ -113,6 +114,7 @@ public static class ScopeTester
                 return held;
             })));
             explainAt = instant => scoping.ExplainMvoForExportRule(metaverseObject, syncRule, instant);
+            computedDatesOf = criterion => scoping.ComputedDates(criterion, metaverseObject, asOfUtc);
         }
         else
         {
@@ -124,6 +126,7 @@ public static class ScopeTester
                 return held;
             })));
             explainAt = instant => scoping.ExplainCsoForImportRule(connectedSystemObject, syncRule, instant);
+            computedDatesOf = criterion => scoping.ComputedDates(criterion, connectedSystemObject, asOfUtc);
         }
 
         var explanation = explainAt(asOfUtc);
@@ -131,10 +134,21 @@ public static class ScopeTester
             .Where(input => input.Attribute.Type == AttributeDataType.DateTime)
             .ToDictionary(input => input.Attribute.Id, input => input.Values.Cast<DateTime>().ToList());
 
+        // A date criterion compares an attribute's dates, or the dates its expression computes from the samples. Saving
+        // refuses an expression that reads the clock, so the computed dates do not move as time passes.
+        IReadOnlyList<DateTime> DatesOf(SyncRuleScopingCriteria criterion)
+        {
+            if (criterion.IsExpression)
+                return computedDatesOf(criterion);
+
+            var attributeId = (exporting ? criterion.MetaverseAttribute?.Id : criterion.ConnectedSystemAttribute?.Id) ?? 0;
+            return dates.TryGetValue(attributeId, out var values) ? values : [];
+        }
+
         return new ScopeTestResult
         {
             Explanation = explanation,
-            NextChange = NextChange(syncRule, explanation.Outcome, asOfUtc, dates, instant => explainAt(instant).Outcome)
+            NextChange = NextChange(syncRule, explanation.Outcome, asOfUtc, DatesOf, instant => explainAt(instant).Outcome)
         };
     }
 
@@ -149,23 +163,19 @@ public static class ScopeTester
     /// reason about how the criteria combine.
     /// </remarks>
     private static ScopeChange? NextChange(SyncRule syncRule, ScopingRuleOutcome current, DateTime asOfUtc,
-        Dictionary<int, List<DateTime>> dates, Func<DateTime, ScopingRuleOutcome> outcomeAt)
+        Func<SyncRuleScopingCriteria, IReadOnlyList<DateTime>> datesOf, Func<DateTime, ScopingRuleOutcome> outcomeAt)
     {
         // An undetermined rule stops at a criterion that cannot be evaluated, and time does not change that.
         if (current == ScopingRuleOutcome.Undetermined)
             return null;
 
-        var exporting = syncRule.Direction == SyncRuleDirection.Export;
         var candidates = new SortedSet<DateTime>(AllCriteria(syncRule.ObjectScopingCriteriaGroups)
             .Where(criterion => criterion is
             {
                 ValueMode: DateCriteriaValueMode.Relative, RelativeCount: not null, RelativeUnit: not null, RelativeDirection: not null
             })
-            .SelectMany(criterion =>
-                dates.TryGetValue((exporting ? criterion.MetaverseAttribute?.Id : criterion.ConnectedSystemAttribute?.Id) ?? 0, out var values)
-                    ? values.SelectMany(value => CrossingCandidates(value, criterion.RelativeCount!.Value, criterion.RelativeUnit!.Value,
-                        criterion.RelativeDirection!.Value))
-                    : [])
+            .SelectMany(criterion => datesOf(criterion).SelectMany(value => CrossingCandidates(value, criterion.RelativeCount!.Value,
+                criterion.RelativeUnit!.Value, criterion.RelativeDirection!.Value)))
             .Where(instant => instant > asOfUtc));
 
         return candidates
@@ -235,17 +245,20 @@ public static class ScopeTester
         return attributes;
     }
 
-    /// <summary>The attributes the scoping criteria compare on the scoped side, each once, in criteria order.</summary>
+    /// <summary>
+    /// The attributes the scoping criteria read on the scoped side, each once, in criteria order: the attribute a
+    /// criterion compares, or those its expression reads.
+    /// </summary>
     private static List<ScopedAttribute> ComparedAttributes(SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         var exporting = syncRule.Direction == SyncRuleDirection.Export;
+        var metaverseSchema = syncRule.MetaverseObjectType?.Attributes ?? [];
+        var connectedSystemSchema = syncRule.ConnectedSystemObjectType?.Attributes ?? [];
         return AllCriteria(syncRule.ObjectScopingCriteriaGroups)
-            .Select(criterion => exporting
-                ? criterion.MetaverseAttribute is { } metaverseAttribute ? Scoped(metaverseAttribute) : null
-                : criterion.ConnectedSystemAttribute is { } connectedSystemAttribute ? Scoped(connectedSystemAttribute) : null)
-            .Where(attribute => attribute != null)
-            .Select(attribute => attribute!)
+            .SelectMany(criterion => exporting
+                ? ScopingCriterionInputs.MetaverseAttributes(criterion, metaverseSchema).Select(Scoped)
+                : ScopingCriterionInputs.ConnectedSystemAttributes(criterion, connectedSystemSchema).Select(Scoped))
             .DistinctBy(attribute => attribute.Id)
             .ToList();
     }

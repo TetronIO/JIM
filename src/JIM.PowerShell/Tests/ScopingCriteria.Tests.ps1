@@ -269,6 +269,62 @@ Describe 'New-JIMScopingCriterion presence and pattern operators' {
 }
 
 
+Describe 'New-JIMScopingCriterion -Expression' {
+
+    It 'Sends the expression and its Compare As type, and no attribute, in the create body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -Expression 'Lower(Trim(cs["department"]))' -CompareAs Text -ComparisonType StartsWith -StringValue 'fin' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.expression -eq 'Lower(Trim(cs["department"]))' -and
+                $Body.compareAs -eq 'Text' -and
+                -not $Body.ContainsKey('metaverseAttributeId') -and
+                -not $Body.ContainsKey('connectedSystemAttributeId')
+            }
+        }
+    }
+
+    It 'Requires -CompareAs with -Expression' {
+        $command = Get-Command New-JIMScopingCriterion
+        $compareAs = $command.Parameters['CompareAs'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ByExpression' }
+
+        $compareAs.Mandatory | Should -BeTrue
+    }
+
+    It 'Warns with the notice the API returns' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999; notice = 'every reconciliation evaluates every object' } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -Expression 'ParseDate(cs["start"], "yyyy-MM-dd")' -CompareAs DateTime -ComparisonType GreaterThan -ValueMode Relative -RelativeCount 30 -RelativeUnit Days -RelativeDirection Ago -Confirm:$false -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+            $warnings | Should -HaveCount 1
+            "$($warnings[0])" | Should -BeLike '*every reconciliation evaluates every object*'
+        }
+    }
+}
+
+Describe 'Set-JIMScopingCriterion -Expression' {
+
+    It 'Sends the expression and its Compare As type in the update body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -Expression 'Upper(mv["Department"])' -CompareAs Text -ComparisonType Equals -StringValue 'FINANCE' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.expression -eq 'Upper(mv["Department"])' -and $Body.compareAs -eq 'Text'
+            }
+        }
+    }
+}
+
 Describe 'Test-JIMScope' {
     It 'Posts the sample values and as-of time to the scoping criteria test endpoint' {
         InModuleScope JIM {

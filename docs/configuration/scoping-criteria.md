@@ -25,7 +25,7 @@ Objects that fall out of scope are **disconnected** from the rule. This is impor
 
 An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) can be **Remain joined (stop Attribute Flow)** instead of **Disconnect from Metaverse**. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md).
 
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all; criteria do not use the [expression language](../concepts/expressions.md).
+Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all. Where the attribute's value needs reshaping first, a criterion can compare an [expression](../concepts/expressions.md) instead; see [Comparing a computed value](#comparing-a-computed-value).
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
@@ -67,6 +67,19 @@ For example, an export rule scoped to `Groups` *contains* `Finance` includes a M
 
 Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
 
+## Comparing a computed value
+
+A criterion can compare the value an [expression](../concepts/expressions.md) computes from the object, rather than an attribute as it is stored. Use it when the value needs reshaping before it can be compared: an inconsistently cased or padded department, a date held as text, a code inside a longer string. Create one with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) `-Expression` and `-CompareAs`, or through the REST API by giving `expression` and `compareAs` in place of an attribute id.
+
+- **It reads the object the rule scopes**<br /> An import rule's expression reads the Connected System Object with `cs["..."]`, and an export rule's reads the Metaverse Object with `mv["..."]`. It must read at least one attribute of that object.
+- **You choose the type it is compared as**<br /> **Compare as** (Text, Number, Long Number, Decimal, Date/Time, Boolean or GUID) decides which operators are offered and what you compare against, exactly as an attribute's own type does. It is chosen rather than worked out, because an expression can compute no value for the object you happen to try it on.
+- **Every value counts**<br /> An expression that computes several values, such as one reading a multi-valued attribute, is tested value by value, as a multi-valued attribute is. One that computes nothing, or only blank text, holds no value.
+- **An object it cannot decide is left alone**<br /> When the expression fails for an object, computes a value that cannot be read as the **Compare as** type (`Finance` compared as a Number), or reads an attribute the object type no longer has because it was renamed or removed after the rule was saved, synchronisation records an error against that object and leaves it, and its connections, as they are. It never guesses which side of the scope the object is on. The rest of the run continues.
+
+For example, to bring in people whose department starts with *Finance* however the source system cases or pads it, compare `Lower(Trim(cs["department"]))` as Text with *starts with* `finance`.
+
+JIM refuses an expression criterion when you save the rule if it could never work: one that does not parse, reads the other side (`mv["..."]` on an import rule), reads no attribute, names an attribute the object type does not have, or calls `Now()` or another function that returns a different value each time it runs. To scope by how long ago something happened, compare the date as a Date/Time against a [relative date](#relative-dates-in-scope-filters) instead.
+
 ## Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
@@ -76,6 +89,8 @@ A relative criterion is a **count**, a **unit** (Hours, Days, Weeks, Months or Y
 - **Whole-day rounding**<br /> Days and coarser units resolve to midnight UTC, so "30 days ago" is a clean day boundary. The Hours unit keeps exact-instant precision for finer windows.
 - **Calendar-correct**<br /> Month and year offsets respect the calendar (31 March minus one month is the last day of February).
 - **Evaluated on demand**<br /> The boundary is resolved fresh each run from the host's UTC clock; nothing is stored as a fixed date.
+
+A relative date can also be the comparison for an [expression compared as a Date/Time](#comparing-a-computed-value), such as a start date held as text. That has a cost worth knowing on a large object type. [Temporal Scope Reconciliation](schedules.md#built-in-schedules) normally reads only the objects whose stored date the clock has just crossed, but an expression's date is computed, not stored, so for such a rule every reconciliation evaluates every object of its type, in batches. JIM says so when you save the criterion, and the reconciliation's Activity reports how many objects it evaluated. Where the type is large, prefer flowing the date into an attribute and scoping on that.
 
 For example, to scope an export rule to leavers terminated between 30 and 364 days ago, use an **All** group with two criteria on the termination-date attribute: *on or before* `30 days ago` and *after* `364 days ago`.
 

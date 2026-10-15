@@ -375,6 +375,8 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             AddReference(children, "metaverseAttributeId", criterion.MetaverseAttributeId, criterion.MetaverseAttribute?.Name, "Metaverse Attribute");
             AddReference(children, "connectedSystemAttributeId", criterion.ConnectedSystemAttributeId, criterion.ConnectedSystemAttribute?.Name, "Connected System Attribute");
+            Add(children, "expression", criterion.Expression, "Expression");
+            AddEnum(children, "compareAs", criterion.CompareAs, "Compare as");
             AddEnum(children, "comparisonType", criterion.ComparisonType, "Comparison");
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
@@ -384,6 +386,13 @@ public class ConfigurationSnapshotService
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
             Add(children, "caseSensitive", Render(criterion.CaseSensitive), "Case sensitive");
+            // Recorded only when Relative: snapshots taken before the value mode was captured hold no key, so recording
+            // the Absolute default would show every existing criterion as changed by the first save after upgrade.
+            if (criterion.ValueMode != DateCriteriaValueMode.Absolute)
+                AddEnum(children, "valueMode", criterion.ValueMode, "Value mode");
+            Add(children, "relativeCount", Render(criterion.RelativeCount), "Relative count");
+            AddEnum(children, "relativeUnit", criterion.RelativeUnit, "Relative unit");
+            AddEnum(children, "relativeDirection", criterion.RelativeDirection, "Relative direction");
             items.Add(ConfigurationSnapshotNode.ObjectNode("criterion", children, "Criterion", criterion.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("criteria", items, "Criteria");
