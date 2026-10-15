@@ -1,5 +1,8 @@
 ---
 title: Previews
+description: "The cmdlets that preview what a configuration change would do before it is saved, and read, compare and stop those previews."
+type: reference
+audience: automation-author
 ---
 
 # Previews
@@ -215,7 +218,7 @@ $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGrou
 $preview.ImpactCounts
 ```
 
-Reports what narrowing an import Synchronisation Rule to the Sales department would do: how many joined objects would leave scope and disconnect from their Metaverse Objects, how many unjoined ones simply stop matching, and how many objects would newly enter scope and be projected.
+Reports what narrowing an import Synchronisation Rule to the Sales department would do: how many joined objects would leave scope and disconnect from their Metaverse Objects, how many unjoined ones stop matching, and how many objects would newly enter scope and be projected.
 
 ```powershell
 $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() -Wait

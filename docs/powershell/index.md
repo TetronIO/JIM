@@ -1,10 +1,13 @@
 ---
 title: PowerShell Module
+description: "How to install the JIM PowerShell module, connect it to JIM, and the conventions its cmdlets share: pipelines, output and confirmation."
+type: reference
+audience: automation-author
 ---
 
 # PowerShell Module
 
-The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, making it straightforward to script identity management workflows.
+The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, so identity management workflows can be scripted.
 
 ## Requirements
 
@@ -99,7 +102,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
-| [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
+| [History](history.md) | 4 | Query Configuration Change History, query deleted objects, and manage change history retention |
 | [Previews](previews.md) | 4 | Preview a configuration change before saving it |
 | [Sync Preview](sync-preview.md) | 2 | Preview what synchronising one object would do |
 | [Example Data](example-data.md) | 10 | Generate sample data for testing and evaluation, create, update, and remove reusable Example Data Sets, and build Data Generation Templates including their per-attribute generation configuration |

@@ -440,7 +440,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                csoValues.Any(v => v.DateTimeValue == attrChange.DateTimeValue),
+                csoValues.Any(v => DateTimeAttributeValue.AreEqual(v.DateTimeValue, attrChange.DateTimeValue)),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -479,9 +479,9 @@ public partial class SyncEngine
     /// </summary>
     /// <remarks>
     /// Number/LongNumber/Guid/Boolean/DateTime use typed sets (not stringified keys) so that set
-    /// membership is exactly the same comparison the original code performed (e.g. DateTime equality
-    /// via <c>Ticks</c>, which - like the <c>==</c> operator this replaces - ignores <see cref="DateTimeKind"/>;
-    /// stringifying with a round-trip format would incorrectly make Kind significant). Binary values are
+    /// membership is exactly the same comparison <see cref="ValueExistsOnCso"/> performs (DateTime by its
+    /// canonical key, <see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind nor a sub-microsecond
+    /// part is significant; stringifying with a round-trip format would make Kind significant). Binary values are
     /// not indexed: byte arrays do not hash usefully, and Binary attributes are never large multi-valued
     /// sets in practice (they are typically a single profile picture, certificate, etc.), so the original
     /// linear <c>SequenceEqual</c> scan is kept for them.
@@ -595,7 +595,7 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => v.DateTimeValue!.Value.Ticks).ToHashSet()
+                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value)).ToHashSet()
             },
 
             // Binary: keep the existing linear SequenceEqual scan - byte arrays do not hash usefully,
@@ -676,7 +676,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                (index.DateTimeTicksValues?.Contains(attrChange.DateTimeValue.Value.Ticks) ?? false),
+                (index.DateTimeTicksValues?.Contains(DateTimeAttributeValue.Key(attrChange.DateTimeValue.Value)) ?? false),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -897,7 +897,7 @@ public partial class SyncEngine
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
             AttributeDataType.LongNumber => csoAttrValues.Select(v => v.LongValue?.ToString()).Where(v => v != null),
             AttributeDataType.Decimal => csoAttrValues.Select(v => v.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(v.DecimalValue.Value) : null).Where(v => v != null),
-            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
+            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(v.DateTimeValue.Value) : null).Where(v => v != null),
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
             AttributeDataType.Reference => csoAttrValues.Select(v => v.UnresolvedReferenceValue).Where(v => v != null),
@@ -923,7 +923,7 @@ public partial class SyncEngine
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
             AttributeDataType.LongNumber => attrChange.LongValue?.ToString() ?? "(null)",
             AttributeDataType.Decimal => attrChange.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value) : "(null)",
-            AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
+            AttributeDataType.DateTime => attrChange.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(attrChange.DateTimeValue.Value) : "(null)",
             AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
             AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",
             AttributeDataType.Reference => attrChange.UnresolvedReferenceValue ?? "(null)",

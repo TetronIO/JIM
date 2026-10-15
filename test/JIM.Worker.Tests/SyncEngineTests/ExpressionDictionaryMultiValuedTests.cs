@@ -94,4 +94,28 @@ public class ExpressionDictionaryMultiValuedTests
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { MetaverseObject = mvo, Attribute = attribute, AttributeId = attribute.Id, StringValue = Primary });
         return mvo;
     }
+
+    /// <summary>
+    /// Expressions are handed dates canonical (#2153 N4): two stored values naming one microsecond in different Kinds are
+    /// one value, read as UTC.
+    /// </summary>
+    [Test]
+    public void BuildCsoAttributeDictionary_DatesNamingOneMicrosecond_ReadAsOneCanonicalDate()
+    {
+        var leaveDates = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "leaveDates", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.MultiValued };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Name = "user", Attributes = [leaveDates] };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType };
+        var utc = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 1, Attribute = leaveDates, DateTimeValue = utc.ToLocalTime() });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 1, Attribute = leaveDates, DateTimeValue = utc.AddTicks(7) });
+
+        var read = SyncEngine.BuildCsoAttributeDictionary(cso, csoType)["leaveDates"];
+
+        Assert.That(read, Is.InstanceOf<DateTime>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(((DateTime)read!).Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(((DateTime)read!).Ticks, Is.EqualTo(utc.Ticks));
+        }
+    }
 }

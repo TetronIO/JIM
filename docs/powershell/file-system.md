@@ -1,5 +1,8 @@
 ---
 title: File System
+description: "The cmdlets that browse and test the paths JIM can read and write, for choosing a file-based Connector's import and export paths."
+type: reference
+audience: automation-author
 ---
 
 # File System

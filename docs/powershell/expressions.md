@@ -1,5 +1,8 @@
 ---
 title: Expressions
+description: "The cmdlet that tests an expression against sample Metaverse and Connected System attribute values before a mapping uses it."
+type: reference
+audience: automation-author
 ---
 
 # Expressions
@@ -8,7 +11,7 @@ Test Synchronisation Rule expressions with sample data before deploying them to 
 
 ## Test-JIMExpression
 
-Tests an expression with sample metaverse and Connected System attribute values.
+Tests an expression with sample Metaverse and Connected System attribute values.
 
 <!-- BEGIN GENERATED: Test-JIMExpression -->
 ### Syntax
@@ -117,7 +120,7 @@ if (-not $result.IsValid) {
 ---
 
 !!! tip "Expression Syntax"
-    Expressions use DynamicExpresso syntax. Use `mv["AttributeName"]` for metaverse attributes and `cs["AttributeName"]` for Connected System attributes. Built-in functions include `Lower()`, `Upper()`, `Trim()`, `EscapeDN()`, `Left()`, `Right()`, `Mid()`, and more. See the [Expressions concept guide](../concepts/expressions.md) for the full function reference.
+    Expressions use DynamicExpresso syntax. Use `mv["AttributeName"]` for Metaverse attributes and `cs["AttributeName"]` for Connected System attributes. Built-in functions include `Lower()`, `Upper()`, `Trim()`, `EscapeDN()`, `Left()`, `Right()`, `Mid()`, and more. See the [Expressions concept guide](../concepts/expressions.md) for the full function reference.
 
 !!! warning "Test the missing-input case"
     A null result clears the target, and a concatenation with a missing operand produces a malformed value rather than null. Use `Test-JIMExpression` with the relevant attribute **omitted** from `-MvAttributes` / `-CsAttributes` (or, with an Attribute Flow, set to `$null`) to see what happens when an input is absent, before deploying the mapping. See [Nulls, Missing Inputs, and Whitespace](../concepts/expressions.md#nulls-missing-inputs-and-whitespace).

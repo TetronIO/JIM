@@ -1,5 +1,8 @@
 ---
 title: Security
+description: "The cmdlets that list roles, their members and the roles a Metaverse Object holds, and add or remove role members."
+type: reference
+audience: automation-author
 ---
 
 # Security
@@ -292,6 +295,6 @@ Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force -ChangeR
 
 ## See also
 
-- [Roles](../configuration/roles.md): role definitions, static membership, administrator-lockout safety, and configuration change history
+- [Roles](../configuration/roles.md): role definitions, static membership, administrator-lockout safety, and Configuration Change History
 - [API Keys](api-keys.md)
 - [History](history.md): `Get-JIMConfigurationChangeHistory -Type Role`

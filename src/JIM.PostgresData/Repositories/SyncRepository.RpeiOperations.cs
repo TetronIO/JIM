@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -287,13 +288,19 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         var changes = rpeis
             .Where(r => r.ConnectedSystemObjectChange != null)
             .Select(r => r.ConnectedSystemObjectChange!)
             .ToList();
 
+        return PersistCsoChangesAsync(changes);
+    }
+
+    /// <inheritdoc />
+    public async Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    {
         if (changes.Count == 0)
             return;
 
@@ -667,7 +674,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (v.DateTimeValue.HasValue)
-                await writer.WriteAsync(v.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(v.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (v.IntValue.HasValue)
