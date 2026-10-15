@@ -113,6 +113,21 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
+    public void AddCriteria_CompareAsMovedOffDateAfterChoosingARelativeDate_DropsTheRelativeDateAndItsNotice()
+    {
+        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        ComposeExpression(provider, DepartmentExpression, null, null);
+        var compareAs = provider.FindComponents<MudSelect<AttributeDataType>>().Single();
+        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.DateTime));
+        var mode = provider.FindComponents<MudRadioGroup<DateCriteriaValueMode>>().Single();
+        provider.InvokeAsync(() => mode.Instance.ValueChanged.InvokeAsync(DateCriteriaValueMode.Relative));
+
+        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.Text));
+
+        Assert.That(provider.FindAll("[data-testid='jim-scoping-criterion-full-pass']"), Is.Empty);
+    }
+
+    [Test]
     public void AddCriteria_SwitchingBackToAttribute_DropsTheExpression()
     {
         var (provider, _) = OpenAddDialog(ImportRule(out _));

@@ -92,7 +92,8 @@ public class SyncRuleScopingCriteria : ICriterionValues
     /// compares an expression's computed date against a relative date, so no stored value can narrow the objects whose
     /// boundary the clock has crossed.
     /// </summary>
-    public bool NeedsFullReconciliationPass => IsExpression && ValueMode == DateCriteriaValueMode.Relative;
+    public bool NeedsFullReconciliationPass =>
+        IsExpression && CompareAs == AttributeDataType.DateTime && ValueMode == DateCriteriaValueMode.Relative;
 
     /// <summary>
     /// What saving a criterion that <see cref="NeedsFullReconciliationPass"/> tells the administrator, word for word

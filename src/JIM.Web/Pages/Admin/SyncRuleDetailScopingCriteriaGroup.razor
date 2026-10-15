@@ -320,6 +320,16 @@
         var type = GetSelectedAttributeType();
         if (type == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, type.Value, CriterionContext.Scoping))
             _newSyncRuleScopingCriteria.ComparisonType = SearchComparisonType.NotSet;
+
+        // A relative date belongs to a date comparison only; left behind on another type it would compare nothing
+        // against the clock and still ask for a full reconciliation pass.
+        if (type != AttributeDataType.DateTime)
+        {
+            _newSyncRuleScopingCriteria.ValueMode = DateCriteriaValueMode.Absolute;
+            _newSyncRuleScopingCriteria.RelativeCount = null;
+            _newSyncRuleScopingCriteria.RelativeUnit = null;
+            _newSyncRuleScopingCriteria.RelativeDirection = null;
+        }
     }
 
     /// <summary>
