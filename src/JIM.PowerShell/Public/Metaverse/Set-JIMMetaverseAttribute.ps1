@@ -13,7 +13,8 @@ function Set-JIMMetaverseAttribute {
         - Type and AttributePlurality are updated via the dedicated schema endpoint. Because the
           schema change is refused while any Metaverse Object holds a stored value for the
           attribute, supplying either -Type or -AttributePlurality sends both (the unspecified one
-          is read from the attribute's current schema).
+          is read from the attribute's current schema, except that -Type Boolean alone sends
+          SingleValued, since a Boolean holds one value).
 
         Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.

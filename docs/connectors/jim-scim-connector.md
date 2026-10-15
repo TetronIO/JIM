@@ -50,10 +50,13 @@ SCIM's nested and multi-valued attributes are flattened into the flat attributes
 | `emails` (type `work`) | `emails.work` | A multi-valued attribute with canonical types becomes one single-valued attribute per type, so a flow has a definite target. |
 | `emails` (marked primary) | `emails.primary` | The entry the provider flags as primary is addressable in its own right. |
 | `addresses` (type `work`) | `addresses.work.streetAddress`, ... | An address has no single value, so the slot is cut per sub-attribute. |
+| `roles`, `entitlements`, `x509Certificates` (no canonical types) | `roles.value`, `roles.display`, ... | Each sub-attribute becomes a multi-valued attribute. The Boolean `primary` sub-attribute is left out: separated from its entry, it would say only that some entry is primary and some is not, and a Boolean attribute holds one value. |
 | `members`, `groups`, `manager` | unchanged | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
 | `urn:...:enterprise:2.0:User:department` | `enterpriseUser.department` | An extension attribute is prefixed with its schema's name. |
 
 Every resource also carries `id`, `externalId` and the `meta` attributes, which the SCIM specification defines rather than any schema document. `id` is the External ID JIM anchors Connected System Objects on, and is always read-only.
+
+A Connected System whose schema was imported before JIM left these `primary` sub-attributes out reports them as no longer reported at its next [schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema), which names any Attribute Flow mapping that reads one.
 
 !!! warning "Two entries sharing a canonical type"
     A provider is free to hold two `work` email addresses. `emails.work` holds one, so the first is imported and the run reports a warning naming the attribute. Nothing is silently dropped, but the second value does not reach JIM.

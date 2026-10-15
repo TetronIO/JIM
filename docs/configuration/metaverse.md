@@ -101,7 +101,7 @@ Once both are clear, the type can be deleted. Its softer references (its Predefi
 
 **Attributes** define the fields available on Metaverse Objects. Examples include `displayName`, `mail`, and `employeeId`. Attributes can be:
 
-- **Single-valued or multi-valued**<br /> A multi-valued attribute holds a list of values (e.g. group memberships, email aliases).
+- **Single-valued or multi-valued**<br /> A multi-valued attribute holds a list of values (e.g. group memberships, email aliases). A Boolean attribute is always single-valued: it holds true or false, and a set holding both would contradict itself. The portal offers no multi-valued plurality while Boolean is the chosen data type, and the REST API and PowerShell refuse a multi-valued Boolean, so nothing is created or changed.
 - **Of various data types**<br /> String, integer, datetime, boolean, reference (a link to another Metaverse Object), and so on.
 
 Attributes are scoped to the object types that use them: an attribute is **bound** to one or more Object Types, and only appears on objects of those types. The same attribute name can carry different meanings on different object types if you genuinely need that, though in practice most attributes are reused identically across types where they apply.
