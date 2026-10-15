@@ -48,14 +48,24 @@ public class ConfigurationTestExpectationDto
 /// </summary>
 public class ConfigurationTestCaseDto
 {
+    /// <summary>
+    /// The ID of the test case.
+    /// </summary>
     public int Id { get; set; }
 
+    /// <summary>
+    /// What the case checks, in the words of whoever saved it.
+    /// </summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// A longer description, or null.
+    /// </summary>
     public string? Description { get; set; }
 
     /// <summary>
-    /// What the case tests: <c>AttributeFlow</c>, <c>GeneratedValue</c>, <c>Scope</c> or <c>ObjectMatchingRule</c>.
+    /// What the case tests: an Attribute Flow's Expression, a Generated Value's base, a Synchronisation Rule's Scope or
+    /// an Object Matching Rule's match values.
     /// </summary>
     public ConfigurationTestCaseKind Kind { get; set; }
 
@@ -99,14 +109,29 @@ public class ConfigurationTestCaseDto
     /// </summary>
     public Dictionary<string, List<string>>? Attributes { get; set; }
 
+    /// <summary>
+    /// What the case expects.
+    /// </summary>
     public ConfigurationTestExpectationDto Expectation { get; set; } = new();
 
+    /// <summary>
+    /// When the case was saved, in UTC.
+    /// </summary>
     public DateTime Created { get; set; }
 
+    /// <summary>
+    /// Who saved the case.
+    /// </summary>
     public string? CreatedByName { get; set; }
 
+    /// <summary>
+    /// When the case was last changed, in UTC, or null when it never has been.
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
 
+    /// <summary>
+    /// Who last changed the case.
+    /// </summary>
     public string? LastUpdatedByName { get; set; }
 
     public static ConfigurationTestCaseDto FromModel(ConfigurationTestCase testCase, bool includeInputs)
@@ -311,16 +336,24 @@ public class RunConfigurationTestsRequest
 /// </summary>
 public class ConfigurationTestRunResultDto
 {
+    /// <summary>
+    /// The ID of the test case that ran.
+    /// </summary>
     public int TestCaseId { get; set; }
 
+    /// <summary>
+    /// The name of the test case that ran.
+    /// </summary>
     public string TestCaseName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// What the case tests.
+    /// </summary>
     public ConfigurationTestCaseKind Kind { get; set; }
 
     /// <summary>
-    /// <c>Passed</c>; <c>Failed</c> (<c>expected</c> and <c>actual</c> say how); <c>NeedsReview</c>, when the case
-    /// no longer fits the configuration and was not run (<c>problems</c> says how); or <c>Error</c>, when it could not
-    /// be run.
+    /// How the run came out. Failed: <c>expected</c> and <c>actual</c> say how. NeedsReview: the case no longer fits
+    /// the configuration and was not run, and <c>problems</c> says how. Error: the case could not be run.
     /// </summary>
     public ConfigurationTestStatus Status { get; set; }
 
@@ -329,8 +362,14 @@ public class ConfigurationTestRunResultDto
     /// </summary>
     public string Summary { get; set; } = string.Empty;
 
+    /// <summary>
+    /// For NeedsReview, each way the case no longer fits the configuration; empty otherwise.
+    /// </summary>
     public List<string> Problems { get; set; } = [];
 
+    /// <summary>
+    /// What the case expects.
+    /// </summary>
     public ConfigurationTestExpectationDto Expected { get; set; } = new();
 
     /// <summary>
@@ -374,6 +413,9 @@ public class ConfigurationTestRunResultDto
 /// </summary>
 public class ConfigurationTestActualDto
 {
+    /// <summary>
+    /// What the configuration gave.
+    /// </summary>
     public ConfigurationTestOutcome Outcome { get; set; }
 
     /// <summary>
@@ -381,5 +423,8 @@ public class ConfigurationTestActualDto
     /// </summary>
     public List<string> Values { get; set; } = [];
 
+    /// <summary>
+    /// For an error, or a Scope synchronisation could not determine, why.
+    /// </summary>
     public string? ErrorMessage { get; set; }
 }
