@@ -169,3 +169,84 @@ Describe 'Test-JIMExpression' {
         $command.Parameters['MetaverseObjectId'].ParameterSets.Keys | Should -Be @('AttributeFlow')
     }
 }
+
+Describe 'Get-JIMExpressionFunction' {
+    BeforeAll {
+        $script:catalogue = @(
+            [PSCustomObject]@{ name = 'StartsWith'; category = 'Text'; signature = 'StartsWith(value, prefix[, ignoreCase])' }
+            [PSCustomObject]@{ name = 'EndsWith'; category = 'Text'; signature = 'EndsWith(value, suffix[, ignoreCase])' }
+            [PSCustomObject]@{ name = 'Now'; category = 'Date'; signature = 'Now()' }
+        )
+    }
+
+    It 'Gets every function from the expression-functions endpoint, one object each' {
+        InModuleScope JIM -Parameters @{ Catalogue = $script:catalogue } {
+            param($Catalogue)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            Mock Invoke-JIMApi { $script:capturedEndpoint = $Endpoint; $Catalogue }
+
+            $functions = @(Get-JIMExpressionFunction)
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/expression-functions'
+            $functions.Count | Should -Be 3
+            $functions[0].name | Should -Be 'StartsWith'
+        }
+    }
+
+    It 'Matches -Name exactly, ignoring case, when it has no wildcard' {
+        InModuleScope JIM -Parameters @{ Catalogue = $script:catalogue } {
+            param($Catalogue)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { $Catalogue }
+
+            $functions = @(Get-JIMExpressionFunction -Name 'startswith')
+
+            $functions.Count | Should -Be 1
+            $functions[0].name | Should -Be 'StartsWith'
+        }
+    }
+
+    It 'Matches -Name as a wildcard pattern' {
+        InModuleScope JIM -Parameters @{ Catalogue = $script:catalogue } {
+            param($Catalogue)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { $Catalogue }
+
+            $functions = @(Get-JIMExpressionFunction -Name '*With')
+
+            $functions.name | Should -Be @('StartsWith', 'EndsWith')
+        }
+    }
+
+    It 'Asks the API for only the -Category given' {
+        InModuleScope JIM -Parameters @{ Catalogue = $script:catalogue } {
+            param($Catalogue)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            Mock Invoke-JIMApi { $script:capturedEndpoint = $Endpoint; $Catalogue | Where-Object category -eq 'Date' }
+
+            $functions = @(Get-JIMExpressionFunction -Category Date)
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/expression-functions?category=Date'
+            $functions.name | Should -Be @('Now')
+        }
+    }
+
+    It 'Rejects a -Category that is not one of the categories' {
+        { Get-JIMExpressionFunction -Category 'NotACategory' } | Should -Throw -ErrorId 'ParameterArgumentValidationError,Get-JIMExpressionFunction'
+    }
+
+    It 'Writes an error and returns nothing when not connected' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Invoke-JIMApi { throw 'should not be called' }
+
+            $functions = Get-JIMExpressionFunction -ErrorAction SilentlyContinue -ErrorVariable err
+
+            $functions | Should -BeNullOrEmpty
+            $err | Should -Not -BeNullOrEmpty
+            Should -Invoke Invoke-JIMApi -Times 0
+        }
+    }
+}
