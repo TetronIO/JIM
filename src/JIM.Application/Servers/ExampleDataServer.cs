@@ -414,6 +414,8 @@ public class ExampleDataServer
             throw new ArgumentException("No template found with that id");
 
         template.Validate();
+        foreach (var danglingRead in DescribeDanglingReads(template))
+            Log.Warning("ExecuteTemplateAsync: template {TemplateName}: {DanglingRead}", LogSanitiser.Sanitise(template.Name), LogSanitiser.Sanitise(danglingRead));
 
         // Calculate total objects to create for progress tracking
         var totalObjectsToCreate = template.ObjectTypes.Sum(ot => ot.ObjectsToCreate);
@@ -1092,6 +1094,25 @@ public class ExampleDataServer
             yield return ($"The expression for {name} reads mv[\"{missing}\"], which this template does not generate on " +
                           $"'{objectType.MetaverseObjectType?.Name}', so it never has a value.", false);
         }
+    }
+
+    /// <summary>
+    /// Each template attribute whose expression reads an attribute the template never generates on the object, so that
+    /// input never has a value (#2055 Phase 3). Saving only warns about these, because a template is built an attribute
+    /// at a time; generation logs them once per run, so a finished template with a dangling read is not silent.
+    /// </summary>
+    public static IReadOnlyList<string> DescribeDanglingReads(ExampleDataTemplate template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+
+        return template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes
+                .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Expression))
+                .Select(attribute => (objectType, attribute, missing: InputsNotGenerated(objectType, attribute, attribute.Expression!))))
+            .Where(read => read.missing.Count > 0)
+            .Select(read => $"'{AttributeName(read.attribute)}' on '{read.objectType.MetaverseObjectType?.Name}' reads " +
+                            $"{string.Join(", ", read.missing.Select(name => $"mv[\"{name}\"]"))}, which the template does not generate, so it never has a value.")
+            .ToList();
     }
 
     private static (string? ObjectType, string? Attribute) ExpressionKey(ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute) =>

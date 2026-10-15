@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -238,6 +239,21 @@ public class ExampleDataTemplateCrudTests
 
         Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
             Throws.TypeOf<ExampleDataTemplateAttributeException>());
+    }
+
+    [Test]
+    public void DescribeDanglingReads_AnExpressionReadingAnAttributeTheTemplateNeverGenerates_NamesItOnce()
+    {
+        // Generation logs these once per run, so a finished template with a dangling read is not silent.
+        var messages = ExampleDataServer.DescribeDanglingReads(BuildTemplateWithExpression(1, "Lower(mv[\"Nickname\"]) + mv[\"Nickname\"]"));
+
+        Assert.That(messages, Has.One.Contains("mv[\"Nickname\"]").And.Contain("Account Name"));
+    }
+
+    [Test]
+    public void DescribeDanglingReads_EveryReadGenerated_IsEmpty()
+    {
+        Assert.That(ExampleDataServer.DescribeDanglingReads(BuildTemplateWithExpression(1, "Lower(mv[\"First Name\"])")), Is.Empty);
     }
 
     private static ExampleDataTemplate BuildTemplateWithExpression(int id, string expression)

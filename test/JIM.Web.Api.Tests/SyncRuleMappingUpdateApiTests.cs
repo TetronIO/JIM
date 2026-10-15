@@ -187,6 +187,8 @@ public class SyncRuleMappingUpdateApiTests
             new UpdateSyncRuleMappingRequest { Expression = "this is (not" });
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.StartWith("Invalid expression:"),
+            "the same message as the create path (#2055 Phase 3)");
         Assert.That(_expressionMapping.Sources[0].Expression, Is.EqualTo("cs[\"mail\"]"),
             "A rejected Expression must not have been written before the rejection.");
         _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
