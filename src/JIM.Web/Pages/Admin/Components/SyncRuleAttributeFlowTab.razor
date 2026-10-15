@@ -585,7 +585,7 @@
                         Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
                             ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
                             : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
-                        Required="true" SyntaxCheck="@(expression => ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, expression))"
+                        Required="true" SyntaxCheck="AttributeFlowExpressionCheck"
                         MetaverseAttributeNames="SuggestedMetaverseAttributeNames" ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                         Class="mt-5" />
 
@@ -729,7 +729,7 @@
                             Direction="SyncRule.Direction" SyncRuleId="SyncRule.Id" ConnectedSystemId="SyncRule.ConnectedSystemId"
                             MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                             TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
-                            StagedSyncRule="SyncRule"
+                            StagedSyncRule="SyncRule" BaseExpressionCheck="AttributeFlowExpressionCheck"
                             MetaverseAttributeNames="SuggestedMetaverseAttributeNames"
                             ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
                             OnChanged="ScheduleFlowAnalysisAsync">
@@ -1884,6 +1884,14 @@
                mapping.TargetConnectedSystemAttribute is { AttributePlurality: AttributePlurality.SingleValued };
     }
 
+    /// <summary>
+    /// Why the expression as typed cannot be saved on this Attribute Flow, or null (#2055 Phase 3); the same check the
+    /// save runs for a new or changed mapping.
+    /// </summary>
+    private string? AttributeFlowExpressionCheck(string? expression) => _attributeFlowMapping == null
+        ? ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, expression)
+        : ExpressionSyntaxCheck.ErrorForAttributeFlow(ExpressionEvaluator, expression, _attributeFlowMapping, SyncRule);
+
     private bool DisableAddAttributeFlowMappingButton()
     {
         if (_attributeFlowMapping == null || _attributeFlowMappingSource == null || _attributeFlowMappingSourceType == null)
@@ -1899,10 +1907,11 @@
             string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
             return true;
 
-        // An expression that does not parse (a syntax error, an unknown function) is refused here, as the REST API
-        // refuses it (#2053); the editor shows why beneath the field, from the same check.
-        if (_attributeFlowMappingSourceType == "Expression" &&
-            ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, _attributeFlowMappingSource.Expression) != null)
+        // An expression the save would refuse (it does not parse, reads the wrong side or an attribute the type does not
+        // have, or returns a type the target can never hold) is refused here, as the save refuses it (#2053, #2055 Phase
+        // 3); the editor shows why beneath the field, from the same check. A Generated Value's base is held to the same.
+        if (_attributeFlowMappingSourceType is "Expression" or "Generated" &&
+            AttributeFlowExpressionCheck(_attributeFlowMappingSource.Expression) != null)
             return true;
 
         // Validate target is configured
