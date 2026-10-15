@@ -222,6 +222,8 @@ internal static class ScopingEvaluator
                 throw InvalidCriterion(invalidReason, criterion.ComparisonType, type, expression);
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary: null, value: null, valueCount: 0);
+            node.Expression = expression;
+            node.FailureReason = $"The criterion is invalid: {invalidReason}.";
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -232,18 +234,25 @@ internal static class ScopingEvaluator
         // An input naming no attribute of the scoped type (renamed or removed since the rule was saved) would read as
         // no value and could take the object out of scope on a name that no longer means anything; stop it instead.
         List<ScopingValue> computed = [];
+        var context = source.ExpressionContext(nowUtc);
         var failure = DescribeUnknownInput(expression, source);
         if (failure == null)
         {
             try
             {
-                var result = expressions.Evaluate(expression, source.ExpressionContext(nowUtc));
+                var result = expressions.Evaluate(expression, context);
                 failure = TryReadComputedValues(result, type, out computed);
             }
             catch (ExpressionEvaluationException ex)
             {
                 failure = $"Its expression could not be evaluated: {ex.Message}";
             }
+
+            // Both messages can quote a value the expression read or computed; one derived from an attribute that may
+            // hold a credential must not reach an error message, a log or an explanation.
+            if (failure != null && ReadsCredential(expression, source))
+                failure = $"Its expression could not be evaluated, or computed a value that cannot be compared as {DescribeType(type)}; " +
+                          "the value is withheld because the expression reads an attribute that may hold a credential.";
         }
 
         CriterionVerdict verdict = default;
@@ -271,6 +280,8 @@ internal static class ScopingEvaluator
             }
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, value: null, valueCount: 0);
+            RecordExpression(node, expression, context, source);
+            node.FailureReason = failure;
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -278,6 +289,7 @@ internal static class ScopingEvaluator
         {
             ScopingValue? shown = verdict.Decided || computed.Count == 1 ? verdict.LastHeld : null;
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, shown, computed.Count);
+            RecordExpression(node, expression, context, source);
         }
 
         return verdict.Met
@@ -306,6 +318,50 @@ internal static class ScopingEvaluator
         catch (ExpressionEvaluationException)
         {
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Whether any attribute the expression reads on the scoped side may hold a credential, judged by its schema type
+    /// where known (a date such as <c>pwdLastSet</c> stays visible) and as text otherwise.
+    /// </summary>
+    private static bool ReadsCredential<TSource>(string expression, TSource source)
+        where TSource : struct, IScopingValueSource =>
+        ExpressionInputResolver.ResolveCached(expression)
+            .Where(input => input.Source == source.ExpressionSide)
+            .Any(input => ScopingTraceBuilder.IsMasked(input.AttributeName, source.SchemaType(input.AttributeName) ?? AttributeDataType.Text));
+
+    /// <summary>
+    /// Records on an explanation what an expression criterion read: the expression, and each attribute it reads on the
+    /// scoped side with the values the object held for it. When any of them may hold a credential the computed value is
+    /// withheld as well, since it is derived from them.
+    /// </summary>
+    private static void RecordExpression<TSource>(ScopingCriterionExplanation node, string expression, ExpressionContext context,
+        TSource source)
+        where TSource : struct, IScopingValueSource
+    {
+        node.Expression = expression;
+        var accessor = source.ExpressionSide == ExpressionInputSource.Metaverse ? context.Mv : context.Cs;
+        foreach (var input in ExpressionInputResolver.ResolveCached(expression)
+                     .Where(input => input.Source == source.ExpressionSide)
+                     .DistinctBy(input => input.AttributeName, StringComparer.OrdinalIgnoreCase))
+        {
+            var values = ExpressionResultValues.Elements(accessor[input.AttributeName]).Where(value => value != null).ToList();
+            var masked = ScopingTraceBuilder.IsMasked(input.AttributeName, source.SchemaType(input.AttributeName) ?? AttributeDataType.Text);
+            node.ExpressionInputs.Add(new ScopingExpressionInputExplanation
+            {
+                Accessor = input.Accessor,
+                ValueCount = values.Count,
+                Masked = masked,
+                Values = masked ? [] : values.Take(ScopingExpressionInputExplanation.MaxValuesShown).Select(value => ExpressionText.Describe(value!)).ToList()
+            });
+        }
+
+        if (node.ExpressionInputs.Any(input => input.Masked))
+        {
+            node.Masked = true;
+            node.ActualDisplay = null;
+            node.ExpectedDisplay = null;
         }
     }
 

@@ -45,4 +45,10 @@ internal interface IScopingValueSource
     /// renamed or removed attribute would then decide scope on a name that no longer means anything.
     /// </summary>
     bool? IsInSchema(string attributeName);
+
+    /// <summary>
+    /// The type of the scoped object type's attribute of this name (ignoring case); null when it has none, or no schema
+    /// is available. Explanations use it to decide whether an expression input's values may be shown.
+    /// </summary>
+    AttributeDataType? SchemaType(string attributeName);
 }

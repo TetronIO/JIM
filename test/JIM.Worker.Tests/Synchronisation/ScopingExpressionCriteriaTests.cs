@@ -28,6 +28,7 @@ public class ScopingExpressionCriteriaTests
     {
         Id = 12, Name = "groups", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued
     };
+    private static readonly ConnectedSystemObjectTypeAttribute UserPassword = new() { Id = 13, Name = "userPassword", Type = AttributeDataType.Text };
     private static readonly MetaverseAttribute MvDepartment = new() { Id = 20, Name = "Department", Type = AttributeDataType.Text };
 
     [SetUp]
@@ -136,7 +137,7 @@ public class ScopingExpressionCriteriaTests
     {
         // On the synchronisation path the rule's object type is loaded with its attributes; the object's may not be.
         var rule = ImportRule(Criterion("Lower(cs[\"department\"])", AttributeDataType.Text, SearchComparisonType.Equals, stringValue: "finance"));
-        rule.ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "person", Attributes = [Department, StartDate, Groups] };
+        rule.ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "person", Attributes = [Department, StartDate, Groups, UserPassword] };
         var cso = Cso((Department, "Finance"));
         cso.Type = null!;
 
@@ -205,6 +206,121 @@ public class ScopingExpressionCriteriaTests
     }
 
     [Test]
+    public void Explain_ExpressionCriterion_RecordsTheExpressionItsInputsAndTheComputedValue()
+    {
+        var rule = ImportRule(Criterion("Lower(Trim(cs[\"department\"]))", AttributeDataType.Text, SearchComparisonType.StartsWith, stringValue: "fin"));
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso((Department, " FINANCE ")), rule).Groups.Single().Criteria.Single();
+
+        var input = criterion.ExpressionInputs.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.Met));
+            Assert.That(criterion.Expression, Is.EqualTo("Lower(Trim(cs[\"department\"]))"));
+            Assert.That(criterion.ActualDisplay, Is.EqualTo("finance"));
+            Assert.That(criterion.ActualDescription, Does.StartWith("computed"), "the value is the expression's, not an attribute's");
+            Assert.That(input.Accessor, Is.EqualTo("cs[\"department\"]"));
+            Assert.That(input.Values, Is.EqualTo(new[] { " FINANCE " }));
+            Assert.That(input.ValueCount, Is.EqualTo(1));
+            Assert.That(input.Masked, Is.False);
+        }
+    }
+
+    [Test]
+    public void Explain_ExpressionInputTheObjectHoldsNoValueFor_RecordsNoValues()
+    {
+        var rule = ImportRule(Criterion("Trim(cs[\"department\"])", AttributeDataType.Text, SearchComparisonType.HasNoValue));
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso(), rule).Groups.Single().Criteria.Single();
+
+        var input = criterion.ExpressionInputs.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(input.Values, Is.Empty);
+            Assert.That(input.ValueCount, Is.Zero);
+            Assert.That(criterion.ActualDescription, Does.Contain("no value"));
+        }
+    }
+
+    [Test]
+    public void Explain_ExpressionInputThatMayHoldACredential_WithholdsItsValues()
+    {
+        var rule = ImportRule(Criterion("cs[\"userPassword\"]", AttributeDataType.Text, SearchComparisonType.HasValue));
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso((UserPassword, "s3cret")), rule).Groups.Single().Criteria.Single();
+
+        var input = criterion.ExpressionInputs.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(input.Masked, Is.True);
+            Assert.That(input.Values, Is.Empty);
+            Assert.That(input.ValueCount, Is.EqualTo(1));
+            Assert.That(criterion.ActualDisplay, Is.Null, "a value computed from a credential is withheld too");
+            Assert.That(criterion.ActualDescription, Does.Not.Contain("s3cret"));
+        }
+    }
+
+    [Test]
+    public void Explain_ExpressionCriterionThatFails_SaysWhy()
+    {
+        var rule = ImportRule(Criterion("cs[\"department\"]", AttributeDataType.Number, SearchComparisonType.GreaterThan, intValue: 5));
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso((Department, "Finance")), rule).Groups.Single().Criteria.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.FailureReason, Does.Contain("Finance").And.Contain("Number"));
+            Assert.That(criterion.ActualDescription, Does.Contain(criterion.FailureReason!));
+        }
+    }
+
+    [Test]
+    public void Explain_ExpressionFailingOnACredentialInput_DoesNotQuoteTheValue()
+    {
+        var rule = ImportRule(Criterion("cs[\"userPassword\"]", AttributeDataType.Number, SearchComparisonType.GreaterThan, intValue: 5));
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso((UserPassword, "s3cret")), rule).Groups.Single().Criteria.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.Invalid));
+            Assert.That(criterion.FailureReason, Is.Not.Null);
+            Assert.That(criterion.FailureReason, Does.Not.Contain("s3cret"));
+            Assert.That(criterion.ActualDescription, Does.Not.Contain("s3cret"));
+        }
+    }
+
+    [Test]
+    public void ImportRule_ExpressionFailingOnACredentialInput_ErrorDoesNotQuoteTheValue()
+    {
+        var rule = ImportRule(Criterion("cs[\"userPassword\"]", AttributeDataType.Number, SearchComparisonType.GreaterThan, intValue: 5));
+
+        var ex = Assert.Throws<ScopingCriterionFailedException>(() => _scoping.IsCsoInScopeForImportRule(Cso((UserPassword, "s3cret")), rule));
+
+        Assert.That(ex!.Message, Does.Not.Contain("s3cret"));
+    }
+
+    [Test]
+    public void Explain_AttributeCriterion_HasNoExpressionDetail()
+    {
+        var rule = ImportRule(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = Department, ConnectedSystemAttributeId = Department.Id,
+            ComparisonType = SearchComparisonType.Equals, StringValue = "Finance"
+        });
+
+        var criterion = _scoping.ExplainCsoForImportRule(Cso((Department, "Finance")), rule).Groups.Single().Criteria.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.Expression, Is.Null);
+            Assert.That(criterion.ExpressionInputs, Is.Empty);
+            Assert.That(criterion.FailureReason, Is.Null);
+            Assert.That(criterion.ActualDescription, Does.StartWith("is"));
+        }
+    }
+
+    [Test]
     public void CanFailToEvaluate_RuleWithAnExpressionCriterion_IsTrue()
     {
         var rule = ImportRule(Criterion("cs[\"department\"]", AttributeDataType.Text, SearchComparisonType.Equals, stringValue: "x"));
@@ -229,7 +345,7 @@ public class ScopingExpressionCriteriaTests
 
     private static ConnectedSystemObject Cso(params (ConnectedSystemObjectTypeAttribute Attribute, string Value)[] values)
     {
-        var type = new ConnectedSystemObjectType { Id = 1, Name = "person", Attributes = [Department, StartDate, Groups] };
+        var type = new ConnectedSystemObjectType { Id = 1, Name = "person", Attributes = [Department, StartDate, Groups, UserPassword] };
         var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = type, TypeId = type.Id };
         foreach (var (attribute, value) in values)
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
