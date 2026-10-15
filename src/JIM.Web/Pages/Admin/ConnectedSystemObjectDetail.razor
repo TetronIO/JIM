@@ -104,12 +104,20 @@
                 </MudStack>
             }
 
-            <MudSpacer />
+        </MudStack>
+
+        @* Second row: what can be done with the object. None of them is the page's main action, so all are outlined in the neutral colour: primary marks a main action alone. *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap mt-3" Spacing="2">
             <MudButton Variant="Variant.Outlined" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
             </MudButton>
+
+            @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
+            <MudButton Variant="Variant.Outlined" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
+                       data-testid="jim-cso-explore-causality">Explore causality</MudButton>
 
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@

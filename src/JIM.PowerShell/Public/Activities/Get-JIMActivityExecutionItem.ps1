@@ -4,7 +4,8 @@
 function Get-JIMActivityExecutionItem {
     <#
     .SYNOPSIS
-        Gets one Run Profile Execution Item, including its error message, or what caused it or what it caused.
+        Gets one Run Profile Execution Item, including its error message, or what caused it or what it caused; or
+        every execution item about one object, each with its nearest cause.
 
     .DESCRIPTION
         Retrieves one execution item of a Run Profile Activity: what happened to one object and, when it failed,
@@ -19,7 +20,12 @@ function Get-JIMActivityExecutionItem {
         nearest and one more per step. A consequences row says in Ending where its branch stopped, and carries the
         CohortKey that Get-JIMCausalCohortMember pages its members with.
 
-        Item ids come from Get-JIMActivity -ExecutionItems, whose rows can be piped straight in.
+        With -ConnectedSystemId and -ConnectedSystemObjectId, or with -MetaverseObjectId, returns the object's causal
+        timeline instead: every execution item about it, newest first, each with its nearest recorded cause, as the
+        Causality Explorer lists them. A deleted object's timeline is still read, through the records its deletion
+        left.
+
+        Item ids come from Get-JIMActivity -ExecutionItems or from a timeline, whose rows can be piped straight in.
 
     .PARAMETER Id
         The execution item to get. The rows of Get-JIMActivity -ExecutionItems can be piped straight in.
@@ -30,10 +36,34 @@ function Get-JIMActivityExecutionItem {
     .PARAMETER Consequences
         Return what the item went on to cause instead, one row per cohort of consequences.
 
+    .PARAMETER ConnectedSystemId
+        The Connected System holding the Connected System Object whose timeline to return.
+
+    .PARAMETER ConnectedSystemObjectId
+        The Connected System Object whose timeline to return. Get-JIMConnectedSystemObject returns it as Id.
+
+    .PARAMETER MetaverseObjectId
+        The Metaverse Object whose timeline to return. Get-JIMMetaverseObject returns it as Id.
+
+    .PARAMETER Page
+        The page of the timeline to return, newest items first.
+
+    .PARAMETER PageSize
+        How many items each page of the timeline holds.
+
+    .PARAMETER All
+        Return the whole timeline, fetching every page. Stops after 1000 pages with a warning unless -Force is given.
+
+    .PARAMETER Force
+        Fetch past the 1000-page limit of -All.
+
     .OUTPUTS
         Without a switch, the item. With -Causes, what caused it, and with -Consequences what it went on to cause,
         in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row
-        with a Count), with Level 1 for the nearest and one more per step.
+        with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's
+        timeline, one row per execution item, newest first; where the deployment records no Metaverse Object
+        changes, a Metaverse Object's timeline holds only what its joined Connected System Objects recorded, and a
+        warning says so.
 
         JIM.CauseCohort
         ExecutionItemId (guid): The execution item the walk started from.
@@ -126,6 +156,19 @@ function Get-JIMActivityExecutionItem {
         Shows what caused an execution item, one row per cohort of causes.
 
     .EXAMPLE
+        Get-JIMActivityExecutionItem -ConnectedSystemId 3 -ConnectedSystemObjectId "c3d4e5f6-a7b8-9012-cdef-123456789012" |
+            Format-Table Executed, TargetName, ObjectChangeType, Because
+
+        Lists what happened to a Connected System Object, newest first, and why.
+
+    .EXAMPLE
+        Get-JIMActivityExecutionItem -MetaverseObjectId "d4e5f6a7-b8c9-0123-def0-234567890123" -All |
+            Where-Object ObjectChangeType -eq 'Deprovisioned' |
+            Get-JIMActivityExecutionItem -Causes
+
+        Finds each time a Metaverse Object was deprovisioned somewhere, and walks back through what caused it.
+
+    .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequences |
             Where-Object Ending -like 'Waiting*' |
             Format-Table Level, HopKind, Count, ObjectType, ConnectedSystem, Ending, DueAt
@@ -141,6 +184,10 @@ function Get-JIMActivityExecutionItem {
     [OutputType('JIM.ActivityRunProfileExecutionItemDetailDto', ParameterSetName = 'Item')]
     [OutputType('JIM.CauseCohort', ParameterSetName = 'Causes')]
     [OutputType('JIM.ConsequenceCohort', ParameterSetName = 'Consequences')]
+    [OutputType('JIM.CausalTimelineRowDto', ParameterSetName = 'ConnectedSystemObjectTimeline')]
+    [OutputType('JIM.CausalTimelineRowDto', ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+    [OutputType('JIM.CausalTimelineRowDto', ParameterSetName = 'MetaverseObjectTimeline')]
+    [OutputType('JIM.CausalTimelineRowDto', ParameterSetName = 'MetaverseObjectTimelineAll')]
     param(
         # No ActivityId alias: an item's id is not its Activity's, and an object carrying both must bind the item's.
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'Item')]
@@ -152,12 +199,82 @@ function Get-JIMActivityExecutionItem {
         [switch]$Causes,
 
         [Parameter(Mandatory, ParameterSetName = 'Consequences')]
-        [switch]$Consequences
+        [switch]$Consequences,
+
+        # The timeline sets bind nothing from the pipeline. A piped Connected System Object or Metaverse Object
+        # carries its own id as Id, which the item sets above already bind by default, so piping one in could only
+        # select a timeline through a switch that existed for nothing else; the object's ids are passed explicitly.
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemObjectTimeline')]
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+        [int]$ConnectedSystemId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemObjectTimeline')]
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+        [guid]$ConnectedSystemObjectId,
+
+        [Parameter(Mandatory, ParameterSetName = 'MetaverseObjectTimeline')]
+        [Parameter(Mandatory, ParameterSetName = 'MetaverseObjectTimelineAll')]
+        [guid]$MetaverseObjectId,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemObjectTimeline')]
+        [Parameter(ParameterSetName = 'MetaverseObjectTimeline')]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Page = 1,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemObjectTimeline')]
+        [Parameter(ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+        [Parameter(ParameterSetName = 'MetaverseObjectTimeline')]
+        [Parameter(ParameterSetName = 'MetaverseObjectTimelineAll')]
+        [ValidateRange(1, 100)]
+        [int]$PageSize = 50,
+
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+        [Parameter(Mandatory, ParameterSetName = 'MetaverseObjectTimelineAll')]
+        [switch]$All,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemObjectTimelineAll')]
+        [Parameter(ParameterSetName = 'MetaverseObjectTimelineAll')]
+        [switch]$Force
     )
 
     process {
         if (-not $script:JIMConnection) {
             Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
+        if ($PSCmdlet.ParameterSetName -like '*Timeline*') {
+            $timelineEndpoint = if ($PSCmdlet.ParameterSetName -like 'ConnectedSystemObject*') {
+                "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$ConnectedSystemObjectId/causal-timeline"
+            }
+            else {
+                "/api/v1/metaverse/objects/$MetaverseObjectId/causal-timeline"
+            }
+            Write-Verbose "Getting causal timeline: $timelineEndpoint"
+
+            # Said once however many pages are read: a hashtable, so the page request below can mark it from its own
+            # scope.
+            $notice = @{ Given = $false }
+            $pageRequest = {
+                param($p)
+                $response = Invoke-JIMApi -Endpoint "$($timelineEndpoint)?page=$p&pageSize=$PageSize"
+                if ($response.metaverseObjectChangesNotRecorded -and -not $notice.Given) {
+                    Write-Warning "This deployment does not record Metaverse Object changes, so the timeline holds only what the object's joined Connected System Objects recorded."
+                    $notice.Given = $true
+                }
+                $response
+            }
+
+            if ($All) {
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMActivityExecutionItem' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'execution items'
+            }
+            else {
+                $response = & $pageRequest $Page
+                foreach ($row in $response.items) {
+                    $row
+                }
+            }
             return
         }
 

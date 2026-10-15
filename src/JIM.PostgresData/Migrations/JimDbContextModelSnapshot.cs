@@ -466,6 +466,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ExternalIdSnapshot");
 
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItems_MetaverseObjectId")
+                        .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
+
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
 
@@ -979,6 +983,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
+
+                    b.HasIndex("DeletedMetaverseObjectId")
+                        .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
+                        .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
 
                     b.HasIndex("DeletedObjectTypeId");
 
@@ -3401,6 +3409,10 @@ namespace JIM.PostgresData.Migrations
                         .IsUnique();
 
                     b.HasIndex("ConnectedSystemObjectId");
+
+                    b.HasIndex("DeletedConnectedSystemObjectId")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
+                        .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
 
                     b.HasIndex("DeletedObjectExternalIdAttributeValueId");
 
