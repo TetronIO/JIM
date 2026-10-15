@@ -31,9 +31,9 @@ Every feature that compares text, the question it asks, and the rule that answer
 
 | Area | Feature | Question | Rule | Can you change it? |
 |------|---------|----------|------|--------------------|
-| Importing | Finding the existing Connected System Object for an incoming object, by External ID | Same thing? | Ignore case | ❌ No |
-| Importing | Detecting two incoming objects with the same External ID | Same thing? | Ignore case | ❌ No |
-| Importing | Resolving references, such as group members and managers, to the objects they point to | Same thing? | Ignore case | ❌ No |
+| Importing | Finding the existing Connected System Object for an incoming object, by External ID or Secondary External ID | Same thing? | Ignore case, unless the attribute is case-exact | ✅ Per attribute |
+| Importing | Detecting two incoming objects with the same External ID | Same thing? | Ignore case, unless the External ID is case-exact | ✅ Per attribute |
+| Importing | Resolving references, such as group members and managers, to the objects they point to | Same thing? | Ignore case, unless the referenced object's External ID or Secondary External ID is case-exact | ✅ Per attribute |
 | Importing | Whether an attribute value changed | Changed? | Exact | ❌ No |
 | Synchronising | [Object Matching Rules](#object-matching-rules): joining on import, and finding an existing account before provisioning on export | Same thing? | Ignore case, unless a source attribute is case-exact | ✅ Per rule |
 | Synchronising | [Scoping criteria](../configuration/scoping-criteria.md) | Condition? | Exact | ✅ Per criterion |
@@ -81,7 +81,13 @@ Only Text attributes carry the declaration. The Schema tab shows a **Case-exact*
 
 To change it, open the attribute's **Edit** dialog on the Schema tab and set **Values are case-exact**, or use `Set-JIMConnectedSystemAttribute -CaseExact` (see [Case-exact values](../configuration/connected-system-attributes.md#case-exact-values)). Your answer is kept when the schema is next refreshed; one you have not changed is restated from the Connected System's schema each time.
 
-The declaration sets the default case sensitivity of a new [Object Matching Rule](#object-matching-rules), and decides whether an External ID or Secondary External ID that the Connected System reports in a different case still counts as the value JIM exported (see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case)). Finding an existing Connected System Object by its External ID, and resolving references, ignore case for every attribute, whatever its declaration.
+The declaration decides how JIM recognises an object by its identifiers. On an External ID or Secondary External ID declared case-exact, `JBloggs` and `jbloggs` are two objects:
+
+- **Importing** finds the Connected System Object JIM already holds only by its value in its own case, treats two incoming objects whose External IDs differ only in case as two objects, and resolves a reference only to the object whose identifier it names in that case.
+- **Exporting** counts a value the Connected System reports in another case as a different value (see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case)).
+- **Object Matching Rules** created on the attribute respect case by default.
+
+Every other identifier ignores case in all of these.
 
 ## 🎯 Scoping and search criteria
 

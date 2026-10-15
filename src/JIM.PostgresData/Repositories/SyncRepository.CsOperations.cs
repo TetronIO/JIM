@@ -499,9 +499,11 @@ public partial class SyncRepository
         // run referencing users from a prior run). Within a single import run, upfront CSO ID
         // pre-generation in SyncImportTaskProcessor should resolve all FKs before persistence.
         //
-        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
-        // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
-        // return DNs with different capitalisation.
+        // Same thing? Ignoring case unless the target's secondary external id attribute is case-exact
+        // (#2051): LDAP Distinguished Names are case-insensitive per RFC 4514, and different connector
+        // runs or LDAP servers may return DNs with different capitalisation. The LOWER() equality stays
+        // the join condition so the functional indexes serve it; a case-exact target additionally needs
+        // the exact value.
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
         try
@@ -528,6 +530,7 @@ public partial class SyncRepository
                   AND av."ReferenceValueId" IS NULL
                   AND target_av."StringValue" IS NOT NULL
                   AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
+                  AND (NOT target_attr."CaseExact" OR av."UnresolvedReferenceValue" = target_av."StringValue")
                 """,
                 connectedSystemId);
         }
@@ -557,8 +560,8 @@ public partial class SyncRepository
         // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
         // column on change records; the DN is stored in StringValue alongside regular string values.
         // The resolution is safe because it only matches when StringValue equals a secondary external
-        // ID value (case-insensitive per RFC 4514, hence the LOWER() comparison), so non-reference
-        // string values are naturally excluded by the JOIN.
+        // ID value (ignoring case per RFC 4514, hence the LOWER() comparison, unless the target's attribute
+        // is case-exact, #2051), so non-reference string values are naturally excluded by the JOIN.
         //
         // Executed in two phases because a single UPDATE does not survive customer scale: the
         // Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync and export stages
@@ -607,6 +610,7 @@ public partial class SyncRepository
                   AND cav."ReferenceValueId" IS NULL
                   AND target_av."StringValue" IS NOT NULL
                   AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
+                  AND (NOT target_attr."CaseExact" OR cav."StringValue" = target_av."StringValue")
             ) s;
             """, npgsqlConn))
         {
@@ -1659,8 +1663,8 @@ public partial class SyncRepository
 
     /// <summary>
     /// The reference recall existence query (#1003). Matches by resolved reference id or by
-    /// case-insensitive raw reference string (values pre-lowered by the caller; LOWER() here
-    /// mirrors the OrdinalIgnoreCase DN comparison export evaluation uses). Driven by the
+    /// raw reference string ignoring case, the database lowering both sides so it never depends on .NET folding alike
+    /// (#2051); a case-exact value's exact match is decided by the caller (ReferenceValueIndex). Driven by the
     /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
     /// group's member rows - milliseconds - rather than materialising them all through EF Core.
     /// Call per target Connected System so identical values cannot cross-match between systems.
@@ -1669,10 +1673,10 @@ public partial class SyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues)
+        IReadOnlyCollection<string> referenceValues)
     {
         if (connectedSystemObjectIds.Count == 0 || connectedSystemAttributeIds.Count == 0 ||
-            (deletedReferenceCsoIds.Count == 0 && loweredReferenceValues.Count == 0))
+            (deletedReferenceCsoIds.Count == 0 && referenceValues.Count == 0))
             return new List<CsoReferenceValueMatch>();
 
         var matches = new List<CsoReferenceValueMatch>();
@@ -1686,7 +1690,7 @@ public partial class SyncRepository
               WHERE ""ConnectedSystemObjectId"" = ANY(@csoIds)
                 AND ""AttributeId"" = ANY(@attributeIds)
                 AND (""ReferenceValueId"" = ANY(@deletedCsoIds)
-                     OR LOWER(""UnresolvedReferenceValue"") = ANY(@loweredValues))";
+                     OR LOWER(""UnresolvedReferenceValue"") IN (SELECT lower(v) FROM unnest(@referenceValues) AS v))";
         var csoIdsParameter = command.CreateParameter();
         csoIdsParameter.ParameterName = "csoIds";
         csoIdsParameter.Value = connectedSystemObjectIds.ToArray();
@@ -1699,10 +1703,10 @@ public partial class SyncRepository
         deletedCsoIdsParameter.ParameterName = "deletedCsoIds";
         deletedCsoIdsParameter.Value = deletedReferenceCsoIds.ToArray();
         command.Parameters.Add(deletedCsoIdsParameter);
-        var loweredValuesParameter = command.CreateParameter();
-        loweredValuesParameter.ParameterName = "loweredValues";
-        loweredValuesParameter.Value = loweredReferenceValues.ToArray();
-        command.Parameters.Add(loweredValuesParameter);
+        var referenceValuesParameter = command.CreateParameter();
+        referenceValuesParameter.ParameterName = "referenceValues";
+        referenceValuesParameter.Value = referenceValues.ToArray();
+        command.Parameters.Add(referenceValuesParameter);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
