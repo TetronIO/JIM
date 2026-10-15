@@ -113,7 +113,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Step Provision  # Scenario 002: Provision, ForwardSync, ReverseSync, Conflict
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-007-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 007: DeleteHistory, KeepHistory, EdgeCases
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 008: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-010-SyncRuleScoping" -Step InboundEnterScope  # Scenario 010: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-010-SyncRuleScoping" -Step InboundEnterScope  # Scenario 010: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators/ExpressionCriterion
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 011: filter to cells using a single operator
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-014-AttributePriority" -Step BaselineResolution  # Scenario 014: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-022-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 022 (cumulative): Discovery, Provision, Override (OpenLDAP only)
@@ -1055,6 +1055,7 @@ Both Connected Systems are built from scratch by `Setup-Scenario-010.ps1`; the s
 | 7 | **OutboundExitDelete** | MVO leaves scope with `Delete` -> Deprovisioned RPEI on next Export run, target row removed |
 | 8 | **CrossSystemCascade** | `EvaluateOutOfScopeExportsAsync` runs inline during sync -> Delete PendingExport queued immediately, before any Export run |
 | 9 | **CriteriaOperators** | Round-trip persistence of text `Equals`/`StartsWith`/`Contains` criteria in a single `All` group via the public API |
+| 10 | **ExpressionCriterion** | The import rule scopes on `Lower(Trim(cs["department"]))` starts with `fin`: `Finance` and ` FINANCE ` are joined, `Facilities` is not, and each object's scope explanation shows the computed value and the input it read |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario-010-SyncRuleScoping.ps1`
 
