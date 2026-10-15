@@ -343,6 +343,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
+        EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -397,6 +398,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+        EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -1005,6 +1007,8 @@ public partial class MetaverseServer
         if (attribute.BuiltIn)
             throw new InvalidOperationException($"Cannot change the type or plurality of built-in Metaverse Attribute '{attribute.Name}'.");
 
+        EnsureAttributeCapability(newType, newPlurality);
+
         var impact = await EvaluateAttributeSchemaChangeAsync(attribute);
 
         // Stored values hard-block a type/plurality change; make no change and report via the impact.
@@ -1017,6 +1021,16 @@ public partial class MetaverseServer
 
         impact.Applied = true;
         return impact;
+    }
+
+    /// <summary>
+    /// Refuses a data type and plurality pair the type cannot hold (a multi-valued Boolean), before anything is created,
+    /// changed or audited. The Metaverse schema obeys the same capability rule as the Connected System schema.
+    /// </summary>
+    private static void EnsureAttributeCapability(AttributeDataType type, AttributePlurality plurality)
+    {
+        if (!AttributeDataTypeCapabilities.IsPermitted(type, plurality))
+            throw new UnsupportedAttributePluralityException(type, plurality);
     }
 
     /// <summary>

@@ -35,7 +35,7 @@
                               Disabled="@ReadOnly" />
 
                 <div class="d-flex gap-4">
-                    <MudSelect @bind-Value="_type" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
+                    <MudSelect @bind-Value="_type" @bind-Value:after="OnTypeChanged" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
                                Required="true" RequiredError="A data type is required." Class="flex-grow-1"
                                Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
                         @foreach (var type in _selectableTypes)
@@ -44,9 +44,10 @@
                         }
                     </MudSelect>
                     <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
-                               Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
+                               Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || (_isEdit && _schemaLocked))"
+                               HelperText="@PluralityHelperText">
                         <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
-                        <MudSelectItem Value="AttributePlurality.MultiValued">Multi-valued</MudSelectItem>
+                        <MudSelectItem Value="AttributePlurality.MultiValued" Disabled="@(!AttributeDataTypeCapabilities.SupportsMultiValued(_type))">Multi-valued</MudSelectItem>
                     </MudSelect>
                 </div>
 
@@ -294,6 +295,18 @@
             _objectTypes = types?.OrderBy(t => t.Name).ToList() ?? new List<MetaverseObjectType>();
         }
     }
+
+    /// <summary>
+    /// The Boolean rule: a Boolean attribute holds one value, so choosing a type that cannot be multi-valued resets
+    /// a multi-valued choice to single-valued (the Multi-valued option is disabled while it stays chosen).
+    /// </summary>
+    private void OnTypeChanged()
+    {
+        _plurality = AttributeDataTypeCapabilities.Constrain(_type, _plurality);
+    }
+
+    private string? PluralityHelperText =>
+        AttributeDataTypeCapabilities.SupportsMultiValued(_type) ? null : "A Boolean attribute holds one value, so it is always single-valued.";
 
     private static string StandardLabel(AttributeStandard standard) => standard switch
     {

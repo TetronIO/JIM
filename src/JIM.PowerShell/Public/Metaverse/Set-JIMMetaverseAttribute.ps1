@@ -32,11 +32,12 @@ function Set-JIMMetaverseAttribute {
 
     .PARAMETER Type
         A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses the change while
-        any Metaverse Object holds a value for the attribute.
+        any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without
+        -AttributePlurality also makes the attribute single-valued.
 
     .PARAMETER AttributePlurality
         Whether the attribute holds one value or many. JIM refuses the change while any Metaverse Object holds a
-        value for the attribute.
+        value for the attribute, and refuses MultiValued for a Boolean.
 
     .PARAMETER StandardMappings
         The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a
@@ -179,7 +180,15 @@ function Set-JIMMetaverseAttribute {
                 } else {
                     $current.type
                 }
-                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $AttributePlurality } else { $current.attributePlurality }
+                # A Boolean holds one value, so a change to Boolean that names no plurality makes the attribute
+                # single-valued, as the portal does; an explicit multi-valued Boolean is sent and JIM refuses it.
+                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) {
+                    $AttributePlurality
+                } elseif ($typeValue -eq 'Boolean') {
+                    'SingleValued'
+                } else {
+                    $current.attributePlurality
+                }
 
                 $schemaBody = @{
                     type               = $typeValue
