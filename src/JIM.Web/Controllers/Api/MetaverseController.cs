@@ -1684,6 +1684,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
+        ApiDateValues.CanonicaliseDates(items);
         return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
     }
 

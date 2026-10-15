@@ -1,5 +1,8 @@
 ---
 title: Predefined Searches
+description: "The cmdlets that list, read and change Predefined Searches, and add, change and remove their criteria."
+type: reference
+audience: automation-author
 ---
 
 # Predefined Searches

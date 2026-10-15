@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 
 namespace JIM.Application.Servers;
 
@@ -41,8 +42,21 @@ public static class ImportContentHashCalculator
     /// Input to the fingerprint (D5). Bumping this invalidates every stored hash lazily (no mass
     /// UPDATE): the next Full Import for each object recomputes a fingerprint that no longer
     /// matches the stored one, so the skip predicate falls through to the honest diff, which then
-    /// re-stamps. Bump this if the canonical encoding in this class changes in any way that could
-    /// change a hash for the same logical input (attribute ordering, value ordering, byte layout).
+    /// re-stamps.
+    /// <para>
+    /// <b>The bump rule.</b> A change to the encoding is only dangerous when it can make an object
+    /// whose stored values differ from its payload hash the same as its stored hash: that is a false
+    /// "unchanged", and the skip would miss a real change. Bump this whenever an encoding change could
+    /// give an <em>unchanged</em> payload a different hash in a way that might collide with another
+    /// payload's old hash (attribute ordering, value ordering, byte layout, a new attribute type).
+    /// No bump is needed when every payload whose bytes change is one whose stored state already
+    /// differs from it, because that payload mismatches and takes the honest diff it needs anyway.
+    /// Canonicalising dates (#2153) is that case: a single whole-microsecond UTC date and a single
+    /// Boolean encode byte-identically to before, and the only dates whose bytes change are those with
+    /// a sub-microsecond part or a Local Kind, whose stored value (the database's microsecond) never
+    /// equalled the raw payload. <c>ImportContentHashCalculatorTests</c> pins the version 1 golden
+    /// hashes; if one changes, bump this.
+    /// </para>
     /// </summary>
     public const int ImportContentHashAlgorithmVersion = 1;
 
@@ -171,10 +185,11 @@ public static class ImportContentHashCalculator
                     .ToList();
 
             case AttributeDataType.DateTime:
-                // DateTime attributes are single-valued by nature (see ConnectedSystemImportObjectAttribute.DateTimeValue).
-                // Ticks-only encoding mirrors DateTime == semantics, which ignores Kind.
+                // One value at most while the import contract is single-valued, so no LINQ. A date encodes as its
+                // canonical ticks (#2153), which is what the diff compares and the database keeps: UTC, floored to the
+                // microsecond. A whole-microsecond UTC or Unspecified date therefore encodes exactly as version 1 did.
                 return importAttribute.DateTimeValue.HasValue
-                    ? new List<byte[]> { BitConverter.GetBytes(importAttribute.DateTimeValue.Value.Ticks) }
+                    ? new List<byte[]> { BitConverter.GetBytes(DateTimeAttributeValue.Key(importAttribute.DateTimeValue.Value)) }
                     : new List<byte[]>();
 
             case AttributeDataType.Binary:

@@ -91,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
+- 🔄 The REST API returns every date attribute value in UTC, ending in `Z`, whatever the server's time zone, and expressions read every date in UTC, so joining one to text with `+` writes `Z` rather than the server's offset. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 - 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
 - 🔄 Expression `StartsWith` and `EndsWith` now compare character by character, as `Eq` does, so a hidden character such as a soft hyphen, or an accented letter stored a different way, no longer counts as a match. (#2051)
@@ -103,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Changing an Object Matching Rule's source through the REST API or `Set-JIMMatchingRule` / `Set-JIMSyncRuleMatchingRule` now saves it. The change was reported as made while the rule kept matching on its old source. Updating a Synchronisation Rule's own Object Matching Rule over the REST API, or with `Set-JIMSyncRuleMatchingRule`, no longer fails with a server error. (#2234)
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
@@ -141,6 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Active Directory Enumeration attributes such as `sAMAccountType` are discovered as Number attributes, not as Booleans that read every value as false; after upgrading, refresh each Active Directory schema as **Refreshing the schema** describes. (#2128)
 - 🐛 After a schema refresh changes an attribute's data type, the next import replaces the values held under the old type rather than keeping both, and the refresh names an Expression that reads the attribute among the mappings to disable. (#2128)
 - 🐛 An LDAP Boolean or DateTime attribute holding more than one value no longer clears the value JIM held: JIM holds one value for these types, so it lists each under **Attribute Values Not Imported** and leaves the attribute as it was. (#2153)
+- 🐛 A date with finer than microsecond precision, such as a SQL `datetime2(7)` value, no longer reads as changed on every Full Import, and no longer raises a false Verification Mode disagreement. JIM holds every date in UTC, to the microsecond. (#2153)
+- 🐛 A date exported by JIM now confirms on the next import and is no longer reported as drift, however the server's time zone is set. (#2153)
 - 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 **Deleted By** on the Deleted Objects page linked the person who deleted an object to a page that does not exist; it now opens their Metaverse Object. (#2066)

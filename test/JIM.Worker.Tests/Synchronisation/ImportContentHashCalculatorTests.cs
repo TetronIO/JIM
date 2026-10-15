@@ -135,6 +135,82 @@ public class ImportContentHashCalculatorTests
             "DateTime values differing only in Kind must hash identically, matching DateTime == semantics.");
     }
 
+    /// <summary>
+    /// A date is hashed as its canonical value (#2153): one with a sub-microsecond part hashes as the microsecond
+    /// JIM holds, because that is what the stored Connected System Object holds and what the diff compares.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_DateTimeWithSubMicrosecondPart_HashesAsTheFlooredMicrosecond()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var whole = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
+
+        var a = BuildDateAndBooleanImportObject(whole, flag: null);
+        var b = BuildDateAndBooleanImportObject(whole.AddTicks(7), flag: null);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(b, objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(a, objectType)));
+    }
+
+    /// <summary>
+    /// A Local date hashes as the instant it names (#2153), so the same moment read with a different Kind is not a
+    /// change.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_LocalDate_HashesAsItsUtcInstant()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var utc = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var local = new DateTime(utc.ToLocalTime().Ticks, DateTimeKind.Local);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(BuildDateAndBooleanImportObject(local, flag: null), objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(BuildDateAndBooleanImportObject(utc, flag: null), objectType)));
+    }
+
+    /// <summary>
+    /// The golden hashes of algorithm version 1 (#2153, PRD section 4), computed before dates were canonicalised. A
+    /// single whole-microsecond UTC date and a single Boolean must keep encoding byte-identically, which is why
+    /// canonicalising dates needed no <see cref="ImportContentHashCalculator.ImportContentHashAlgorithmVersion"/>
+    /// bump. If this fails, the encoding of an unchanged payload has changed: bump the version (see the class doc).
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_Version1GoldenPayload_HashIsUnchanged()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var importObject = BuildDateAndBooleanImportObject(new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234560), flag: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ImportContentHashAlgorithmVersionUnderTest, Is.EqualTo(1));
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(importObject, objectType), Is.EqualTo(GoldenVersion1Hash));
+            Assert.That(ImportContentHashCalculator.CalculateTypeFingerprint(objectType), Is.EqualTo(GoldenVersion1Fingerprint));
+        }
+    }
+
+    private const int ImportContentHashAlgorithmVersionUnderTest = ImportContentHashCalculator.ImportContentHashAlgorithmVersion;
+    private static readonly Guid GoldenVersion1Hash = new("a1301547-b9b5-82ce-c3ef-3c9634aa020e");
+    private static readonly Guid GoldenVersion1Fingerprint = new("aadbf2e1-8be7-576c-4cf7-65d4188eef1c");
+
+    private static ConnectedSystemObjectType BuildDateAndBooleanObjectType()
+    {
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "TEST_TYPE" };
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "WHEN_CHANGED", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = objectType, Selected = true });
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "ENABLED", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = objectType, Selected = true });
+        return objectType;
+    }
+
+    private static ConnectedSystemImportObject BuildDateAndBooleanImportObject(DateTime whenChanged, bool? flag)
+    {
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = "TEST_TYPE",
+            Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "WHEN_CHANGED", DateTimeValue = whenChanged } }
+        };
+        if (flag.HasValue)
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ENABLED", BoolValue = flag });
+        return importObject;
+    }
+
     [Test]
     public void CalculateContentHash_AbsentAttributeVsEmptyAttribute_SameHash()
     {

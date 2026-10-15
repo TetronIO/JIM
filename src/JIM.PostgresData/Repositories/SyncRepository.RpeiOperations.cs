@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -673,7 +674,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             if (v.DateTimeValue.HasValue)
-                await writer.WriteAsync(v.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(v.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (v.IntValue.HasValue)

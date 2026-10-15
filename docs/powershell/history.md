@@ -1,10 +1,13 @@
 ---
 title: History
+description: "The cmdlets that query Configuration Change History and deleted objects, and count and clean up change history."
+type: reference
+audience: automation-author
 ---
 
 # History
 
-Cmdlets for querying configuration change history, querying deleted objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects, and let you control how long change history records are kept.
+Cmdlets for querying Configuration Change History, querying deleted objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects, and let you control how long change history records are kept.
 
 ---
 
@@ -270,7 +273,7 @@ One object giving how many Connected System Object change records the Connected 
 |----------|------|-------------|
 | `ConnectedSystemId` | `int` | Connected System ID. |
 | `ConnectedSystemName` | `string` | Connected System name. |
-| `ChangeRecordCount` | `int` | Count of CSO change records for this Connected System. |
+| `ChangeRecordCount` | `int` | Number of Connected System Object change records for this Connected System. |
 <!-- END GENERATED: Get-JIMHistoryCount -->
 
 ### Examples
@@ -298,7 +301,7 @@ Get-JIMConnectedSystem |
 
 ## Invoke-JIMHistoryCleanup
 
-Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned Connected System Object's initial password). Records still being worked are never removed, however old.
+Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned Connected System Object's initial password). Records still being worked are never removed, however old.
 
 This also runs on its own, daily, on the built-in [History Retention Cleanup Schedule](../configuration/schedules.md#built-in-schedules). Use this cmdlet to run a pass now, or to drain a large backlog faster than one pass a day.
 
@@ -321,8 +324,8 @@ With `-PassThru`, what the pass removed and the retention settings it applied; o
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `CsoChangesDeleted` | `int` | Number of CSO change records deleted. |
-| `MvoChangesDeleted` | `int` | Number of MVO change records deleted. |
+| `CsoChangesDeleted` | `int` | Number of Connected System Object change records deleted. |
+| `MvoChangesDeleted` | `int` | Number of Metaverse Object change records deleted. |
 | `ActivitiesDeleted` | `int` | Number of Activity records deleted. |
 | `ConfigurationChangeActivitiesDeleted` | `int` | Number of configuration-change Activity records (versioned configuration snapshots) deleted, per the configuration change retention period. |
 | `ConfigurationChangeRetentionPeriodDays` | `int` | Configured configuration change retention period in days. |
