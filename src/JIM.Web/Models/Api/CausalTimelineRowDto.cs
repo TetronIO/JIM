@@ -108,7 +108,7 @@ public class CausalTimelineRowDto
     /// <summary>
     /// The item's nearest causes, grouped into cohorts; at most three, with <see cref="NearestCauseCount"/> giving the
     /// total. Empty where nothing earlier was recorded or retained. Only this first step is read, so the members' own
-    /// causes are empty here; ask the execution item's causes endpoint for the full chain.
+    /// causes are empty here; read the causes of the item with this row's Id for the full chain.
     /// </summary>
     public List<CausalChainCohortDto> NearestCauses { get; set; } = [];
 
