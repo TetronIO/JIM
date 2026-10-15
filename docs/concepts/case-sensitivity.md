@@ -43,6 +43,9 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Exporting | Whether a value needs exporting, export confirmation (did the value JIM sent arrive?) and Drift Detection | Changed? | Exact | ❌ No |
 | Exporting | The same three, for an [identifier](#identifiers-a-target-reports-in-its-own-case): an External ID, a Secondary External ID or a reference | Same thing? | Ignore case, unless the attribute is case-exact | ✅ Per attribute, by its case-exact declaration |
 | Exporting | Drift Detection: whether a Connected System contributes an attribute that an export expression names | Same thing? | Ignore case | ❌ No |
+| Exporting | Renaming a directory object whose name changed only in case | Changed? | Exact for the naming attribute, such as `cn`; the rest of the distinguished name ignores case | ❌ No |
+| Importing | Matching a file's column headers to attribute names | Same thing? | Ignore case | ❌ No |
+| Importing | Matching a database's related-table and change-log rows to their object | Same thing? | As the database compares the anchor column: ignore case unless its collation is case-sensitive | ✅ Per attribute |
 | Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | ❌ No |
 | Schema | [Case-exact declaration](#case-exact-attributes) on a Connected System attribute | Says how its values answer "Same thing?" | Discovered from the Connected System's schema | ✅ Per attribute |
 | Expressions | `==`, `Eq` | Condition? | Exact, character by character | ✅ Wrap both sides in `Lower()` |
@@ -137,6 +140,8 @@ An identifier is different. A directory reports a distinguished name in the case
 - **Drift Detection** does not report a case-only difference as drift.
 
 A reference JIM has resolved to another Connected System Object is confirmed when the Connected System Object refers to that object, whatever its distinguished name looks like.
+
+The object's own name is JIM's, though. When the value of a directory object's naming attribute changes only in case, from `joe bloggs` to `Joe Bloggs` say, the LDAP Connector renames the entry so that the directory holds the new case, keeping the parts above it as the directory has them.
 
 An identifier declared [case-exact](#case-exact-attributes) still compares exactly, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers.
 

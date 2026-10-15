@@ -452,6 +452,27 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Escapes an attribute value for use in a relative distinguished name (RFC 4514 section 2.4): the characters
+    /// <c>" + , ; &lt; &gt; \ =</c> anywhere, a leading space or <c>#</c>, and a trailing space.
+    /// </summary>
+    internal static string EscapeRdnValue(string value)
+    {
+        var escaped = new StringBuilder(value.Length + 8);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+            var needsEscape = character is '"' or '+' or ',' or ';' or '<' or '>' or '\\' or '=' ||
+                              (i == 0 && character is ' ' or '#') ||
+                              (i == value.Length - 1 && character == ' ');
+            if (needsEscape)
+                escaped.Append('\\');
+            escaped.Append(character);
+        }
+
+        return escaped.ToString();
+    }
+
+    /// <summary>
     /// Whether a distinguished name is within the scope the supplied Containers describe: the Container with the
     /// final say over it admits it rather than carving it out. An empty collection means the caller has no
     /// Container-level opinion to apply, and every name is admitted.
