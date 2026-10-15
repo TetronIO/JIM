@@ -135,6 +135,13 @@
     public string? Class { get; set; }
 
     /// <summary>
+    /// Changed by the page to reload the panel, after a change to what it covers (an Object Matching Rule added or
+    /// deleted).
+    /// </summary>
+    [Parameter]
+    public int ReloadKey { get; set; }
+
+    /// <summary>
     /// A coverage the administrator can add a new case for.
     /// </summary>
     private sealed record CoverageOption(string Label, ConfigurationTestCase Template);
@@ -148,12 +155,12 @@
     private bool _loading = true;
     private bool _running;
 
-    private (int? SyncRuleId, int? ConnectedSystemId)? _loadedFor;
+    private (int? SyncRuleId, int? ConnectedSystemId, int ReloadKey)? _loadedFor;
 
     // Loads once for what the panel shows, not on every render of the page around it.
     protected override async Task OnParametersSetAsync()
     {
-        var showing = (SyncRuleId, ConnectedSystem?.Id);
+        var showing = (SyncRuleId, ConnectedSystem?.Id, ReloadKey);
         if (_loadedFor == showing)
             return;
         _loadedFor = showing;
@@ -161,10 +168,10 @@
     }
 
     /// <summary>
-    /// Reloads the cases and the configuration they cover, as saved. The page calls it after a save, so a case's
-    /// inputs are laid against what the configuration reads now.
+    /// Reloads the cases and the configuration they cover, as saved, so a case's inputs are laid against what the
+    /// configuration reads now.
     /// </summary>
-    public async Task LoadAsync()
+    private async Task LoadAsync()
     {
         _loading = true;
         using var jim = JimFactory.Create();
@@ -196,7 +203,6 @@
         foreach (var gone in _results.Keys.Where(id => _testCases.All(c => c.Id != id)).ToList())
             _results.Remove(gone);
         _loading = false;
-        StateHasChanged();
     }
 
     private List<CoverageOption> BuildCoverageOptions()

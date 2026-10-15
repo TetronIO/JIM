@@ -92,7 +92,7 @@ else
    Advanced mode they are on each Synchronisation Rule's Tests tab. *@
 @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem && ConnectedSystem.ObjectTypes is { Count: > 0 })
 {
-    <ConfigurationTestCasesPanel @ref="_testCasesPanel" ConnectedSystem="ConnectedSystem" Class="mt-6" />
+    <ConfigurationTestCasesPanel ConnectedSystem="ConnectedSystem" ReloadKey="_testCasesReloadKey" Class="mt-6" />
 }
 
 @* Mode Switch Dialog *@
@@ -186,9 +186,9 @@ else
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     /// <summary>
-    /// The test cases panel, reloaded when a rule is added or deleted so it can offer, or stop listing, the rule.
+    /// Bumped when a rule is added or deleted, so the test cases panel reloads and offers, or stops listing, the rule.
     /// </summary>
-    private ConfigurationTestCasesPanel? _testCasesPanel;
+    private int _testCasesReloadKey;
 
     // Object Matching Rules
     private int _selectedMatchingRuleTabIndex;
@@ -388,8 +388,7 @@ else
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
-            if (_testCasesPanel != null)
-                await _testCasesPanel.LoadAsync();
+            _testCasesReloadKey++;
             StateHasChanged();
         }
         catch (InvalidDataException ex)
@@ -427,8 +426,7 @@ else
 
             Snackbar.Add("Matching rule has been deleted.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
-            if (_testCasesPanel != null)
-                await _testCasesPanel.LoadAsync();
+            _testCasesReloadKey++;
             StateHasChanged();
         }
         catch (Exception ex)
