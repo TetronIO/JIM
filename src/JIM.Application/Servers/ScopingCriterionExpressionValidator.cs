@@ -22,7 +22,11 @@ namespace JIM.Application.Servers;
 /// </remarks>
 public sealed class ScopingCriterionExpressionValidator
 {
-    private static readonly HashSet<AttributeDataType> ComparableTypes =
+    /// <summary>
+    /// The types an expression's computed value can be compared as, in the order a picker offers them. Reference and
+    /// Binary are left out: no scoping operator compares a computed value of either meaningfully.
+    /// </summary>
+    public static readonly IReadOnlyList<AttributeDataType> CompareAsTypes =
     [
         AttributeDataType.Text, AttributeDataType.Number, AttributeDataType.LongNumber, AttributeDataType.Decimal,
         AttributeDataType.DateTime, AttributeDataType.Boolean, AttributeDataType.Guid
@@ -57,7 +61,7 @@ public sealed class ScopingCriterionExpressionValidator
             criterion.ConnectedSystemAttributeId.HasValue || criterion.ConnectedSystemAttribute != null)
             return "A Scoping Criterion compares either an attribute or an expression, not both.";
 
-        if (criterion.CompareAs is not { } compareAs || !ComparableTypes.Contains(compareAs))
+        if (criterion.CompareAs is not { } compareAs || !CompareAsTypes.Contains(compareAs))
             return "An expression criterion needs a Compare As type, the type its computed value is compared as: Text, Number, " +
                    "Long Number, Decimal, Date, Boolean or Guid.";
 
