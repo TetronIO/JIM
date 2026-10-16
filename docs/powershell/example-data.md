@@ -468,7 +468,7 @@ Get-JIMExampleDataTemplate | Where-Object { $_.Name -like "Demo*" -and -not $_.B
 
 Adds one attribute's generation configuration to an Object Type within an existing Data Generation Template, without restating the rest of the template: the cmdlet reads the template, appends the new attribute, and writes the whole configuration back with every existing setting preserved.
 
-Supply exactly one of `-MetaverseAttribute` or `-ConnectedSystemObjectTypeAttributeId` to say which attribute values are generated for.
+Supply `-MetaverseAttribute` to say which attribute values are generated for.
 
 <!-- BEGIN GENERATED: Add-JIMExampleDataTemplateAttribute -->
 ### Syntax
@@ -488,7 +488,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `TemplateId` | `int` | Yes (ById) |  | The unique identifier of the Data Generation Template to add the attribute to. Accepts pipeline input by property name. |
 | `TemplateName` | `string` | Yes (ByName) |  | The name of the Data Generation Template to add the attribute to. |
 | `ObjectType` | `object` | Yes |  | The Metaverse Object Type (name or id) identifying which of the template's Object Types receives the attribute. |
-| `MetaverseAttribute` | `object` | No |  | The Metaverse Attribute (name or id) values are generated for. Required. |
+| `MetaverseAttribute` | `object` | No |  | The Metaverse Attribute (name or id) values are generated for. Always needed: the cmdlet stops with an error if it is omitted. |
 | `Pattern` | `string` | No |  | A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com". |
 | `Expression` | `string` | No |  | An expression that constructs the value from other already-generated attributes via mv["Attribute Name"]. |
 | `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |

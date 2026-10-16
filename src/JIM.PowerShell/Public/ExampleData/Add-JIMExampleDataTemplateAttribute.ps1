@@ -23,7 +23,7 @@ function Add-JIMExampleDataTemplateAttribute {
         receives the attribute.
 
     .PARAMETER MetaverseAttribute
-        The Metaverse Attribute (name or id) values are generated for. Required.
+        The Metaverse Attribute (name or id) values are generated for. Always needed: the cmdlet stops with an error if it is omitted.
 
     .PARAMETER Pattern
         A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com".
