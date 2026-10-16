@@ -1402,3 +1402,44 @@ echo "$stamp [12:00:31 ERR] Unhandled exception in the export run"
         }
     }
 }
+
+Describe 'ConvertTo-ScheduleStepTime' {
+    # The schedule execution API's step times reach the harness as DateTime values, because PowerShell's JSON
+    # reader converts ISO 8601 strings; Scenario 006 then parsed them again. On a runner outside the US that
+    # threw "String '10/16/2026 16:57:20' was not recognized as a valid DateTime" (the Active Directory lab, 2026-10-16).
+    BeforeEach {
+        $script:originalCulture = [System.Globalization.CultureInfo]::CurrentCulture
+        [System.Globalization.CultureInfo]::CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('en-GB')
+    }
+    AfterEach {
+        [System.Globalization.CultureInfo]::CurrentCulture = $script:originalCulture
+    }
+
+    It 'returns a DateTime it is given unchanged, whatever the current culture' {
+        $value = [datetime]::new(2026, 10, 16, 16, 57, 20, [System.DateTimeKind]::Utc)
+
+        ConvertTo-ScheduleStepTime -Value $value | Should -Be $value
+    }
+
+    It 'reads an ISO 8601 string as UTC, whatever the current culture' {
+        $result = ConvertTo-ScheduleStepTime -Value '2026-10-16T16:57:20.123Z'
+
+        $result | Should -Be ([datetime]::new(2026, 10, 16, 16, 57, 20, 123, [System.DateTimeKind]::Utc))
+        $result.Kind | Should -Be ([System.DateTimeKind]::Utc)
+    }
+}
+
+Describe 'Limit-ActiveDirectorySamAccountName' {
+    # New-TestUser's names are first.last plus the index; 18 of Scenario 008's first 1,000 run past Active
+    # Directory's 20 characters, which it refuses (00000523, 2026-10-16).
+    It 'leaves a name of 20 characters or fewer alone' {
+        Limit-ActiveDirectorySamAccountName -SamAccountName 'hannah.jenkins109' -Index 109 | Should -Be 'hannah.jenkins109'
+    }
+
+    It 'shortens a longer name to 20 characters and keeps the index that makes it unique' {
+        $result = Limit-ActiveDirectorySamAccountName -SamAccountName 'penelope.fitzgerald137' -Index 137
+
+        $result | Should -Be 'penelope.fitzgera137'
+        $result.Length | Should -Be 20
+    }
+}

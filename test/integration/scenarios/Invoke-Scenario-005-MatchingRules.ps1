@@ -173,7 +173,9 @@ userPassword: Password123!
             # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
             # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
             # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
-            # carries no password, so it is created disabled, which the join assertions do not depend on.
+            # carries Scenario 017's lab password: once JIM joins it, its export asks for the account enabled, and
+            # Active Directory will not enable an account with no password (0000052D). The Synchronisation Rule's
+            # Initial Password does not help here, because it reaches only accounts JIM provisions, not ones it joins.
             $directoryLabel = "Active Directory"
             $userDn = "CN=$DisplayName,OU=$Department,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
             $ldif = @"
@@ -191,6 +193,7 @@ userPrincipalName: $email
 mail: $email
 department: $Department
 employeeID: $EmployeeId
+unicodePwd:: $(ConvertTo-UnicodePwdValue -Password 'Chalkstream-7-Vault!')
 "@
         }
         $createResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
@@ -379,7 +382,7 @@ try {
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound",
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.2nd", "baseline.user1", "test.match.outbound",
         "test.expr.join", "test.expr.export", "test.ambig", "test.ambig.one", "test.ambig.two", "test.expr.failure")
     $deletedCount = 0
     foreach ($user in $testUsers) {
@@ -891,7 +894,7 @@ try {
                     $testUser2 = New-TestUser -Index 9011
                     $testUser2.HrId = "00009011-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
-                    $testUser2.SamAccountName = "test.multirule.second"
+                    $testUser2.SamAccountName = "test.multirule.2nd"
                     $testUser2.Email = "test.multirule@panoply.local"  # SAME email (rule 2 should match)
                     $testUser2.DisplayName = "Test MultiRule Second"
 

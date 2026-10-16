@@ -542,8 +542,12 @@ function Find-DirectoryEntry {
 
     if (-not $BaseDn) { $BaseDn = [string]$DirectoryConfig['BaseDN'] }
 
+    # Active Directory refuses an unpaged search matching more than MaxPageSize (1,000) entries (exit 4,
+    # sizeLimitExceeded), so there the search is paged; with -LLL ldapsearch prints no paging comments. The
+    # container directories lift their size limits server side, so their searches stay as they were.
+    $paging = if ($DirectoryConfig['DirectoryType'] -eq 'ActiveDirectory') { @('-E', 'pr=1000/noprompt') } else { @() }
     $arguments = @(Get-DirectoryToolBindArgument -DirectoryConfig $DirectoryConfig) +
-        @('-LLL', '-b', $BaseDn, '-s', $Scope, $Filter) +
+        @('-LLL') + $paging + @('-b', $BaseDn, '-s', $Scope, $Filter) +
         @(Get-DirectorySearchAttributeList -Attributes $Attributes)
 
     $raw = Invoke-DirectoryLdapTool -DirectoryConfig $DirectoryConfig -Tool ldapsearch -Arguments $arguments

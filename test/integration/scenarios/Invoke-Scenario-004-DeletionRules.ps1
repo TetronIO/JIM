@@ -1096,14 +1096,16 @@ try {
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
+    # Keep each name within 20 characters: Active Directory refuses a longer sAMAccountName (00000523), though Samba
+    # AD and the RFC directories accept one.
     $testUsers = @(
         "test.wlcd.recall", "test.wlcd.norecall",
-        "test.nosource.preserve",
+        "test.nosrc.preserve",
         "test.auth.immediate", "test.auth.grace",
-        "test.pending.preserve",
+        "test.pend.preserve",
         "test.manual.recall", "test.manual.norecall",
-        "test.deprov.provdelete", "test.deprov.provdisc",
-        "test.deprov.joindelete", "test.deprov.joindisc",
+        "test.deprov.provdel", "test.deprov.provdisc",
+        "test.deprov.joindel", "test.deprov.joindisc",
         "test.trigger.allsrc", "test.trigger.rejoin",
         "baseline.user1"
     )
@@ -1349,7 +1351,7 @@ try {
         # Provision a test user via HR CSV only (no Training join - CSV is the sole import source)
         $test1bMvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "PRES001" `
-            -SamAccountName "test.nosource.preserve" `
+            -SamAccountName "test.nosrc.preserve" `
             -DisplayName "Test NoSource Preserve" `
             -TestName "Test1b"
 
@@ -1365,10 +1367,10 @@ try {
         # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 5)
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $csv = Import-Csv $csvPath
-        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.nosource.preserve" })
+        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.nosrc.preserve" })
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Copy-CsvToConnectorFiles -SourcePath $csvPath
-        Write-Host "  Removed test.nosource.preserve from CSV" -ForegroundColor Gray
+        Write-Host "  Removed test.nosrc.preserve from CSV" -ForegroundColor Gray
 
         $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Test1b removal)"
@@ -1429,9 +1431,9 @@ try {
         $noopExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
         Assert-ExportSuccess -ActivityId $noopExport.activityId -Name "LDAP Export (Test1b no-op)"
         Start-Sleep -Seconds 2
-        if (-not (Test-LDAPUserExists -UserIdentifier 'test.nosource.preserve' -DirectoryConfig $DirectoryConfig)) {
+        if (-not (Test-LDAPUserExists -UserIdentifier 'test.nosrc.preserve' -DirectoryConfig $DirectoryConfig)) {
             $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "Directory account missing after preservation (last known state should keep the account intact)" }
-            throw "Test 1b Assert 6 failed: directory account test.nosource.preserve missing after values were preserved as last known state"
+            throw "Test 1b Assert 6 failed: directory account test.nosrc.preserve missing after values were preserved as last known state"
         }
         Write-Host "  PASSED: Directory account remains intact (built from preserved last known state)" -ForegroundColor Green
 
@@ -1797,7 +1799,7 @@ try {
         # Provision a test user via HR CSV (creates MVO + CSV CSO + LDAP CSO)
         $test4bMvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "PRES002" `
-            -SamAccountName "test.pending.preserve" `
+            -SamAccountName "test.pend.preserve" `
             -DisplayName "Test Pending Preserve" `
             -TestName "Test4b"
 
@@ -1813,10 +1815,10 @@ try {
         # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 4)
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $csv = Import-Csv $csvPath
-        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.pending.preserve" })
+        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.pend.preserve" })
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Copy-CsvToConnectorFiles -SourcePath $csvPath
-        Write-Host "  Removed test.pending.preserve from CSV" -ForegroundColor Gray
+        Write-Host "  Removed test.pend.preserve from CSV" -ForegroundColor Gray
 
         $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Test4b removal)"
@@ -2194,7 +2196,7 @@ try {
 
         Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
             -CsoOrigin Provisioned -DeprovisionAction Delete `
-            -EmployeeId "DEPROV001" -SamAccountName "test.deprov.provdelete" `
+            -EmployeeId "DEPROV001" -SamAccountName "test.deprov.provdel" `
             -DisplayName "Test Deprov ProvDelete" -TestName "Test8" `
             -StepName "DeprovisionProvisionedDelete"
     }
@@ -2220,7 +2222,7 @@ try {
 
         Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
             -CsoOrigin Joined -DeprovisionAction Delete `
-            -EmployeeId "DEPROV003" -SamAccountName "test.deprov.joindelete" `
+            -EmployeeId "DEPROV003" -SamAccountName "test.deprov.joindel" `
             -DisplayName "Test Deprov JoinDelete" -TestName "Test10" `
             -StepName "DeprovisionJoinedDelete"
     }

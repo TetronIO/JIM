@@ -574,6 +574,18 @@ Describe 'Find-DirectoryEntry' {
         $entries[0].department | Should -Be @('Finance')
     }
 
+    It 'pages the search on Active Directory, which refuses an unpaged one matching more than 1,000 entries' {
+        # Scenario 026's Medium population ended "ldapsearch ... failed (exit 4)", sizeLimitExceeded (2026-10-16).
+        Add-DockerResponse -ExitCode 0 -Output @('dn: CN=A,DC=x', 'employeeID: EMP000001')
+
+        $null = @(Find-DirectoryEntry -DirectoryConfig (Get-AdTestConfig) -Filter '(employeeID=*)' -Attributes 'employeeID')
+
+        $arguments = @($script:dockerCalls[0].Args)
+        $pagingAt = [array]::IndexOf($arguments, '-E')
+        $pagingAt | Should -BeGreaterThan -1
+        $arguments[$pagingAt + 1] | Should -Be 'pr=1000/noprompt'
+    }
+
     It 'returns unfolded LDIF text with -AsText, in the shape ldbsearch printed' {
         Add-DockerResponse -ExitCode 0 -Output @('dn: CN=Alice,OU=Finance,DC=panoply,DC=l', ' ocal', 'department: Finance')
 

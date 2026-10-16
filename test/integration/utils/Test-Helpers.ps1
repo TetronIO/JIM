@@ -1956,6 +1956,34 @@ function New-TestUser {
     }
 }
 
+function Limit-ActiveDirectorySamAccountName {
+    <#
+    .SYNOPSIS
+        Shortens a New-TestUser account name to Active Directory's 20-character sAMAccountName limit.
+
+    .DESCRIPTION
+        Active Directory refuses a longer sAMAccountName (00000523); Samba AD and the RFC directories accept
+        one. New-TestUser ends every name with its index, so the name is cut before the index and the index
+        kept, which keeps it unique. A name already within the limit is returned unchanged.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SamAccountName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Index
+    )
+
+    $limit = 20
+    if ($SamAccountName.Length -le $limit) {
+        return $SamAccountName
+    }
+
+    $suffix = [string]$Index
+    return $SamAccountName.Substring(0, $limit - $suffix.Length) + $suffix
+}
+
 function Get-RandomSubset {
     <#
     .SYNOPSIS
@@ -3626,6 +3654,33 @@ function Assert-ScheduleExecutionSuccess {
     Write-Host "  ✓ $Name completed successfully (Status: Complete, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
+function ConvertTo-ScheduleStepTime {
+    <#
+    .SYNOPSIS
+        Returns a schedule execution step's time as a DateTime, whatever the current culture.
+
+    .DESCRIPTION
+        PowerShell's JSON reader has usually turned the API's ISO 8601 string into a DateTime already, and
+        that is returned as it is. Parsing it again would turn it back into text in the invariant culture's
+        month-first form and read that in the current culture, which throws outside the US. A string is read
+        invariantly, as UTC.
+    #>
+    [OutputType([datetime])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Value
+    )
+
+    if ($Value -is [datetime]) {
+        return $Value
+    }
+
+    return [datetime]::Parse(
+        [string]$Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+}
+
 function Assert-ParallelExecutionTiming {
     <#
     .SYNOPSIS
@@ -3706,8 +3761,8 @@ function Assert-ParallelExecutionTiming {
             $stepsWithTiming += @{
                 Name = $stepName
                 ConnectedSystemId = $s.connectedSystemId
-                StartedAt = [DateTime]::Parse($s.startedAt)
-                CompletedAt = [DateTime]::Parse($s.completedAt)
+                StartedAt = ConvertTo-ScheduleStepTime -Value $s.startedAt
+                CompletedAt = ConvertTo-ScheduleStepTime -Value $s.completedAt
             }
         }
 

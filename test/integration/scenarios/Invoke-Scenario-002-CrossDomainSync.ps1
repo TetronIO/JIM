@@ -362,12 +362,15 @@ userPassword: Password123!
             }
         }
         else {
-            # Samba AD (samba-tool) or Active Directory (ldapadd, then unicodePwd over LDAPS)
+            # Samba AD (samba-tool) or Active Directory (ldapadd, then unicodePwd over LDAPS). displayName is
+            # given explicitly: samba-tool derives it from the given name and surname, but Active Directory
+            # writes only what it is given, and the Target's DN expression is built from Display Name.
             $createResult = New-DirectoryUser -DirectoryConfig $SourceConfig `
                 -Dn "CN=$testUserDisplayName,OU=TestUsers,$($SourceConfig.BaseDN)" `
                 -SamAccountName $testUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
+                    displayName = $testUserDisplayName
                     givenName  = $testUserFirstName
                     sn         = $testUserLastName
                     mail       = $testUserEmail
@@ -540,6 +543,7 @@ userPassword: Password123!
                 -SamAccountName $reverseUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
+                    displayName = "$reverseUserFirstName $reverseUserLastName"
                     givenName  = $reverseUserFirstName
                     sn         = $reverseUserLastName
                     department = $reverseUserDepartment
@@ -638,6 +642,7 @@ userPassword: Password123!
                 -SamAccountName $conflictUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
+                    displayName = "Conflict TestUser"
                     givenName  = "Conflict"
                     sn         = "TestUser"
                     department = "OriginalDept"
