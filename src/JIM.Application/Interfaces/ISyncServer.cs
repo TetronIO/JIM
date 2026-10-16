@@ -343,7 +343,8 @@ public interface ISyncServer
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null);
+        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
+        Action<IReadOnlyList<string>>? containersCreated = null);
 
     #endregion
 }

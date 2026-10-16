@@ -61,6 +61,12 @@ public class ExportExecutionServer
     /// </summary>
     private CollisionRemediationRun? _collisionRemediation;
 
+    /// <summary>
+    /// The run's caller, told of the containers each Connector created as its connection closes (#2197), so it can select
+    /// them whether or not the run completes.
+    /// </summary>
+    private Action<IReadOnlyList<string>>? _containersCreated;
+
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
@@ -109,7 +115,8 @@ public class ExportExecutionServer
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        UniqueValueReservationSet? uniqueValueReservations = null)
+        UniqueValueReservationSet? uniqueValueReservations = null,
+        Action<IReadOnlyList<string>>? containersCreated = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -198,6 +205,7 @@ public class ExportExecutionServer
             _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges);
         }
 
+        _containersCreated = containersCreated;
         try
         {
             // Execute exports using the connector with batch-loading
@@ -213,6 +221,7 @@ public class ExportExecutionServer
         {
             _collisionRemediation?.Complete();
             _collisionRemediation = null;
+            _containersCreated = null;
         }
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -911,21 +920,15 @@ public class ExportExecutionServer
                     }
                 }
 
-                // Capture created containers before closing connection
-                if (connector is IConnectorContainerCreation containerCreator &&
-                    containerCreator.CreatedContainerExternalIds.Count > 0)
-                {
-                    result.CreatedContainerExternalIds.AddRange(containerCreator.CreatedContainerExternalIds);
-                    Log.Information("ExecuteUsingCallsWithBatchingAsync: Captured {Count} created container(s) for auto-selection",
-                        containerCreator.CreatedContainerExternalIds.Count);
-                }
-
                 // Reached only if nothing above threw; used by the finally block below to tell a
                 // genuine export failure apart from a clean run.
                 exportPhaseSucceeded = true;
             }
             finally
             {
+                // Before the connection closes, which forgets them, and whether or not the run completed (#2197).
+                CaptureCreatedContainers(connector, result, resultLock: null);
+
                 string? closeReturn;
                 using (Diagnostics.Diagnostics.Connector.StartSpan("CloseExportConnection"))
                 {
@@ -1570,22 +1573,10 @@ public class ExportExecutionServer
                     batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
                     await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
-                    // Capture created containers from this batch's connector
-                    List<string>? batchContainerIds = null;
-                    if (batchConnector is IConnectorContainerCreation containerCreator &&
-                        containerCreator.CreatedContainerExternalIds.Count > 0)
-                    {
-                        batchContainerIds = [..containerCreator.CreatedContainerExternalIds];
-                    }
-
                     // Aggregate results into shared result (thread-safe)
                     lock (resultLock)
                     {
                         AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
-                        if (batchContainerIds != null)
-                        {
-                            result.CreatedContainerExternalIds.AddRange(batchContainerIds);
-                        }
                     }
                     batchResultMerged = true;
                     batchOutcomeRecorded = true;
@@ -1663,6 +1654,10 @@ public class ExportExecutionServer
                     // Close the batch connector (but not the primary - that's managed by the caller)
                     if (batchIndex != 0)
                     {
+                        // Before its connection closes, whether or not the batch succeeded (#2197).
+                        if (ownedConnector != null)
+                            CaptureCreatedContainers(ownedConnector, result, resultLock);
+
                         string? closeReturn;
                         try
                         {
@@ -2443,6 +2438,28 @@ public class ExportExecutionServer
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// Takes the containers <paramref name="connector"/> created, before its connection closes and forgets them (#2197):
+    /// onto the run's result, and to the caller, which selects them even when the run does not complete. A container
+    /// left unselected leaves the accounts created in it unconfirmed, and later exports there refused as outside the
+    /// managed scope.
+    /// </summary>
+    private void CaptureCreatedContainers(object connector, ExportExecutionResult result, object? resultLock)
+    {
+        if (connector is not IConnectorContainerCreation containerCreator || containerCreator.CreatedContainerExternalIds.Count == 0)
+            return;
+
+        var created = containerCreator.CreatedContainerExternalIds.ToList();
+        if (resultLock == null)
+            result.CreatedContainerExternalIds.AddRange(created);
+        else
+            lock (resultLock)
+                result.CreatedContainerExternalIds.AddRange(created);
+
+        _containersCreated?.Invoke(created);
+        Log.Information("CaptureCreatedContainers: Captured {Count} created container(s) for auto-selection", created.Count);
     }
 
     /// <summary>

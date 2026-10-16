@@ -66,6 +66,12 @@ public class SyncExportTaskProcessor
     /// </summary>
     private readonly JIM.Application.UniqueValues.UniqueValueReservationSet? _uniqueValueReservations;
 
+    /// <summary>
+    /// The containers the run's Connectors created, as each connection closed (#2197): selected however the run ends.
+    /// </summary>
+    private readonly List<string> _containersCreated = [];
+    private readonly Lock _containersCreatedLock = new();
+
     public SyncExportTaskProcessor(
         ISyncServer syncServer,
         ISyncRepository syncRepository,
@@ -100,6 +106,61 @@ public class SyncExportTaskProcessor
     /// <summary>
     /// Executes the export Run Profile.
     /// </summary>
+    /// <summary>
+    /// Told by the export of the containers a Connector created, as its connection closes; parallel batches call it from
+    /// their own threads.
+    /// </summary>
+    private void RecordContainersCreated(IReadOnlyList<string> containerExternalIds)
+    {
+        lock (_containersCreatedLock)
+            _containersCreated.AddRange(containerExternalIds.Where(id => !_containersCreated.Contains(id)));
+    }
+
+    /// <summary>
+    /// Selects the containers the run created, so the accounts created in them import back and later exports there are
+    /// within the managed scope.
+    /// </summary>
+    private async Task AutoSelectCreatedContainersAsync()
+    {
+        List<string> created;
+        lock (_containersCreatedLock)
+            created = [.. _containersCreated];
+        if (created.Count == 0)
+            return;
+
+        Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection", created.Count);
+        await _phases.EnterAsync(RunPhaseKeys.ExportSelectNewContainers);
+        using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", created.Count))
+        {
+            await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
+                _connectedSystem,
+                _connector,
+                created,
+                _initiatedByType,
+                _initiatedById,
+                _initiatedByName,
+                _activity);
+        }
+    }
+
+    /// <summary>
+    /// Selects the containers a cancelled or failed run created, which it did not get to (#2197): the accounts created
+    /// in them are in the Connected System all the same. Never throws, so it cannot hide why the run ended; a failure is
+    /// logged, and the containers can be selected by refreshing the hierarchy.
+    /// </summary>
+    private async Task AutoSelectCreatedContainersAfterAnUnfinishedRunAsync()
+    {
+        try
+        {
+            await AutoSelectCreatedContainersAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "PerformExportAsync: Could not select the container(s) the unfinished export to {SystemName} created; refresh its container hierarchy to select them",
+                _connectedSystem.Name);
+        }
+    }
+
     public async Task PerformExportAsync()
     {
         using var exportSpan = Diagnostics.Sync.StartSpan("Export");
@@ -233,7 +294,8 @@ public class SyncExportTaskProcessor
                         // across the entire run. This bounds memory to batch size (~100 items).
                         await PersistBatchRpeisAsync(batchItems, _connectedSystem.Id);
                     },
-                    uniqueValueReservations: _uniqueValueReservations);
+                    uniqueValueReservations: _uniqueValueReservations,
+                    containersCreated: RecordContainersCreated);
             }
 
             // The Connector has nothing left to do, so whichever step it last declared stops being
@@ -259,24 +321,7 @@ public class SyncExportTaskProcessor
 
             // Auto-select any containers created during export.
             // This creates a child activity with its own message — do not update the parent's message.
-            if (result.CreatedContainerExternalIds.Count > 0)
-            {
-                Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
-                    result.CreatedContainerExternalIds.Count);
-
-                await _phases.EnterAsync(RunPhaseKeys.ExportSelectNewContainers);
-                using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
-                {
-                    await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
-                        _connectedSystem,
-                        _connector,
-                        result.CreatedContainerExternalIds,
-                        _initiatedByType,
-                        _initiatedById,
-                        _initiatedByName,
-                        _activity);
-                }
-            }
+            await AutoSelectCreatedContainersAsync();
 
             await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
 
@@ -287,11 +332,13 @@ public class SyncExportTaskProcessor
             // Only a cancellation someone asked for ends the run as cancelled; one nobody asked for, such as a timeout
             // surfacing as an OperationCanceledException, fails it below (#2083).
             Log.Information("PerformExportAsync: Export cancelled for {SystemName}", _connectedSystem.Name);
+            await AutoSelectCreatedContainersAfterAnUnfinishedRunAsync();
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Export cancelled");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "PerformExportAsync: Error during export for {SystemName}", _connectedSystem.Name);
+            await AutoSelectCreatedContainersAfterAnUnfinishedRunAsync();
             await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }

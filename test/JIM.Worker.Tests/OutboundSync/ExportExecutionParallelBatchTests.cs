@@ -1089,6 +1089,46 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #2197: a parallel batch whose Connector created a container and then failed still hands the container on to be
+    /// selected. Captured only from a batch that succeeded, the container of a failed one was lost when its Connector
+    /// was closed and disposed, and the accounts created in it stayed unconfirmed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatchCreatesAContainerThenThrows_StillReportsTheContainerAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () =>
+        {
+            var created = new List<string>();
+            var connector = CreateScriptedConnector((_, _) =>
+            {
+                created.Add("OU=New,DC=panoply,DC=local");
+                throw new InvalidOperationException("The directory went away");
+            });
+            connector.As<IConnectorContainerCreation>().Setup(c => c.CreatedContainerExternalIds).Returns(() => created.ToList());
+            return connector.Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+        var reported = new List<string>();
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory,
+            containersCreated: reported.AddRange);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.EqualTo(2), "the batch failed");
+            Assert.That(result.CreatedContainerExternalIds, Is.EqualTo(new[] { "OU=New,DC=panoply,DC=local" }));
+            Assert.That(reported, Is.EqualTo(new[] { "OU=New,DC=panoply,DC=local" }));
+        }
+    }
+
+    /// <summary>
     /// #2083: a parallel batch cancelled while its Connector held it was left Executing.
     /// </summary>
     [Test]
