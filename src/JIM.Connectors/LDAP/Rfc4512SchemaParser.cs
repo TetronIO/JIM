@@ -234,6 +234,9 @@ internal static class Rfc4512SchemaParser
                 case "NO-USER-MODIFICATION":
                     result.IsNoUserModification = true;
                     break;
+                case "OBSOLETE":
+                    result.IsObsolete = true;
+                    break;
                 case "USAGE":
                     result.Usage = ReadUsageValue(tokens, ref i);
                     break;
@@ -706,6 +709,11 @@ internal class Rfc4512AttributeTypeDescription
     public bool IsSingleValued { get; set; }
     public bool IsNoUserModification { get; set; }
     public Rfc4512AttributeUsage Usage { get; set; } = Rfc4512AttributeUsage.UserApplications;
+
+    /// <summary>
+    /// Whether the directory has declared the attribute type superseded.
+    /// </summary>
+    public bool IsObsolete { get; set; }
 }
 
 /// <summary>

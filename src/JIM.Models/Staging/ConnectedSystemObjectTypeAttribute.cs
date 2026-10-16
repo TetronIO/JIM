@@ -112,6 +112,17 @@ public class ConnectedSystemObjectTypeAttribute
     public AttributeWritability Writability { get; set; }
 
     /// <summary>
+    /// Classification the Connector reported for this attribute, i.e. <see cref="AttributeTags.Operational"/> for an
+    /// attribute the Connected System maintains for its own operation. Empty when the Connector classifies nothing,
+    /// which is the norm.
+    /// </summary>
+    /// <remarks>
+    /// Connector-owned: a schema refresh restates it, like <see cref="Writability"/>; administrators cannot set it.
+    /// See <see cref="AttributeTags"/> for the well-known values.
+    /// </remarks>
+    public List<string> Tags { get; set; } = [];
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
     /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
     /// Null when the schema does not say; import reference resolution then searches every Object Type and

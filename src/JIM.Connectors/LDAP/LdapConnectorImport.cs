@@ -787,20 +787,17 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             "see Service Account Permissions in the JIM LDAP Connector documentation) rather than raising the limit for every client.";
     }
 
-    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
-        => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
-
-    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, LdapConnection connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+    /// <summary>
+    /// The attributes a Full Import search asks the directory for on <paramref name="connectedSystemObjectType"/>:
+    /// every selected attribute by name, plus the identifiers and objectClass JIM always needs.
+    /// </summary>
+    /// <remarks>
+    /// Naming each attribute is what makes a selected operational attribute (<c>pwdFailureTime</c>,
+    /// <c>createTimestamp</c>) come back at all: a directory returns operational attributes only when they are
+    /// requested by name (RFC 4511 4.5.1.8), and it is why unselected ones cost nothing (#2153, D8).
+    /// </remarks>
+    internal static string[] GetRequestedAttributeNames(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        if (_cancellationToken.IsCancellationRequested)
-        {
-            _logger.Debug("GetFisoResults: O1 Cancellation requested. Stopping");
-            return;
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})";
-
         // add user selected attributes
         var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
 
@@ -815,7 +812,24 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         attributes.Add("objectClass");
 
         // remove any duplicates we might have added and change to a simple array for use with the search request
-        var queryAttributes = attributes.Distinct().ToArray();
+        return attributes.Distinct().ToArray();
+    }
+
+    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+        => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
+
+    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, LdapConnection connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetFisoResults: O1 Cancellation requested. Stopping");
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})";
+
+        var queryAttributes = GetRequestedAttributeNames(connectedSystemObjectType);
 
         var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter,
             LdapConnectorUtilities.GetSearchScope(connectedSystemContainer), queryAttributes);

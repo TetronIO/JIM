@@ -154,6 +154,9 @@ internal static class AuxiliaryClassAttributeMerger
                     // So does its case-exact declaration: the values compare the same way on any class (#2051).
                     CaseExact = attribute.CaseExact,
 
+                    // And whatever the Connector classified it as.
+                    Tags = [.. attribute.Tags],
+
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name
 

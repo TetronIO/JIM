@@ -120,4 +120,40 @@ public class ConnectedSystemAttributeDtoTests
             Assert.That(dto.ReferencedObjectTypeName, Is.Null);
         }
     }
+
+    [Test]
+    public void FromEntity_OperationalAttribute_CarriesItsTagsAndReportsItOperational()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 7,
+            Name = "pwdFailureTime",
+            Type = AttributeDataType.DateTime,
+            AttributePlurality = AttributePlurality.MultiValued,
+            Writability = AttributeWritability.ReadOnly,
+            Tags = [AttributeTags.Operational]
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Tags, Is.EqualTo(new[] { AttributeTags.Operational }));
+            Assert.That(dto.IsOperational, Is.True);
+        }
+    }
+
+    [Test]
+    public void FromEntity_UntaggedAttribute_ReportsEmptyTagsAndNotOperational()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "mail", Type = AttributeDataType.Text };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Tags, Is.Empty);
+            Assert.That(dto.IsOperational, Is.False);
+        }
+    }
 }

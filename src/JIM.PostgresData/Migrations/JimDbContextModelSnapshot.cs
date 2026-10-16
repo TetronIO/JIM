@@ -3599,6 +3599,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SelectionLocked")
                         .HasColumnType("boolean");
 
+                    b.PrimitiveCollection<List<string>>("Tags")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 

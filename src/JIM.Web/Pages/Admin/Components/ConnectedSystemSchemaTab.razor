@@ -398,7 +398,7 @@
                             Adornment="Adornment.Start"
                             AdornmentIcon="@Icons.Material.Filled.FilterAlt"
                             IconSize="Size.Small">
-                            @foreach (var className in _selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
+                            @foreach (var className in _selectedObjectType.Attributes.Select(a => a.ClassName).OfType<string>().Distinct().OrderBy(a => a))
                             {
                                 <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
                             }
@@ -498,6 +498,41 @@
                     </MudChipSet>
                 </div>
             </MudStack>
+
+            @* Operational attributes are held back rather than discarded, so the count and the way back are stated
+               plainly, as internal object types are on the Object Types tab. A selected one is always listed. *@
+            @{
+                var hiddenOperationalCount = GetHiddenOperationalAttributeCount();
+            }
+            @if (hiddenOperationalCount > 0)
+            {
+                <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
+                    <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                        <span class="flex-grow-1">
+                            @hiddenOperationalCount operational @(hiddenOperationalCount == 1 ? "attribute is" : "attributes are") hidden.
+                            The Connected System maintains these for its own operation, such as when an entry was created or when a sign-in last failed; JIM can import them but never export them.
+                        </span>
+                        <AlertButton Severity="Severity.Normal"
+                                     StartIcon="@Icons.Material.Filled.Visibility"
+                                     OnClick="@(() => SetShowOperationalAttributesAsync(true))">
+                            Show operational attributes
+                        </AlertButton>
+                    </div>
+                </MudAlert>
+            }
+            else if (_showOperationalAttributes && selectedObjectType.Attributes.Any(a => a.IsOperational()))
+            {
+                <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
+                    <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                        <span class="flex-grow-1">Operational attributes are shown.</span>
+                        <AlertButton Severity="Severity.Normal"
+                                     StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                     OnClick="@(() => SetShowOperationalAttributesAsync(false))">
+                            Hide operational attributes
+                        </AlertButton>
+                    </div>
+                </MudAlert>
+            }
         </MudPaper>
 
         @* An Active Directory object type runs to several hundred attributes, which is what the infinite-scroll
@@ -575,7 +610,16 @@
                         <VirtualisedSortHeader Title="Class" Name="class" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @context.Item.ClassName
+                        @if (context.Item.IsOperational())
+                        {
+                            <MudTooltip Text="An operational attribute: the Connected System maintains it for its own operation, and it belongs to no class. JIM can import it but never export it." Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Default" Variant="Variant.Text">Operational</MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            @context.Item.ClassName
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -844,6 +888,9 @@
     // Object types the Connected System classified as internal are held back until asked for. Not persisted as a
     // user preference: it is a per-visit "let me look at the plumbing", not a standing choice about every system.
     private bool _showInternalObjectTypes;
+
+    // Likewise operational attributes, which an LDAP directory publishes by the dozen (#2153, D8).
+    private bool _showOperationalAttributes;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
     private bool _selectedObjectTypeHasConstrainedAttributes;
@@ -1551,7 +1598,28 @@
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>
         SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites, _selectedSchemaWritabilities);
 
-    private static bool SchemaFilterFunc(
+    /// <summary>
+    /// Whether the attribute grid lists <paramref name="element"/> at all, before any filter: an unselected
+    /// operational attribute is held back until asked for. Every count beside the filters goes through
+    /// <see cref="SchemaFilterFunc"/>, so they all describe the rows the grid can show.
+    /// </summary>
+    private bool IsListed(ConnectedSystemObjectTypeAttribute element) =>
+        _showOperationalAttributes || element.Selected || !element.IsOperational();
+
+    /// <summary>
+    /// How many operational attributes the current view is holding back, which is what the disclosure above the grid
+    /// reports. Zero while they are being shown.
+    /// </summary>
+    private int GetHiddenOperationalAttributeCount() =>
+        _selectedObjectType?.Attributes.Count(a => !IsListed(a)) ?? 0;
+
+    private async Task SetShowOperationalAttributesAsync(bool show)
+    {
+        _showOperationalAttributes = show;
+        await RefreshAttributeGridAsync();
+    }
+
+    private bool SchemaFilterFunc(
         ConnectedSystemObjectTypeAttribute element,
         string searchString,
         IReadOnlyCollection<string> attributeClassFilterSelectedValues,
@@ -1562,6 +1630,9 @@
     {
         // All filters must pass (AND logic)
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
+
+        if (!IsListed(element))
+            return false;
 
         // Filter by "show only selected" checkbox
         if (attributeSelectedFilter && !element.Selected)

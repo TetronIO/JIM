@@ -449,6 +449,12 @@ internal class LdapConnectorSchema
             var contentRules = ParseAllDitContentRules(subschemaEntry);
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} DIT Content Rules", contentRules.Count);
 
+            // Operational attribute types an ordinary entry can carry, offered on every structural type below (D8).
+            var operationalAttributeTypes = attributeTypeDefs.Values
+                .Where(Rfc4512OperationalAttributes.IsDiscoverable)
+                .ToList();
+            _logger.Debug("GetRfcSchemaAsync: {Count} operational attribute types will be offered on structural types", operationalAttributeTypes.Count);
+
             // Step 6: Build the connector schema. Abstract classes are excluded: they exist only to be inherited
             // from. Auxiliary classes are always reported, because JIM merges an administrator's selected auxiliary
             // classes into the structural type they extend, and cannot do that for a class it never discovered.
@@ -557,6 +563,9 @@ internal class LdapConnectorSchema
                 if (objectClassAttribute != null)
                     objectClassAttribute.Writability = AttributeWritability.ReadOnly;
 
+                if (isStructural)
+                    AddOperationalAttributes(objectType, objectClassDef.Name!, operationalAttributeTypes, attributeTypeDefs);
+
                 objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
 
                 ApplyExternalIdRecommendations(objectType);
@@ -569,6 +578,43 @@ internal class LdapConnectorSchema
 
             return _schema;
         });
+    }
+
+    /// <summary>
+    /// Offers the directory's operational attributes on a structural Object Type (#2153, D8): each is unselected (as
+    /// every discovered attribute is), read-only, attached to no class, and tagged so the schema screen can group it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only structural types receive them. An auxiliary class is merged into the structural type an entry carries,
+    /// which already has them, and offering them twice would hand the merge two attributes of one name.
+    /// </para>
+    /// <para>
+    /// An attribute the type already has is left as it is. That is what keeps the synthesised External ID
+    /// (<c>entryUUID</c> is itself operational) exactly as earlier discovery reported it, so a refresh restates
+    /// nothing about it.
+    /// </para>
+    /// </remarks>
+    private void AddOperationalAttributes(
+        ConnectorSchemaObjectType objectType,
+        string objectClassName,
+        List<Rfc4512AttributeTypeDescription> operationalAttributeTypes,
+        Dictionary<string, Rfc4512AttributeTypeDescription> attributeTypeDefs)
+    {
+        var existingNames = objectType.Attributes.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var operationalAttributes = operationalAttributeTypes
+            .Where(attributeType => !existingNames.Contains(attributeType.Name!))
+            .Select(attributeType => BuildRfcSchemaAttribute(attributeType.Name!, attributeTypeDefs, objectClassName, required: false, objectType.Name))
+            .OfType<ConnectorSchemaAttribute>();
+
+        foreach (var attribute in operationalAttributes)
+        {
+            // Usage alone makes it read-only (DetermineRfcAttributeWritability), and it belongs to no object class.
+            attribute.ClassName = null;
+            attribute.Tags.Add(AttributeTags.Operational);
+            objectType.Attributes.Add(attribute);
+        }
     }
 
     /// <summary>
