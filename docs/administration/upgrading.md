@@ -20,7 +20,7 @@ Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` co
 - [ ] **Take a full backup: database plus encryption keys**, as a matched pair, following [Backup & Disaster Recovery](backup-recovery.md). Take it after stopping the services (below) so the two artefacts are consistent with each other.
 - [ ] **Disable all Schedules**, and record which ones you disabled. This stops new runs starting under you while you work. See [Pausing work first](#pausing-work).
 - [ ] **Let in-flight work finish.** With Schedules disabled, wait for any running Activities to complete before stopping the services. See [Pausing work first](#pausing-work) for what happens if you do not.
-- [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path.
+- [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path. Air-gapped, keep the previous release's bundle too, until you have accepted the upgrade.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can introduce configuration variables. See the [Configuration Reference](configuration.md).
 - [ ] **Upgrading from v0.15 or earlier on Docker: put JIM's certificate in place first.** From v0.16.0, `docker-compose.production.yml` serves HTTPS itself, on host port 443 by default, and needs the certificate and its key at `tls/tls.crt` and `tls/tls.key` beside the compose files (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)). Until both exist, `docker compose up` stops with an error naming the missing file and JIM does not start; your data is untouched, so putting the files in place and running it again completes the upgrade. If a reverse proxy on the same host terminates TLS for JIM, use [Plain HTTP for a Proxy on the Same Host](tls-and-reverse-proxy.md#plain-http-for-a-proxy-on-the-same-host) instead, which needs no certificate.
 
@@ -74,7 +74,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 1. Stops if the new release is not newer than the one JIM runs, and asks you to confirm the database and encryption keys are backed up (set `JIM_SETUP_BACKUP_CONFIRMED=true` to answer in advance; a "no" cancels the upgrade).
 2. Stops if `docker-compose.yml` or `docker-compose.production.yml` has been edited since it installed them, because it replaces them. Put changes of your own in a compose file of your own beside them, such as `docker-compose.local.yml`, and start JIM once with it added (`-f docker-compose.local.yml`): the upgrade starts JIM with every compose file it was last started with. Nothing changes when it stops at this step or the one before. It records the files it installs in `compose-files.sha256`; an installation made before it kept that record is upgraded with a warning instead.
 3. Installs the release's compose files, keeping the previous ones and `.env` beside them as `docker-compose.yml.previous`, `docker-compose.production.yml.previous` and `.env.previous`, sets `JIM_VERSION`, and saves the release's `.env.example` beside `.env`, naming any setting it adds that your `.env` does not mention. With the bundled PostgreSQL, it sizes the database's memory to the host where `.env` does not already (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
-4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
+4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it first names the PostgreSQL image JIM runs now `postgres:jim-previous`, so that it stays on the host for [rolling back](#rolling-back) even when the release's image takes over its tag, and then it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
 5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
 
 Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and an earlier upgrade's `.previous` files intact. Then carry on at [Check it worked](#verifying).
@@ -131,9 +131,13 @@ The same upgrade as [the installer's](#with-the-installer), by hand.
 
 2. **Stop the services** and **take your backup**, as in steps 1 and 2 above.
 
-3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply.
+3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply. With the bundled PostgreSQL, first name the image it runs now `postgres:jim-previous`, as the installer does: the new image can take over its tag, and Docker's containerd image store then removes the previous one, which rolling back needs.
 
     ```bash
+    # With the bundled PostgreSQL
+    docker tag "$(docker inspect -f '{{.Image}}' jim.database)" docker.io/library/postgres:jim-previous
+
+    # In the extracted bundle
     for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
@@ -318,6 +322,13 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
     cd /opt/jim
     docker compose -f docker-compose.yml -f docker-compose.production.yml \
       --profile with-db up -d
+    ```
+
+    If Docker reports it cannot resolve or download the PostgreSQL image, the previous one is no longer on the host: Docker's containerd image store removes it when the new release's image takes over its tag, unless it was kept as `postgres:jim-previous` (the installer does this). Load the previous release's images from its bundle, then run the command again:
+
+    ```bash
+    # In the previous release's extracted bundle
+    for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
     Leave out `docker-compose.production.yml` and every container still reports healthy, but `jim.web` publishes no port, so JIM is unreachable. The stopped `jim.web` container records the compose files it was last started with, if you are unsure which they were:
