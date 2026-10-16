@@ -419,7 +419,9 @@ function Get-PasswordDeliveryActivity {
         A delivery's Activity is a child of the Activity that queued the password change, and the Activity list
         returns only top-level Activities, so searching the list cannot find it (#2288). This reads the top-level
         Activities created since -Since (which must be before the change was queued), keeps any that are themselves
-        a delivery, and walks the children of the rest.
+        a delivery, and walks the children of every password Activity among them: the Activity that queues a
+        password, whether an administrator's set or an Initial Password staged at export, is one. The list's
+        childActivityCount cannot pick them out, because the API's list leaves it at 0.
 
     .PARAMETER Since
         A moment before the password change was queued, in UTC.
@@ -439,8 +441,7 @@ function Get-PasswordDeliveryActivity {
     $candidates = [System.Collections.Generic.List[object]]::new()
     foreach ($root in @(Get-JIMActivity -CreatedFrom $Since -PageSize 100)) {
         $candidates.Add($root)
-        $childCount = Get-PropertyText -Object $root -Name 'childActivityCount'
-        if ($childCount -and [int]$childCount -gt 0) {
+        if ((Get-PropertyText -Object $root -Name 'targetType') -eq 'PasswordSynchronisation') {
             foreach ($child in @(Get-JIMActivityChildren -Id $root.id -All)) { $candidates.Add($child) }
         }
     }
