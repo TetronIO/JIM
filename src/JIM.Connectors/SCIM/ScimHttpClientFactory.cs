@@ -110,7 +110,7 @@ public static class ScimHttpClientFactory
 
         // The runtime backstop to configuration validation, for a Connected System saved before it refused
         // cleartext addresses; nothing is sent until both the Base URL and any token endpoint pass.
-        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out var baseUri, out var error))
+        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out var baseUri, out var error, ScimTransportSecurity.BaseUrlExample))
             throw new ScimAuthenticationException(error);
 
         var handler = CreateHandler(settingValues, trustedCertificates, logger);

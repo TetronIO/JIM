@@ -22,6 +22,9 @@ internal static class ScimTransportSecurity
     /// <summary>What travels to the Token Endpoint URL (client_secret_post), for the refusal message.</summary>
     public const string TokenEndpointPayload = "the Client Secret";
 
+    /// <summary>A well-formed Base URL, shown when the configured value does not parse.</summary>
+    public const string BaseUrlExample = "https://example.com/scim/v2";
+
     /// <summary>
     /// True when the address is absolute and either HTTPS, or HTTP to a loopback host.
     /// </summary>
@@ -44,13 +47,16 @@ internal static class ScimTransportSecurity
     /// <param name="whatIsSent">What travels to this address, so the refusal says why it matters.</param>
     /// <param name="uri">The parsed address, when it is permitted.</param>
     /// <param name="errorMessage">Why the address is refused, when it is.</param>
-    public static bool TryValidate(string url, string settingName, string whatIsSent, [NotNullWhen(true)] out Uri? uri, [NotNullWhen(false)] out string? errorMessage)
+    /// <param name="exampleUrl">A well-formed value to show when the configured one does not parse, if any.</param>
+    public static bool TryValidate(string url, string settingName, string whatIsSent, [NotNullWhen(true)] out Uri? uri, [NotNullWhen(false)] out string? errorMessage, string? exampleUrl = null)
     {
         uri = null;
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
         {
-            errorMessage = $"The '{settingName}' setting is not a valid absolute URL.";
+            errorMessage = exampleUrl == null
+                ? $"The '{settingName}' setting is not a valid absolute URL."
+                : $"The '{settingName}' setting is not a valid absolute URL. Supply the full address, i.e. {exampleUrl}.";
             return false;
         }
 

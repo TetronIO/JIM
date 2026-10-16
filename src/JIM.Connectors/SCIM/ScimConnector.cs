@@ -197,7 +197,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         // JIM is deployed in high-trust environments; neither identity data nor credentials may travel over
         // cleartext HTTP. Loopback is permitted to support local test service providers.
-        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out _, out var baseUrlError))
+        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out _, out var baseUrlError, ScimTransportSecurity.BaseUrlExample))
         {
             response.Add(new ConnectorSettingValueValidationResult
             {
