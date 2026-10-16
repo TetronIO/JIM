@@ -3929,6 +3929,31 @@ public class SyncImportTaskProcessor
                         // A set diff keyed canonically (#2153), over the rows that hold a date. The stored value is the
                         // database's microsecond, read as Kind Local, and the import is canonical, so a value and its
                         // re-imported self are equal, and order is never a change.
+                        var importedDateTimes = importedObjectAttribute.DateTimeValues;
+                        if (importedDateTimes.Count == 1)
+                        {
+                            // The single-valued fast path allocates nothing beyond what it stages: one pass keeps the
+                            // row holding the imported date and removes every other.
+                            var importedKey = DateTimeAttributeValue.Key(importedDateTimes[0]);
+                            var held = connectedSystemObject.AttributeValues;
+                            var matched = false;
+                            for (var v = 0; v < held.Count; v++)
+                            {
+                                var heldValue = held[v];
+                                if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.DateTimeValue is not { } heldDate)
+                                    continue;
+
+                                if (!matched && DateTimeAttributeValue.Key(heldDate) == importedKey)
+                                    matched = true;
+                                else
+                                    connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
+                            }
+
+                            if (!matched)
+                                connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedDateTimes[0] });
+                            break;
+                        }
+
                         var csoDateTimeAttrValues = connectedSystemObject.AttributeValues
                             .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.DateTimeValue != null)
                             .ToList();
@@ -4123,16 +4148,27 @@ public class SyncImportTaskProcessor
                         // and no SingleOrDefault: an object holding both from before the Boolean rule converges on what
                         // the import carries, which the normaliser has seen is one value.
                         // todo (#872): consider having the ability to update values instead of replacing.
-                        var csoBoolAttrValues = connectedSystemObject.AttributeValues
-                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.BoolValue != null)
-                            .ToList();
+                        // One pass, allocating nothing beyond what it stages.
                         var importHasTrue = importedObjectAttribute.BoolValues.Contains(true);
                         var importHasFalse = importedObjectAttribute.BoolValues.Contains(false);
+                        var csoHasTrue = false;
+                        var csoHasFalse = false;
+                        var heldValues = connectedSystemObject.AttributeValues;
+                        for (var v = 0; v < heldValues.Count; v++)
+                        {
+                            var heldValue = heldValues[v];
+                            if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.BoolValue is not { } heldBool)
+                                continue;
 
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(csoBoolAttrValues.Where(av => av.BoolValue!.Value ? !importHasTrue : !importHasFalse));
+                            if (heldBool)
+                                csoHasTrue = true;
+                            else
+                                csoHasFalse = true;
 
-                        var csoHasTrue = csoBoolAttrValues.Exists(av => av.BoolValue!.Value);
-                        var csoHasFalse = csoBoolAttrValues.Exists(av => !av.BoolValue!.Value);
+                            if (heldBool ? !importHasTrue : !importHasFalse)
+                                connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
+                        }
+
                         if (importHasTrue && !csoHasTrue)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = true });
                         if (importHasFalse && !csoHasFalse)

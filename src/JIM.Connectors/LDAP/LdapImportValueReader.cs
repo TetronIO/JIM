@@ -120,9 +120,12 @@ internal static class LdapImportValueReader
                 continue;
             }
 
-            several ??= [];
-            if (several.Count == 0)
+            if (several == null)
+            {
+                several = [];
                 AddParsed(first, several, read);
+            }
+
             AddParsed(value, several, read);
         }
 

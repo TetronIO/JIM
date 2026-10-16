@@ -13,6 +13,11 @@ namespace JIM.Application.Servers;
 /// Puts the values a Connector hands JIM into the form JIM holds them (#2153), once, where they enter: before the
 /// content hash, duplicate detection, the diff and the database write all see them. Pure; no I/O.
 /// </summary>
+/// <remarks>
+/// A Connector hands JIM what the source holds and does not normalise; JIM decides what it can keep. Without this, a
+/// source date with a sub-microsecond part was "changed" on every honest diff (the database keeps the microsecond) and
+/// raised a false Verification Mode disagreement, and each Connector chose among a Boolean's values its own way.
+/// </remarks>
 public static class ImportValueNormaliser
 {
     /// <summary>The reason given for each of two or more dates JIM cannot keep apart.</summary>
@@ -127,8 +132,7 @@ public static class ImportValueNormaliser
             Log.Debug("ImportValueNormaliser: Collapsed {DuplicateCount} duplicate date value(s) of attribute '{AttributeName}'",
                 values.Count - instants.Count, LogSanitiser.Sanitise(attribute.Name));
 
-        foreach (var value in values)
-            Canonicalise(value, summary);
+        summary.DatesCanonicalised += values.Count(value => IsChangedByCanonicalising(value, DateTimeAttributeValue.ToCanonical(value)));
 
         // The distinct values in the order first read, each in its canonical form.
         var canonicalValues = new List<DateTime>(instants.Count);
@@ -165,25 +169,18 @@ public static class ImportValueNormaliser
     private static DateTime Canonicalise(DateTime held, ImportValueNormalisationSummary summary)
     {
         var canonical = DateTimeAttributeValue.ToCanonical(held);
-        if (canonical.Ticks != held.Ticks || canonical.Kind != held.Kind)
+        if (IsChangedByCanonicalising(held, canonical))
             summary.DatesCanonicalised++;
 
         return canonical;
     }
 
-    private static bool IsReportedByConnector(ConnectedSystemImportObject importObject, string attributeName)
-    {
-        if (importObject.AttributeValueErrors is not { Count: > 0 } errors)
-            return false;
+    private static bool IsChangedByCanonicalising(DateTime held, DateTime canonical) =>
+        canonical.Ticks != held.Ticks || canonical.Kind != held.Kind;
 
-        foreach (var error in errors)
-        {
-            if (error.AttributeName.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
+    private static bool IsReportedByConnector(ConnectedSystemImportObject importObject, string attributeName) =>
+        importObject.AttributeValueErrors is { Count: > 0 } errors &&
+        errors.Exists(error => error.AttributeName.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The instant a date names, in UTC ticks at its full precision; the canonical key's input.</summary>
     private static long ToUtcTicks(DateTime value)

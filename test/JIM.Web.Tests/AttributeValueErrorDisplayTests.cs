@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using JIM.Web.Models;
 using NUnit.Framework;
 
@@ -55,6 +56,18 @@ public class AttributeValueErrorDisplayTests
         {
             Assert.That(AttributeValueErrorDisplay.SchemaHref(4, "person record"), Is.EqualTo("/admin/connected-systems/4?t=schema&ot=person%20record"));
             Assert.That(AttributeValueErrorDisplay.SchemaHref(4, null), Is.EqualTo("/admin/connected-systems/4?t=schema"));
+        }
+    }
+
+    [Test]
+    public void FoundBy_ValueJimCouldNotHold_NamesJimAndAConnectorValueNamesTheConnector()
+    {
+        // #2153: a value JIM itself refused was read; saying the Connector could not read it would send the
+        // administrator to the wrong place.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AttributeValueErrorDisplay.FoundBy(ImportAttributeValueErrorSource.Jim), Is.EqualTo("JIM"));
+            Assert.That(AttributeValueErrorDisplay.FoundBy(ImportAttributeValueErrorSource.Connector), Is.EqualTo("Connector"));
         }
     }
 }

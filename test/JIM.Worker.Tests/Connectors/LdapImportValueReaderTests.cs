@@ -156,6 +156,18 @@ public class LdapImportValueReaderTests
     }
 
     [Test]
+    public void ReadDateTime_FirstTwoValuesUnreadable_ReportsEachOnce()
+    {
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "nonsense", "rubbish", "20231215143000Z"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.EqualTo(new[] { new DateTime(2023, 12, 15, 14, 30, 0, DateTimeKind.Utc) }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "nonsense", "rubbish" }));
+        }
+    }
+
+    [Test]
     public void ReadDateTime_TwoValuesTheSameInstantInDifferentForms_CollapseWithoutReport()
     {
         var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "20231215143000.0Z"));
