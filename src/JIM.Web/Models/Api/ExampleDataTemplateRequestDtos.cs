@@ -86,22 +86,16 @@ public class ExampleDataTemplateObjectTypeRequest
 }
 
 /// <summary>
-/// How a Data Generation Template generates values for one attribute. Exactly one of
-/// <see cref="MetaverseAttributeId"/> or <see cref="ConnectedSystemObjectTypeAttributeId"/> identifies
-/// the attribute being generated; the remaining properties configure value generation and are validated
-/// against the attribute's data type.
+/// How a Data Generation Template generates values for one attribute. <see cref="MetaverseAttributeId"/>
+/// identifies the Metaverse Attribute being generated; the remaining properties configure value generation and
+/// are validated against the attribute's data type.
 /// </summary>
 public class ExampleDataTemplateAttributeRequest
 {
     /// <summary>
-    /// The id of the Metaverse Attribute to generate values for, when targeting the Metaverse.
+    /// The id of the Metaverse Attribute to generate values for. Required.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
-
-    /// <summary>
-    /// The id of the Connected System attribute to generate values for, when targeting a Connected System.
-    /// </summary>
-    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
 
     /// <summary>
     /// What percentage (1-100) of generated objects receive a value for this attribute.

@@ -1529,9 +1529,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("BoolTrueDistribution")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("ConnectedSystemObjectTypeAttributeId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("ExampleDataObjectTypeId")
                         .HasColumnType("integer");
 
@@ -1577,8 +1574,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AttributeDependencyId");
-
-                    b.HasIndex("ConnectedSystemObjectTypeAttributeId");
 
                     b.HasIndex("ExampleDataObjectTypeId");
 
@@ -5448,10 +5443,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("AttributeDependencyId");
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemObjectTypeAttribute")
-                        .WithMany()
-                        .HasForeignKey("ConnectedSystemObjectTypeAttributeId");
-
                     b.HasOne("JIM.Models.ExampleData.ExampleDataObjectType", null)
                         .WithMany("TemplateAttributes")
                         .HasForeignKey("ExampleDataObjectTypeId")
@@ -5462,8 +5453,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("MetaverseAttributeId");
 
                     b.Navigation("AttributeDependency");
-
-                    b.Navigation("ConnectedSystemObjectTypeAttribute");
 
                     b.Navigation("MetaverseAttribute");
                 });

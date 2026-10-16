@@ -661,10 +661,13 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
 
-    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    public Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+        => throw new PreviewWriteAttemptedException(nameof(BeginTransactionAsync));
+
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseExecutingPendingExportsAsync));
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()

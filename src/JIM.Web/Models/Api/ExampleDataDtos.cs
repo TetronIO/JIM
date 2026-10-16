@@ -93,9 +93,8 @@ public class ExampleDataSetValueDto
 
 /// <summary>
 /// API representation of a Data Generation Template, including its per-Object-Type attribute configuration.
-/// Replaces the raw entity response (#1447), whose graph reached live schema entities
-/// (ExampleDataTemplateAttribute carries a ConnectedSystemObjectTypeAttribute) and was one navigation away
-/// from killing OpenAPI document generation; the DTO carries referenced objects as ids and names.
+/// Replaces the raw entity response (#1447), whose graph reached live schema entities and was one navigation
+/// away from killing OpenAPI document generation; the DTO carries referenced objects as ids and names.
 /// </summary>
 public class ExampleDataTemplateDto
 {
@@ -213,8 +212,7 @@ public class ExampleDataTemplateObjectTypeDto
 
 /// <summary>
 /// API representation of how a Data Generation Template generates values for one attribute.
-/// The attribute being generated is identified by id and name: MetaverseAttribute for Metaverse-targeted
-/// generation, ConnectedSystemObjectTypeAttribute for Connected-System-targeted generation.
+/// The Metaverse Attribute being generated is identified by id and name.
 /// </summary>
 public class ExampleDataTemplateAttributeDto
 {
@@ -224,24 +222,14 @@ public class ExampleDataTemplateAttributeDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The id of the Metaverse Attribute values are generated for, when targeting the Metaverse.
+    /// The id of the Metaverse Attribute values are generated for.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Metaverse Attribute values are generated for, when targeting the Metaverse.
+    /// The name of the Metaverse Attribute values are generated for.
     /// </summary>
     public string? MetaverseAttributeName { get; set; }
-
-    /// <summary>
-    /// The id of the Connected System attribute values are generated for, when targeting a Connected System.
-    /// </summary>
-    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
-
-    /// <summary>
-    /// The name of the Connected System attribute values are generated for, when targeting a Connected System.
-    /// </summary>
-    public string? ConnectedSystemObjectTypeAttributeName { get; set; }
 
     /// <summary>
     /// What percentage of generated objects receive a value for this attribute.
@@ -343,8 +331,6 @@ public class ExampleDataTemplateAttributeDto
             Id = entity.Id,
             MetaverseAttributeId = entity.MetaverseAttribute?.Id,
             MetaverseAttributeName = entity.MetaverseAttribute?.Name,
-            ConnectedSystemObjectTypeAttributeId = entity.ConnectedSystemObjectTypeAttribute?.Id,
-            ConnectedSystemObjectTypeAttributeName = entity.ConnectedSystemObjectTypeAttribute?.Name,
             PopulatedValuesPercentage = entity.PopulatedValuesPercentage,
             BoolTrueDistribution = entity.BoolTrueDistribution,
             BoolShouldBeRandom = entity.BoolShouldBeRandom,

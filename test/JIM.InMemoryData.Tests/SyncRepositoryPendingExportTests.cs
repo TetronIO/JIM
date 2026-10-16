@@ -359,12 +359,11 @@ public class SyncRepositoryPendingExportTests
     public async Task ReleaseExecutingPendingExportsAsync_WritesOnlyRowsStillExecutingAndReturnsThemAsync()
     {
         var executing = CreatePe();
-        executing.Status = PendingExportStatus.Executing;
         _repo.SeedPendingExport(executing);
-
         var recorded = CreatePe();
-        recorded.Status = PendingExportStatus.Exported;
         _repo.SeedPendingExport(recorded);
+        var markedAt = await _repo.MarkPendingExportsAsExecutingAsync([executing, recorded]);
+        recorded.Status = PendingExportStatus.Exported;
 
         var lastAttemptedAt = DateTime.UtcNow.AddMinutes(-5);
         var released = await _repo.ReleaseExecutingPendingExportsAsync(
@@ -372,7 +371,7 @@ public class SyncRepositoryPendingExportTests
             new PendingExportRetryState(executing.Id, PendingExportStatus.Pending, 2, lastAttemptedAt, null, "an earlier failure", null),
             new PendingExportRetryState(recorded.Id, PendingExportStatus.Pending, 9, null, null, "must not land", null),
             new PendingExportRetryState(Guid.NewGuid(), PendingExportStatus.Pending, 0, null, null, null, null)
-        ]);
+        ], markedAt);
 
         using (Assert.EnterMultipleScope())
         {
@@ -381,6 +380,28 @@ public class SyncRepositoryPendingExportTests
                 Is.EqualTo(new PendingExportRetryState(executing.Id, PendingExportStatus.Pending, 2, lastAttemptedAt, null, "an earlier failure", null)));
             Assert.That(recorded.Status, Is.EqualTo(PendingExportStatus.Exported));
             Assert.That(recorded.ErrorCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// #2197: a row a later run has marked Executing again belongs to that run, and is not put back by this one.
+    /// </summary>
+    [Test]
+    public async Task ReleaseExecutingPendingExportsAsync_RowMarkedAgainByALaterRun_IsLeftToItAsync()
+    {
+        var export = CreatePe();
+        _repo.SeedPendingExport(export);
+        var markedAt = await _repo.MarkPendingExportsAsExecutingAsync([export]);
+        export.LastAttemptedAt = markedAt.AddSeconds(5);
+
+        var released = await _repo.ReleaseExecutingPendingExportsAsync(
+            [new PendingExportRetryState(export.Id, PendingExportStatus.Pending, 1, null, null, "the earlier run's failure", null)], markedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(released, Is.Empty);
+            Assert.That(export.Status, Is.EqualTo(PendingExportStatus.Executing));
+            Assert.That(export.ErrorCount, Is.Zero);
         }
     }
 

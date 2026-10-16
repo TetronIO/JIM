@@ -95,11 +95,20 @@ public class DataGeneratorTemplateAttributeFailTests
     }
 
     [Test]
+    public void Validate_WithoutMetaverseAttribute_ThrowsNamingTheMetaverseAttribute()
+    {
+        var subject = new ExampleDataTemplateAttribute { PopulatedValuesPercentage = 100, Pattern = "x" };
+
+        var exception = Assert.Throws<ExampleDataTemplateAttributeException>(subject.Validate);
+        Assert.That(exception!.Message, Is.EqualTo("A Metaverse Attribute is required: Example Data generates Metaverse Attribute values only."));
+    }
+
+    [Test]
     public void TestIsValidNumberTypeFail()
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             MinNumber = 100,
             MaxNumber = 50
@@ -108,7 +117,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             RandomNumbers = true
@@ -143,7 +152,7 @@ public class DataGeneratorTemplateAttributeFailTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
@@ -151,7 +160,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             MinDate = DateTime.UtcNow                
         };
@@ -159,7 +168,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() }
 
@@ -168,7 +177,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = true
         };
@@ -180,7 +189,7 @@ public class DataGeneratorTemplateAttributeFailTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
@@ -188,7 +197,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
             MinDate = DateTime.UtcNow
         };
@@ -196,7 +205,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
         };
@@ -204,7 +213,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true
         };
@@ -212,7 +221,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject5 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true
         };
@@ -224,7 +233,7 @@ public class DataGeneratorTemplateAttributeFailTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
@@ -232,7 +241,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = true
         };
@@ -240,7 +249,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
         };
@@ -248,7 +257,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true
         };
@@ -260,7 +269,7 @@ public class DataGeneratorTemplateAttributeFailTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = true
         };
@@ -268,7 +277,7 @@ public class DataGeneratorTemplateAttributeFailTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             MinDate = DateTime.UtcNow
         };
@@ -300,7 +309,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // cannot use PopulatedValuesPercentage and ManagerDepthPercentage together
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             PopulatedValuesPercentage = 100,
             ManagerDepthPercentage = 50
         };
@@ -309,7 +318,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // ManagerDepthPercentage cannot be zero. If you don't want to use ManagerDepthPercentage, then set it to null
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 0
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject2.Validate);
@@ -317,7 +326,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // not everyone can be a manager
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 100
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject3.Validate);
@@ -325,7 +334,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // outside of bounds
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 120
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject4.Validate);
@@ -333,7 +342,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // outside of bounds
         var subject5 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = -10
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject5.Validate);
@@ -341,7 +350,7 @@ public class DataGeneratorTemplateAttributeFailTests
         // ManagerDepthPercentage can only be used on reference attribute types
         var subject6 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject6.Validate);
