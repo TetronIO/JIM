@@ -22,6 +22,13 @@ public class Activity
     /// </summary>
     public const string SyncRuleMappingTargetNamePrefix = "Mapping to ";
 
+    /// <summary>
+    /// The <see cref="TargetName"/> prefix used by configuration test case activities (#2055), which carry the target
+    /// type of what owns the case (a Synchronisation Rule, or a Connected System for a Simple mode Object Matching
+    /// Rule): a test case has no target type of its own. Followed by the case's name, never its values.
+    /// </summary>
+    public const string ConfigurationTestCaseTargetNamePrefix = "Test case ";
+
     public Guid Id { get; set; }
 
     /// <summary>

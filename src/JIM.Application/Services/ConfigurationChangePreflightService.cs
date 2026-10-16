@@ -47,9 +47,12 @@ public class ConfigurationChangePreflightService
         if (proposed.Id == 0)
             return ConfigurationChangePreflight.None;
 
+        // The captured state records the rule's saved test cases (#2055 Phase 4), which a save of the rule does not
+        // edit, so the proposed state carries them as stored; without them every case would read as removed.
+        var testCases = await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(proposed.Id);
         return await EvaluateAsync(
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id),
-            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases));
     }
 
     /// <summary>
@@ -65,9 +68,11 @@ public class ConfigurationChangePreflightService
         if (proposed.Id == 0)
             return ConfigurationChangePreflight.None;
 
+        // As for a Synchronisation Rule: the captured state records the Simple mode Object Matching Rules' test cases.
+        var testCases = await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(proposed.Id);
         return await EvaluateAsync(
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, proposed.Id),
-            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases));
     }
 
     /// <summary>

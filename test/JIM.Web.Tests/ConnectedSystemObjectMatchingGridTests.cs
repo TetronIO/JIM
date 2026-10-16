@@ -36,6 +36,9 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
         Services.AddSingleton<IConfigurationChangePreviewStarter>(new UnusedPreviewStarter());
         // The Add Matching Rule panel judges the rule being composed as the save would (#2052).
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
+        // The test cases panel beneath the rules reads its cases when it renders (#2055 Phase 4); it is not the grid
+        // this fixture covers, and stubbing it keeps the guard below about the tab itself.
+        ComponentFactories.AddStub<JIM.Web.Pages.Admin.Components.ConfigurationTestCasesPanel>();
     }
 
     /// <summary>

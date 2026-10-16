@@ -119,7 +119,8 @@ public class ConfigurationSnapshotService
             .SelectMany(m => m.Generation!.Exclusions)
             .Any(e => e.ConnectedSystem == null);
         var connectedSystemNames = needsNames ? await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync() : null;
-        return CreateSnapshot(rule, hashKey, connectedSystemNames);
+        var testCases = rule.Id > 0 ? await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(rule.Id) : [];
+        return CreateSnapshot(rule, hashKey, connectedSystemNames, testCases);
     }
 
     /// <summary>
@@ -129,9 +130,20 @@ public class ConfigurationSnapshotService
     /// <see cref="CreateSnapshotAsync(SyncRule, byte[])"/>, which looks the names up. The preflight can use this one: it
     /// diffs ids, and reports an exclusion by its kind rather than its name.
     /// </summary>
-    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey) => CreateSnapshot(rule, hashKey, connectedSystemNames: null);
+    /// <remarks>This overload records no saved test cases. Change capture uses
+    /// <see cref="CreateSnapshotAsync(SyncRule, byte[])"/>, which reads them; a caller comparing against captured history
+    /// passes them to <see cref="CreateSnapshot(SyncRule, byte[], IReadOnlyList{ConfigurationTestCase})"/>.</remarks>
+    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey) => CreateSnapshot(rule, hashKey, connectedSystemNames: null, testCases: []);
 
-    private ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyDictionary<int, string>? connectedSystemNames)
+    /// <summary>
+    /// Builds a scoped snapshot of a Synchronisation Rule with the saved configuration test cases that cover it (#2055
+    /// Phase 4): those of its Scope, its Attribute Flows and its own Object Matching Rules.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyList<ConfigurationTestCase> testCases) =>
+        CreateSnapshot(rule, hashKey, connectedSystemNames: null, testCases);
+
+    private ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyDictionary<int, string>? connectedSystemNames,
+        IReadOnlyList<ConfigurationTestCase> testCases)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
@@ -155,6 +167,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules, connectedSystemNames));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
+        AddTestCases(children, testCases, rule.AttributeFlowRules, hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -405,9 +418,33 @@ public class ConfigurationSnapshotService
     /// (using <paramref name="hashKey"/>) is recorded instead. The high-volume operational collections (Objects,
     /// Pending Exports) and PersistedConnectorData are excluded.
     /// </summary>
-    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey)
+    /// <remarks>This overload records no saved test cases. Change capture uses
+    /// <see cref="CreateSnapshotAsync(ConnectedSystem, byte[])"/>, which reads them; a caller comparing against captured
+    /// history passes them to <see cref="CreateSnapshot(ConnectedSystem, byte[], IReadOnlyList{ConfigurationTestCase})"/>.</remarks>
+    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey) => CreateSnapshot(connectedSystem, hashKey, []);
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Connected System as <see cref="CreateSnapshot(ConnectedSystem, byte[])"/> does,
+    /// with the saved configuration test cases of its Simple mode Object Matching Rules (#2055 Phase 4), read from the
+    /// database. Every change capture path uses this overload.
+    /// </summary>
+    public async Task<ConfigurationSnapshot> CreateSnapshotAsync(ConnectedSystem connectedSystem, byte[] hashKey)
     {
         ArgumentNullException.ThrowIfNull(connectedSystem);
+        var testCases = connectedSystem.Id > 0
+            ? await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(connectedSystem.Id)
+            : [];
+        return CreateSnapshot(connectedSystem, hashKey, testCases);
+    }
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Connected System with the saved configuration test cases of its Simple mode Object
+    /// Matching Rules (#2055 Phase 4). A Synchronisation Rule's own cases are in its own snapshot.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey, IReadOnlyList<ConfigurationTestCase> testCases)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(testCases);
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", connectedSystem.Name, "Name");
@@ -427,6 +464,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
         children.Add(BuildPartitions(connectedSystem.Partitions));
+        AddTestCases(children, testCases, attributeFlows: [], hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -515,6 +553,57 @@ public class ConfigurationSnapshotService
     {
         using var hmac = new HMACSHA256(hashKey);
         return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(plaintext)));
+    }
+
+    // -- Configuration test cases (#2055 Phase 4) -------------------------------------------------------------------
+
+    /// <summary>
+    /// Records saved configuration test cases as a top-level collection of the snapshot of what owns them. Top level,
+    /// not beside the Attribute Flow or Object Matching Rule each covers, because classification takes the class of
+    /// every node a change passes through: a case nested in an Attribute Flow would make adding it a Class B change to
+    /// the flow, when a test case changes nothing that synchronises. Omitted when there are none, so a snapshot
+    /// captured before test cases existed compares as unchanged.
+    /// <para>
+    /// A case's inputs and expected values can be personal data loaded from a real object, so each is recorded as a
+    /// keyed hash, as a secret is: history says they changed, and never what they were. Each is hashed from its
+    /// parsed form re-serialised, because PostgreSQL's jsonb rewrites the stored text (key order, spacing), and a
+    /// hash of that text would differ for the same case.
+    /// </para>
+    /// </summary>
+    private static void AddTestCases(List<ConfigurationSnapshotNode> nodes, IReadOnlyList<ConfigurationTestCase> testCases,
+        IReadOnlyList<SyncRuleMapping> attributeFlows, byte[] hashKey)
+    {
+        if (testCases.Count == 0)
+            return;
+
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var testCase in testCases.OrderBy(c => c.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "name", testCase.Name, "Name");
+            Add(children, "description", testCase.Description, "Description");
+            AddEnum(children, "testCaseKind", testCase.Kind, "Tests");
+            var flow = attributeFlows.FirstOrDefault(m => m.Id == testCase.SyncRuleMappingId);
+            AddReference(children, "testCaseAttributeFlowId", testCase.SyncRuleMappingId,
+                flow?.TargetMetaverseAttribute?.Name ?? flow?.TargetConnectedSystemAttribute?.Name, "Attribute Flow");
+            AddReference(children, "testCaseObjectMatchingRuleId", testCase.ObjectMatchingRuleId, null, "Object Matching Rule");
+            Add(children, "testCaseRunAsOf", Render(testCase.RunAsOfUtc), "Run as of");
+
+            var expectation = testCase.Expectation;
+            AddEnum(children, "testCaseExpectation", expectation.Kind, "Expects");
+            if (expectation.Kind == ConfigurationTestExpectationKind.Values)
+            {
+                Add(children, "testCaseInOrder", Render(expectation.InOrder), "In this order");
+                children.Add(ConfigurationSnapshotNode.Secret("testCaseExpectedValues",
+                    ComputePlaintextHash(JsonSerializer.Serialize(expectation.Values, SerialiserOptions), hashKey), "Expected values"));
+            }
+
+            children.Add(ConfigurationSnapshotNode.Secret("testCaseInputs",
+                ComputePlaintextHash(JsonSerializer.Serialize(testCase.Inputs, SerialiserOptions), hashKey), "Inputs"));
+            items.Add(ConfigurationSnapshotNode.ObjectNode("testCase", children, testCase.Name, testCase.Id));
+        }
+
+        nodes.Add(ConfigurationSnapshotNode.CollectionNode("testCases", items, "Test cases"));
     }
 
     private ConfigurationSnapshotNode BuildRunProfiles(List<ConnectedSystemRunProfile>? runProfiles)

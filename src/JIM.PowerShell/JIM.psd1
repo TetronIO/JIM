@@ -124,6 +124,13 @@
         'Remove-JIMScopingCriterion',
         'Test-JIMScope',
 
+        # Configuration test cases
+        'Get-JIMConfigurationTestCase',
+        'New-JIMConfigurationTestCase',
+        'Set-JIMConfigurationTestCase',
+        'Remove-JIMConfigurationTestCase',
+        'Invoke-JIMConfigurationTest',
+
         # Run Profiles
         'Get-JIMRunProfile',
         'New-JIMRunProfile',
