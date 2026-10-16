@@ -66,14 +66,18 @@ public class ConnectedSystemImportObject
     /// <param name="attributeName">The attribute the value was found on.</param>
     /// <param name="value">The value as received, before conversion.</param>
     /// <param name="reason">Why it could not be read.</param>
-    public void AddAttributeValueError(string attributeName, string? value, string reason)
+    /// <param name="source">Who found it could not be imported. A Connector leaves this as it is; JIM sets it when it is
+    /// JIM that cannot hold a value the Connector read (#2153).</param>
+    public void AddAttributeValueError(string attributeName, string? value, string reason,
+        ImportAttributeValueErrorSource source = ImportAttributeValueErrorSource.Connector)
     {
         AttributeValueErrors ??= [];
         AttributeValueErrors.Add(new ConnectedSystemImportObjectAttributeValueError
         {
             AttributeName = attributeName,
             Value = value,
-            Reason = reason
+            Reason = reason,
+            Source = source
         });
         ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
     }

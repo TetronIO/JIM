@@ -465,14 +465,14 @@ Describe 'Invoke-LDAPSearch' {
         Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('dn: CN=x,DC=y') } }
     }
 
-    It 'keeps the URI and flags a container config has always produced' {
+    It 'keeps the URI and flags a container config has always produced, and pages the search' {
         Invoke-LDAPSearch -ContainerName 'samba-ad-primary' -Server 'localhost' -Port 389 -Scheme 'ldap' `
             -BaseDN 'DC=panoply,DC=local' -BindDN 'CN=Administrator,CN=Users,DC=panoply,DC=local' `
             -BindPassword 'Test@123!' -Filter '(cn=x)' -Attributes @('cn', 'mail') | Out-Null
 
         Should -Invoke Invoke-LdapTool -Times 1 -Exactly -ParameterFilter {
             $Tool -eq 'ldapsearch' -and $DirectoryConfig.ContainerName -eq 'samba-ad-primary' -and
-            (($Arguments -join '|') -eq '-x|-LLL|-H|ldap://localhost:389|-D|CN=Administrator,CN=Users,DC=panoply,DC=local|-w|Test@123!|-b|DC=panoply,DC=local|(cn=x)|cn|mail')
+            (($Arguments -join '|') -eq '-x|-LLL|-E|pr=1000/noprompt|-H|ldap://localhost:389|-D|CN=Administrator,CN=Users,DC=panoply,DC=local|-w|Test@123!|-b|DC=panoply,DC=local|(cn=x)|cn|mail')
         }
     }
 

@@ -58,7 +58,7 @@ public static class TestUtilities
         switch (schemaAttribute.Type)
         {
             case AttributeDataType.Boolean:
-                Assert.That(csoAttributeValues[0].BoolValue, Is.EqualTo(csioAttribute!.BoolValue));
+                Assert.That(csoAttributeValues.Select(v => v.BoolValue!.Value), Is.EquivalentTo(csioAttribute!.BoolValues));
                 break;
             case AttributeDataType.Guid:
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same)
@@ -93,7 +93,7 @@ public static class TestUtilities
                     Assert.That(csoAttributeValues.Any(q => q.StringValue == csioStringValue));
                 break;
             case AttributeDataType.DateTime:
-                Assert.That(csoAttributeValues[0].DateTimeValue, Is.EqualTo(csioAttribute!.DateTimeValue));
+                Assert.That(csoAttributeValues.Select(v => v.DateTimeValue!.Value), Is.EquivalentTo(csioAttribute!.DateTimeValues));
                 break;
             case AttributeDataType.Binary:
                 // this is quite crude, and could be improved.

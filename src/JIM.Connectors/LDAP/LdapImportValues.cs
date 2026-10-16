@@ -19,7 +19,7 @@ internal sealed class LdapImportValues<T>
 
     /// <summary>
     /// Each value that was not imported, as received: one that could not be read as the attribute's type, or one of
-    /// several where JIM holds one value for the type (#2153).
+    /// two dates that differ only below the 100 nanoseconds JIM can read (#2153).
     /// </summary>
     internal IReadOnlyList<LdapUnreadableValue> Unreadable => _unreadable ?? [];
 

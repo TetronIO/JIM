@@ -434,18 +434,21 @@ userPassword: Password123!
     if ($Step -eq "ForwardSync" -or $Step -eq "All") {
         Write-TestSection "Test 2: Forward Sync (Attribute Change)"
 
-        # For OpenLDAP we update displayName (SINGLE-VALUE, mapped); for AD we update department
+        # For OpenLDAP we change the surname, and Display Name, built from the given name and surname, must
+        # carry it to the Target's displayName; for AD we update department
         $updateAttrName = if ($isRfcDirectory) { "displayName" } else { "department" }
-        $updateNewValue = if ($isRfcDirectory) { "CrossDomain Updated" } else { "Sales" }
-        Write-Host "Updating user $updateAttrName in Source..." -ForegroundColor Gray
+        $updateNewValue = if ($isRfcDirectory) { "$testUserFirstName Updated" } else { "Sales" }
+        $sourceAttrName = if ($isRfcDirectory) { "sn" } else { $updateAttrName }
+        $sourceNewValue = if ($isRfcDirectory) { "Updated" } else { $updateNewValue }
+        Write-Host "Updating user $sourceAttrName in Source..." -ForegroundColor Gray
 
         if ($isRfcDirectory) {
             $userDN = "$($SourceConfig.UserRdnAttr)=$testUserSam,$($SourceConfig.UserContainer)"
             $modifyLdif = @"
 dn: $userDN
 changetype: modify
-replace: $updateAttrName
-$updateAttrName`: $updateNewValue
+replace: $sourceAttrName
+$sourceAttrName`: $sourceNewValue
 "@
         }
         else {
@@ -460,7 +463,7 @@ $updateAttrName`: $updateNewValue
         $modifyResult = Invoke-DirectoryLdif -DirectoryConfig $SourceConfig -Ldif $modifyLdif -Operation modify
 
         if ($modifyResult.Success -or $modifyResult.Output -match "modifying entry") {
-            Write-Host "  ✓ Updated $updateAttrName to '$updateNewValue' in Source" -ForegroundColor Green
+            Write-Host "  ✓ Updated $sourceAttrName to '$sourceNewValue' in Source" -ForegroundColor Green
         }
         else {
             Write-Host "  ⚠ ldapmodify may have failed: $($modifyResult.Output)" -ForegroundColor Yellow

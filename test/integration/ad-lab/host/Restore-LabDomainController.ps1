@@ -8,7 +8,8 @@
 .DESCRIPTION
     Applies the named production checkpoint, starts the VM if it is stopped, then waits until the guest answers
     PowerShell Direct and LDAPS (TCP 636) accepts a connection. Fails if the checkpoint does not exist, or the
-    timeout passes.
+    timeout passes. Through PowerShell Direct it then makes sure a previous password stops working as soon as it
+    changes (OldPasswordAllowedPeriod=0, as the Configure phase sets), whatever the checkpoint was taken with.
 
     A revert is a restore from backup as far as the directory is concerned: the domain controller boots fresh,
     the clock comes from the host, and it renews its invocationId, so a Delta Import watermark taken before the
@@ -116,6 +117,12 @@ try {
             if (-not $listening) { Start-Sleep -Seconds 5 }
         }
         if (-not $listening) { throw "LDAPS (636) did not accept a connection in '$Name' within $TimeoutSeconds seconds." }
+
+        # The Configure phase sets this, but a checkpoint taken before it did would bring the 5 minute default back,
+        # so it is applied after every revert too (#2287). It is one registry value and needs no restart.
+        if (Invoke-Command -VMName $Name -Credential $credential -ScriptBlock ${function:Set-LabOldPasswordAllowedPeriod}) {
+            Write-Progress-Line "Stopped the previous password working after a change in $Name (OldPasswordAllowedPeriod=0)"
+        }
     }
     else {
         Write-Progress-Line 'JIM_AD_LAB_ADMIN_PASSWORD is not set: waiting on the heartbeat and a TCP connection to LDAPS from this host instead of PowerShell Direct.' 'Yellow'

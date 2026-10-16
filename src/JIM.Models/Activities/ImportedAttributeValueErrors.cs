@@ -69,7 +69,8 @@ public class ImportedAttributeValueErrors
                     AttributeType = objectType?.Attributes
                         .FirstOrDefault(a => a.Name.Equals(value.AttributeName, StringComparison.OrdinalIgnoreCase))?.Type,
                     Value = Shorten(value.Value),
-                    Reason = value.Reason
+                    Reason = value.Reason,
+                    Source = value.Source
                 })
                 .ToList()
         };

@@ -686,9 +686,11 @@ function Invoke-LDAPSearch {
 
     try {
         # Build ldapsearch arguments array — pass args directly to docker exec
-        # to avoid shell glob expansion issues with '*'
+        # to avoid shell glob expansion issues with '*'. Paged, as Find-DirectoryEntry's searches are: Active
+        # Directory refuses an unpaged search matching more than 1,000 entries (exit 4, sizeLimitExceeded), and
+        # no server need build one unbounded response.
         $ldapArgs = @(
-            "-x", "-LLL",
+            "-x", "-LLL", "-E", "pr=1000/noprompt",
             "-H", $ldapUri,
             "-D", $BindDN,
             "-w", $BindPassword,
