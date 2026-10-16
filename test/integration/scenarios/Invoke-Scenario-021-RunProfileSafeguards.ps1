@@ -41,6 +41,17 @@
           employee is marked as deleted, and the timestamp moves
         - Restores the CSV, clears both limits and re-imports, so later scenarios are unaffected
 
+    Test 3: Delta Import deletion limits (#2089)
+        - LDAP Full Import then Delta Import, so the Delta Import starts from a current watermark
+        - Max detected deletions on the LDAP Delta Import Run Profile one below the number of users then deleted
+          in the directory; the Delta Import withholds every reported delete: none of their Connected System
+          Objects is Obsolete, the Activity is CompleteWithWarning with the Delta Import warning, and
+          detectedDeletionsWithheld equals the deleted count
+        - A second Delta Import refuses the same count again, which proves the watermark did not advance
+        - Max detected deletions equal to the count: every delete is applied and nothing is withheld
+        - Clears the limit, synchronises the Obsolete objects away and re-provisions the deleted users, so later
+          scenarios see the full population
+
 .PARAMETER Step
     Which test step to execute
 
@@ -65,7 +76,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("ExportLimit", "ImportLimit", "All")]
+    [ValidateSet("ExportLimit", "ImportLimit", "DeltaImportLimit", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -99,6 +110,11 @@ if ($Template -in $longTailTemplates) {
 
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
+
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
 
 Write-TestSection "Scenario 021: Run Profile Safeguards"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -522,6 +538,124 @@ try {
 
         $testResults.Steps += @{ Name = "Full Import deletion-detection limits (share, count)"; Success = $true }
         Write-Host "  ✓ Test 2 passed" -ForegroundColor Green
+    }
+
+    # =============================================================================================================
+    # Test 3: Delta Import deletion limits (#2089)
+    # =============================================================================================================
+    if ($Step -eq "DeltaImportLimit" -or $Step -eq "All") {
+        Write-TestSection "Test 3: Delta Import Deletion Limits"
+
+        Assert-NotNull -Value $config.LDAPDeltaImportProfileId -Message "The fixture has a Delta Import Run Profile for the LDAP Connected System"
+        $deltaProfileId = $config.LDAPDeltaImportProfileId
+
+        # Step 3a: Baseline, so the Delta Import starts from a current watermark and reports nothing stale
+        Write-TestStep "3a" "LDAP Full Import then Delta Import (baseline watermark)"
+        $baselineFull = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $baselineFull.activityId -Name "LDAP Full Import (Test 3 baseline)"
+        $baselineDelta = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $baselineDelta.activityId -Name "LDAP Delta Import (Test 3 baseline)"
+        Assert-Equal -Expected 0 -Actual ([int](Get-JIMActivityStats -ActivityId $baselineDelta.activityId).totalCsoDeletes) -Message "The baseline Delta Import reports no deletes"
+
+        # Pick the users to delete deterministically: the first few joined (JIM-managed) users by DN
+        $ldapUsers = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -All |
+            Where-Object { [string]$_.status -eq "Normal" -and [string]$_.joinType -ne "NotJoined" -and [string]$_.typeName -eq $DirectoryConfig.UserObjectClass -and $_.secondaryExternalIdValue } |
+            Sort-Object secondaryExternalIdValue)
+        # Up to three, always leaving one user behind; at least two, so the limit below the count is at least one
+        $deleteCount = [Math]::Min(3, $ldapUsers.Count - 1)
+        Assert-Condition -Condition ($deleteCount -ge 2) -Message "The LDAP Connected System holds at least three joined users (got $($ldapUsers.Count))"
+        $departingUsers = @($ldapUsers | Select-Object -First $deleteCount)
+        $departingIds = @($departingUsers | ForEach-Object { [string]$_.id })
+        $withheldLimit = $deleteCount - 1
+
+        # Step 3b: Max detected deletions one below the number about to be deleted
+        Write-TestStep "3b" "Set Max detected deletions $withheldLimit on the LDAP Delta Import Run Profile"
+        Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -MaxDetectedDeletions $withheldLimit | Out-Null
+        $deltaProfile = Get-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId | Where-Object { $_.id -eq $deltaProfileId }
+        Assert-Equal -Expected $withheldLimit -Actual ([int]$deltaProfile.safeguards.maxDetectedDeletions) -Message "Get-JIMRunProfile reports Max detected deletions $withheldLimit on the Delta Import"
+
+        # Step 3c: Delete the users in the directory and run the Delta Import; every delete is withheld
+        Write-TestStep "3c" "Delete $deleteCount users in the directory and run the Delta Import (withheld)"
+        foreach ($user in $departingUsers) {
+            $removed = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $user.secondaryExternalIdValue
+            Assert-Equal -Expected "Deleted" -Actual ([string]$removed.Outcome) -Message "Deleted $($user.secondaryExternalIdValue) in the directory"
+        }
+        Start-Sleep -Seconds 5
+
+        $withheldRuns = @()
+        foreach ($attempt in 1..2) {
+            $withheldResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $withheldResult.activityId -Name "LDAP Delta Import (Test 3 withheld, run $attempt)" -AllowWarnings
+            $withheldActivity = Get-JIMActivity -Id $withheldResult.activityId
+            Assert-Equal -Expected "CompleteWithWarning" -Actual ([string]$withheldActivity.status) -Message "The withheld Delta Import completed with a warning (run $attempt)"
+            Assert-Equal -Expected $deleteCount -Actual ([int]$withheldActivity.detectedDeletionsWithheld) -Message "The Activity records $deleteCount deletions withheld (run $attempt)"
+            Assert-Condition -Condition ($withheldActivity.warningMessage -like "*The Connected System reported $deleteCount objects*as deleted*limit of $withheldLimit*") -Message "The warning names the count and the limit (got: $($withheldActivity.warningMessage))"
+            Assert-Condition -Condition ($withheldActivity.warningMessage -like '*none were marked as deleted*') -Message "The warning states nothing was marked (got: $($withheldActivity.warningMessage))"
+            Assert-Equal -Expected 0 -Actual ([int](Get-JIMActivityStats -ActivityId $withheldResult.activityId).totalCsoDeletes) -Message "Nothing was marked as deleted (run $attempt)"
+
+            $obsoleteIds = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Status Obsolete -All | ForEach-Object { [string]$_.id })
+            $obsoleteDeparting = @($departingIds | Where-Object { $_ -in $obsoleteIds })
+            Assert-Equal -Expected 0 -Actual $obsoleteDeparting.Count -Message "None of the deleted users' Connected System Objects is Obsolete (run $attempt)"
+            $withheldRuns += $withheldActivity
+        }
+        # The second run reading the same deletes again is the proof the first kept its starting watermark
+        Assert-Equal -Expected ([int]$withheldRuns[0].detectedDeletionsWithheld) -Actual ([int]$withheldRuns[1].detectedDeletionsWithheld) -Message "The second Delta Import withholds the same deletes, so the watermark did not advance"
+
+        # Step 3d: Raise the limit to the count; every delete is applied
+        Write-TestStep "3d" "Set Max detected deletions $deleteCount and run the Delta Import (applied)"
+        Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -MaxDetectedDeletions $deleteCount | Out-Null
+        $appliedResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $appliedResult.activityId -Name "LDAP Delta Import (Test 3 applied)"
+        $appliedActivity = Get-JIMActivity -Id $appliedResult.activityId
+        Assert-Equal -Expected 0 -Actual ([int]$appliedActivity.detectedDeletionsWithheld) -Message "Nothing was withheld once the limit allows the deletes"
+        Assert-Equal -Expected $deleteCount -Actual ([int](Get-JIMActivityStats -ActivityId $appliedResult.activityId).totalCsoDeletes) -Message "Every deleted user was marked as deleted"
+        $obsoleteIdsAfter = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Status Obsolete -All | ForEach-Object { [string]$_.id })
+        $appliedDeparting = @($departingIds | Where-Object { $_ -in $obsoleteIdsAfter })
+        Assert-Equal -Expected $deleteCount -Actual $appliedDeparting.Count -Message "Every deleted user's Connected System Object is Obsolete"
+
+        # Step 3e: Clear the limit, synchronise the Obsolete objects away and re-provision the deleted users. Their
+        # Metaverse Objects are unchanged, so the disconnection alone stages nothing; JIM provisions a missing target
+        # account the next time the object changes. Touch the departed employees' title in the HR CSV to provision
+        # them, then put the CSV back so the directory ends where it started.
+        Write-TestStep "3e" "Clear the limit and re-provision the deleted users"
+        Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -MaxDetectedDeletions $null | Out-Null
+        $clearedProfile = Get-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId | Where-Object { $_.id -eq $deltaProfileId }
+        Assert-Condition -Condition ($null -eq $clearedProfile.safeguards.maxDetectedDeletions -and $null -eq $clearedProfile.safeguards.maxDetectedDeletionsPercent) -Message "Both deletion limits are cleared on the Delta Import"
+        $ldapSync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $ldapSync.activityId -Name "LDAP Delta Sync (Test 3 restore)"
+        Assert-Equal -Expected $deleteCount -Actual ([int](Get-JIMActivityStats -ActivityId $ldapSync.activityId).totalDisconnections) -Message "The Delta Sync disconnected every deleted user"
+
+        $baselineCsvRows3 = @(Import-Csv $csvPath)
+        $departingNames = @($departingUsers | ForEach-Object { [string]$_.displayName })
+        $touchedCsv = @($baselineCsvRows3 | ForEach-Object {
+            $row = $_.PSObject.Copy()
+            if ($row.displayName -in $departingNames) { $row.title = "$($row.title) (re-provisioned)" }
+            $row
+        })
+        $touchedCount = @($touchedCsv | Where-Object { $_.title -like '* (re-provisioned)' }).Count
+        Assert-Equal -Expected $deleteCount -Actual $touchedCount -Message "Every deleted user has an HR row to touch"
+        $touchedCsv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        Invoke-ImportAndSync -Config $config -Name "Test 3 re-provision" | Out-Null
+        Assert-Equal -Expected $deleteCount -Actual (Get-LdapPendingExportCount -Config $config) -Message "A create is pending for each deleted user"
+        Assert-ExportAppliedInFull -Config $config -Expected $deleteCount -Name "Test 3 re-provision"
+        Invoke-LdapConfirmingImport -Config $config -Name "Test 3 re-provision"
+        foreach ($user in $departingUsers) {
+            Assert-Condition -Condition (Test-DirectoryEntryPresent -DirectoryConfig $DirectoryConfig -BaseDn $user.secondaryExternalIdValue -Filter "(objectClass=*)") -Message "$($user.secondaryExternalIdValue) exists in the directory again"
+        }
+
+        $baselineCsvRows3 | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        Invoke-ImportAndSync -Config $config -Name "Test 3 restore" | Out-Null
+        $pendingAfterDeltaRestore = Get-LdapPendingExportCount -Config $config
+        if ($pendingAfterDeltaRestore -gt 0) {
+            Assert-ExportAppliedInFull -Config $config -Expected $pendingAfterDeltaRestore -Name "Test 3 restore"
+            Invoke-LdapConfirmingImport -Config $config -Name "Test 3 restore"
+        }
+        Assert-Equal -Expected 0 -Actual (Get-LdapPendingExportCount -Config $config) -Message "No export is pending to LDAP once the directory is restored"
+
+        $testResults.Steps += @{ Name = "Delta Import deletion limits (withheld, watermark kept, applied)"; Success = $true }
+        Write-Host "  ✓ Test 3 passed" -ForegroundColor Green
     }
 
     # =============================================================================================================
