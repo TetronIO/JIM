@@ -112,6 +112,8 @@ public class ExportExecutionParallelBatchTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Collision Remediation reads whether Metaverse Object changes are tracked; an empty set falls back to the default.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
@@ -1143,6 +1145,37 @@ public class ExportExecutionParallelBatchTests
             Assert.That(result.FailedCount, Is.EqualTo(2));
             Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
                 Is.EquivalentTo(exports.Skip(1).Select(pe => (Guid?)pe.Id)));
+        }
+    }
+
+    /// <summary>
+    /// #2197: a batch's results are recorded before anything that processes them further can fail. Collision Remediation
+    /// failing for one rejected change used to fail the whole batch before any result was recorded, so a change the
+    /// Connector had written was counted as a failed attempt and sent again (a Create, a second time).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CollisionRemediationFailsForOneChange_RecordsTheOthersResultsFirstAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        targetSystem.ConnectorDefinition.SupportsUniquenessRejectionClassification = true;
+        var exports = SeedFreshExports(targetSystem, 2);
+        var written = new HashSet<Guid>();
+        SyncRepo.OnPendingExportsUpdated = ids => written.UnionWith(ids);
+        SyncRepo.FailSyncRuleLoadWith = new InvalidOperationException("The Synchronisation Rules could not be read.");
+        var rejection = ConnectedSystemExportResult.Failed("That value is already in use.");
+        rejection.ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse;
+        var connector = CreateScriptedConnector((_, _) => [ConnectedSystemExportResult.Succeeded(), rejection]);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Does.Contain(exports[0].Id), "the written change's result is recorded");
+            Assert.That(result.ProcessedExportItems.Where(item => item.Succeeded).Select(item => item.PendingExportId),
+                Is.EqualTo(new[] { (Guid?)exports[0].Id }));
+            Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
+                Is.EqualTo(new[] { (Guid?)exports[1].Id }), "only the change whose remediation failed is reported failed");
         }
     }
 

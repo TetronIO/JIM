@@ -664,6 +664,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
 
+    public Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+        => throw new PreviewWriteAttemptedException(nameof(BeginTransactionAsync));
+
     public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseExecutingPendingExportsAsync));
 

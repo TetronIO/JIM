@@ -78,6 +78,12 @@ public class SyncRepository : ISyncRepository
     public Exception? FailConnectedSystemObjectUpdateWith { get; set; }
 
     /// <summary>
+    /// When set, <see cref="GetAllSyncRulesAsync"/> throws it, so a test can make a step that reads the rules after a
+    /// batch's exports came back (Collision Remediation) fail, and prove the batch's other results are not lost (#2197).
+    /// </summary>
+    public Exception? FailSyncRuleLoadWith { get; set; }
+
+    /// <summary>
     /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
     /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
     /// </summary>
@@ -2440,6 +2446,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
     {
+        if (FailSyncRuleLoadWith != null)
+            throw FailSyncRuleLoadWith;
+
         GetAllSyncRulesCallCount++;
         return Task.FromResult(_syncRules.Values.ToList());
     }
@@ -3425,6 +3434,9 @@ public class SyncRepository : ISyncRepository
     /// No transaction to hold in memory (#288 preview backstop); the preview's other defence-in-depth
     /// layers (structural purity, the read-only guard) still apply against this repository.
     /// </summary>
+    // The in-memory store has no transaction to hold; its writes land as they are made.
+    public Task<ISyncRepositoryTransaction?> BeginTransactionAsync() => Task.FromResult<ISyncRepositoryTransaction?>(null);
+
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
 

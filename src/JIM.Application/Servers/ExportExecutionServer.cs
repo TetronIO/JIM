@@ -2196,6 +2196,7 @@ public class ExportExecutionServer
         // once below, after the batch's writes (#1750 Phase 4).
         DerivedInputMarkBatch? derivedInputMarks = null;
         var collisionRemediation = _collisionRemediation;
+        var collisionCandidates = new List<(PendingExport Export, ConnectedSystemExportResult Rejection, List<PendingExportAttributeValueChange> WrittenChanges)>();
 
         for (var i = 0; i < batch.Count; i++)
         {
@@ -2228,65 +2229,16 @@ public class ExportExecutionServer
             if (!exportResult.Success)
             {
                 // A value already in use (Unique Value Generation, #242, release 4): Collision Remediation may correct a
-                // generated value behind it, or park the export for an administrator's decision. Either way the export
-                // is not failed and its error count is not consumed.
-                var collision = exportResult.ErrorType == ConnectedSystemExportErrorType.UniqueValueAlreadyInUse && collisionRemediation != null
-                    ? await collisionRemediation.HandleAsync(export, exportResult, repository,
-                        () => derivedInputMarks ??= new DerivedInputMarkBatch(collisionRemediation.DerivedFlowGraph, "Collision Remediation"))
-                    : null;
-
-                if (collision != null)
+                // generated value behind it, or park the export for an administrator's decision. It reads and writes, so
+                // it can fail, and runs only once the batch's other results are recorded (#2197).
+                if (exportResult.ErrorType == ConnectedSystemExportErrorType.UniqueValueAlreadyInUse && collisionRemediation != null)
                 {
-                    exportsToUpdate.Add(export);
-                    if (collision.Handling == GeneratedValueCollisionHandling.Remediated)
-                    {
-                        result.DeferredCount++;
-                        result.GeneratedValuesRemediatedCount++;
-                    }
-                    else
-                    {
-                        result.FailedCount++;
-                        result.GeneratedValuesNeedingDecisionCount++;
-                    }
-
-                    var collisionChanges = CollisionAttributeChanges(collision) ?? writtenChanges;
-                    result.ProcessedExportItems.Add(new ProcessedExportItem
-                    {
-                        ChangeType = export.ChangeType,
-                        ConnectedSystemObject = export.ConnectedSystemObject,
-                        PendingExportId = export.Id,
-                        AttributeChangeCount = collisionChanges.Count,
-                        AttributeValueChanges = collisionChanges,
-                        Succeeded = false,
-                        ErrorMessage = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.Message : null,
-                        ErrorCount = export.ErrorCount,
-                        ErrorType = exportResult.ErrorType,
-                        RejectedAttributeName = exportResult.RejectedAttributeName,
-                        GeneratedValueCollision = collision,
-                        ExecutionItemId = collision.ExecutionItemId
-                    }.WithCauseFrom(export));
+                    collisionCandidates.Add((export, exportResult, writtenChanges));
                     continue;
                 }
 
-                // Export failed - mark as failed
-                MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+                RecordFailedAttempt(export, exportResult, writtenChanges, result);
                 exportsToUpdate.Add(export);
-                result.FailedCount++;
-
-                // Capture export data for activity tracking (before any state changes)
-                result.ProcessedExportItems.Add(new ProcessedExportItem
-                {
-                    ChangeType = export.ChangeType,
-                    ConnectedSystemObject = export.ConnectedSystemObject,
-                    PendingExportId = export.Id,
-                    AttributeChangeCount = writtenChanges.Count,
-                    AttributeValueChanges = writtenChanges,
-                    Succeeded = false,
-                    ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                    ErrorCount = export.ErrorCount,
-                    ErrorType = exportResult.ErrorType,
-                    RejectedAttributeName = exportResult.RejectedAttributeName
-                }.WithCauseFrom(export));
                 continue;
             }
 
@@ -2407,11 +2359,33 @@ public class ExportExecutionServer
             ? exportsToUpdate.Where(pe => !heldUntilStaged.Contains(pe)).ToList()
             : exportsToUpdate;
 
-        // Batch update all Pending Exports
-        await WritePendingExportsAsync(writtenNow, repository);
+        // The batch's results are recorded first, before anything that processes them further can fail (#2197), and a
+        // Create's result together with the External ID it assigned: the status alone would leave an object JIM cannot
+        // address, and losing both would have a Create already written sent again. A failure here records nothing, and
+        // the batch is reported failed as a whole.
+        await using (var transaction = await repository.BeginTransactionAsync())
+        {
+            if (csosToUpdate.Count > 0)
+                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
+            await WritePendingExportsAsync(writtenNow, repository);
+            if (transaction != null)
+                await transaction.CommitAsync();
+        }
 
         try
         {
+            // Each value already in use is decided, and recorded, on its own, so one that cannot be decided fails alone.
+            foreach (var (export, rejection, writtenChanges) in collisionCandidates)
+            {
+                var collision = await collisionRemediation!.HandleAsync(export, rejection, repository,
+                    () => derivedInputMarks ??= new DerivedInputMarkBatch(collisionRemediation.DerivedFlowGraph, "Collision Remediation"));
+                if (collision != null)
+                    RecordCollision(export, rejection, writtenChanges, collision, result);
+                else
+                    RecordFailedAttempt(export, rejection, writtenChanges, result);
+                await WritePendingExportsAsync([export], repository);
+            }
+
             // An "Allow the rename" answers one rejection; an export that has now succeeded for that account makes it moot.
             await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, repository);
 
@@ -2422,13 +2396,7 @@ public class ExportExecutionServer
                 await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
             }
 
-            // Batch update CSOs that need external ID or status changes
-            if (csosToUpdate.Count > 0)
-            {
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
-            }
-
-            // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync, because the delivery pass finds the
+            // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync (with the batch's results, above), because the delivery pass finds the
             // account in the Connected System by the external ID that call has just assigned; staging first would
             // record work against an account JIM could not yet address.
             if (provisionedAccounts.Count > 0)
@@ -2475,6 +2443,68 @@ public class ExportExecutionServer
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// Records an export the Connector refused, or whose result could not be had, as a failed attempt with an execution
+    /// item. The caller persists it.
+    /// </summary>
+    private static void RecordFailedAttempt(PendingExport export, ConnectedSystemExportResult exportResult,
+        List<PendingExportAttributeValueChange> writtenChanges, ExportExecutionResult result)
+    {
+        MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+        result.FailedCount++;
+
+        // Capture export data for activity tracking (before any state changes)
+        result.ProcessedExportItems.Add(new ProcessedExportItem
+        {
+            ChangeType = export.ChangeType,
+            ConnectedSystemObject = export.ConnectedSystemObject,
+            PendingExportId = export.Id,
+            AttributeChangeCount = writtenChanges.Count,
+            AttributeValueChanges = writtenChanges,
+            Succeeded = false,
+            ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+            ErrorCount = export.ErrorCount,
+            ErrorType = exportResult.ErrorType,
+            RejectedAttributeName = exportResult.RejectedAttributeName
+        }.WithCauseFrom(export));
+    }
+
+    /// <summary>
+    /// Records an export rejected for a value already in use that Collision Remediation decided (#242, release 4): not a
+    /// failed attempt, so its error count is not consumed. The caller persists it.
+    /// </summary>
+    private static void RecordCollision(PendingExport export, ConnectedSystemExportResult rejection,
+        List<PendingExportAttributeValueChange> writtenChanges, GeneratedValueCollisionOutcome collision, ExportExecutionResult result)
+    {
+        if (collision.Handling == GeneratedValueCollisionHandling.Remediated)
+        {
+            result.DeferredCount++;
+            result.GeneratedValuesRemediatedCount++;
+        }
+        else
+        {
+            result.FailedCount++;
+            result.GeneratedValuesNeedingDecisionCount++;
+        }
+
+        var collisionChanges = CollisionAttributeChanges(collision) ?? writtenChanges;
+        result.ProcessedExportItems.Add(new ProcessedExportItem
+        {
+            ChangeType = export.ChangeType,
+            ConnectedSystemObject = export.ConnectedSystemObject,
+            PendingExportId = export.Id,
+            AttributeChangeCount = collisionChanges.Count,
+            AttributeValueChanges = collisionChanges,
+            Succeeded = false,
+            ErrorMessage = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.Message : null,
+            ErrorCount = export.ErrorCount,
+            ErrorType = rejection.ErrorType,
+            RejectedAttributeName = rejection.RejectedAttributeName,
+            GeneratedValueCollision = collision,
+            ExecutionItemId = collision.ExecutionItemId
+        }.WithCauseFrom(export));
     }
 
     private static async Task WritePendingExportsAsync(List<PendingExport> exports, ISyncRepository repository)

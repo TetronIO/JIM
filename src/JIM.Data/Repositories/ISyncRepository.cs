@@ -1694,6 +1694,14 @@ public interface ISyncRepository
     /// </summary>
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
 
+    /// <summary>
+    /// Begins a database transaction that the writes made through this repository join until it is committed or
+    /// disposed, so a set of them lands together or not at all (#2197): an export's recorded result and the External ID
+    /// it assigned, say. Returns null when a transaction is already open, whose writes these then join and whose owner
+    /// commits them, or when the provider is not relational (the in-memory test repository).
+    /// </summary>
+    Task<ISyncRepositoryTransaction?> BeginTransactionAsync();
+
     #endregion
 
     #region Generated Values (#242)

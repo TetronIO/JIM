@@ -702,6 +702,25 @@ public partial class SyncRepository : ISyncRepository
         return new RollbackOnlyTransactionScope(transaction);
     }
 
+    /// <inheritdoc />
+    public async Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+    {
+        if (!_context.Database.IsRelational() || _context.Database.CurrentTransaction != null)
+            return null;
+
+        return new SyncRepositoryTransaction(await _context.Database.BeginTransactionAsync());
+    }
+
+    /// <summary>
+    /// A transaction the caller commits; disposed uncommitted, it rolls back (EF Core's own disposal behaviour).
+    /// </summary>
+    private sealed class SyncRepositoryTransaction(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction) : ISyncRepositoryTransaction
+    {
+        public Task CommitAsync() => transaction.CommitAsync();
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
+    }
+
     /// <summary>
     /// Disposal wrapper that rolls the wrapped transaction back unconditionally: commit is not offered,
     /// by design. Rolling back a transaction the server already aborted is a no-op, so disposal is safe

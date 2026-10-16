@@ -120,6 +120,8 @@ public class InitialPasswordStagingTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Collision Remediation reads whether Metaverse Object changes are tracked; an empty set falls back to the default.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
@@ -939,20 +941,37 @@ public class InitialPasswordStagingTests
     /// <summary>
     /// Holding the Create back must not let it stay Executing when the batch fails afterwards: its success has been
     /// recorded, and a failure that left it Executing would have it put back and sent again, creating the account twice
-    /// (#2083, #2270).
+    /// (#2083, #2270). Here Collision Remediation fails for another change in the batch, after the batch's results are
+    /// recorded and before the Initial Password is staged (#2197).
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_BatchFailingAfterTheCreateSucceeded_StillWritesTheCreatesStatusAsync()
     {
-        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
-        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
-        SyncRepo.FailConnectedSystemObjectUpdateWith = new InvalidOperationException("The database rejected the external id.");
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var (_, _, rejected) = ArrangeProvisioningCreate(initialPasswordEnabled: false, syncRuleId: ProvisioningRuleId + 1);
+        rejected.CreatedAt = export.CreatedAt.AddSeconds(1);
+        system.ConnectorDefinition.SupportsUniquenessRejectionClassification = true;
+        SyncRepo.FailSyncRuleLoadWith = new InvalidOperationException("The Synchronisation Rules could not be read.");
         var statusWritten = false;
         SyncRepo.OnPendingExportsUpdated = ids => statusWritten |= ids.Contains(export.Id);
+        var rejection = ConnectedSystemExportResult.Failed("That value is already in use.");
+        rejection.ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse;
 
-        await ExportAsync(system, ConnectedSystemExportResult.Succeeded("CN=Test User"));
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                exports.Select(pe => pe.Id == export.Id ? ConnectedSystemExportResult.Succeeded("CN=Test User") : rejection).ToList());
 
-        Assert.That(statusWritten, Is.True, "a Create whose success was recorded must leave Executing whatever fails after it");
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(system, mockConnector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ProcessedExportItems.Single(item => item.PendingExportId == rejected.Id).Succeeded, Is.False,
+                "the failure this test depends on happened");
+            Assert.That(statusWritten, Is.True, "a Create whose success was recorded must leave Executing whatever fails after it");
+        }
     }
 
     /// <summary>

@@ -254,6 +254,71 @@ public class PendingExportReleaseDatabaseTests
         Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Executing));
     }
 
+    /// <summary>
+    /// #2197: an export's recorded result and the External ID it assigned land together. Written in one transaction that
+    /// is not committed (the batch failed before it was), neither is left behind: no status without the object's id, and
+    /// no id on an object whose export still reads as not yet sent.
+    /// </summary>
+    [Test]
+    public async Task BeginTransactionAsync_ResultAndExternalIdWrittenThenNotCommitted_LeavesNeitherAsync()
+    {
+        var (exportId, csoId, values) = await WriteResultAndExternalIdAsync(commit: false);
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Executing));
+            Assert.That(await read.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == csoId), Is.Zero);
+            Assert.That(values, Is.EqualTo(1), "the write was made inside the transaction");
+        }
+    }
+
+    [Test]
+    public async Task BeginTransactionAsync_ResultAndExternalIdWrittenAndCommitted_LeavesBothAsync()
+    {
+        var (exportId, csoId, _) = await WriteResultAndExternalIdAsync(commit: true);
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(await read.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == csoId), Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// Writes an Executing export as Exported and an External ID value onto its object, through the same repository
+    /// methods the export path uses, inside <c>BeginTransactionAsync</c>; returns how many values the transaction saw.
+    /// </summary>
+    private async Task<(Guid ExportId, Guid CsoId, int ValuesSeenInside)> WriteResultAndExternalIdAsync(bool commit)
+    {
+        var ids = await SeedPendingExportsAsync(PendingExportStatus.Executing);
+        var attributeId = await SeedAttributeAsync();
+
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var export = await context.PendingExports.AsNoTracking().Include(pe => pe.AttributeValueChanges).SingleAsync(pe => pe.Id == ids[0]);
+        var cso = await context.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == export.ConnectedSystemObjectId);
+        var attribute = await context.ConnectedSystemAttributes.AsNoTracking().SingleAsync(a => a.Id == attributeId);
+
+        int seen;
+        await using (var transaction = await repository.Sync.BeginTransactionAsync())
+        {
+            Assert.That(transaction, Is.Not.Null, "a relational provider with no transaction open begins one");
+            var value = new ConnectedSystemObjectAttributeValue { AttributeId = attribute.Id, StringValue = "CN=Test User" };
+            await repository.Sync.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync([(cso, [value])]);
+            export.Status = PendingExportStatus.Exported;
+            await repository.Sync.UpdatePendingExportsAsync([export]);
+            seen = await context.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == cso.Id);
+            if (commit)
+                await transaction!.CommitAsync();
+        }
+
+        return (export.Id, cso.Id, seen);
+    }
+
     private async Task<int> SeedAttributeAsync()
     {
         await using var seed = NewContext();
