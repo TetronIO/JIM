@@ -1243,6 +1243,13 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// A Synchronisation Rule as it is stored, with the same graph as <see cref="GetSyncRuleAsync"/>, untracked: never the
+    /// instance a caller on the same context has loaded and is editing. The save gate (#2055 Phase 4b) runs test cases
+    /// against it as the "before" of a save, so it must be read before the save flushes.
+    /// </summary>
+    public Task<SyncRule?> GetSyncRuleUntrackedAsync(int id);
+
+    /// <summary>
     /// Gets just the <c>Name</c> of every requested Synchronisation Rule, keyed by id (#1519 follow-up). An id
     /// with no corresponding row (the rule has been deleted) is simply absent from the result; callers resolve
     /// that as "name unknown" rather than treating it as an error. Used to back a change-history attribution
@@ -1893,6 +1900,12 @@ public interface IConnectedSystemRepository
     /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+
+    /// <summary>
+    /// An Object Matching Rule as it is stored, untracked: never the instance a caller on the same context is editing.
+    /// The save gate (#2055 Phase 4b) runs test cases against it as the "before" of a save.
+    /// </summary>
+    Task<ObjectMatchingRule?> GetObjectMatchingRuleUntrackedAsync(int id);
 
     /// <summary>
     /// The Object Matching Rules with these ids that still exist, each with its source's Connected System attribute

@@ -27,6 +27,8 @@ Where a change is sync-affecting or destructive, JIM shows a confirmation before
 
 Cancelling the confirmation abandons the save. Nothing is written.
 
+A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is stopped too, until you keep editing, accept its new result or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
+
 !!! note "Saving is not applying"
 
     A saved configuration change does not reach existing objects until synchronisation runs again, so the confirmation ends by recommending a Full Synchronisation. The Connected System pages show a [changed-since indicator](connected-systems.md#configuration-changes-pending-a-full-synchronisation) so you can see at a glance which systems have configuration waiting for one.

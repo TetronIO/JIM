@@ -119,6 +119,17 @@ function Set-JIMSyncRuleMapping {
         checked again; omit to leave the exclusions unchanged. Refused for a generated value on an export
         Synchronisation Rule, which is checked only in its own Connected System.
 
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
+
     .PARAMETER PassThru
         Returns the mapping as changed.
 
@@ -253,6 +264,10 @@ function Set-JIMSyncRuleMapping {
         # Exclusions (release 3): replaces them; @() clears them, and is sent as an empty JSON array.
         [int[]]$ExcludeConnectedSystemId,
 
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
+
         [switch]$PassThru
     )
 
@@ -310,6 +325,9 @@ function Set-JIMSyncRuleMapping {
             Write-Verbose "Updating Synchronisation Rule Mapping: $mapId in Synchronisation Rule: $SyncRuleId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/$mapId" -Method 'PATCH' -Body $body
 
                 Write-Verbose "Updated Synchronisation Rule Mapping: $mapId"

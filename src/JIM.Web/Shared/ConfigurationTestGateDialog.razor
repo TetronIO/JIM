@@ -1,0 +1,103 @@
+@using JIM.Models.Exceptions
+@using JIM.Models.Logic
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The save gate (#2055 Phase 4b): a save stopped configuration test cases passing, and nothing was saved. Lists each
+   case with what it expected and what it now gives, and offers the three ways on: keep editing (the default, which
+   leaves the edit unsaved on the page), accept the new results as what the cases expect, or save anyway. Both ways
+   that save are recorded with the change in Configuration History. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">This change stops @(Regressions.Count == 1 ? "a configuration test case" : $"{Regressions.Count} configuration test cases") passing</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Nothing has been saved. @(Regressions.Count == 1 ? "This case passed" : "These cases passed") before the change, and
+            @(Regressions.Count == 1 ? "does" : "do") not with it.
+        </MudText>
+        <MudSimpleTable Dense="true" Elevation="0" Outlined="true" data-testid="jim-test-gate-regressions">
+            <thead>
+                <tr>
+                    <th>Test case</th>
+                    <th>With this change</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var regression in Regressions)
+                {
+                    <tr>
+                        <td>
+                            <MudText Typo="Typo.body2"><b>@regression.TestCase.Name</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@StatusLabel(regression.After.Status)</MudText>
+                        </td>
+                        <td>
+                            <MudText Typo="Typo.body2">@regression.After.Summary</MudText>
+                            @foreach (var problem in regression.After.Problems)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@problem</MudText>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        @if (_acceptBlockedReason != null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-test-gate-accept-blocked">@_acceptBlockedReason</MudAlert>
+        }
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
+            Accepting or saving anyway is recorded with the change in Configuration History, naming each case.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MudDialog.Cancel())" data-testid="jim-test-gate-keep-editing">Keep editing</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(_acceptBlockedReason != null)"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(new ConfigurationTestGateOptions(AcceptNewResults: true))))"
+                   data-testid="jim-test-gate-accept">Accept new @(Regressions.Count == 1 ? "result" : "results")</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(new ConfigurationTestGateOptions(SaveAnyway: true))))"
+                   data-testid="jim-test-gate-save-anyway">Save anyway</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// Each case the change stops passing.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ConfigurationTestRegression> Regressions { get; set; } = [];
+
+    private string? _acceptBlockedReason;
+
+    protected override void OnParametersSet() => _acceptBlockedReason = ConfigurationTestCaseDisplay.AcceptBlockedReason(Regressions);
+
+    private static string StatusLabel(ConfigurationTestStatus status) => status switch
+    {
+        ConfigurationTestStatus.Failed => "Now fails",
+        ConfigurationTestStatus.NeedsReview => "Now needs review",
+        ConfigurationTestStatus.Error => "Could not run",
+        _ => "Passes"
+    };
+
+    /// <summary>
+    /// Asks what to do about a save the save gate refused, returning the options to save again with, or null to keep
+    /// editing (the edit stays unsaved on the page).
+    /// </summary>
+    public static async Task<ConfigurationTestGateOptions?> ShowAsync(IDialogService dialogService, ConfigurationTestsRegressedException refused)
+    {
+        ArgumentNullException.ThrowIfNull(dialogService);
+        ArgumentNullException.ThrowIfNull(refused);
+
+        var parameters = new DialogParameters<ConfigurationTestGateDialog> { { d => d.Regressions, refused.Regressions } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<ConfigurationTestGateDialog>(null, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: ConfigurationTestGateOptions chosen } ? chosen : null;
+    }
+}

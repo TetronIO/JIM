@@ -232,6 +232,7 @@ public class ChangeHistoryServer
                 InitiatedByName = current.InitiatedByName,
                 When = current.When,
                 Reason = current.Reason,
+                ConfigurationTestGateNote = current.ConfigurationTestGateNote,
                 // The first version is a creation regardless of the recording activity's own operation; otherwise the
                 // summary is the one-line rollup of the diff we just computed (falling back to a generic label if the
                 // snapshot could not be deserialised).

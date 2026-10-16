@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1 to 3 and 4a complete)
+- **Status:** Doing (Phases 1 to 3, 4a and 4b complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -110,15 +110,21 @@ Saved test cases on every surface, run on demand. The save gate is Phase 4b.
 - **Surfaces:** `/api/v1/configuration-tests` CRUD and `POST /run`; `Get-`, `New-`, `Set-`, `Remove-JIMConfigurationTestCase` and `Invoke-JIMConfigurationTest`; the Synchronisation Rule's **Tests** tab, the Connected System's Matching tab in Simple mode, and **Save as test case** in the Attribute Flow and Scope testers. The Object Matching Rule editor's Try it tests a rule before it is added, so it has nothing saved to cover.
 - **As built:** every portal save and run of a case goes through a fresh `JimApplication`: the Synchronisation Rule page holds its rule change-tracked for the edit session, and an Activity's save on that context would save the half-edited rule with the case.
 
-### Phase 4b: The save gate
+### Phase 4b: The save gate ✅
 
-- **Run on save:** saving what a case covers runs its cases, deciding "a save changes something a case covers" with Phase 3's unchanged comparison (`SyncRuleMappingExpressionState.IsUnchangedIn` and its counterparts).
+- **Run on save:** saving what a case covers runs its cases. ~~Deciding "a save changes something a case covers" with Phase 3's unchanged comparison (`SyncRuleMappingExpressionState.IsUnchangedIn` and its counterparts).~~ Superseded during the build, with the orchestrator's agreement: see "As built (regression gate)".
 - **The gate:** Keep editing (default), Accept the new result as expected, or Save anyway (recorded with the change in Configuration History). REST answers 409 unless `saveAnyway`; PowerShell takes `-SaveAnyway`.
 - **Never a lockout:** disabling a Synchronisation Rule, removing an Attribute Flow and deleting either always save, whatever their cases give; tests prove it.
+- **As built (regression gate):** a case gates a save only when it passes against the configuration as stored and does not against what the save proposes (`ConfigurationTestGate`). `IsUnchangedIn` could not decide it: it compares expressions and targets only, not Missing Input Behaviour, value processing, case normalisation, a switch into or out of a Generated Value, or source order; the Scoping Criterion state is per criterion, not group logic, nesting or removals; Object Matching Rules have none. Comparing results needs no change-detection model to keep complete, and cannot lock anyone out: a case already failing never stops a save, and a disable, a reorder or a case-sensitivity toggle cannot change a result. The stored side is read untracked before the save's first flush (`GetSyncRuleUntrackedAsync`, `GetObjectMatchingRuleUntrackedAsync`); both runs are as of one instant read once per save, so a case reading the clock cannot regress between them. Debug logs the case count and elapsed time per gated save, and an owner holds at most 200 cases (`ConfigurationTestCase.MaxTestCasesPerOwner`).
+- **As built (paths):** the whole-rule save (portal, `PUT sync-rules/{id}` and every Scoping Criteria endpoint), an Attribute Flow's settings (`PATCH .../mappings/{id}`) and an Object Matching Rule update at both levels. Creates have no cases yet; deletes take their cases with them.
+- **As built (accept):** `acceptNewResults` / `-AcceptNewResult` rewrites only the cases that regressed in that save, after the save's write and before its capture, so their Class C changes are in the same Configuration History version. A Needs review, Error or undetermined Scope result cannot be accepted and still refuses the save unless it is saved anyway.
+- **As built (record):** `Activity.ConfigurationTestGateNote` names each case saved past or accepted, by name and status, never values; Configuration History shows it on the portal, the REST history item and `Get-JIMConfigurationChangeHistory`.
+- **As built (surfaces):** the 409 body is `{ message, regressions: [{ result, canAccept, acceptedExpectation }] }`; PowerShell turns it into an error naming each case and its new result. The portal's gate dialog follows the Configuration Change acknowledgement; Keep editing leaves the edit on the page.
+- **Fix found on the way:** Phase 4a ran a Synchronisation Rule mode Object Matching Rule case with its Synchronisation Rule's Metaverse Object Type set on a copy, which `DescribeInvalidity` refuses, so every such case needed review. The runner now runs the rule as stored.
 
 ### Phase 5: Docs and pipelines
 
-- The **Configuration Tests** page gains the save gate; the Attribute Flow, Scope, Object Matching and Generated Values pages link to it; changelog ✨.
+- The Attribute Flow, Scope, Object Matching and Generated Values pages link to the **Configuration Tests** page (which gained the save gate in 4b), and `expressions.md` once its word budget allows.
 - An integration scenario step running `Invoke-JIMConfigurationTest -FailOnUnsuccessful` in a pipeline.
 - Plan closeout: Status Done, moved to `done/`, in the PR that closes #2055.
 

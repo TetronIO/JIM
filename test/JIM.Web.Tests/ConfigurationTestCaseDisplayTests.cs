@@ -174,6 +174,34 @@ public class ConfigurationTestCaseDisplayTests
         }
     }
 
+    [Test]
+    public void AcceptBlockedReason_EveryNewResultCanBeExpected_IsNull()
+    {
+        Assert.That(ConfigurationTestCaseDisplay.AcceptBlockedReason([Regression("Surname flows", accepted: true)]), Is.Null);
+    }
+
+    [Test]
+    public void AcceptBlockedReason_ACaseThatNeedsReview_NamesItAndSaysWhatToDo()
+    {
+        var reason = ConfigurationTestCaseDisplay.AcceptBlockedReason(
+            [Regression("Surname flows", accepted: true), Regression("Leavers are out of scope", accepted: false)]);
+
+        Assert.That(reason, Does.Contain("'Leavers are out of scope'").And.Not.Contain("Surname flows").And.Contain("save anyway"));
+    }
+
+    private static ConfigurationTestRegression Regression(string name, bool accepted)
+    {
+        var testCase = new ConfigurationTestCase { Name = name, Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.NoValue) };
+        var result = new ConfigurationTestRunResult { TestCaseName = name, Expected = testCase.Expectation };
+        return new ConfigurationTestRegression
+        {
+            TestCase = testCase,
+            Before = result,
+            After = result,
+            AcceptedExpectation = accepted ? new ConfigurationTestExpectation(ConfigurationTestExpectationKind.AnyValue) : null
+        };
+    }
+
     private static SyncRule BuildRule()
     {
         var rule = new SyncRule { Id = 7, Name = "HR Import" };

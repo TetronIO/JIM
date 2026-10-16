@@ -67,7 +67,7 @@ Creates a scoping criteria group on a Synchronisation Rule, at the top level or 
 ### Syntax
 
 ```powershell
-New-JIMScopingCriteriaGroup -SyncRuleId <int> [-ParentGroupId <int>] [-Type <string>] [-Position <int>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriteriaGroup -SyncRuleId <int> [-ParentGroupId <int>] [-Type <string>] [-Position <int>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -78,6 +78,8 @@ New-JIMScopingCriteriaGroup -SyncRuleId <int> [-ParentGroupId <int>] [-Type <str
 | `ParentGroupId` | `int` | No |  | The ID of the group to create this one inside. Without it, the group is created at the top level. |
 | `Type` | `string` | No | `'All'` | How the group combines what it contains: All is met when every criterion and child group in it is met, Any when at least one is. One of `All` or `Any`. |
 | `Position` | `int` | No | `0` | Where the group sits among the groups beside it, used to order them. It does not change which objects are in scope. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the group created. |
 
 ### Output
@@ -111,7 +113,7 @@ Changes how a scoping criteria group combines what it contains, or where it sits
 ### Syntax
 
 ```powershell
-Set-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int> [-Type <string>] [-Position <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int> [-Type <string>] [-Position <int>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -122,6 +124,8 @@ Set-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int> [-Type <string>] [-
 | `GroupId` | `int` | Yes |  | The ID of the group to change. Accepts pipeline input by property name, `GroupId` or `Id`. |
 | `Type` | `string` | No |  | How the group combines what it contains: All is met when every criterion and child group in it is met, Any when at least one is. One of `All` or `Any`. |
 | `Position` | `int` | No |  | Where the group sits among the groups beside it, used to order them. It does not change which objects are in scope. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the group as changed. |
 
 ### Output
@@ -151,7 +155,7 @@ Deletes a scoping criteria group, with every criterion and child group inside it
 ### Syntax
 
 ```powershell
-Remove-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int> [-WhatIf] [-Confirm]
+Remove-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int> [-SaveAnyway] [-AcceptNewResult] [-WhatIf] [-Confirm]
 ```
 
 It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
@@ -162,6 +166,8 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 |------|------|----------|---------|-------------|
 | `SyncRuleId` | `int` | Yes |  | The ID of the Synchronisation Rule. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the group to delete. Accepts pipeline input by property name, `GroupId` or `Id`. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 
 ### Output
 
@@ -185,19 +191,19 @@ Adds a criterion to a scoping criteria group: one attribute compared with one va
 
 ```powershell
 # ByMvId (default)
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByMvName
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByCsId
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByCsName
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByExpression
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -225,6 +231,8 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -Expression <string> -C
 | `RelativeCount` | `int` | No |  | How many units from now the date is, zero or more. Used with `-ValueMode` Relative. |
 | `RelativeUnit` | `string` | No |  | The unit `-RelativeCount` counts. Used with `-ValueMode` Relative. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
 | `RelativeDirection` | `string` | No |  | Whether the date is in the past (Ago) or the future (FromNow). Used with `-ValueMode` Relative. One of `Ago` or `FromNow`. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the criterion created. |
 
 ### Output
@@ -321,19 +329,19 @@ Replaces a criterion in a scoping criteria group: its attribute, comparison and 
 
 ```powershell
 # ByMvId (default)
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByMvName
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByCsId
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -ConnectedSystemAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -ConnectedSystemAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByCsName
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -ConnectedSystemAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByExpression
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Expression <string> -CompareAs <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -362,6 +370,8 @@ Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> -Exp
 | `RelativeCount` | `int` | No |  | How many units from now the date is, zero or more. Used with `-ValueMode` Relative. |
 | `RelativeUnit` | `string` | No |  | The unit `-RelativeCount` counts. Used with `-ValueMode` Relative. One of `Hours`, `Days`, `Weeks`, `Months` or `Years`. |
 | `RelativeDirection` | `string` | No |  | Whether the date is in the past (Ago) or the future (FromNow). Used with `-ValueMode` Relative. One of `Ago` or `FromNow`. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the criterion as replaced. |
 
 ### Output
@@ -391,7 +401,7 @@ Deletes a criterion from a scoping criteria group.
 ### Syntax
 
 ```powershell
-Remove-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> [-WhatIf] [-Confirm]
+Remove-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int> [-SaveAnyway] [-AcceptNewResult] [-WhatIf] [-Confirm]
 ```
 
 It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
@@ -403,6 +413,8 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | `SyncRuleId` | `int` | Yes |  | The ID of the Synchronisation Rule. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the group the criterion is in. Accepts pipeline input by property name. |
 | `CriterionId` | `int` | Yes |  | The ID of the criterion to delete. Accepts pipeline input by property name, `CriterionId` or `Id`. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 
 ### Output
 

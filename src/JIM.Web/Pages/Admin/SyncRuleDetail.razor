@@ -3,6 +3,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
 @using JIM.Models.Core
+@using JIM.Models.Exceptions
 @using JIM.Models.Logic
 @using JIM.Models.Preview
 @using JIM.Models.Staging.DTOs
@@ -872,17 +873,30 @@ else if (_syncRule != null)
         var previewActivityId = confirming.IsStale ? null : confirming.ActivityId;
         var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
         bool wasSuccessful;
-        try
+        ConfigurationTestGateOptions? configurationTestGate = null;
+        while (true)
         {
-            wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId,
-                mappingRemovalChoices: _mappingRemovalChoices);
-        }
-        catch (ArgumentException ex)
-        {
-            // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
-            // targeting the same attribute (#1532); surface its message rather than an unhandled error.
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
+            try
+            {
+                wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId,
+                    mappingRemovalChoices: _mappingRemovalChoices, configurationTestGate: configurationTestGate);
+                break;
+            }
+            catch (ConfigurationTestsRegressedException ex)
+            {
+                // the save gate (#2055 Phase 4b): the change stops configuration test cases passing, and nothing was
+                // saved. Keep editing leaves the edit on the page; accepting or saving anyway saves it again.
+                configurationTestGate = await ConfigurationTestGateDialog.ShowAsync(DialogService, ex);
+                if (configurationTestGate == null)
+                    return;
+            }
+            catch (ArgumentException ex)
+            {
+                // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
+                // targeting the same attribute (#1532); surface its message rather than an unhandled error.
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
         }
         // the staged removals the choices describe have been applied; a failed save keeps them for the retry.
         if (wasSuccessful)

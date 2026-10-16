@@ -7532,9 +7532,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedBy">The user who initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null, configurationTestGate);
     }
 
     /// <summary>
@@ -7545,9 +7546,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedByApiKey">The API key that initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey, configurationTestGate);
     }
 
     /// <summary>
@@ -7559,7 +7561,8 @@ public partial class ConnectedSystemServer
     /// would save nothing while reporting success.
     /// </remarks>
     private async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsCoreAsync(
-        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -7598,6 +7601,13 @@ public partial class ConnectedSystemServer
         if (settings.Enabled == false || settings.Expression != null)
             await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
 
+        // The save gate (#2055 Phase 4b): the rule as stored, against the rule with this mapping as the update leaves
+        // it. Before the Activity below, whose save would flush this tracked mapping.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRulePartSaveAsync(
+            mapping.SyncRule?.Id ?? mapping.SyncRuleId,
+            proposed => ReplaceById(proposed.AttributeFlowRules, mapping, m => m.Id),
+            configurationTestGate);
+
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
@@ -7607,7 +7617,8 @@ public partial class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (initiatedByApiKey != null)
@@ -7632,6 +7643,7 @@ public partial class ConnectedSystemServer
         if (mapping.KeepUnique != keepUniqueBefore)
             await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, initiatedByApiKey);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -9306,7 +9318,7 @@ public partial class ConnectedSystemServer
     /// (#1537): the named mappings are deleted properly (rows and sources removed), and kept ones have their
     /// contributed values' provenance severed before the row deletion. Only valid when updating an existing rule.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -9404,6 +9416,11 @@ public partial class ConnectedSystemServer
         // branches above, which clear the rules a simple mode system would never consult.
         await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
 
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
         // initial password. Switching the setting off with the provisioning it depended on keeps the stored
         // configuration honest, rather than leaving one that reads as on and can never run.
@@ -9442,7 +9459,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9503,6 +9521,9 @@ public partial class ConnectedSystemServer
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
+        // this change's Configuration History version.
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -9560,7 +9581,7 @@ public partial class ConnectedSystemServer
     /// The staged Attribute Flow mapping removals this save performs, each with its recall-or-keep choice
     /// (#1537); see the user-initiated overload above.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -9649,6 +9670,11 @@ public partial class ConnectedSystemServer
         // branches above, which clear the rules a simple mode system would never consult.
         await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
 
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
@@ -9665,7 +9691,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9723,6 +9750,7 @@ public partial class ConnectedSystemServer
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -10419,20 +10447,23 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule.
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -10440,22 +10471,43 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule (initiated by API key).
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The save gate (#2055 Phase 4b) for an Object Matching Rule update: in Synchronisation Rule mode, the rule as
+    /// stored against the rule holding this one as the update leaves it; in Simple mode, this rule alone.
+    /// </summary>
+    private Task<ConfigurationTestGateOutcome> GateObjectMatchingRuleSaveAsync(ObjectMatchingRule rule, ConfigurationTestGateOptions? configurationTestGate) =>
+        rule.SyncRuleId is { } syncRuleId
+            ? Application.ConfigurationTests.GateSyncRulePartSaveAsync(syncRuleId,
+                proposed => ReplaceById(proposed.ObjectMatchingRules, rule, r => r.Id), configurationTestGate)
+            : Application.ConfigurationTests.GateSimpleModeMatchingRuleSaveAsync(rule, configurationTestGate);
+
+    /// <summary>Puts <paramref name="replacement"/> in place of the item in <paramref name="items"/> with its id.</summary>
+    private static void ReplaceById<T>(List<T> items, T replacement, Func<T, int> id)
+    {
+        var index = items.FindIndex(item => id(item) == id(replacement));
+        if (index >= 0)
+            items[index] = replacement;
     }
 
     /// <summary>

@@ -241,6 +241,17 @@ function Invoke-JIMApiRequest {
                         $errorMessage = "$errorMessage`n$($details -join "`n")"
                     }
                 }
+
+                # The save gate (#2055 Phase 4b): a change refused because it stops configuration test cases
+                # passing. Name each case and what it now gives, and say how to go ahead.
+                $regressions = $errorObj.regressions ?? $errorObj.Regressions
+                if ($regressions) {
+                    $details = foreach ($regression in $regressions) {
+                        $result = $regression.result ?? $regression.Result
+                        "  - '$($result.testCaseName ?? $result.TestCaseName)': $($result.summary ?? $result.Summary)"
+                    }
+                    $errorMessage = "$errorMessage`n$($details -join "`n")`nRun the command again with -AcceptNewResult to take the new results as expected, or -SaveAnyway to save regardless."
+                }
             }
             catch {
                 # Keep original error message if JSON parsing fails

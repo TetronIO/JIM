@@ -37,6 +37,17 @@ function Set-JIMSyncRuleMatchingRule {
         Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. Omit it to leave it as
         it is.
 
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
+
     .PARAMETER PassThru
         Returns the rule as changed.
 
@@ -89,6 +100,10 @@ function Set-JIMSyncRuleMatchingRule {
         [Parameter()]
         [bool]$CaseSensitive,
 
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
+
         [switch]$PassThru
     )
 
@@ -131,6 +146,9 @@ function Set-JIMSyncRuleMatchingRule {
             Write-Verbose "Updating Matching Rule ID: $Id for Synchronisation Rule ID: $SyncRuleId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Matching Rule ID: $Id"

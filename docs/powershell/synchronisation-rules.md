@@ -223,16 +223,16 @@ Changes a Synchronisation Rule: its name and description, whether it is enabled,
 
 ```powershell
 # ById (default)
-Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Disable
-Set-JIMSyncRule -Id <int> -Disable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRule -Id <int> -Disable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Enable
-Set-JIMSyncRule -Id <int> -Enable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRule -Id <int> -Enable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -252,6 +252,8 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `EnforceState` | `bool` | No |  | On an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. |
 | `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Synchronisation Rule's change history. |
 | `PreviewActivityId` | `guid` | No |  | The Configuration Change Preview this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable rather than a claim. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the rule as changed. |
 
 ### Output
