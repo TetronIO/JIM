@@ -79,13 +79,13 @@
                     }
                     @if (context.Item.MaxDetectedDeletions.HasValue)
                     {
-                        <MudTooltip Text="If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@DeletionLimitTooltip(context.Item.RunType)" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max detected deletions @context.Item.MaxDetectedDeletions</MudChip>
                         </MudTooltip>
                     }
                     @if (context.Item.MaxDetectedDeletionsPercent.HasValue)
                     {
-                        <MudTooltip Text="If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@DeletionLimitTooltip(context.Item.RunType)" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max detected deletions @(context.Item.MaxDetectedDeletionsPercent)%</MudChip>
                         </MudTooltip>
                     }
@@ -288,10 +288,13 @@
                             </MudTooltip>
                         </div>
                     }
+                }
 
+                @if (IsImportRunType(_newRunProfile.RunType))
+                {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText Typo="Typo.subtitle2">Safeguards</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@DeletionLimitsSummary(_newRunProfile.RunType)</MudText>
                         <MudGrid Spacing="3">
                             <MudItem xs="6">
                                 <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxDetectedDeletions" Label="Max detected deletions"
@@ -302,10 +305,7 @@
                                                  Variant="Variant.Outlined" Min="0" Max="100" Clearable="true" Placeholder="No limit" />
                             </MudItem>
                         </MudGrid>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                            Measured against the objects in this run's scope when it starts. Objects the import did see are still updated.
-                            Fix the connector's scope or raise a limit, then run again.
-                        </MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@DeletionLimitsCaption(_newRunProfile.RunType)</MudText>
                     </MudPaper>
                 }
 
@@ -421,10 +421,13 @@
                             </MudText>
                         }
                     }
+                }
 
+                @if (IsImportRunType(_editRunProfile.RunType))
+                {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText Typo="Typo.subtitle2">Safeguards</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@DeletionLimitsSummary(_editRunProfile.RunType)</MudText>
                         <MudGrid Spacing="3">
                             <MudItem xs="6">
                                 <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxDetectedDeletions" Label="Max detected deletions"
@@ -435,10 +438,7 @@
                                                  Variant="Variant.Outlined" Min="0" Max="100" Clearable="true" Placeholder="No limit" />
                             </MudItem>
                         </MudGrid>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                            Measured against the objects in this run's scope when it starts. Objects the import did see are still updated.
-                            Fix the connector's scope or raise a limit, then run again.
-                        </MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@DeletionLimitsCaption(_editRunProfile.RunType)</MudText>
                     </MudPaper>
                 }
 
@@ -578,6 +578,24 @@
     private static bool IsImportRunType(ConnectedSystemRunType runType) =>
         runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
 
+    /// <summary>
+    /// What the deletion limits do on this kind of import (#2089): a Full Import's limits guard the objects it no longer
+    /// finds, a Delta Import's the deletes its Connector reports.
+    /// </summary>
+    private static string DeletionLimitsSummary(ConnectedSystemRunType runType) => runType == ConnectedSystemRunType.DeltaImport
+        ? "If the Connected System reports more deletions than either limit, this Delta Import marks none as deleted."
+        : "If a Full Import would mark more objects as deleted than either limit, it marks none.";
+
+    private static string DeletionLimitsCaption(ConnectedSystemRunType runType) => runType == ConnectedSystemRunType.DeltaImport
+        ? "Measured against the objects in this run's scope before it saves anything. Creates and updates are still applied. " +
+          "Each Delta Import reports withheld deletions again until you raise a limit or run a Delta Import Run Profile without one."
+        : "Measured against the objects in this run's scope when it starts. Objects the import did see are still updated. " +
+          "Fix the connector's scope or raise a limit, then run again.";
+
+    private static string DeletionLimitTooltip(ConnectedSystemRunType runType) => runType == ConnectedSystemRunType.DeltaImport
+        ? "If the Connected System reports more deletions than this, the Delta Import marks none as deleted and completes with a warning."
+        : "If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning.";
+
     private static bool IsImportOrExportRunType(ConnectedSystemRunType runType) =>
         runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport or ConnectedSystemRunType.Export;
 
@@ -618,8 +636,8 @@
             MaxCreates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxCreates : null,
             MaxUpdates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxUpdates : null,
             MaxDeletes = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxDeletes : null,
-            MaxDetectedDeletions = _newRunProfile.RunType == ConnectedSystemRunType.FullImport ? _newRunProfile.MaxDetectedDeletions : null,
-            MaxDetectedDeletionsPercent = _newRunProfile.RunType == ConnectedSystemRunType.FullImport ? _newRunProfile.MaxDetectedDeletionsPercent : null
+            MaxDetectedDeletions = IsImportRunType(_newRunProfile.RunType) ? _newRunProfile.MaxDetectedDeletions : null,
+            MaxDetectedDeletionsPercent = IsImportRunType(_newRunProfile.RunType) ? _newRunProfile.MaxDetectedDeletionsPercent : null
         };
 
         try
@@ -688,7 +706,7 @@
             _editRunProfileOriginal.MaxDeletes = _editRunProfile.MaxDeletes;
         }
 
-        if (_editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport)
+        if (IsImportRunType(_editRunProfileOriginal.RunType))
         {
             _editRunProfileOriginal.MaxDetectedDeletions = _editRunProfile.MaxDetectedDeletions;
             _editRunProfileOriginal.MaxDetectedDeletionsPercent = _editRunProfile.MaxDetectedDeletionsPercent;

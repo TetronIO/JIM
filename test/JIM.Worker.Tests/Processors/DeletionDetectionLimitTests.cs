@@ -163,11 +163,9 @@ public class DeletionDetectionLimitTests
     [Test]
     public void DetectedDeletionsWithheld_LeftNullUnlessDeletionDetectionRuns()
     {
-        // PerformImportAsync only calls ProcessConnectedSystemObjectDeletionsAsync at all when the Run
-        // Profile is a Full Import (the guard around line 548 is unchanged by Layer 2), so a Delta
-        // Import's Activity never has this method invoked against it and the counter stays at its
-        // default: null, not zero. Asserted here at the boundary this fixture actually controls, rather
-        // than by driving a full Delta Import.
+        // Only a Full Import that runs deletion detection, or a Delta Import that completes (#2089, see
+        // DeltaImportDeletionLimitTests), sets the counter; every other Activity keeps its default: null,
+        // not zero. Asserted here at the boundary this fixture actually controls.
         var activity = new Activity();
 
         Assert.That(activity.DetectedDeletionsWithheld, Is.Null);

@@ -125,20 +125,22 @@ public class ConnectedSystemRunProfile : IAuditable
     public int? MaxDeletes { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618): the maximum number of Connected System Objects a Full Import
-    /// may newly mark as deleted in one run. Only honoured when <see cref="RunType"/> is
-    /// <see cref="ConnectedSystemRunType.FullImport"/>. Null means no limit. Zero is a valid limit:
-    /// the run refuses to mark anything as deleted. If either this or
-    /// <see cref="MaxDetectedDeletionsPercent"/> would be exceeded, deletion detection marks nothing;
-    /// objects the import did see are still created and updated as normal.
+    /// Run Profile Safeguards (#1618): the maximum number of Connected System Objects an import may
+    /// newly mark as deleted in one run: those a Full Import's deletion detection no longer finds, or
+    /// those a Delta Import's Connector reports deleted (#2089). Only valid when <see cref="RunType"/>
+    /// is <see cref="ConnectedSystemRunType.FullImport"/> or <see cref="ConnectedSystemRunType.DeltaImport"/>.
+    /// Null means no limit. Zero is a valid limit: the run refuses to mark anything as deleted. If
+    /// either this or <see cref="MaxDetectedDeletionsPercent"/> would be exceeded, the run marks
+    /// nothing as deleted; objects it creates and updates are still applied as normal. A Delta Import
+    /// that withholds its deletes keeps the watermark it started with, so the next one reads them again.
     /// </summary>
     public int? MaxDetectedDeletions { get; set; }
 
     /// <summary>
     /// Run Profile Safeguards (#1618): the maximum share, 0 to 100, of the Connected System Objects in
-    /// the run's scope at the start of the run that a Full Import may newly mark as deleted. Only
-    /// honoured when <see cref="RunType"/> is <see cref="ConnectedSystemRunType.FullImport"/>. Null
-    /// means no limit.
+    /// the run's scope before it saves anything that an import may newly mark as deleted. Only valid
+    /// when <see cref="RunType"/> is <see cref="ConnectedSystemRunType.FullImport"/> or
+    /// <see cref="ConnectedSystemRunType.DeltaImport"/> (#2089). Null means no limit.
     /// </summary>
     public int? MaxDetectedDeletionsPercent { get; set; }
 

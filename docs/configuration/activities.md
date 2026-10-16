@@ -51,9 +51,13 @@ When an Export activity withholds anything, it completes as **Complete with warn
 
 > Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.
 
-### Run Profile Safeguards (Full Import deletion detection limits)
+### Run Profile Safeguards (import deletion limits)
 
-Every Full Import activity that ran deletion detection carries a `detectedDeletionsWithheld` counter: `0` when its Run Profile has no deletion detection limit, or the count of newly-detected deletions did not exceed either limit; otherwise it is how many Connected System Objects deletion detection found missing but did not mark as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+Every Full Import activity that ran deletion detection, and every Delta Import activity that completed, carries a `detectedDeletionsWithheld` counter. It is `0` when the Run Profile has no deletion limit, or the run's deletions did not exceed either limit. Otherwise it is how many Connected System Objects the run left exactly as they were instead of marking them as deleted: for a Full Import, the objects deletion detection no longer found; for a Delta Import, the objects the Connected System reported as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+
+When a run withholds its deletions, it completes as **Complete with warning**, and its warning message names the limit, how many objects were involved and what share of the Connected System that is. A Delta Import's warning reads, for example:
+
+> The Connected System reported 342 objects (7% of 4,880) as deleted, above this Run Profile's limit of 100; none were marked as deleted. Each Delta Import will report them again until this is resolved. Check what deleted them in the Connected System. If the deletions are intended, raise the limit, or run a Delta Import Run Profile without these limits to let them through.
 
 When a Full Import activity's deletion detection is refused, it completes as **Complete with warning**, and its warning message names the limit that tripped, for example:
 

@@ -14,7 +14,7 @@ Since v0.15.0:
 
 - **Run steps on the Activity**: the import enters named steps as it goes (`RunPhaseKeys`: connecting, importing objects with the Connector's own narrated sub-steps and object counts nested inside it, processing deletions, resolving references, saving changes, reconciling Pending Exports, recording results), so an operator sees where a run is rather than a single message.
 - **Container Scope exclusions (#1255)**: a Connector that discards entries under an excluded Container reports how many per Container; the processor accumulates those counts across every page and records them on the Activity (never as a warning, and never failing the run).
-- **Deletion-detection limits (#1618, Run Profile Safeguards)**: a Full Import's deletion detection resolves every candidate first, and refuses outright when the number that would be newly marked as deleted exceeds the Run Profile's `MaxDetectedDeletions` or `MaxDetectedDeletionsPercent`. See Deletion Detection below.
+- **Deletion-detection limits (#1618, Run Profile Safeguards)**: a Full Import's deletion detection resolves every candidate first, and refuses outright when the number that would be newly marked as deleted exceeds the Run Profile's `MaxDetectedDeletions` or `MaxDetectedDeletionsPercent`. See Deletion Detection below. The same limits guard a Delta Import's explicit deletes (#2089): see Delta Import deletion limits below.
 - **Unconfirmed Create retry (#1695)**: after deletion detection, a Full Import finds every exported Create Pending Export whose Pending Provisioning CSO it did not see at all, and marks it for retry, because deletion detection deliberately excludes Pending Provisioning CSOs and reconciliation only visits CSOs an import returned.
 - **LDAP Delta Import change sources (#1736)**: the LDAP Connector reads changes through one change source per directory family (`uSNChanged` plus the Deleted Objects container for Active Directory and Samba AD, `cn=accesslog` for OpenLDAP, `cn=changelog` for other directories), and a Delta Import checks its change source's readiness first: a finding either stops the run (for example a change source it cannot read, #1737) or becomes the Activity's warning (for example deletions it cannot see, #1727), rather than silently importing nothing.
 
@@ -68,7 +68,10 @@ flowchart TD
     FileProcess --> RecordExclusions
 
     CloseConn --> RecordExclusions[Record entries discarded by<br/>excluded Containers on the Activity #1255<br/>Cancelled? Stop here, nothing persisted]
-    RecordExclusions --> PostImport{Full Import<br/>and objects > 0?}
+    RecordExclusions --> DeltaLimits{Delta Import and its<br/>explicit deletes above<br/>MaxDetectedDeletions or<br/>MaxDetectedDeletionsPercent? #2089}
+    DeltaLimits -->|Yes| WithholdDeletes[Withhold every explicit delete<br/>Restore each CSO's status, drop its RPEI<br/>DetectedDeletionsWithheld = count, warning<br/>Drop the captured watermark]
+    DeltaLimits -->|No| PostImport
+    WithholdDeletes --> PostImport{Full Import<br/>and objects > 0?}
 
     %% --- Deletion detection ---
     PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>Resolve candidates, check the<br/>Run Profile's deletion limits #1618,<br/>then mark missing CSOs Obsolete or refuse<br/>Scoped to target partition if set<br/>See Deletion Detection below]
@@ -87,7 +90,7 @@ flowchart TD
     Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
     Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
     ValidateRpeis --> PersistRpeis[Flush remaining RPEIs<br/>via raw SQL bulk insert<br/>create/update batches flushed<br/>their own RPEIs as they committed]
-    PersistRpeis --> RecordWatermark{Watermark captured<br/>and not overridden<br/>at close?}
+    PersistRpeis --> RecordWatermark{Watermark captured<br/>and not overridden at close<br/>or dropped by withheld deletes?}
     RecordWatermark -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData #1868<br/>only now that everything read is staged]
     RecordWatermark -->|No| End
     PersistWatermark --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
@@ -194,6 +197,17 @@ flowchart TD
 **Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
 **Delta Import exception**: Deletion detection only runs for Full Import. Delta Imports handle explicit deletes via `ObjectChangeType.Deleted` from the connector (e.g., LDAP tombstone/changelog entries).
+
+### Delta Import deletion limits
+
+A Delta Import's explicit deletes are guarded by the same `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent` limits (#2089). Each delete marks its CSO Obsolete in memory as its page is processed, and is recorded with the CSO's status and `LastUpdated` beforehand; a delete a later page supersedes (#2074) is taken out of that record. Nothing is saved until every page has been read, so once the last page is in, and before staging, the run takes one decision for all of them:
+
+- **Within the limits, or no limit set**: every delete stands, exactly as before. `Activity.DetectedDeletionsWithheld = 0`.
+- **Over either limit**: every recorded CSO is put back to its previous status and `LastUpdated`, taken off the update list, and its RPEI (with its `DeletionDetected` outcome) removed. Creates and updates in the run are staged as normal. `Activity.DetectedDeletionsWithheld` is the withheld count and a Delta-Import-specific warning is appended, so the Activity completes with a warning.
+
+The count excludes replays for CSOs already Obsolete and deletes for objects JIM does not hold, which are dropped as they are read. The percentage base is the CSO count in the Run Profile's scope before staging, the same base a Full Import uses.
+
+**The watermark is kept on a refusal.** A Full Import that refuses loses nothing, because the next one looks for every object again; a Delta Import whose watermark moved past the withheld deletes would never read them again. A refused run therefore drops the captured watermark, as a failed run does (#1868), and each following Delta Import re-reads the same window and refuses again until an administrator fixes the source, raises the limit, runs an unlimited Delta Import Run Profile by hand (the watermark belongs to the Connected System, not the Run Profile), or runs a Full Import.
 
 ## Parallel LDAP Import (#72)
 

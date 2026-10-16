@@ -56,13 +56,14 @@ function Set-JIMRunProfile {
         rules as -MaxCreates.
 
     .PARAMETER MaxDetectedDeletions
-        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. 0 refuses to
-        mark any, and $null clears the limit. Only valid on a Full Import Run Profile. The Safeguards you do not
-        give keep their values.
+        A Safeguard: the most Connected System Objects an import run may newly mark as deleted: those a Full Import
+        no longer finds, or those a Delta Import's Connector reports deleted. 0 refuses to mark any, and $null
+        clears the limit. Only valid on a Full Import or Delta Import Run Profile. The Safeguards you do not give
+        keep their values.
 
     .PARAMETER MaxDetectedDeletionsPercent
-        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to
-        100) of those in the run's scope when it starts, under the same rules as -MaxDetectedDeletions.
+        A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to
+        100) of those in the run's scope before it saves anything, under the same rules as -MaxDetectedDeletions.
 
     .PARAMETER PassThru
         Returns the updated Run Profile.
@@ -129,6 +130,12 @@ function Set-JIMRunProfile {
 
         Clears both deletion detection limits, so the Full Import's deletion detection is
         unrestricted again.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 8 -MaxDetectedDeletions 50
+
+        Limits Delta Import Run Profile 8 to applying at most 50 deletions the Connected System
+        reports in one run; a run that reports more applies none of them.
 
     .LINK
         Get-JIMRunProfile

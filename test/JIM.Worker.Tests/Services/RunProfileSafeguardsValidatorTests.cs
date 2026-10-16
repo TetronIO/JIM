@@ -120,17 +120,37 @@ public class RunProfileSafeguardsValidatorTests
     // Run Profile Safeguards (#1618, Layer 2): MaxDetectedDeletions / MaxDetectedDeletionsPercent
     // -----------------------------------------------------------------------------------------------------------------
 
-    [Test]
-    public void Validate_DeletionDetectionLimitsSetOnFullImportRunProfile_ReturnsNull()
+    // A Delta Import applies the deletes its Connector reports, and the same limits guard those (#2089).
+    [TestCase(ConnectedSystemRunType.FullImport)]
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    public void Validate_DeletionDetectionLimitsSetOnImportRunProfile_ReturnsNull(ConnectedSystemRunType runType)
     {
         var runProfile = new ConnectedSystemRunProfile
         {
-            RunType = ConnectedSystemRunType.FullImport,
+            RunType = runType,
             MaxDetectedDeletions = 500,
             MaxDetectedDeletionsPercent = 10
         };
 
         Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
+    }
+
+    [Test]
+    public void Validate_NegativeMaxDetectedDeletionsOnDeltaImportRunProfile_NamesTheField()
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.DeltaImport, MaxDetectedDeletions = -1 };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
+            Is.EqualTo("MaxDetectedDeletions cannot be negative."));
+    }
+
+    [Test]
+    public void Validate_MaxDetectedDeletionsPercentAboveOneHundredOnDeltaImportRunProfile_NamesTheField()
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.DeltaImport, MaxDetectedDeletionsPercent = 101 };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
+            Is.EqualTo("MaxDetectedDeletionsPercent must be between 0 and 100."));
     }
 
     [Test]
@@ -150,24 +170,25 @@ public class RunProfileSafeguardsValidatorTests
     }
 
     [TestCase(ConnectedSystemRunType.Export)]
-    [TestCase(ConnectedSystemRunType.DeltaImport)]
     [TestCase(ConnectedSystemRunType.FullSynchronisation)]
     [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
-    public void Validate_MaxDetectedDeletionsOnNonFullImportRunProfile_NamesTheField(ConnectedSystemRunType runType)
+    public void Validate_MaxDetectedDeletionsOnNonImportRunProfile_NamesTheField(ConnectedSystemRunType runType)
     {
         var runProfile = new ConnectedSystemRunProfile { RunType = runType, MaxDetectedDeletions = 500 };
 
         Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
-            Is.EqualTo("MaxDetectedDeletions can only be set on a Full Import Run Profile."));
+            Is.EqualTo("MaxDetectedDeletions can only be set on a Full Import or Delta Import Run Profile."));
     }
 
-    [Test]
-    public void Validate_MaxDetectedDeletionsPercentOnNonFullImportRunProfile_NamesTheField()
+    [TestCase(ConnectedSystemRunType.Export)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    public void Validate_MaxDetectedDeletionsPercentOnNonImportRunProfile_NamesTheField(ConnectedSystemRunType runType)
     {
-        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.Export, MaxDetectedDeletionsPercent = 10 };
+        var runProfile = new ConnectedSystemRunProfile { RunType = runType, MaxDetectedDeletionsPercent = 10 };
 
         Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
-            Is.EqualTo("MaxDetectedDeletionsPercent can only be set on a Full Import Run Profile."));
+            Is.EqualTo("MaxDetectedDeletionsPercent can only be set on a Full Import or Delta Import Run Profile."));
     }
 
     [Test]
@@ -204,7 +225,7 @@ public class RunProfileSafeguardsValidatorTests
         // a Run Profile with both kinds set wrongly still reports the first offending export field.
         var runProfile = new ConnectedSystemRunProfile
         {
-            RunType = ConnectedSystemRunType.DeltaImport,
+            RunType = ConnectedSystemRunType.FullSynchronisation,
             MaxCreates = 5,
             MaxDetectedDeletions = 5
         };

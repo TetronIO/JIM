@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 **Max detected deletions** and **Max detected deletions percent** can now be set on a Delta Import Run Profile, in the portal, REST API and PowerShell. A Delta Import whose Connected System reports more deletions than a limit marks none of them as deleted and warns, and each following Delta Import reports them again until you act. (#2089)
 - 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
 - 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
 - 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)

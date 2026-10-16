@@ -129,15 +129,16 @@ public class RunProfileSafeguardsDto
     public int? MaxDeletes { get; set; }
 
     /// <summary>
-    /// The maximum number of Connected System Objects a Full Import may newly mark as deleted in one
-    /// run. Full Import Run Profiles only. If either this or <see cref="MaxDetectedDeletionsPercent"/>
-    /// would be exceeded, deletion detection marks nothing.
+    /// The maximum number of Connected System Objects an import may newly mark as deleted in one run:
+    /// those a Full Import no longer finds, or those a Delta Import's Connector reports deleted. Full
+    /// Import and Delta Import Run Profiles only. If either this or <see cref="MaxDetectedDeletionsPercent"/>
+    /// would be exceeded, the run marks nothing as deleted.
     /// </summary>
     public int? MaxDetectedDeletions { get; set; }
 
     /// <summary>
-    /// The maximum share, 0 to 100, of the Connected System Objects in the run's scope at the start of
-    /// the run that a Full Import may newly mark as deleted. Full Import Run Profiles only.
+    /// The maximum share, 0 to 100, of the Connected System Objects in the run's scope before it saves
+    /// anything that an import may newly mark as deleted. Full Import and Delta Import Run Profiles only.
     /// </summary>
     public int? MaxDetectedDeletionsPercent { get; set; }
 }
