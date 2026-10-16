@@ -22,17 +22,38 @@ public static class ScheduleCronExpression
 
     /// <summary>
     /// The expression for running at each of <paramref name="runTimes"/> on each of <paramref name="daysOfWeek"/>
-    /// (0 = Sunday to 6 = Saturday). One expression holds one minute past the hour, so the minute is taken from the first
-    /// time; <see cref="TryFromPattern"/> refuses times that do not share one.
+    /// (0 = Sunday to 6 = Saturday). One expression holds one minute past the hour, so the times must share one
+    /// (see <see cref="RunTimesShareAMinute"/>); building from times that do not throws rather than quietly running
+    /// every time at the first time's minute.
     /// </summary>
     public static string BuildSpecificTimes(IEnumerable<int> daysOfWeek, IReadOnlyCollection<TimeSpan> runTimes)
     {
         if (runTimes.Count == 0)
             throw new ArgumentException("At least one run time is needed.", nameof(runTimes));
+        if (!RunTimesShareAMinute(runTimes, out var error))
+            throw new ArgumentException(error, nameof(runTimes));
 
         var minute = runTimes.First().Minutes;
         var hours = string.Join(",", runTimes.Select(t => t.Hours).Distinct().OrderBy(h => h));
         return $"{minute} {hours} * * {DaysField(daysOfWeek)}";
+    }
+
+    /// <summary>
+    /// Whether every one of <paramref name="runTimes"/> is at the same minute past the hour, which one expression needs.
+    /// When they are not, <paramref name="error"/> says why in the words both the portal's Schedule editor and the REST
+    /// API show.
+    /// </summary>
+    public static bool RunTimesShareAMinute(IEnumerable<TimeSpan> runTimes, out string? error)
+    {
+        if (runTimes.Select(t => t.Minutes).Distinct().Count() > 1)
+        {
+            error = "Every run time must be at the same minute past the hour (06:30 and 18:30, not 06:00 and 18:30); " +
+                    "one Schedule holds one cron expression. Use a Custom pattern, or a second Schedule, for times that differ.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -177,13 +198,7 @@ public static class ScheduleCronExpression
             error = "A SpecificTimes pattern needs at least one time in runTimes.";
             return false;
         }
-        if (times.Select(t => t.Minutes).Distinct().Count() > 1)
-        {
-            error = "Every time in runTimes must be at the same minute past the hour (06:30 and 18:30, not 06:00 and 18:30); " +
-                    "one Schedule holds one cron expression. Use a Custom pattern, or a second Schedule, for times that differ.";
-            return false;
-        }
-        return true;
+        return RunTimesShareAMinute(times, out error);
     }
 
     private static bool TryParseTime(string text, out TimeSpan time) =>

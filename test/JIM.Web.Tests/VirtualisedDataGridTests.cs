@@ -362,4 +362,38 @@ public class VirtualisedDataGridTests : JimComponentTestContext
         Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.unfit"), Is.True,
             "disposal must release the resize listener the fit registered");
     }
+
+    // The grid rewrites the URL with history.replaceState, which NavigationManager never sees, so its Uri still
+    // holds the query from the last real navigation. A page filter changed in place must survive the grid's next
+    // write of its own state, here the scroll reset every filter change is followed by.
+    private string LastWrittenQuery() => (string)JSInterop.Invocations
+        .Last(i => i.Identifier == "jimInterop.replaceQueryString").Arguments[0]!;
+
+    [Test]
+    public async Task SetQueryParameterAsync_FollowedByScrollReset_KeepsTheNewValueAsync()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/pending-deletions?type=users");
+        var cut = RenderGrid();
+
+        await cut.InvokeAsync(() => cut.Instance.SetQueryParameterAsync("type", "groups"));
+        await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LastWrittenQuery(), Does.Contain("type=groups"));
+            Assert.That(LastWrittenQuery(), Does.Not.Contain("type=users"));
+        }
+    }
+
+    [Test]
+    public async Task ClearQueryParameterAsync_FollowedByScrollReset_KeepsTheParameterRemovedAsync()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/t/users?search=hasAttribute:department");
+        var cut = RenderGrid();
+
+        await cut.InvokeAsync(() => cut.Instance.ClearQueryParameterAsync("search"));
+        await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
+
+        Assert.That(LastWrittenQuery(), Does.Not.Contain("hasAttribute"));
+    }
 }
