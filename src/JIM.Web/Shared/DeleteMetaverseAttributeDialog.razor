@@ -109,11 +109,12 @@
 
     // References present require the typed confirmation; unreferenced deletes do not.
     private string? BuildConfirmationPhrase() =>
-        _impact is { References.Count: > 0 } ? _impact.AttributeName : null;
+        _impact is { RequiresConfirmation: true } ? _impact.AttributeName : null;
 
     private string BuildConfirmButtonText()
     {
-        if (_impact == null)
+        // A refused delete removes nothing, so its button promises nothing.
+        if (_impact == null || _impact.BlockedByValues || _impact.BlockedByReaders)
             return "Delete";
 
         return _impact.References.Count > 0

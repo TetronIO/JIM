@@ -128,7 +128,7 @@
     }
 
     private string RemoveButtonText() =>
-        _cascadeReferences.Count > 0
+        _cascadeReferences.Count > 0 && _impact is { BlockedByValues: false, BlockedByReaders: false }
             ? $"Remove binding + {_cascadeReferences.Count} reference(s)"
             : "Remove binding";
 

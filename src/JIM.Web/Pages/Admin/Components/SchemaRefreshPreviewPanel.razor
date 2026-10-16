@@ -117,11 +117,10 @@
             @if (Dependents is { RemovalRefused: true })
             {
                 <MudAlert Severity="Severity.Info" Class="mt-3" data-testid="jim-schema-refresh-removal-refused">
-                    <strong>Apply &amp; Remove is unavailable.</strong> Removing would delete attributes that
-                    @Dependents.RemovedAttributeReaders.Count configuration item(s) still read, and JIM does not remove
-                    them for you: a Scoping Criterion left reading nothing takes objects out of scope. Change
-                    @string.Join("; ", Dependents.RemovedAttributeReaders.Select(r => r.Description)) first, or
-                    use Apply &amp; Disable Dependents, which keeps the attributes.
+                    <strong>Apply &amp; Remove is unavailable.</strong> It would delete attributes that
+                    @Dependents.RemovedAttributeReaders.Count configuration item(s) above still read, and JIM does not
+                    remove those for you: a Scoping Criterion left reading nothing takes objects out of scope. Change
+                    them first, or use Apply &amp; Disable Dependents, which keeps the attributes.
                 </MudAlert>
             }
 

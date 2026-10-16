@@ -267,7 +267,8 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Find("[data-testid=jim-apply-remove-schema-refresh]").HasAttribute("disabled"), Is.True);
-            Assert.That(cut.Find("[data-testid=jim-schema-refresh-removal-refused]").TextContent, Does.Contain("HR Users Inbound"));
+            Assert.That(cut.Find("[data-testid=jim-schema-refresh-removal-refused]"), Is.Not.Null);
+            Assert.That(cut.Markup, Does.Contain("Scoping Criterion on 'department' in Synchronisation Rule 'HR Users Inbound'"));
             Assert.That(cut.Find("[data-testid=jim-apply-disable-schema-refresh]").HasAttribute("disabled"), Is.False);
         }
     }
