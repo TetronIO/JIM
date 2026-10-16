@@ -265,8 +265,13 @@ public partial class MetaverseServer
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
                 .ToList()
+            // Only the rows the engine flows, those holding a value of the type (#2153), and a date in JIM's canonical
+            // text form, so one instant held in two kinds or precisions is one candidate, written as an Expression's is.
             : csoValues
-                .Select(v => v.ToStringNoName())
+                .Where(v => SyncEngine.HoldsValueOfType(v, targetAttributeType))
+                .Select(v => targetAttributeType == AttributeDataType.DateTime
+                    ? ExpressionText.FormatDate(v.DateTimeValue!.Value)
+                    : v.ToStringNoName())
                 .Where(v => !string.IsNullOrEmpty(v))
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
