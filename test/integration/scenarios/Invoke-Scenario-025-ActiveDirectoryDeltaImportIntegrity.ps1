@@ -515,14 +515,25 @@ function Invoke-RestoreFromBackupTest {
 
     # Started without -Wait, and polled here: the worker logs an Error line for a failed run, the runner's error
     # watcher would abort a -Wait on it, and the result being asserted would never be read. See this script's help.
-    $failedRun = Start-JIMRunProfile -ConnectedSystemId $system.ConnectedSystemId -RunProfileId $system.DeltaImportProfileId -PassThru
-    $script:ExpectedFailureActivityId = "$($failedRun.activityId)"
-    $failedActivity = Wait-ActivityTerminal -ActivityId "$($failedRun.activityId)"
+    # The refusal is also declared to the runner's log scan, which reads the expected-errors file rather than this
+    # script's own allowance (#2289). The activity id is not known until the run has started, and the worker may log
+    # the line before then, so the declaration names the refusal's own text: the worker's line for a failed run, and
+    # the exception that says the invocationId changed. It is scoped to this step, the only run in it.
+    $refusalStep = "$label DeltaImportAfterRevert"
+    Add-JimExpectedError -Step $refusalStep -Pattern '(?i)SafeFailActivityAsync: Unhandled exception whilst executing sync run|invocationId has changed' | Out-Null
+    try {
+        $failedRun = Start-JIMRunProfile -ConnectedSystemId $system.ConnectedSystemId -RunProfileId $system.DeltaImportProfileId -PassThru
+        $script:ExpectedFailureActivityId = "$($failedRun.activityId)"
+        $failedActivity = Wait-ActivityTerminal -ActivityId "$($failedRun.activityId)"
 
-    # Give the watcher time to write the Error line the failure logged, then take it: a sentinel left non-empty
-    # would abort the next Run Profile wait. What it held must be the expected refusal and nothing else.
-    Start-Sleep -Seconds 5
-    $errorLines = @(Clear-JimErrorWatcher)
+        # Give the watcher time to write the Error line the failure logged, then take it: a sentinel left non-empty
+        # would abort the next Run Profile wait. What it held must be the expected refusal and nothing else.
+        Start-Sleep -Seconds 5
+        $errorLines = @(Clear-JimErrorWatcher)
+    }
+    finally {
+        Complete-JimExpectedError -Step $refusalStep
+    }
     $unexpectedLines = @($errorLines | Where-Object { $_ -notmatch [regex]::Escape($script:ExpectedFailureActivityId) -and $_ -notmatch 'invocationId' })
 
     $failedStatus = Get-PropertyText -Object $failedActivity -Name "status"
