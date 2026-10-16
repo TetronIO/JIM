@@ -23,7 +23,8 @@
                  test/integration/docker/samba-ad-prebuilt/post-provision.sh: DNS forwarder, w32time, Windows
                  Update off, Administrator password never expires, the OUs, svc-jim and the JIM Connectors group,
                  the delegation from jim-ad-delegation.acl (unchanged), read over Deleted Objects, the LDAPS
-                 certificate, and (when asked) the Recycle Bin.
+                 certificate, and (when asked) the Recycle Bin. Beyond post-provision.sh, it stops a previous
+                 password working after a change (OldPasswordAllowedPeriod=0), which Samba never allows anyway.
       Verify     Read it all back, then prove the delegation as svc-jim over LDAPS, as post-provision.sh does.
                  Throws if any required check fails.
 
@@ -653,6 +654,9 @@ function Invoke-ConfigurePhase {
 
     Set-ServiceAccount -BaseDn $base -Password $ServiceAccountPassword
 
+    # A replaced password must stop working at once, or a scenario cannot tell JIM's delivery replaced it (#2287).
+    if (Set-LabOldPasswordAllowedPeriod) { Set-Changed 'Stopped the previous password working after a change (OldPasswordAllowedPeriod=0)' }
+
     # The delegation, from the same file the Samba image and the connector documentation use, and the read over
     # Deleted Objects. The same functions Grant-LabDelegation.ps1 uses at run time.
     foreach ($container in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
@@ -739,6 +743,11 @@ function Invoke-VerifyPhase {
     Add-Check 'Administrator never expires its password' {
         $administrator = Get-ADUser -Identity 'Administrator' -Properties PasswordNeverExpires
         [pscustomobject]@{ Passed = [bool]$administrator.PasswordNeverExpires; Detail = "neverExpires=$($administrator.PasswordNeverExpires)" }
+    }
+
+    Add-Check 'A previous password stops working as soon as it changes' {
+        $minutes = Get-LabOldPasswordAllowedPeriod
+        [pscustomobject]@{ Passed = ($minutes -eq 0); Detail = "OldPasswordAllowedPeriod=$(if ($null -eq $minutes) { 'not set (5 minutes)' } else { $minutes })" }
     }
 
     Add-Check 'Windows Update automatic installation is off' {
