@@ -561,7 +561,7 @@ Describe 'Get-DirectoryEntry' {
 }
 
 Describe 'Find-DirectoryEntry' {
-    It 'searches the subtree from the base DN by default' {
+    It 'searches the subtree from the base DN by default, paged' {
         Add-DockerResponse -ExitCode 0 -Output @('dn: CN=A,DC=x', 'department: Finance')
 
         $entries = @(Find-DirectoryEntry -DirectoryConfig (Get-SambaTestConfig) -Filter '(sAMAccountName=alice)' -Attributes 'department')
@@ -569,16 +569,21 @@ Describe 'Find-DirectoryEntry' {
         $script:dockerCalls[0].Args | Should -Be @(
             'exec', 'samba-ad-primary', 'ldapsearch', '-x', '-H', 'ldap://localhost:389',
             '-D', 'CN=Administrator,CN=Users,DC=panoply,DC=local', '-w', 'Test@123!',
-            '-LLL', '-b', 'DC=panoply,DC=local', '-s', 'sub', '(sAMAccountName=alice)', 'department')
+            '-LLL', '-E', 'pr=1000/noprompt', '-b', 'DC=panoply,DC=local', '-s', 'sub', '(sAMAccountName=alice)', 'department')
         $entries.Count | Should -Be 1
         $entries[0].department | Should -Be @('Finance')
     }
 
-    It 'pages the search on Active Directory, which refuses an unpaged one matching more than 1,000 entries' {
-        # Scenario 026's Medium population ended "ldapsearch ... failed (exit 4)", sizeLimitExceeded (2026-10-16).
+    It 'pages the search on every directory type, Active Directory included' -ForEach @(
+        @{ Factory = 'Get-SambaTestConfig' }
+        @{ Factory = 'Get-AdTestConfig' }
+        @{ Factory = 'Get-OpenLdapTestConfig' }
+    ) {
+        # Active Directory refuses an unpaged search matching more than 1,000 entries: Scenario 026's Medium
+        # population ended "ldapsearch ... failed (exit 4)", sizeLimitExceeded (2026-10-16).
         Add-DockerResponse -ExitCode 0 -Output @('dn: CN=A,DC=x', 'employeeID: EMP000001')
 
-        $null = @(Find-DirectoryEntry -DirectoryConfig (Get-AdTestConfig) -Filter '(employeeID=*)' -Attributes 'employeeID')
+        $null = @(Find-DirectoryEntry -DirectoryConfig (& $Factory) -Filter '(employeeID=*)' -Attributes 'employeeID')
 
         $arguments = @($script:dockerCalls[0].Args)
         $pagingAt = [array]::IndexOf($arguments, '-E')
