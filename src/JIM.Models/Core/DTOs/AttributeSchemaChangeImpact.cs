@@ -6,7 +6,8 @@ namespace JIM.Models.Core.DTOs;
 /// <summary>
 /// The evaluated impact of changing a Metaverse Attribute's data type or plurality to a proposed pair. While any
 /// Metaverse Object holds a value for the attribute, the only change allowed is widening it from single-valued to
-/// multi-valued with its data type unchanged; every other change is refused.
+/// multi-valued with its data type unchanged; every other change is refused. Submitting the current data type and
+/// plurality is no change at all, so it is never refused.
 /// </summary>
 /// <remarks>
 /// Returned by both the preview and the execute method so REST and PowerShell callers get the same block/allow
@@ -56,9 +57,17 @@ public class AttributeSchemaChangeImpact
     public int TotalObjectsWithValues { get; set; }
 
     /// <summary>
-    /// True when the change was applied. False when it was refused, or when the impact was only previewed.
+    /// True when the requested data type and plurality are now in effect: the change was made, or they were already
+    /// the attribute's own and there was nothing to change. False when the change was refused, or when the impact was
+    /// only previewed.
     /// </summary>
     public bool Applied { get; set; }
+
+    /// <summary>
+    /// True when the requested data type and plurality are the attribute's current ones, so there is nothing to change.
+    /// Stored values never block this, and nothing is written or recorded in the change history.
+    /// </summary>
+    public bool IsUnchanged => ProposedType == CurrentType && ProposedPlurality == CurrentPlurality;
 
     /// <summary>
     /// True when the change keeps the data type and goes from single-valued to multi-valued. This is the one change
@@ -67,10 +76,11 @@ public class AttributeSchemaChangeImpact
     public bool IsLosslessWidening => IsLosslessWideningChange(CurrentType, CurrentPlurality, ProposedType, ProposedPlurality);
 
     /// <summary>
-    /// True when the change is refused because Metaverse Objects hold values and it is not a lossless widening: a data
-    /// type change, or a change from multi-valued to single-valued.
+    /// True when the change is refused because Metaverse Objects hold values and it is neither a lossless widening nor
+    /// a request for the current data type and plurality: a data type change, or a change from multi-valued to
+    /// single-valued.
     /// </summary>
-    public bool BlockedByValues => TotalObjectsWithValues > 0 && !IsLosslessWidening;
+    public bool BlockedByValues => TotalObjectsWithValues > 0 && !IsUnchanged && !IsLosslessWidening;
 
     /// <summary>
     /// Whether changing an attribute from one (type, plurality) pair to another is a lossless widening: the same data
