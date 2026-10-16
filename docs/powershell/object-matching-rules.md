@@ -196,13 +196,13 @@ Changes an Object Matching Rule on a Connected System Object Type. What you leav
 
 ```powershell
 # NoSource (default)
-Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Attribute
-Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceAttributeId <int> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceAttributeId <int> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Expression
-Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceExpression <string> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceExpression <string> [-Order <int>] [-MetaverseObjectTypeId <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -217,6 +217,8 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceExpression <string
 | `SourceAttributeId` | `int` | Yes (Attribute) |  | Replaces the rule's source with this Connected System attribute. Cannot be used with `-SourceExpression`; give neither to leave the source as it is. |
 | `SourceExpression` | `string` | Yes (Expression) |  | Replaces the rule's source with an expression computing the value to match on: for example '"E" + Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result is converted to the type of the rule's Metaverse attribute, and a list of text values is matched value by value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one the Object Type does not have, or calls a function that returns a different value each time. Cannot be used with `-SourceAttributeId`. |
 | `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. Omit it to leave it as it is. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the rule as changed. |
 
 ### Output
@@ -403,13 +405,13 @@ Changes an Object Matching Rule on a Synchronisation Rule. What you leave out st
 
 ```powershell
 # NoSource (default)
-Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Attribute
-Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceAttributeId <int> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceAttributeId <int> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
 # Expression
-Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceExpression <string> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceExpression <string> [-Order <int>] [-TargetMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -423,6 +425,8 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceExpression <strin
 | `SourceAttributeId` | `int` | Yes (Attribute) |  | Replaces the rule's source with this Connected System attribute. Cannot be used with `-SourceExpression`; give neither to leave the source as it is. |
 | `SourceExpression` | `string` | Yes (Expression) |  | Replaces the rule's source with an expression computing the value to match on: for example '"E" + Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result is converted to the type of the rule's Metaverse attribute, and a list of text values is matched value by value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one the Object Type does not have, or calls a function that returns a different value each time. Cannot be used with `-SourceAttributeId`. |
 | `CaseSensitive` | `bool` | No |  | Whether the comparison respects case: with `$true`, 'emp123' does not match 'EMP123'. Omit it to leave it as it is. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
 | `PassThru` | `switch` | No |  | Returns the rule as changed. |
 
 ### Output

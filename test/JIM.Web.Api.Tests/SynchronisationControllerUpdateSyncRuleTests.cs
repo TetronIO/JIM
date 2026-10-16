@@ -56,6 +56,8 @@ public class SynchronisationControllerUpdateSyncRuleTests
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a

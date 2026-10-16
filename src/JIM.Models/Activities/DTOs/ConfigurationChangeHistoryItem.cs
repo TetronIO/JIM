@@ -50,6 +50,12 @@ public class ConfigurationChangeHistoryItem
     /// </summary>
     public string? Reason { get; set; }
 
+    /// <summary>
+    /// Set when the change stopped configuration test cases passing and was saved anyway, or their new results were
+    /// accepted: the cases, by name and status, never their values.
+    /// </summary>
+    public string? ConfigurationTestGateNote { get; set; }
+
     /// <summary>A short description of what the change touched, for example "Scope, Attribute Flow".</summary>
     public string Summary { get; set; } = null!;
 

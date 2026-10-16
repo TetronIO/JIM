@@ -9,10 +9,12 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -65,6 +67,9 @@ public class SynchronisationControllerObjectMatchingRuleTests
         _apiKeyRepo = new Mock<IApiKeyRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        _repository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
@@ -425,6 +430,99 @@ public class SynchronisationControllerObjectMatchingRuleTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         Assert.That(updated!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
     }
+
+    #region Save gate (#2055 Phase 4b)
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_ChangeStopsATestCasePassing_Returns409NamingTheCaseAndSavesNothingAsync()
+    {
+        var stored = GatedSimpleModeRule();
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        var conflict = result as ConflictObjectResult;
+        Assert.That(conflict, Is.Not.Null, result.GetType().Name);
+        var body = (ConfigurationTestGateResponse)conflict!.Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(body.Message, Does.Contain("Matches on employee ID"));
+            Assert.That(body.Regressions.Single().Result.TestCaseName, Is.EqualTo("Matches on employee ID"));
+            Assert.That(body.Regressions.Single().CanAccept, Is.True);
+            Assert.That(body.Regressions.Single().AcceptedExpectation!.Values, Is.EqualTo(new[] { "E12345" }));
+        }
+        _connectedSystemRepo.Verify(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_SaveAnyway_SavesAsync()
+    {
+        var stored = GatedSimpleModeRule();
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }],
+            SaveAnyway = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _connectedSystemRepo.Verify(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_AcceptNewResults_RewritesTheCaseAndSavesAsync()
+    {
+        var stored = GatedSimpleModeRule();
+        ConfigurationTestCase? rewritten = null;
+        _testRepository.Setup(r => r.UpdateTestCaseAsync(It.IsAny<ConfigurationTestCase>()))
+            .Callback<ConfigurationTestCase>(c => rewritten = c).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }],
+            AcceptNewResults = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(rewritten!.Expectation.Values, Is.EqualTo(new[] { "E12345" }));
+    }
+
+    private Mock<IConfigurationTestRepository> _testRepository = null!;
+
+    /// <summary>
+    /// A Simple mode rule matching on employee ID as it is, with a passing test case covering it.
+    /// </summary>
+    private ObjectMatchingRule GatedSimpleModeRule()
+    {
+        var stored = StoredTypeScopedRule();
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        // A fresh instance each read, as an untracked read gives: the stored rule, whatever the edit did to the one above.
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleUntrackedAsync(stored.Id)).ReturnsAsync(() => StoredTypeScopedRule());
+        _connectedSystemRepo.Setup(r => r.GetObjectTypeAsync(CsoTypeId)).ReturnsAsync(_csoType);
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+
+        _testRepository = new Mock<IConfigurationTestRepository>();
+        _testRepository.Setup(r => r.GetSimpleModeMatchingTestCasesAsync(ConnectedSystemId)).ReturnsAsync(
+        [
+            new ConfigurationTestCase
+            {
+                Id = 5,
+                Name = "Matches on employee ID",
+                Kind = ConfigurationTestCaseKind.ObjectMatchingRule,
+                ObjectMatchingRuleId = stored.Id,
+                Inputs = [new ConfigurationTestInput(null, "employeeID", ["12345"])],
+                Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values, ["12345"])
+            }
+        ]);
+        _testRepository.Setup(r => r.GetTestCasesForConnectedSystemAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _testRepository.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _repository.Setup(r => r.ConfigurationTests).Returns(_testRepository.Object);
+        return stored;
+    }
+
+    #endregion
 
     private const string PrefixedEmployeeId = "\"E\" + Trim(cs[\"employeeID\"])";
 

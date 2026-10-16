@@ -54,6 +54,9 @@ public class ConfigurationTestsControllerTests
         _activities = new Mock<IActivityRepository>();
         var apiKeys = new Mock<IApiKeyRepository>();
         _repository.Setup(r => r.ConfigurationTests).Returns(_testRepository.Object);
+        // What owns a new case holds none yet, so it has room for it.
+        _testRepository.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _testRepository.Setup(r => r.GetSimpleModeMatchingTestCasesAsync(It.IsAny<int>())).ReturnsAsync([]);
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
         _repository.Setup(r => r.Activity).Returns(_activities.Object);
         _repository.Setup(r => r.ApiKeys).Returns(apiKeys.Object);

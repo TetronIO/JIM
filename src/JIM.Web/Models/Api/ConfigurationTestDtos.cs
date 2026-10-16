@@ -433,3 +433,85 @@ public class ConfigurationTestActualDto
     /// </summary>
     public string? ErrorMessage { get; set; }
 }
+
+/// <summary>
+/// What a save does when it stops a configuration test case passing (the save gate). Without either, such a save is
+/// refused with 409 Conflict and changes nothing.
+/// </summary>
+public interface IConfigurationTestGateRequest
+{
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    bool? SaveAnyway { get; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each case that stopped passing expects, and save. A case whose
+    /// new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+    /// the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    bool? AcceptNewResults { get; }
+}
+
+/// <summary>
+/// Reads a request's save gate choices.
+/// </summary>
+public static class ConfigurationTestGateRequestExtensions
+{
+    public static ConfigurationTestGateOptions ToConfigurationTestGateOptions(this IConfigurationTestGateRequest request) =>
+        new(request.SaveAnyway == true, request.AcceptNewResults == true);
+}
+
+/// <summary>
+/// The 409 Conflict body of a save the save gate refused: the save stops configuration test cases passing, and nothing
+/// was saved. Send it again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.
+/// </summary>
+public class ConfigurationTestGateResponse
+{
+    /// <summary>
+    /// Why the save was refused, naming the cases.
+    /// </summary>
+    [Required]
+    public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Each case that passed before the save and does not with it.
+    /// </summary>
+    [Required]
+    public List<ConfigurationTestRegressionDto> Regressions { get; set; } = [];
+
+    public static ConfigurationTestGateResponse FromException(JIM.Models.Exceptions.ConfigurationTestsRegressedException exception) => new()
+    {
+        Message = exception.Message,
+        Regressions = exception.Regressions.Select(ConfigurationTestRegressionDto.FromModel).ToList()
+    };
+}
+
+/// <summary>
+/// A configuration test case a save would stop passing.
+/// </summary>
+public class ConfigurationTestRegressionDto
+{
+    /// <summary>
+    /// The case's run against the configuration the save proposes.
+    /// </summary>
+    [Required]
+    public ConfigurationTestRunResultDto Result { get; set; } = null!;
+
+    /// <summary>
+    /// True when <c>acceptNewResults</c> can take this result as what the case expects.
+    /// </summary>
+    public bool CanAccept { get; set; }
+
+    /// <summary>
+    /// What the case would expect if its new result were accepted; null when it cannot be.
+    /// </summary>
+    public ConfigurationTestExpectationDto? AcceptedExpectation { get; set; }
+
+    public static ConfigurationTestRegressionDto FromModel(ConfigurationTestRegression regression) => new()
+    {
+        Result = ConfigurationTestRunResultDto.FromModel(regression.After),
+        CanAccept = regression.CanAccept,
+        AcceptedExpectation = regression.AcceptedExpectation == null ? null : ConfigurationTestExpectationDto.FromModel(regression.AcceptedExpectation)
+    };
+}
