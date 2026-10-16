@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
+using System.Globalization;
 namespace JIM.Connectors.File;
 
 internal class FileConnectorImport
@@ -260,18 +261,41 @@ internal class FileConnectorImport
                     }
                     else if (attribute.Type == AttributeDataType.DateTime)
                     {
+                        // Every value read (#2153), split like every other type when the attribute is multi-valued, each
+                        // as UTC: a value with no time zone is taken as UTC and an offset is honoured, in the configured
+                        // culture. JIM puts each into the form it holds; the Connector does not normalise.
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.DateTimeValues.Add(_reader.CsvReader.GetField<DateTime>(attribute.Name));
+                            var values = isMultiValued
+                                ? fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                : [fieldValue];
+                            foreach (var value in values)
+                            {
+                                if (DateTime.TryParse(value, _reader.CsvReader.Configuration.CultureInfo, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dateTimeValue))
+                                    importObjectAttribute.DateTimeValues.Add(dateTimeValue);
+                                else
+                                    (unreadableValues ??= []).Add(value);
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Boolean)
                     {
+                        // Every value read (#2153): a true or false attribute holds one, and JIM reports one arriving with
+                        // both rather than the Connector choosing.
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.BoolValues.Add(_reader.CsvReader.GetField<bool>(attribute.Name));
+                            var values = isMultiValued
+                                ? fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                : [fieldValue.Trim()];
+                            foreach (var value in values)
+                            {
+                                if (TryParseBoolean(value, out var boolValue))
+                                    importObjectAttribute.BoolValues.Add(boolValue);
+                                else
+                                    (unreadableValues ??= []).Add(value);
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Guid)
@@ -364,6 +388,27 @@ internal class FileConnectorImport
             await _progress.ReportObjectsReadAsync(result.ImportObjects.Count);
 
         return FinaliseResult(result, stopwatch);
+    }
+
+    /// <summary>
+    /// Reads <c>true</c> or <c>false</c> in any case, or <c>1</c> or <c>0</c>, as the file's typed reader did.
+    /// </summary>
+    private static bool TryParseBoolean(string value, out bool result)
+    {
+        if (bool.TryParse(value, out result))
+            return true;
+
+        switch (value)
+        {
+            case "1":
+                result = true;
+                return true;
+            case "0":
+                result = false;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

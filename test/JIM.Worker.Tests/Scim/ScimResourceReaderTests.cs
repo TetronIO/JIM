@@ -72,6 +72,31 @@ public class ScimResourceReaderTests
     }
 
     [Test]
+    public void Read_MultiValuedDateTimeArray_StagesEveryElement()
+    {
+        // #2153 S5: assigning inside the loop kept only the last element.
+        var attribute = new ScimFlattenedAttribute("loginTimes", "loginTimes", AttributeDataType.DateTime, AttributePlurality.MultiValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "loginTimes": [ "2026-02-04T13:53:42Z", "2026-02-05T13:53:42.5+01:00" ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "loginTimes").DateTimeValues, Is.EqualTo(new[]
+        {
+            new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc),
+            new DateTime(2026, 2, 5, 12, 53, 42, 500, DateTimeKind.Utc)
+        }));
+    }
+
+    [Test]
+    public void Read_BooleanArrayHoldingBoth_StagesEachForJimToReport()
+    {
+        var attribute = new ScimFlattenedAttribute("flags", "flags", AttributeDataType.Boolean, AttributePlurality.SingleValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "flags": [ true, false ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "flags").BoolValues, Is.EqualTo(new[] { true, false }));
+    }
+
+    [Test]
     public void Read_AttributeAbsentFromTheResource_IsNotStaged()
     {
         // An attribute the provider did not send is unasserted, not empty. Staging it empty would look

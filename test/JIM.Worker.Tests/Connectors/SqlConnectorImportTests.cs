@@ -510,6 +510,34 @@ public class SqlConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_RelatedTableOfDates_ImportsEveryRowAsync()
+    {
+        // #2153 S5: each related row is a value; assigning rather than appending kept one arbitrary row.
+        var provider = new FakeSqlProvider();
+        var first = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_ID", "PHONE_NUMBER"],
+            [1, first], [1, first.AddDays(1)], [1, first.AddDays(2)]);
+
+        var run = await RunImportAsync(provider, PhonesDocument, RelatedValuesSystem(AttributeDataType.DateTime), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").DateTimeValues,
+            Is.EquivalentTo(new[] { first, first.AddDays(1), first.AddDays(2) }));
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedTableOfBooleans_ImportsEveryRowForJimToReportAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_ID", "PHONE_NUMBER"], [1, true], [1, false]);
+
+        var run = await RunImportAsync(provider, PhonesDocument, RelatedValuesSystem(AttributeDataType.Boolean), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").BoolValues, Is.EquivalentTo(new[] { true, false }));
+    }
+
+    [Test]
     public async Task ImportAsync_RelatedRowJoinedInAnotherCaseToAnAnchorThatIgnoresCase_GathersItsValuesOntoTheObjectAsync()
     {
         // Microsoft SQL Server's default collation joins 'abc' to 'ABC', so the database hands the row back; matching it
@@ -1227,6 +1255,17 @@ public class SqlConnectorImportTests
             ObjectType("Person",
                 Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
                 Attribute("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued))
+        ]
+    };
+
+    private static ConnectedSystem RelatedValuesSystem(AttributeDataType valueType) => new()
+    {
+        Name = "HR Database",
+        ObjectTypes =
+        [
+            ObjectType("Person",
+                Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                Attribute("PhoneNumbers", valueType, plurality: AttributePlurality.MultiValued))
         ]
     };
 

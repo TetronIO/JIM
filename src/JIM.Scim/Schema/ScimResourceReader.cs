@@ -211,13 +211,14 @@ public static class ScimResourceReader
             switch (attribute.Type)
             {
                 case AttributeDataType.Boolean:
-                    // Booleans are single-valued by nature: several values cannot be told apart.
+                    // Every value is staged (#2153): a true or false attribute holds one, and JIM itself reports an
+                    // attribute arriving with both, the same way for every Connector, rather than the last one winning.
                     if (value.ValueKind == JsonValueKind.True)
-                        { converted.BoolValues.Clear(); converted.BoolValues.Add(true); }
+                        converted.BoolValues.Add(true);
                     else if (value.ValueKind == JsonValueKind.False)
-                        { converted.BoolValues.Clear(); converted.BoolValues.Add(false); }
+                        converted.BoolValues.Add(false);
                     else if (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed))
-                        { converted.BoolValues.Clear(); converted.BoolValues.Add(parsed); }
+                        converted.BoolValues.Add(parsed);
                     else
                         unreadable.Add(Unreadable(attribute, value, "Not true or false."));
                     break;
@@ -252,7 +253,7 @@ public static class ScimResourceReader
 
                 case AttributeDataType.DateTime:
                     if (TryGetDateTime(value, out var dateTimeValue))
-                        { converted.DateTimeValues.Clear(); converted.DateTimeValues.Add(dateTimeValue); }
+                        converted.DateTimeValues.Add(dateTimeValue);
                     else
                         unreadable.Add(Unreadable(attribute, value, "Not a valid date and time."));
                     break;
