@@ -143,6 +143,50 @@ public class ScopingExplanationViewTests : JimComponentTestContext
         Assert.That(items.Select(i => i.TextContent.Trim()), Is.EqualTo(bullets.Select(b => b.PlainText)));
     }
 
+    [Test]
+    public void Render_ExpressionCriterion_ShowsEachInputWithTheValuesTheObjectHeld()
+    {
+        var cut = RenderExplanation(ExpressionScoping(
+            new ScopingExpressionInputExplanation { Accessor = "cs[\"department\"]", Values = [" FINANCE "], ValueCount = 1 },
+            new ScopingExpressionInputExplanation { Accessor = "cs[\"division\"]" }));
+
+        var inputs = cut.FindAll("[data-testid='jim-scoping-expression-input']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inputs.Select(i => i.GetAttribute("data-accessor")), Is.EqualTo(new[] { "cs[\"department\"]", "cs[\"division\"]" }));
+            Assert.That(inputs[0].TextContent, Does.Contain(" FINANCE "));
+            Assert.That(inputs[1].GetAttribute("data-held"), Is.EqualTo("0"));
+        }
+    }
+
+    [Test]
+    public void Render_ExpressionInputWithheld_ShowsNoValue()
+    {
+        var cut = RenderExplanation(ExpressionScoping(
+            new ScopingExpressionInputExplanation { Accessor = "cs[\"userPassword\"]", ValueCount = 1, Masked = true }));
+
+        var input = cut.Find("[data-testid='jim-scoping-expression-input']");
+        Assert.That(input.GetAttribute("data-masked"), Is.EqualTo("true"));
+    }
+
+    [Test]
+    public void Render_AttributeCriterion_ShowsNoExpressionInputs()
+    {
+        var cut = RenderExplanation(FinanceAppScoping());
+
+        Assert.That(cut.FindAll("[data-testid='jim-scoping-expression-input']"), Is.Empty);
+    }
+
+    private static ScopingExplanation ExpressionScoping(params ScopingExpressionInputExplanation[] inputs)
+    {
+        var criterion = Criterion("1.1", ScopingCriterionOutcome.Met, "Lower(Trim(cs[\"department\"])) starts with fin (ignoring case)", "computed finance");
+        criterion.Expression = "Lower(Trim(cs[\"department\"]))";
+        criterion.ExpressionInputs = [.. inputs];
+        var explanation = FinanceAppScoping();
+        explanation.Groups = [new ScopingGroupExplanation { Path = "1", Type = SearchGroupType.All, Met = true, Description = "All of these must be met (met)", Criteria = [criterion] }];
+        return explanation;
+    }
+
     /// <summary>
     /// A masked credential value arrives as a Hidden segment; the list shows the segment's own words, never anything
     /// in its place.

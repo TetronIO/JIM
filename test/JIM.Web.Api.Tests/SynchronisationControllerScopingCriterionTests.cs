@@ -217,6 +217,23 @@ public class SynchronisationControllerScopingCriterionTests
     // ── Expression criteria (#2054) ──────────────────────────────────────────────────────────────────────────
 
     [Test]
+    public async Task UpdateScopingCriterionAsync_ExpressionComparedAsTextWithARelativeDate_ReturnsBadRequestAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(BuildExportRuleWithCriterion());
+
+        var result = await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId,
+            new CreateScopingCriterionRequest
+            {
+                Expression = "Lower(mv[\"Department\"])", CompareAs = "Text", ComparisonType = "LessThan",
+                ValueMode = "Relative", RelativeCount = 30, RelativeUnit = "Days", RelativeDirection = "Ago"
+            });
+
+        var badRequest = result as BadRequestObjectResult;
+        Assert.That(badRequest, Is.Not.Null);
+        Assert.That(System.Text.Json.JsonSerializer.Serialize(badRequest!.Value), Does.Contain("DateTime"));
+    }
+
+    [Test]
     public async Task UpdateScopingCriterionAsync_Expression_ReplacesTheAttributeWithTheExpressionAsync()
     {
         var rule = BuildExportRuleWithCriterion();

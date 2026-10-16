@@ -1,9 +1,13 @@
-﻿@using JIM.Models.Core
+﻿@using JIM.Application.Servers
+@using JIM.Models.Core
+@using JIM.Models.Interfaces
 @using JIM.Models.Logic
 @using JIM.Models.Search
 @using JIM.Models.Staging
 @using JIM.Utilities
 @using JIM.Web.Models
+@using JIM.Web.Pages.Admin.Components
+@inject IExpressionEvaluator ExpressionEvaluator
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -40,25 +44,16 @@
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
     {
         <div class="mt-5">
-            <MudChip T="string">
-                <AvatarContent>
-                    @if (criteria.MetaverseAttribute != null)
-                    {
-                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
-                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                        </MudTooltip>
-                    }
-                    else
-                    {
-                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
-                        <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                        </MudTooltip>
-                    }
-                </AvatarContent>
-                <ChildContent>@criteria.GetAttributeName()</ChildContent>
-            </MudChip>
+            @if (criteria.IsExpression)
+            {
+                <AttributeChip Kind="AttributeChipKind.Expression" Expression="@criteria.Expression"
+                               Tooltip="@($"Expression, compared as {criteria.CompareAs?.ToString().SplitOnCapitalLetters()}")" />
+            }
+            else
+            {
+                <AttributeChip Kind="@(criteria.MetaverseAttribute != null ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
+                               Name="@criteria.GetAttributeName()" />
+            }
             <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
             @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
             {
@@ -121,7 +116,45 @@
     <DialogContent>
         @if (_newSyncRuleScopingCriteria != null)
         {
-            @if (SyncRule.Direction == SyncRuleDirection.Export)
+            <div class="d-flex align-center flex-wrap gap-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Compare</MudText>
+                <SegmentedToggle TValue="bool" Options="CompareOptions" Value="_compareExpression" ValueChanged="SetCompareExpression"
+                                 AriaLabel="Compare" TestId="jim-scoping-criterion-compare" />
+            </div>
+
+            @if (_compareExpression)
+            {
+                <ExpressionEditor @ref="_expressionEditor" @bind-Value="_newSyncRuleScopingCriteria.Expression"
+                                  Id="scoping-criterion-expression" Label="Expression" Required="true" Class="mt-5"
+                                  Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText"
+                                  MetaverseAttributeNames="@(Exporting ? ScopedAttributeNames : null)"
+                                  ConnectedSystemAttributeNames="@(Exporting ? null : ScopedAttributeNames)" />
+                <div class="mt-1">
+                    <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
+                    <InsertAttributeMenu MetaverseAttributes="@(Exporting ? SyncRule.MetaverseObjectType?.Attributes : null)"
+                                         ConnectedSystemAttributes="@(Exporting ? null : SelectableConnectedSystemAttributes)"
+                                         ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
+                                         Direction="SyncRule.Direction"
+                                         OnInsert="InsertIntoExpressionAsync" />
+                </div>
+                <MudSelect T="AttributeDataType" Value="@(_newSyncRuleScopingCriteria.CompareAs ?? AttributeDataType.Text)"
+                           ValueChanged="SetCompareAs"
+                           Label="Compare as"
+                           HelperText="The type the computed value is converted to before it is compared"
+                           Class="mt-5"
+                           Variant="Variant.Outlined"
+                           ToStringFunc="@(t => t.ToString().SplitOnCapitalLetters())">
+                    @foreach (var type in ScopingCriterionExpressionValidator.CompareAsTypes)
+                    {
+                        <MudSelectItem Value="@type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (ExpressionProblem() is { } problem)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-scoping-criterion-problem">@problem</MudAlert>
+                }
+            }
+            else if (SyncRule.Direction == SyncRuleDirection.Export)
             {
                 <MudSelect T="MetaverseAttribute"
                            @bind-Value="_newSyncRuleScopingCriteria.MetaverseAttribute"
@@ -175,6 +208,11 @@
             <CriterionValueEditor Criterion="_newSyncRuleScopingCriteria" AttributeType="attributeType" OnChanged="StateHasChanged" />
         }
 
+        @if (_newSyncRuleScopingCriteria is { NeedsFullReconciliationPass: true })
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-5" data-testid="jim-scoping-criterion-full-pass">@SyncRuleScopingCriteria.FullReconciliationPassNotice</MudAlert>
+        }
+
     </DialogContent>
     <DialogActions>
         <MudButton DropShadow="false"
@@ -204,6 +242,37 @@
     private bool _addCriteriaDialogVisible;
     private DialogOptions _dialogOptions = new() { FullWidth = true };
     private SyncRuleScopingCriteria? _newSyncRuleScopingCriteria;
+    private bool _compareExpression;
+    private ExpressionEditor? _expressionEditor;
+    private ScopingCriterionExpressionValidator? _expressionValidator;
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> CompareOptions =
+    [
+        new(false, "Attribute", "jim-scoping-criterion-compare-attribute", Tooltip: "Compare the values an attribute holds"),
+        new(true, "Expression", "jim-scoping-criterion-compare-expression",
+            Tooltip: "Compare a value worked out from the object, for values the source stores in a different shape")
+    ];
+
+    private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
+
+    private string ExpressionPlaceholder => Exporting ? "e.g. Lower(Trim(mv[\"Department\"]))" : "e.g. Lower(Trim(cs[\"department\"]))";
+
+    private string ExpressionHelperText => Exporting
+        ? "Reads the Metaverse Object only, as mv[\"Attribute Name\"]."
+        : "Reads the Connected System Object only, as cs[\"attributeName\"].";
+
+    /// <summary>The Connected System attributes an expression can read: those JIM imports, never a credential.</summary>
+    private IReadOnlyList<ConnectedSystemObjectTypeAttribute> SelectableConnectedSystemAttributes =>
+    [
+        .. (SyncRule.ConnectedSystemObjectType?.Attributes ?? [])
+            .Where(a => !CredentialAttributes.IsCredentialAttribute(a.Name))
+            .OrderBy(a => a.Name)
+    ];
+
+    /// <summary>The scoped type's attribute names, which the editor suggests and the save checks the expression against.</summary>
+    private IReadOnlyCollection<string> ScopedAttributeNames => Exporting
+        ? (SyncRule.MetaverseObjectType?.Attributes ?? []).Select(a => a.Name).ToList()
+        : (SyncRule.ConnectedSystemObjectType?.Attributes ?? []).Select(a => a.Name).ToList();
 
     private void HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup syncRuleScopingCriteriaGroup)
     {
@@ -220,6 +289,7 @@
     private void HandleShowAddCriteriaDialogButtonClick()
     {
         _newSyncRuleScopingCriteria = new SyncRuleScopingCriteria();
+        _compareExpression = false;
         _addCriteriaDialogVisible = true;
     }
 
@@ -250,6 +320,67 @@
         var type = GetSelectedAttributeType();
         if (type == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, type.Value, CriterionContext.Scoping))
             _newSyncRuleScopingCriteria.ComparisonType = SearchComparisonType.NotSet;
+
+        // A relative date belongs to a date comparison only; left behind on another type it would compare nothing
+        // against the clock and still ask for a full reconciliation pass.
+        if (type != AttributeDataType.DateTime)
+        {
+            _newSyncRuleScopingCriteria.ValueMode = DateCriteriaValueMode.Absolute;
+            _newSyncRuleScopingCriteria.RelativeCount = null;
+            _newSyncRuleScopingCriteria.RelativeUnit = null;
+            _newSyncRuleScopingCriteria.RelativeDirection = null;
+        }
+    }
+
+    /// <summary>
+    /// Switches what the criterion compares. The other side's choice is dropped, so a criterion never carries both an
+    /// attribute and an expression, and an operator the new side's type does not offer is cleared.
+    /// </summary>
+    private void SetCompareExpression(bool compareExpression)
+    {
+        _compareExpression = compareExpression;
+        if (_newSyncRuleScopingCriteria == null)
+            return;
+
+        if (compareExpression)
+        {
+            _newSyncRuleScopingCriteria.MetaverseAttribute = null;
+            _newSyncRuleScopingCriteria.ConnectedSystemAttribute = null;
+            _newSyncRuleScopingCriteria.CompareAs ??= AttributeDataType.Text;
+        }
+        else
+        {
+            _newSyncRuleScopingCriteria.Expression = null;
+            _newSyncRuleScopingCriteria.CompareAs = null;
+        }
+
+        HandleAttributeChanged();
+    }
+
+    private void SetCompareAs(AttributeDataType compareAs)
+    {
+        if (_newSyncRuleScopingCriteria == null)
+            return;
+
+        _newSyncRuleScopingCriteria.CompareAs = compareAs;
+        HandleAttributeChanged();
+    }
+
+    private Task InsertIntoExpressionAsync(string accessor) =>
+        _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Why the save would refuse the expression, judged exactly as the save judges it; null while there is no
+    /// expression yet, since an unfinished criterion is not a problem.
+    /// </summary>
+    private string? ExpressionProblem()
+    {
+        if (_newSyncRuleScopingCriteria is not { IsExpression: true } criterion)
+            return null;
+
+        _expressionValidator ??= new ScopingCriterionExpressionValidator(ExpressionEvaluator);
+        var objectTypeName = (Exporting ? SyncRule.MetaverseObjectType?.Name : SyncRule.ConnectedSystemObjectType?.Name) ?? "the scoped object type";
+        return _expressionValidator.DescribeProblem(criterion, SyncRule.Direction, ScopedAttributeNames, objectTypeName);
     }
 
     private bool DisableAddCriteriaButton()
@@ -257,8 +388,12 @@
         if (_newSyncRuleScopingCriteria == null)
             return true;
 
-        // Check appropriate attribute based on Synchronisation Rule direction
-        if (SyncRule.Direction == SyncRuleDirection.Export)
+        if (_compareExpression)
+        {
+            if (!_newSyncRuleScopingCriteria.IsExpression || ExpressionProblem() != null)
+                return true;
+        }
+        else if (SyncRule.Direction == SyncRuleDirection.Export)
         {
             if (_newSyncRuleScopingCriteria.MetaverseAttribute == null)
                 return true;
@@ -284,6 +419,9 @@
     {
         if (_newSyncRuleScopingCriteria == null)
             return null;
+
+        if (_compareExpression)
+            return _newSyncRuleScopingCriteria.CompareAs;
 
         if (SyncRule.Direction == SyncRuleDirection.Export)
             return _newSyncRuleScopingCriteria.MetaverseAttribute?.Type;

@@ -925,13 +925,14 @@ else if (_syncRule != null)
     /// <c>CreateOrUpdateSyncRuleAsync</c>). A no-op when the save touched no such mapping.
     /// </summary>
     /// <summary>
-    /// After the whole-rule save, one snackbar per warning it raised about the Attribute Flows: a problem with an
-    /// expression the save left as it was (#2055 Phase 3), or a derived flow calling a non-repeatable function (#1750).
+    /// After the whole-rule save, one snackbar per warning it raised: a problem with an Attribute Flow expression or a
+    /// Scoping Criterion the save left as it was (#2055 Phase 3, #2054), or a derived flow calling a non-repeatable
+    /// function (#1750).
     /// The same list the REST API returns as <c>warnings</c> and PowerShell writes as warnings.
     /// </summary>
     private void ReportSaveWarnings()
     {
-        foreach (var warning in _syncRule?.AttributeFlowSaveWarnings ?? [])
+        foreach (var warning in _syncRule?.SaveWarnings ?? [])
             Snackbar.Add(warning, Severity.Warning);
     }
 

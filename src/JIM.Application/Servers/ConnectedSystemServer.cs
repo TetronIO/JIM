@@ -8672,89 +8672,100 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates every scoping criterion with the shared <see cref="CriterionValidation"/> rule (#2053): an operator
-    /// applicable to its attribute's data type in scoping, the value it compares against, and a pattern JIM can run.
-    /// Throws <see cref="ArgumentException"/> on the first invalid criterion found, so a Synchronisation Rule with, for
-    /// example, "Starts With" on a DateTime attribute can never be persisted (the evaluator could never satisfy it,
-    /// silently dropping objects from scope).
-    /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
-    /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
+    /// Checks every scoping criterion on the save path that the portal, the REST API and PowerShell share: the shared
+    /// <see cref="CriterionValidation"/> rule (#2053: an operator applicable to the attribute's type in scoping, the value
+    /// it compares against, a pattern JIM can run, and a relative date only on a date), and, for an expression criterion,
+    /// whether it could ever be evaluated for objects of the rule's scoped type (#2054,
+    /// <see cref="ScopingCriterionExpressionValidator"/>).
+    /// <para>
+    /// A problem with a new or changed criterion refuses the save (<see cref="ArgumentException"/>), since the evaluator
+    /// could never satisfy it and would silently drop objects from scope. A problem with a criterion the save leaves as it
+    /// was is only reported (<see cref="SyncRuleScopingCriteria.SaveWarnings"/>), as for Attribute Flow expressions
+    /// (#2055 Phase 3): a criterion can stop being valid after it was saved (an attribute's type changes, an attribute an
+    /// expression reads is renamed), and refusing it then would stop the rule being saved at all, disabling it included.
+    /// </para>
+    /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are still
+    /// populated, and before anything flushes, so the stored criteria read are what is stored and not the edit.
     /// </summary>
-    private static void ValidateScopingCriteriaOperators(SyncRule syncRule)
+    private async Task ValidateScopingCriteriaAsync(SyncRule syncRule)
     {
-        foreach (var group in syncRule.ObjectScopingCriteriaGroups)
-            ValidateScopingGroupOperators(group);
+        var criteria = AllScopingCriteria(syncRule.ObjectScopingCriteriaGroups).ToList();
+        if (criteria.Count == 0)
+            return;
+
+        var storedIds = criteria.Where(c => c.Id > 0).Select(c => c.Id).ToList();
+        var stored = storedIds.Count > 0
+            ? await Application.Repository.ConnectedSystems.GetSyncRuleScopingCriterionStatesAsync(storedIds) ?? []
+            : [];
+
+        (IReadOnlyCollection<string> AttributeNames, string ObjectTypeName)? scopedSchema = null;
+        foreach (var criterion in criteria)
+        {
+            criterion.SaveWarnings.Clear();
+            var problems = new List<(string Subject, string Reason)>();
+
+            if (criterion.GetAttributeDataType() is { } attributeType)
+            {
+                // A criterion whose operator takes no value is stored without one, whatever the caller sent.
+                CriterionValidation.ClearValues(criterion);
+                var attributeName = criterion.GetAttributeName() ?? "an attribute";
+                if (CriterionValidation.Validate(criterion, attributeType, CriterionContext.Scoping, attributeName) is { } reason)
+                    problems.Add((attributeName, reason));
+            }
+
+            if (criterion.IsExpression)
+            {
+                scopedSchema ??= await LoadScopedSchemaAsync(syncRule);
+                var (attributeNames, objectTypeName) = scopedSchema.Value;
+                if (_scopingCriterionExpressionValidator.DescribeProblem(criterion, syncRule.Direction, attributeNames, objectTypeName) is { } reason)
+                    problems.Add((criterion.Expression!, reason));
+            }
+
+            if (problems.Count == 0)
+                continue;
+
+            var unchanged = criterion.Id > 0 && stored.TryGetValue(criterion.Id, out var state) && state.IsUnchangedIn(criterion);
+            if (!unchanged)
+            {
+                var message = $"Scoping criterion on '{problems[0].Subject}' cannot be saved: {problems[0].Reason}";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+                throw new ArgumentException(message);
+            }
+
+            foreach (var (subject, reason) in problems)
+            {
+                var warning = $"Scoping criterion on '{subject}' is not valid, and was left as it was: {reason}";
+                criterion.SaveWarnings.Add(warning);
+                Log.Warning("CreateOrUpdateSyncRuleAsync: Synchronisation Rule {SyncRuleId} saved with an unchanged invalid scoping criterion; {Warning}",
+                    syncRule.Id, LogSanitiser.Sanitise(warning));
+            }
+        }
     }
 
     /// <summary>
-    /// Refuses an expression scoping criterion that could never be evaluated for objects of the rule's scoped type
-    /// (#2054); see <see cref="ScopingCriterionExpressionValidator"/>. The scoped type's attributes are loaded when the
-    /// rule carries the type without them.
+    /// The names of the rule's scoped object type's attributes and the type's name, for checking what an expression
+    /// criterion reads. The type is loaded with its attributes when the rule carries it without them.
     /// </summary>
-    private async Task ValidateScopingCriteriaExpressionsAsync(SyncRule syncRule)
+    private async Task<(IReadOnlyCollection<string> AttributeNames, string ObjectTypeName)> LoadScopedSchemaAsync(SyncRule syncRule)
     {
-        var expressionCriteria = AllScopingCriteria(syncRule.ObjectScopingCriteriaGroups).Where(c => c.IsExpression).ToList();
-        if (expressionCriteria.Count == 0)
-            return;
-
-        var exporting = syncRule.Direction == SyncRuleDirection.Export;
-        List<string> attributeNames;
-        string objectTypeName;
-        if (exporting)
+        if (syncRule.Direction == SyncRuleDirection.Export)
         {
             var type = syncRule.MetaverseObjectType is { Attributes.Count: > 0 } loaded
                 ? loaded
                 : await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(syncRule.MetaverseObjectTypeId, includeChildObjects: true);
-            attributeNames = type?.Attributes.Select(a => a.Name).ToList() ?? [];
-            objectTypeName = type?.Name ?? syncRule.MetaverseObjectType?.Name ?? "the Metaverse Object Type";
-        }
-        else
-        {
-            var type = syncRule.ConnectedSystemObjectType is { Attributes.Count: > 0 } loaded
-                ? loaded
-                : await Application.Repository.ConnectedSystems.GetObjectTypeAsync(syncRule.ConnectedSystemObjectTypeId);
-            attributeNames = type?.Attributes.Select(a => a.Name).ToList() ?? [];
-            objectTypeName = type?.Name ?? syncRule.ConnectedSystemObjectType?.Name ?? "the Connected System Object Type";
+            return (type?.Attributes.Select(a => a.Name).ToList() ?? [],
+                type?.Name ?? syncRule.MetaverseObjectType?.Name ?? "the Metaverse Object Type");
         }
 
-        var problem = expressionCriteria
-            .Select(criterion => (Criterion: criterion,
-                Problem: _scopingCriterionExpressionValidator.DescribeProblem(criterion, syncRule.Direction, attributeNames, objectTypeName)))
-            .FirstOrDefault(found => found.Problem != null);
-        if (problem.Problem == null)
-            return;
-
-        var message = $"Scoping criterion on '{problem.Criterion.Expression}' cannot be saved: {problem.Problem}";
-        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+        var objectType = syncRule.ConnectedSystemObjectType is { Attributes.Count: > 0 } loadedType
+            ? loadedType
+            : await Application.Repository.ConnectedSystems.GetObjectTypeAsync(syncRule.ConnectedSystemObjectTypeId);
+        return (objectType?.Attributes.Select(a => a.Name).ToList() ?? [],
+            objectType?.Name ?? syncRule.ConnectedSystemObjectType?.Name ?? "the Connected System Object Type");
     }
 
     private static IEnumerable<SyncRuleScopingCriteria> AllScopingCriteria(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
         groups.SelectMany(group => group.Criteria.Concat(AllScopingCriteria(group.ChildGroups)));
-
-    private static void ValidateScopingGroupOperators(SyncRuleScopingCriteriaGroup group)
-    {
-        foreach (var criterion in group.Criteria)
-        {
-            var attributeType = criterion.GetAttributeDataType();
-            if (attributeType == null)
-                continue;
-
-            // A criterion whose operator takes no value is stored without one, whatever the caller sent.
-            CriterionValidation.ClearValues(criterion);
-            var attributeName = criterion.GetAttributeName() ?? "an attribute";
-            var error = CriterionValidation.Validate(criterion, attributeType.Value, CriterionContext.Scoping, attributeName);
-            if (error != null)
-            {
-                var message = $"Scoping criterion on '{attributeName}' cannot be saved: {error}";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
-                throw new ArgumentException(message);
-            }
-        }
-
-        foreach (var child in group.ChildGroups)
-            ValidateScopingGroupOperators(child);
-    }
 
     /// <summary>
     /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
@@ -9313,12 +9324,11 @@ public partial class ConnectedSystemServer
         // each is refused rather than ignored.
         ValidateMappingRemovalChoices(syncRule, mappingRemovalChoices);
 
-        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
-        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
-        // can never satisfy, which would silently drop objects out of scope.
-        ValidateScopingCriteriaOperators(syncRule);
-        // ...and any expression criterion that could never be evaluated (#2054).
-        await ValidateScopingCriteriaExpressionsAsync(syncRule);
+        // reject any new or changed scoping criterion the evaluator could never satisfy (an operator invalid for its
+        // type, such as "Starts With" on a DateTime, or an expression that could never be evaluated, #2054), which would
+        // silently drop objects out of scope; one the save leaves as it was is only warned about, so the rule can always
+        // be saved, disabled or tidied.
+        await ValidateScopingCriteriaAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
@@ -9567,12 +9577,11 @@ public partial class ConnectedSystemServer
         // each is refused rather than ignored.
         ValidateMappingRemovalChoices(syncRule, mappingRemovalChoices);
 
-        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
-        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
-        // can never satisfy, which would silently drop objects out of scope.
-        ValidateScopingCriteriaOperators(syncRule);
-        // ...and any expression criterion that could never be evaluated (#2054).
-        await ValidateScopingCriteriaExpressionsAsync(syncRule);
+        // reject any new or changed scoping criterion the evaluator could never satisfy (an operator invalid for its
+        // type, such as "Starts With" on a DateTime, or an expression that could never be evaluated, #2054), which would
+        // silently drop objects out of scope; one the save leaves as it was is only warned about, so the rule can always
+        // be saved, disabled or tidied.
+        await ValidateScopingCriteriaAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.

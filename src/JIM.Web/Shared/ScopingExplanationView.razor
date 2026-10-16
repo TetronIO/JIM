@@ -58,6 +58,20 @@
                     </span>
                     <span class="jim-scoping-criterion-text">@criterion.Description</span>
                     <span class="jim-scoping-criterion-actual">@criterion.ActualDescription</span>
+                    @if (criterion.ExpressionInputs.Count > 0)
+                    {
+                        @* What an expression criterion was given, beside what it computed (#2054). *@
+                        <ul class="jim-scoping-expression-inputs" aria-label="Attributes the expression read">
+                            @foreach (var input in criterion.ExpressionInputs)
+                            {
+                                <li data-testid="jim-scoping-expression-input" data-accessor="@input.Accessor"
+                                    data-held="@input.ValueCount" data-masked="@(input.Masked ? "true" : "false")">
+                                    <code class="jim-scoping-expression-accessor">@input.Accessor</code>
+                                    <span class="jim-scoping-expression-held">@DescribeHeld(input)</span>
+                                </li>
+                            }
+                        </ul>
+                    }
                 </div>
             }
             @foreach (var child in group.ChildGroups)
@@ -66,6 +80,21 @@
             }
         </div>
     };
+
+    /// <summary>
+    /// The values an expression input held: each quoted, so whitespace the expression trims stays visible.
+    /// </summary>
+    private static string DescribeHeld(ScopingExpressionInputExplanation input)
+    {
+        if (input.Masked)
+            return "held a hidden value";
+        if (input.ValueCount == 0)
+            return "held no value";
+
+        var listed = string.Join(", ", input.Values.Select(value => $"\"{value}\""));
+        var unlisted = input.ValueCount - input.Values.Count;
+        return unlisted > 0 ? $"held {listed} and {unlisted} more" : $"held {listed}";
+    }
 
     private static string OutcomeLabel(ScopingRuleOutcome outcome) => outcome switch
     {
