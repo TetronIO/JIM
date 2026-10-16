@@ -336,6 +336,41 @@ public class ScimAttributeFlatteningTests
     }
 
     [Test]
+    public void Flatten_MultiValuedComplexWithoutCanonicalTypes_OnlyItsValueIsWritable()
+    {
+        // Flattening decorrelates each sub-attribute from its entry, and JIM's multi-valued values have no defined
+        // order, so the writer cannot tell which entry a "type" belongs to. "value" identifies the entry (#2090).
+        var flattened = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var attribute in new[] { "roles", "entitlements", "x509Certificates" })
+            {
+                Assert.That(flattened.Single(a => a.Name == $"{attribute}.value").Writability, Is.EqualTo(AttributeWritability.Writable), attribute);
+                Assert.That(flattened.Single(a => a.Name == $"{attribute}.type").Writability, Is.EqualTo(AttributeWritability.ReadOnly), attribute);
+                Assert.That(flattened.Single(a => a.Name == $"{attribute}.display").Writability, Is.EqualTo(AttributeWritability.ReadOnly), attribute);
+            }
+        }
+    }
+
+    [Test]
+    public void Flatten_MultiValuedComplexWithNoValueSubAttribute_IsImportOnly()
+    {
+        // With no "value", nothing identifies an entry, so no sub-attribute can be written without guessing.
+        var accounts = new ScimSchemaAttribute
+        {
+            Name = "accounts",
+            Type = ScimAttributeTypes.Complex,
+            MultiValued = true,
+            SubAttributes = [Simple("system", ScimAttributeTypes.String), Simple("login", ScimAttributeTypes.String)]
+        };
+
+        var flattened = ScimAttributeMapper.Flatten(accounts, ScimUrns.User);
+
+        Assert.That(flattened, Has.All.Property(nameof(ScimFlattenedAttribute.Writability)).EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    [Test]
     public void Flatten_SingleValuedComplexWithABooleanSubAttribute_StillEmitsIt()
     {
         // A single-valued complex attribute's Boolean holds one value, so it is kept.

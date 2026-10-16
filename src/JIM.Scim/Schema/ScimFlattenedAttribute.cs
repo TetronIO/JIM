@@ -83,6 +83,14 @@ public class ScimFlattenedAttribute
     /// </summary>
     public bool CaseExact { get; }
 
+    /// <summary>
+    /// Whether each value is a whole entry of a multi-valued complex attribute without canonical types, identified by
+    /// its <see cref="SubAttributeName"/> (<c>roles.value</c>). Such a value is written, added and removed as an entry
+    /// of the parent attribute, the way a reference is, never at the sub-attribute's own path, which would reach every
+    /// entry at once (#2090).
+    /// </summary>
+    public bool IsEntryValue => Access == ScimValueAccess.ComplexSubAttribute && AttributePlurality == AttributePlurality.MultiValued;
+
     public ScimFlattenedAttribute(
         string name,
         string scimPath,
