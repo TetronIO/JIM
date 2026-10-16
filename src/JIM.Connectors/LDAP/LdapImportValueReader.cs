@@ -79,40 +79,100 @@ internal static class LdapImportValueReader
 
     /// <summary>
     /// Reads a Boolean: <c>TRUE</c> or <c>FALSE</c> (RFC 4517 3.3.3), in any case. Anything else is unreadable rather
-    /// than false, and an attribute with more than one value reports each (<see cref="TryGetSingleValue{T}"/>).
+    /// than false. Every value is read: a true or false attribute holds one value, and JIM itself reports an attribute
+    /// holding both (#2153), the same way for every Connector, rather than the reader choosing one.
     /// </summary>
     internal static LdapImportValues<bool> ReadBoolean(DirectoryAttribute attribute)
     {
         var read = new LdapImportValues<bool>();
-        if (!TryGetSingleValue(attribute, AttributeDataType.Boolean, read, out var value))
-            return read;
-
-        if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
-            read.Values.Add(true);
-        else if (value.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
-            read.Values.Add(false);
-        else
-            read.AddUnreadable(value);
+        foreach (var value in TextValues(attribute))
+        {
+            if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
+                read.Values.Add(true);
+            else if (value.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
+                read.Values.Add(false);
+            else
+                read.AddUnreadable(value);
+        }
 
         return read;
     }
 
     /// <summary>
-    /// Reads a date and time as UTC, from any form <see cref="TryParseDirectoryTime"/> reads. An attribute with more
-    /// than one value reports each (<see cref="TryGetSingleValue{T}"/>).
+    /// Reads every value of a date and time attribute as UTC, from any form <see cref="TryParseDirectoryTime(string, out DateTime)"/>
+    /// reads (#2153). The same instant in two forms is one value. Two values that differ only below the 100 nanoseconds
+    /// a DateTime holds would read as one, so each is reported with <see cref="UnreadableValueReasons.FinerThanJimReads"/>
+    /// rather than merged silently. JIM itself puts each value into the form it holds (to the microsecond).
     /// </summary>
     internal static LdapImportValues<DateTime> ReadDateTime(DirectoryAttribute attribute)
     {
         var read = new LdapImportValues<DateTime>();
-        if (!TryGetSingleValue(attribute, AttributeDataType.DateTime, read, out var value))
-            return read;
 
-        if (TryParseDirectoryTime(value, out var utc))
-            read.Values.Add(utc);
-        else
-            read.AddUnreadable(value);
+        // Each value read, with its text and whether digits finer than 100ns were dropped from it. Allocated only for an
+        // attribute with more than one value; the single-valued case reads straight into the result.
+        List<(string Text, DateTime Utc, bool Truncated)>? several = null;
+        string? first = null;
+        foreach (var value in TextValues(attribute))
+        {
+            if (first == null)
+            {
+                first = value;
+                continue;
+            }
+
+            several ??= [];
+            if (several.Count == 0)
+                AddParsed(first, several, read);
+            AddParsed(value, several, read);
+        }
+
+        if (several == null)
+        {
+            if (first == null)
+                return read;
+
+            if (TryParseDirectoryTime(first, out var utc, out _))
+                read.Values.Add(utc);
+            else
+                read.AddUnreadable(first);
+            return read;
+        }
+
+        var instants = new Dictionary<long, List<(string Text, DateTime Utc, bool Truncated)>>();
+        var order = new List<long>();
+        foreach (var parsed in several)
+        {
+            if (!instants.TryGetValue(parsed.Utc.Ticks, out var same))
+            {
+                same = [];
+                instants[parsed.Utc.Ticks] = same;
+                order.Add(parsed.Utc.Ticks);
+            }
+
+            same.Add(parsed);
+        }
+
+        foreach (var same in order.Select(ticks => instants[ticks]))
+        {
+            if (same.Count > 1 && same.Exists(p => p.Truncated))
+            {
+                foreach (var colliding in same)
+                    read.AddUnreadable(colliding.Text, UnreadableValueReasons.FinerThanJimReads);
+                continue;
+            }
+
+            read.Values.Add(same[0].Utc);
+        }
 
         return read;
+    }
+
+    private static void AddParsed(string value, List<(string Text, DateTime Utc, bool Truncated)> parsed, LdapImportValues<DateTime> read)
+    {
+        if (TryParseDirectoryTime(value, out var utc, out var truncated))
+            parsed.Add((value, utc, truncated));
+        else
+            read.AddUnreadable(value);
     }
 
     /// <summary>
@@ -159,13 +219,20 @@ internal static class LdapImportValueReader
     /// UTCTime. Where both readings fall inside them either could be meant, and the value is not read rather than
     /// risking a wrong date.
     /// </remarks>
-    internal static bool TryParseDirectoryTime(string? value, out DateTime utc)
+    internal static bool TryParseDirectoryTime(string? value, out DateTime utc) => TryParseDirectoryTime(value, out utc, out _);
+
+    /// <summary>
+    /// <see cref="TryParseDirectoryTime(string, out DateTime)"/>, also saying whether the value carried digits finer
+    /// than the 100 nanoseconds a DateTime holds, which reading it dropped (#2153).
+    /// </summary>
+    internal static bool TryParseDirectoryTime(string? value, out DateTime utc, out bool truncated)
     {
         utc = default;
+        truncated = false;
         if (string.IsNullOrEmpty(value))
             return false;
 
-        var isGeneralizedTime = TryParseGeneralizedTime(value, out var generalizedTime);
+        var isGeneralizedTime = TryParseGeneralizedTime(value, out var generalizedTime, out var generalizedTruncated);
         var isUtcTime = TryParseUtcTime(value, out var utcTime);
         if (isGeneralizedTime && isUtcTime && generalizedTime.Year is >= UtcTimeFirstYear and <= UtcTimeLastYear)
             return false;
@@ -179,6 +246,7 @@ internal static class LdapImportValueReader
         if (isGeneralizedTime)
         {
             utc = generalizedTime;
+            truncated = generalizedTruncated;
             return true;
         }
 
@@ -186,9 +254,10 @@ internal static class LdapImportValueReader
             DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out utc);
     }
 
-    private static bool TryParseGeneralizedTime(string value, out DateTime utc)
+    private static bool TryParseGeneralizedTime(string value, out DateTime utc, out bool truncated)
     {
         utc = default;
+        truncated = false;
         var position = 0;
         if (!TryReadDigits(value, ref position, 4, out var year) ||
             !TryReadDigits(value, ref position, 2, out var month) ||
@@ -218,7 +287,7 @@ internal static class LdapImportValueReader
         if (position < value.Length && value[position] is '.' or ',')
         {
             position++;
-            if (!TryReadFraction(value, ref position, lastUnitTicks, out fractionTicks))
+            if (!TryReadFraction(value, ref position, lastUnitTicks, out fractionTicks, out truncated))
                 return false;
         }
 
@@ -288,10 +357,12 @@ internal static class LdapImportValueReader
     }
 
     /// <summary>
-    /// Reads one or more digits as a fraction of <paramref name="unitTicks"/>, truncated to the 100ns a DateTime holds.
+    /// Reads one or more digits as a fraction of <paramref name="unitTicks"/>, truncated to the 100ns a DateTime holds;
+    /// <paramref name="truncated"/> says whether anything non-zero was dropped.
     /// </summary>
-    private static bool TryReadFraction(string value, ref int position, long unitTicks, out long ticks)
+    private static bool TryReadFraction(string value, ref int position, long unitTicks, out long ticks, out bool truncated)
     {
+        truncated = false;
         var start = position;
         long numerator = 0;
         long denominator = 1;
@@ -302,11 +373,17 @@ internal static class LdapImportValueReader
                 numerator = (numerator * 10) + (value[position] - '0');
                 denominator *= 10;
             }
+            else if (value[position] != '0')
+            {
+                truncated = true;
+            }
 
             position++;
         }
 
-        ticks = (long)((Int128)unitTicks * numerator / denominator);
+        var scaled = (Int128)unitTicks * numerator;
+        ticks = (long)(scaled / denominator);
+        truncated |= scaled % denominator != 0;
         return position > start;
     }
 
@@ -354,32 +431,6 @@ internal static class LdapImportValueReader
 
     private static IEnumerable<string> TextValues(DirectoryAttribute attribute) =>
         attribute.GetValues(typeof(string)).Cast<string>().Where(value => !string.IsNullOrWhiteSpace(value));
-
-    /// <summary>
-    /// Gets the one value of an attribute whose <paramref name="type"/> JIM holds one value of (a Boolean or a date and
-    /// time). False when the attribute has no value, or when it has several: JIM cannot hold them, so each is kept on
-    /// <paramref name="read"/> to report, and the import leaves the attribute as JIM already holds it rather than
-    /// choosing one of them.
-    /// </summary>
-    /// <remarks>
-    /// Reading none of several values without reporting them left the attribute with no value, which the import took
-    /// as the directory holding none, removing the value JIM held. Reporting them is a stop-gap: #2153 slice S5 reads
-    /// every value, importing several dates as they are and having JIM itself report a second Boolean value, and
-    /// replaces this.
-    /// </remarks>
-    private static bool TryGetSingleValue<T>(DirectoryAttribute attribute, AttributeDataType type, LdapImportValues<T> read, [NotNullWhen(true)] out string? value)
-    {
-        var values = TextValues(attribute).ToList();
-        value = values.Count == 1 ? values[0] : null;
-        if (values.Count > 1)
-        {
-            var reason = UnreadableValueReasons.MoreValuesThanJimHolds(type, values.Count);
-            foreach (var surplusValue in values)
-                read.AddUnreadable(surplusValue, reason);
-        }
-
-        return value != null;
-    }
 
     /// <summary>
     /// Removes duplicate values defensively: a directory should not return any, but corrupt data or a fault in the
