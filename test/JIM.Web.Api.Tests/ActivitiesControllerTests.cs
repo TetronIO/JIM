@@ -1042,6 +1042,27 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityExecutionItemAsync_ValuesJimCouldNotHold_SayJimFoundThemAndOlderRecordsSayTheConnectorAsync()
+    {
+        // #2153: JIM reports values too (dates less than a microsecond apart, both true and false), and a script must be
+        // able to tell those from values the Connector could not read. A record kept before the source was recorded
+        // carries no source, and every one of those was the Connector's.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            AttributeValueErrorsJson = """{"total":2,"values":[{"attributeName":"isActive","value":"true","reason":"r","source":"Jim"},{"attributeName":"startDate","value":"x","reason":"r"}]}"""
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto!.AttributeValueErrors.Select(v => v.Source), Is.EqualTo(new[] { ImportAttributeValueErrorSource.Jim, ImportAttributeValueErrorSource.Connector }));
+    }
+
+    [Test]
     public async Task GetActivityExecutionItemAsync_ItemWithNoUnreadableValues_ReturnsAnEmptyListAsync()
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Added };

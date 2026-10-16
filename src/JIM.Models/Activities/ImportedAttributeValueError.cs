@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
 
@@ -33,4 +34,10 @@ public class ImportedAttributeValueError
     /// Why the value could not be read.
     /// </summary>
     public string Reason { get; set; } = null!;
+
+    /// <summary>
+    /// Who found the value could not be imported: the Connector, which could not read it, or JIM, which could not hold
+    /// it (#2153). Records written before this was kept read as the Connector, which is who raised every one of them.
+    /// </summary>
+    public ImportAttributeValueErrorSource Source { get; set; } = ImportAttributeValueErrorSource.Connector;
 }

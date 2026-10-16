@@ -78,7 +78,7 @@ public class ImportAttributeDataTypeChangeTests
     {
         // The Connector read 805306368 as a Boolean, which came out false, and JIM stored that.
         var hrId = Guid.NewGuid();
-        await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValue = false }));
+        await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValues = { false } }));
 
         RedefineAttribute(Leaver, AttributeDataType.Number);
         var activity = await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = Leaver, IntValues = [805306368] }));
@@ -104,7 +104,7 @@ public class ImportAttributeDataTypeChangeTests
         await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = CourseCount, IntValues = [1, 2] }));
 
         RedefineAttribute(CourseCount, AttributeDataType.Boolean);
-        var activity = await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = CourseCount, BoolValue = true }));
+        var activity = await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = CourseCount, BoolValues = { true } }));
 
         using (Assert.EnterMultipleScope())
         {
@@ -121,7 +121,7 @@ public class ImportAttributeDataTypeChangeTests
         // An unreadable value is not a statement of what the attribute holds (#2066), so it removes nothing, whatever
         // column what JIM held is in.
         var hrId = Guid.NewGuid();
-        await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValue = false }));
+        await RunFullImportAsync(Person(hrId, new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValues = { false } }));
 
         RedefineAttribute(Leaver, AttributeDataType.Number);
         var unreadable = Person(hrId);

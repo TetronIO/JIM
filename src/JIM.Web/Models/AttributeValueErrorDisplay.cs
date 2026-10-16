@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Web.Models;
 
@@ -39,6 +40,10 @@ public static class AttributeValueErrorDisplay
         AttributeDataType.Reference => "A reference to another object",
         _ => null
     };
+
+    /// <summary>Who found a value could not be imported (#2153): the Connector, or JIM.</summary>
+    public static string FoundBy(ImportAttributeValueErrorSource source) =>
+        source == ImportAttributeValueErrorSource.Jim ? "JIM" : "Connector";
 
     /// <summary>The Connected System's Schema tab, open on the Object Type where one is given.</summary>
     public static string SchemaHref(int connectedSystemId, string? objectTypeName) => string.IsNullOrEmpty(objectTypeName)

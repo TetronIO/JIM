@@ -562,22 +562,9 @@ else
             // change loaded some other way (the paged multi-valued dialog reads the same helper).
             if (_unresolvedReferencesByChangeId.TryGetValue(change.Id, out var reference))
                 return $"{reference.ReferencedMetaverseObjectDisplayName ?? reference.ReferencedMetaverseObjectId.ToString()} [{GetUnresolvedReferenceReasonLabel(reference.Reason).ToLowerInvariant()}]";
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
         }
 
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
+        return PendingExportValueDisplay.Text(change) ?? "[null]";
     }
 
     private static string GetUnresolvedReferenceReasonLabel(UnresolvedReferenceReason reason) => reason switch

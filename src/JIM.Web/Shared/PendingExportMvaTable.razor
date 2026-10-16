@@ -149,37 +149,8 @@
         return new VirtualisedWindow<PendingExportAttributeValueChange>(result.Results, result.TotalResults);
     }
 
-    private static string GetValueText(PendingExportAttributeValueChange change)
-    {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
-
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.LongValue.HasValue)
-            return change.LongValue.Value.ToString();
-
-        if (change.DecimalValue.HasValue)
-            return change.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
-
-        if (change.GuidValue.HasValue)
-            return change.GuidValue.Value.ToString();
-
-        if (change.BoolValue.HasValue)
-            return change.BoolValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
-    }
+    private static string GetValueText(PendingExportAttributeValueChange change) =>
+        PendingExportValueDisplay.Text(change) ?? "[null]";
 
     private static MudBlazor.Color GetChangeTypeColor(PendingExportAttributeChangeType changeType)
     {
