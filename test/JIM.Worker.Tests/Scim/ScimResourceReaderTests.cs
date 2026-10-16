@@ -67,7 +67,7 @@ public class ScimResourceReaderTests
         // JIM stores every date and time in UTC; a provider is free to send an offset.
         var result = ReadUser("""{ "id": "1", "meta": { "lastModified": "2026-02-04T15:53:42+02:00" } }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValue,
+        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValues.Single(),
             Is.EqualTo(new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc)));
     }
 
@@ -94,7 +94,7 @@ public class ScimResourceReaderTests
     {
         var result = ReadUser("""{ "id": "1", "active": true }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.True);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.True);
     }
 
     [Test]
@@ -104,7 +104,7 @@ public class ScimResourceReaderTests
         // consequential attribute JIM synchronises.
         var result = ReadUser("""{ "id": "1", "active": "false" }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.False);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.False);
     }
 
     [Test]

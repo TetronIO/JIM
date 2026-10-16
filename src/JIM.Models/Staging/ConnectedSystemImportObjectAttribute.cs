@@ -24,19 +24,47 @@ public class ConnectedSystemImportObjectAttribute
 
     public List<decimal> DecimalValues { get; set; } = new();
 
+    // Allocated on first use, so an attribute of another type carries nothing new (#2153).
+    private List<DateTime>? _dateTimeValues;
+    private List<bool>? _boolValues;
+
     /// <summary>
-    /// DateTimes are in practice, single-valued. Who needs multiple DateTime values?
+    /// Every date and time value the Connected System holds for the attribute, as the source holds it. Do not
+    /// normalise them: JIM puts every date into the form it holds (UTC, to the microsecond) itself, collapses exact
+    /// duplicates, and reports any two values it cannot keep apart, rather than a Connector deciding what is lost.
     /// </summary>
-    public DateTime? DateTimeValue { get; set; }
+    public List<DateTime> DateTimeValues
+    {
+        get => _dateTimeValues ??= [];
+        set => _dateTimeValues = value;
+    }
+
+    /// <summary>
+    /// Whether the attribute carries any date and time value. Reads without allocating, so prefer it to
+    /// <c>DateTimeValues.Count</c> on a hot path.
+    /// </summary>
+    public bool HasDateTimeValues => _dateTimeValues is { Count: > 0 };
 
     public List<Guid> GuidValues { get; set; } = new();
 
     public List<byte[]> ByteValues { get; set; } = new();
 
     /// <summary>
-    /// Booleans are inherently single-valued in nature. You can't distinguish multiple values.
+    /// Every true or false value the Connected System holds for the attribute. A true or false attribute holds one
+    /// value: hand JIM whatever the source holds all the same, and JIM collapses a repeated value and reports each value
+    /// when both true and false arrive, rather than a Connector choosing one.
     /// </summary>
-    public bool? BoolValue { get; set; }
+    public List<bool> BoolValues
+    {
+        get => _boolValues ??= [];
+        set => _boolValues = value;
+    }
+
+    /// <summary>
+    /// Whether the attribute carries any true or false value. Reads without allocating, so prefer it to
+    /// <c>BoolValues.Count</c> on a hot path.
+    /// </summary>
+    public bool HasBoolValues => _boolValues is { Count: > 0 };
 
     public override string ToString()
     {

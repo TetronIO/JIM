@@ -282,6 +282,22 @@ public enum ConnectedSystemImportObjectError
 }
 
 /// <summary>
+/// Who found that a value an import read could not be imported (#2153).
+/// </summary>
+public enum ImportAttributeValueErrorSource
+{
+    /// <summary>
+    /// The Connector could not read the value as its attribute's type.
+    /// </summary>
+    Connector = 0,
+    /// <summary>
+    /// JIM could not hold the value as the Connector read it, such as two dates less than a microsecond apart, or both
+    /// true and false for a true or false attribute.
+    /// </summary>
+    Jim = 1
+}
+
+/// <summary>
 /// Defines the type of Run Profile operation to execute against a Connected System.
 /// </summary>
 public enum ConnectedSystemRunType

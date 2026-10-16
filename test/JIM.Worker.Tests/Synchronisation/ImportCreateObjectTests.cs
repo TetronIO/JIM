@@ -137,7 +137,7 @@ public class ImportCreateObjectTests
                 {
                     // datetime
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE }
                 },
                 new ()
                 {
@@ -167,7 +167,7 @@ public class ImportCreateObjectTests
                 {
                     // boolean string
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false
+                    BoolValues = { false }
                 }
             }
         });
@@ -193,7 +193,7 @@ public class ImportCreateObjectTests
                 {
                     // datetime
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE }
                 },
                 new ()
                 {
@@ -229,7 +229,7 @@ public class ImportCreateObjectTests
                 {
                     // boolean string
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false
+                    BoolValues = { false }
                 }
             }
         });
@@ -324,7 +324,7 @@ public class ImportCreateObjectTests
                 {
                     // datetime
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = null
+                    DateTimeValues = { }
                 },
                 new ()
                 {
@@ -354,7 +354,7 @@ public class ImportCreateObjectTests
                 {
                     // boolean
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = null
+                    BoolValues = { }
                 }
             }
         });

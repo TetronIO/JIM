@@ -146,7 +146,7 @@ public class LdapConnectorImportUnreadableValueTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.AttributeValueErrors, Is.Null);
-            Assert.That(Attribute(imported, "isCriticalSystemObject").BoolValue, Is.EqualTo(expected));
+            Assert.That(Attribute(imported, "isCriticalSystemObject").BoolValues.Single(), Is.EqualTo(expected));
         }
     }
 
@@ -159,7 +159,7 @@ public class LdapConnectorImportUnreadableValueTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.AttributeValueErrors, Is.Null);
-            Assert.That(Attribute(imported, "isCriticalSystemObject").BoolValue, Is.Null);
+            Assert.That(Attribute(imported, "isCriticalSystemObject").BoolValues, Is.Empty);
         }
     }
 
@@ -200,12 +200,12 @@ public class LdapConnectorImportUnreadableValueTests
     {
         var imported = ConvertUser(("whenChanged", ["20231215143000,5Z"]));
 
-        var whenChanged = Attribute(imported, "whenChanged").DateTimeValue;
+        var whenChanged = Attribute(imported, "whenChanged").DateTimeValues.Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.AttributeValueErrors, Is.Null);
             Assert.That(whenChanged, Is.EqualTo(new DateTime(2023, 12, 15, 14, 30, 0, 500, DateTimeKind.Utc)));
-            Assert.That(whenChanged?.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(whenChanged.Kind, Is.EqualTo(DateTimeKind.Utc));
         }
     }
 
@@ -221,12 +221,12 @@ public class LdapConnectorImportUnreadableValueTests
     {
         var imported = ConvertUser(("whenChanged", [value]));
 
-        var whenChanged = Attribute(imported, "whenChanged").DateTimeValue;
+        var whenChanged = Attribute(imported, "whenChanged").DateTimeValues.Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.AttributeValueErrors, Is.Null);
             Assert.That(whenChanged, Is.EqualTo(DateTime.SpecifyKind(DateTime.Parse(expectedUtc, System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc)));
-            Assert.That(whenChanged?.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(whenChanged.Kind, Is.EqualTo(DateTimeKind.Utc));
         }
     }
 

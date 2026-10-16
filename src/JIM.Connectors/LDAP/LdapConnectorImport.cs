@@ -1080,13 +1080,15 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
                     case AttributeDataType.Boolean:
                         var booleans = LdapImportValueReader.ReadBoolean(attribute);
-                        importObjectAttribute.BoolValue = booleans.Values.Count == 1 ? booleans.Values[0] : null;
+                        if (booleans.Values.Count == 1)
+                            importObjectAttribute.BoolValues.Add(booleans.Values[0]);
                         unreadableValues = booleans.Unreadable;
                         break;
 
                     case AttributeDataType.DateTime:
                         var dateTimes = LdapImportValueReader.ReadDateTime(attribute);
-                        importObjectAttribute.DateTimeValue = dateTimes.Values.Count == 1 ? dateTimes.Values[0] : null;
+                        if (dateTimes.Values.Count == 1)
+                            importObjectAttribute.DateTimeValues.Add(dateTimes.Values[0]);
                         unreadableValues = dateTimes.Unreadable;
                         break;
 

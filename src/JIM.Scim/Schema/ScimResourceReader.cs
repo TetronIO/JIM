@@ -213,11 +213,11 @@ public static class ScimResourceReader
                 case AttributeDataType.Boolean:
                     // Booleans are single-valued by nature: several values cannot be told apart.
                     if (value.ValueKind == JsonValueKind.True)
-                        converted.BoolValue = true;
+                        { converted.BoolValues.Clear(); converted.BoolValues.Add(true); }
                     else if (value.ValueKind == JsonValueKind.False)
-                        converted.BoolValue = false;
+                        { converted.BoolValues.Clear(); converted.BoolValues.Add(false); }
                     else if (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed))
-                        converted.BoolValue = parsed;
+                        { converted.BoolValues.Clear(); converted.BoolValues.Add(parsed); }
                     else
                         unreadable.Add(Unreadable(attribute, value, "Not true or false."));
                     break;
@@ -252,7 +252,7 @@ public static class ScimResourceReader
 
                 case AttributeDataType.DateTime:
                     if (TryGetDateTime(value, out var dateTimeValue))
-                        converted.DateTimeValue = dateTimeValue;
+                        { converted.DateTimeValues.Clear(); converted.DateTimeValues.Add(dateTimeValue); }
                     else
                         unreadable.Add(Unreadable(attribute, value, "Not a valid date and time."));
                     break;
@@ -304,8 +304,8 @@ public static class ScimResourceReader
                || attribute.DecimalValues.Count > 0
                || attribute.GuidValues.Count > 0
                || attribute.ByteValues.Count > 0
-               || attribute.DateTimeValue.HasValue
-               || attribute.BoolValue.HasValue;
+               || attribute.HasDateTimeValues
+               || attribute.HasBoolValues;
     }
 
     /// <summary>

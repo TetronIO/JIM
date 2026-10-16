@@ -1338,10 +1338,12 @@ internal sealed class SqlConnectorImport
                 attribute.DecimalValues.Add(ToDecimal(value));
                 break;
             case AttributeDataType.Boolean:
-                attribute.BoolValue = Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+                attribute.BoolValues.Clear();
+                attribute.BoolValues.Add(Convert.ToBoolean(value, CultureInfo.InvariantCulture));
                 break;
             case AttributeDataType.DateTime:
-                attribute.DateTimeValue = ToUtc(value);
+                attribute.DateTimeValues.Clear();
+                attribute.DateTimeValues.Add(ToUtc(value));
                 break;
             case AttributeDataType.Guid:
                 attribute.GuidValues.Add(_provider.ConvertToGuid(value));

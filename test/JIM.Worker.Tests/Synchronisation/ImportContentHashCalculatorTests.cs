@@ -127,8 +127,8 @@ public class ImportContentHashCalculatorTests
         objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "START_DATE", Type = AttributeDataType.DateTime, ConnectedSystemObjectType = objectType });
 
         var ticks = new DateTime(2026, 7, 24, 10, 0, 0).Ticks;
-        var a = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValue = new DateTime(ticks, DateTimeKind.Utc) } } };
-        var b = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValue = new DateTime(ticks, DateTimeKind.Unspecified) } } };
+        var a = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValues = { new DateTime(ticks, DateTimeKind.Utc) } } } };
+        var b = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValues = { new DateTime(ticks, DateTimeKind.Unspecified) } } } };
 
         Assert.That(ImportContentHashCalculator.CalculateContentHash(a, objectType),
             Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(b, objectType)),
@@ -204,10 +204,10 @@ public class ImportContentHashCalculatorTests
         var importObject = new ConnectedSystemImportObject
         {
             ObjectType = "TEST_TYPE",
-            Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "WHEN_CHANGED", DateTimeValue = whenChanged } }
+            Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "WHEN_CHANGED", DateTimeValues = { whenChanged } } }
         };
         if (flag.HasValue)
-            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ENABLED", BoolValue = flag });
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ENABLED", BoolValues = { flag.Value } });
         return importObject;
     }
 
@@ -472,8 +472,8 @@ public class ImportContentHashCalculatorTests
         else if (attr.DecimalValues.Count > 0) attr.DecimalValues[random.Next(attr.DecimalValues.Count)] += 1.23m;
         else if (attr.GuidValues.Count > 0) attr.GuidValues[random.Next(attr.GuidValues.Count)] = Guid.NewGuid();
         else if (attr.ByteValues.Count > 0) attr.ByteValues[random.Next(attr.ByteValues.Count)] = new byte[] { (byte)random.Next(256) };
-        else if (attr.DateTimeValue.HasValue) attr.DateTimeValue = attr.DateTimeValue.Value.AddDays(1);
-        else if (attr.BoolValue.HasValue) attr.BoolValue = !attr.BoolValue.Value;
+        else if (attr.DateTimeValues.Count > 0) attr.DateTimeValues[0] = attr.DateTimeValues[0].AddDays(1);
+        else if (attr.BoolValues.Count > 0) attr.BoolValues[0] = !attr.BoolValues[0];
     }
 
     private static void AddRandomValue(ConnectedSystemImportObjectAttribute attr, Random random)
@@ -511,10 +511,10 @@ public class ImportContentHashCalculatorTests
                 IntValues = new List<int>(a.IntValues),
                 LongValues = new List<long>(a.LongValues),
                 DecimalValues = new List<decimal>(a.DecimalValues),
-                DateTimeValue = a.DateTimeValue,
+                DateTimeValues = new List<DateTime>(a.DateTimeValues),
                 GuidValues = new List<Guid>(a.GuidValues),
                 ByteValues = a.ByteValues.Select(b => (byte[])b.Clone()).ToList(),
-                BoolValue = a.BoolValue
+                BoolValues = new List<bool>(a.BoolValues)
             }).ToList()
         };
     }
@@ -562,7 +562,7 @@ public class ImportContentHashCalculatorTests
                     for (var v = 0; v < count; v++) importAttr.DecimalValues.Add(random.Next(-100000, 100000) / 7m);
                     break;
                 case AttributeDataType.DateTime:
-                    importAttr.DateTimeValue = new DateTime(2020, 1, 1).AddDays(random.Next(0, 3000));
+                    importAttr.DateTimeValues.Add(new DateTime(2020, 1, 1).AddDays(random.Next(0, 3000)));
                     break;
                 case AttributeDataType.Binary:
                     for (var v = 0; v < count; v++)
@@ -579,7 +579,7 @@ public class ImportContentHashCalculatorTests
                         for (var v = 0; v < count; v++) importAttr.GuidValues.Add(Guid.NewGuid());
                     break;
                 case AttributeDataType.Boolean:
-                    importAttr.BoolValue = random.Next(2) == 0;
+                    importAttr.BoolValues.Add(random.Next(2) == 0);
                     break;
             }
 
@@ -630,8 +630,8 @@ public class ImportContentHashCalculatorTests
                         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DecimalValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.DateTime:
-                    if (importAttr.DateTimeValue.HasValue)
-                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DateTimeValue = importAttr.DateTimeValue, ConnectedSystemObject = cso });
+                    foreach (var v in importAttr.DateTimeValues)
+                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DateTimeValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.Binary:
                     foreach (var v in importAttr.ByteValues)
@@ -642,8 +642,8 @@ public class ImportContentHashCalculatorTests
                         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, GuidValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.Boolean:
-                    if (importAttr.BoolValue.HasValue)
-                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, BoolValue = importAttr.BoolValue, ConnectedSystemObject = cso });
+                    foreach (var v in importAttr.BoolValues)
+                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, BoolValue = v, ConnectedSystemObject = cso });
                     break;
             }
         }

@@ -188,8 +188,8 @@ public static class ImportContentHashCalculator
                 // One value at most while the import contract is single-valued, so no LINQ. A date encodes as its
                 // canonical ticks (#2153), which is what the diff compares and the database keeps: UTC, floored to the
                 // microsecond. A whole-microsecond UTC or Unspecified date therefore encodes exactly as version 1 did.
-                return importAttribute.DateTimeValue.HasValue
-                    ? new List<byte[]> { BitConverter.GetBytes(DateTimeAttributeValue.Key(importAttribute.DateTimeValue.Value)) }
+                return importAttribute.HasDateTimeValues
+                    ? new List<byte[]> { BitConverter.GetBytes(DateTimeAttributeValue.Key(importAttribute.DateTimeValues[0])) }
                     : new List<byte[]>();
 
             case AttributeDataType.Binary:
@@ -207,8 +207,8 @@ public static class ImportContentHashCalculator
 
             case AttributeDataType.Boolean:
                 // Boolean attributes are single-valued by nature (see ConnectedSystemImportObjectAttribute.BoolValue).
-                return importAttribute.BoolValue.HasValue
-                    ? new List<byte[]> { new[] { importAttribute.BoolValue.Value ? (byte)1 : (byte)0 } }
+                return importAttribute.HasBoolValues
+                    ? new List<byte[]> { new[] { importAttribute.BoolValues[0] ? (byte)1 : (byte)0 } }
                     : new List<byte[]>();
 
             case AttributeDataType.NotSet:

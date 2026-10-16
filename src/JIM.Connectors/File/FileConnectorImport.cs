@@ -263,7 +263,7 @@ internal class FileConnectorImport
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                            importObjectAttribute.DateTimeValues.Add(_reader.CsvReader.GetField<DateTime>(attribute.Name));
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Boolean)
@@ -271,7 +271,7 @@ internal class FileConnectorImport
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                            importObjectAttribute.BoolValues.Add(_reader.CsvReader.GetField<bool>(attribute.Name));
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Guid)

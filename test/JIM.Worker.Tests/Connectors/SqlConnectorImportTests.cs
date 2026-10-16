@@ -289,7 +289,7 @@ public class SqlConnectorImportTests
             Assert.That(Attribute(imported, "HEADCOUNT").IntValues, Is.EqualTo(new[] { 42 }));
             Assert.That(Attribute(imported, "PAYROLL_NUMBER").LongValues, Is.EqualTo(new[] { 9_000_000_000L }));
             Assert.That(Attribute(imported, "SALARY").DecimalValues, Is.EqualTo(new[] { 1234.50m }));
-            Assert.That(Attribute(imported, "IS_ACTIVE").BoolValue, Is.True);
+            Assert.That(Attribute(imported, "IS_ACTIVE").BoolValues.Single(), Is.True);
             Assert.That(Attribute(imported, "OBJECT_GUID").GuidValues, Is.EqualTo(new[] { guid }));
             Assert.That(Attribute(imported, "PHOTO").ByteValues.Single(), Is.EqualTo(bytes));
         }
@@ -362,8 +362,8 @@ public class SqlConnectorImportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)));
-            Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every date and time in UTC, so the kind is never left unspecified.");
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)));
+            Assert.That(imported.DateTimeValues.Single().Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every date and time in UTC, so the kind is never left unspecified.");
         }
     }
 
@@ -387,7 +387,7 @@ public class SqlConnectorImportTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects.Single().ErrorType, Is.Null, "A skipped hour is not an error in the row.");
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2020, 10, 3, 16, 30, 0, DateTimeKind.Utc)));
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2020, 10, 3, 16, 30, 0, DateTimeKind.Utc)));
         }
     }
 
@@ -404,7 +404,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Australia/Sydney");
 
-        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValue, Is.EqualTo(new DateTime(2020, 4, 4, 16, 30, 0, DateTimeKind.Utc)));
+        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValues.Single(), Is.EqualTo(new DateTime(2020, 4, 4, 16, 30, 0, DateTimeKind.Utc)));
     }
 
     [Test]
@@ -417,7 +417,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10);
 
-        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValue,
+        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValues.Single(),
             Is.EqualTo(new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc)));
     }
 
@@ -434,9 +434,9 @@ public class SqlConnectorImportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 7, 0, 0, DateTimeKind.Utc)),
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2026, 7, 15, 7, 0, 0, DateTimeKind.Utc)),
                 "A value that states its own offset needs no setting to interpret it.");
-            Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(imported.DateTimeValues.Single().Kind, Is.EqualTo(DateTimeKind.Utc));
         }
     }
 
@@ -994,7 +994,7 @@ public class SqlConnectorImportTests
         var run = await RunImportAsync(provider, AssignmentDocument, AssignmentSystem(), pageSize: 10);
 
         var rolesByStart = run.ImportObjects.ToDictionary(
-            importObject => Attribute(importObject, "EFFECTIVE_FROM").DateTimeValue!.Value.Millisecond,
+            importObject => Attribute(importObject, "EFFECTIVE_FROM").DateTimeValues.Single().Millisecond,
             importObject => Attribute(importObject, "Roles").StringValues);
 
         using (Assert.EnterMultipleScope())

@@ -148,7 +148,7 @@ public class ImportDeduplicationTests
                 {
                     // DateTime
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = DateTime.UtcNow
+                    DateTimeValues = { DateTime.UtcNow }
                 },
                 new()
                 {
@@ -178,7 +178,7 @@ public class ImportDeduplicationTests
                 {
                     // Boolean
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false
+                    BoolValues = { false }
                 }
             }
         };

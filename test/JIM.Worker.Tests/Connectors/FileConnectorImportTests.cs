@@ -647,14 +647,14 @@ public class FileConnectorImportTests
         Assert.That(row2.ErrorType, Is.Null, "Row with empty DateTime should not cause error");
         var dateAttr2 = row2.Attributes.SingleOrDefault(a => a.Name == "StartDate");
         Assert.That(dateAttr2, Is.Not.Null);
-        Assert.That(dateAttr2!.DateTimeValue, Is.Null, "Empty DateTime should result in null DateTimeValue");
+        Assert.That(dateAttr2!.DateTimeValues, Is.Empty, "Empty DateTime should result in null DateTimeValue");
 
         // Row 3: Empty IsActive (Boolean) - should have no BoolValue
         var row3 = result.ImportObjects[2];
         Assert.That(row3.ErrorType, Is.Null, "Row with empty Boolean should not cause error");
         var boolAttr3 = row3.Attributes.SingleOrDefault(a => a.Name == "IsActive");
         Assert.That(boolAttr3, Is.Not.Null);
-        Assert.That(boolAttr3!.BoolValue, Is.Null, "Empty Boolean should result in null BoolValue");
+        Assert.That(boolAttr3!.BoolValues, Is.Empty, "Empty Boolean should result in null BoolValue");
 
         // Row 4: All empty (except Name) - should have no errors
         var row4 = result.ImportObjects[3];
