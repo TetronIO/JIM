@@ -16,7 +16,8 @@ function Set-JIMMetaverseAttribute {
           one value). While any Metaverse Object holds a value for the attribute, the only schema
           change JIM allows is widening it from SingleValued to MultiValued with its type
           unchanged; every value is kept. Any other schema change is refused until the values are
-          cleared.
+          cleared. Giving the type and plurality the attribute already has is no change: it always
+          succeeds, and nothing is recorded in the attribute's change history.
 
         Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
@@ -41,7 +42,8 @@ function Set-JIMMetaverseAttribute {
     .PARAMETER AttributePlurality
         Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute,
         JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to
-        SingleValued, and refuses MultiValued for a Boolean.
+        SingleValued, and refuses MultiValued for a Boolean. Giving the plurality the attribute already has changes
+        nothing, so stored values never block it.
 
     .PARAMETER StandardMappings
         The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a

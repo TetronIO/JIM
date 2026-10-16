@@ -418,6 +418,29 @@ public class MetaverseControllerAttributeTests
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Once);
     }
 
+    /// <summary>
+    /// Submitting the attribute's current type and plurality while values exist is a no-op, not a conflict: the
+    /// endpoint returns 200 with the attribute as it stands and writes nothing.
+    /// </summary>
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_UnchangedWithStoredValues_ReturnsOkAndWritesNothingAsync()
+    {
+        var attribute = Attr(1);
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        _mv.Setup(r => r.GetAttributeValueObjectCountAsync(1)).ReturnsAsync(77);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = attribute.Type, AttributePlurality = AttributePlurality.MultiValued });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = (((OkObjectResult)result).Value as MetaverseAttributeDetailDto)!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Type, Is.EqualTo(attribute.Type));
+            Assert.That(dto.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+        }
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
     [Test]
     public async Task ChangeAttributeSchemaAsync_NarrowingWithStoredValues_ReturnsConflictAndAppliesNothingAsync()
     {
