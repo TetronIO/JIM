@@ -1443,3 +1443,81 @@ Describe 'Limit-ActiveDirectorySamAccountName' {
         $result.Length | Should -Be 20
     }
 }
+
+Describe 'Display Name from first and last names' {
+    BeforeAll {
+        # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing it.
+        # Their parameters exist only for the mocks' parameter filters to bind to.
+        if (-not (Get-Command Get-JIMSyncRuleMapping -ErrorAction SilentlyContinue)) {
+            function script:Get-JIMSyncRuleMapping {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
+                param($SyncRuleId)
+            }
+        }
+        if (-not (Get-Command New-JIMSyncRuleMapping -ErrorAction SilentlyContinue)) {
+            function script:New-JIMSyncRuleMapping {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
+                param($SyncRuleId, $TargetMetaverseAttributeId, $Expression, $MissingInputBehaviour)
+            }
+        }
+    }
+
+    Context 'Get-DisplayNameExpression' {
+        It 'joins the two Connected System attributes with a space' {
+            Get-DisplayNameExpression -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName' |
+                Should -Be 'cs["firstName"] + " " + cs["lastName"]'
+        }
+    }
+
+    Context 'Add-DisplayNameExpressionMapping' {
+        It 'creates the expression mapping, failing the mapping when a name is missing' {
+            Mock Get-JIMSyncRuleMapping { @() }
+            Mock New-JIMSyncRuleMapping { @{ id = 9 } }
+
+            Add-DisplayNameExpressionMapping -SyncRuleId 3 -DisplayNameAttributeId 7 -FirstNameAttribute 'givenName' -LastNameAttribute 'sn'
+
+            Should -Invoke New-JIMSyncRuleMapping -Times 1 -Exactly -ParameterFilter {
+                $SyncRuleId -eq 3 -and $TargetMetaverseAttributeId -eq 7 -and
+                $Expression -eq 'cs["givenName"] + " " + cs["sn"]' -and $MissingInputBehaviour -eq 'FailMapping'
+            }
+        }
+
+        It 'leaves a rule that already flows into Display Name alone' {
+            Mock Get-JIMSyncRuleMapping { @(@{ id = 4; targetMetaverseAttributeId = 7 }) }
+            Mock New-JIMSyncRuleMapping { }
+
+            Add-DisplayNameExpressionMapping -SyncRuleId 3 -DisplayNameAttributeId 7 -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName'
+
+            Should -Invoke New-JIMSyncRuleMapping -Times 0
+        }
+    }
+
+    Context 'Split-TestDisplayName' {
+        It 'puts everything before the last space in the first name, so the two rejoin to the display name' -ForEach @(
+            @{ DisplayName = 'Test WLCD Recall'; First = 'Test WLCD'; Last = 'Recall' }
+            @{ DisplayName = 'Test Projection'; First = 'Test'; Last = 'Projection' }
+        ) {
+            $parts = Split-TestDisplayName -DisplayName $DisplayName
+
+            $parts.FirstName | Should -Be $First
+            $parts.LastName | Should -Be $Last
+            "$($parts.FirstName) $($parts.LastName)" | Should -Be $DisplayName
+        }
+
+        It 'refuses a display name with no space, which no first and last name can produce' {
+            { Split-TestDisplayName -DisplayName 'Mononym' } | Should -Throw
+        }
+    }
+
+    Context 'Set-TestUserDisplayName' {
+        It 'gives a New-TestUser user the display name and the first and last names that rebuild it' {
+            $user = New-TestUser -Index 3
+
+            Set-TestUserDisplayName -User $user -DisplayName 'Test Join Conflict One'
+
+            $user.DisplayName | Should -Be 'Test Join Conflict One'
+            $user.FirstName | Should -Be 'Test Join Conflict'
+            $user.LastName | Should -Be 'One'
+        }
+    }
+}

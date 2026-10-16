@@ -266,13 +266,15 @@ function Invoke-ProvisionUser {
 
     $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
     $upn = "$SamAccountName@panoply.local"
+    # Display Name is built from first and last names, so they must rejoin to exactly $DisplayName.
+    $names = Split-TestDisplayName -DisplayName $DisplayName
 
     # Add user to CSV
     $csv = Import-Csv $csvPath
     $newUser = [PSCustomObject]@{
         employeeId      = $EmployeeId
-        firstName        = $DisplayName.Split(' ')[0]
-        lastName         = $DisplayName.Split(' ')[-1]
+        firstName        = $names.FirstName
+        lastName         = $names.LastName
         email            = "$SamAccountName@panoply.local"
         department       = "Information Technology"
         title            = "Engineer"

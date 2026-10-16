@@ -362,15 +362,12 @@ userPassword: Password123!
             }
         }
         else {
-            # Samba AD (samba-tool) or Active Directory (ldapadd, then unicodePwd over LDAPS). displayName is
-            # given explicitly: samba-tool derives it from the given name and surname, but Active Directory
-            # writes only what it is given, and the Target's DN expression is built from Display Name.
+            # Samba AD (samba-tool) or Active Directory (ldapadd, then unicodePwd over LDAPS)
             $createResult = New-DirectoryUser -DirectoryConfig $SourceConfig `
                 -Dn "CN=$testUserDisplayName,OU=TestUsers,$($SourceConfig.BaseDN)" `
                 -SamAccountName $testUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
-                    displayName = $testUserDisplayName
                     givenName  = $testUserFirstName
                     sn         = $testUserLastName
                     mail       = $testUserEmail
@@ -437,18 +434,21 @@ userPassword: Password123!
     if ($Step -eq "ForwardSync" -or $Step -eq "All") {
         Write-TestSection "Test 2: Forward Sync (Attribute Change)"
 
-        # For OpenLDAP we update displayName (SINGLE-VALUE, mapped); for AD we update department
+        # For OpenLDAP we change the surname, and Display Name, built from the given name and surname, must
+        # carry it to the Target's displayName; for AD we update department
         $updateAttrName = if ($isRfcDirectory) { "displayName" } else { "department" }
-        $updateNewValue = if ($isRfcDirectory) { "CrossDomain Updated" } else { "Sales" }
-        Write-Host "Updating user $updateAttrName in Source..." -ForegroundColor Gray
+        $updateNewValue = if ($isRfcDirectory) { "$testUserFirstName Updated" } else { "Sales" }
+        $sourceAttrName = if ($isRfcDirectory) { "sn" } else { $updateAttrName }
+        $sourceNewValue = if ($isRfcDirectory) { "Updated" } else { $updateNewValue }
+        Write-Host "Updating user $sourceAttrName in Source..." -ForegroundColor Gray
 
         if ($isRfcDirectory) {
             $userDN = "$($SourceConfig.UserRdnAttr)=$testUserSam,$($SourceConfig.UserContainer)"
             $modifyLdif = @"
 dn: $userDN
 changetype: modify
-replace: $updateAttrName
-$updateAttrName`: $updateNewValue
+replace: $sourceAttrName
+$sourceAttrName`: $sourceNewValue
 "@
         }
         else {
@@ -463,7 +463,7 @@ $updateAttrName`: $updateNewValue
         $modifyResult = Invoke-DirectoryLdif -DirectoryConfig $SourceConfig -Ldif $modifyLdif -Operation modify
 
         if ($modifyResult.Success -or $modifyResult.Output -match "modifying entry") {
-            Write-Host "  ✓ Updated $updateAttrName to '$updateNewValue' in Source" -ForegroundColor Green
+            Write-Host "  ✓ Updated $sourceAttrName to '$sourceNewValue' in Source" -ForegroundColor Green
         }
         else {
             Write-Host "  ⚠ ldapmodify may have failed: $($modifyResult.Output)" -ForegroundColor Yellow
@@ -543,7 +543,6 @@ userPassword: Password123!
                 -SamAccountName $reverseUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
-                    displayName = "$reverseUserFirstName $reverseUserLastName"
                     givenName  = $reverseUserFirstName
                     sn         = $reverseUserLastName
                     department = $reverseUserDepartment
@@ -642,7 +641,6 @@ userPassword: Password123!
                 -SamAccountName $conflictUserSam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
-                    displayName = "Conflict TestUser"
                     givenName  = "Conflict"
                     sn         = "TestUser"
                     department = "OriginalDept"

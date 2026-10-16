@@ -1984,6 +1984,112 @@ function Limit-ActiveDirectorySamAccountName {
     return $SamAccountName.Substring(0, $limit - $suffix.Length) + $suffix
 }
 
+function Get-DisplayNameExpression {
+    <#
+    .SYNOPSIS
+        The import expression that builds the Metaverse Display Name from a source's first and last names.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FirstNameAttribute,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LastNameAttribute
+    )
+
+    return "cs[""$FirstNameAttribute""] + "" "" + cs[""$LastNameAttribute""]"
+}
+
+function Add-DisplayNameExpressionMapping {
+    <#
+    .SYNOPSIS
+        Gives an import Synchronisation Rule a Display Name built from the source's first and last names.
+
+    .DESCRIPTION
+        Display Name is derived, as identity systems commonly derive it, rather than taken from a source's
+        displayName column. A missing first or last name fails the mapping (FailMapping): the object is
+        reported in error and keeps its Display Name, rather than taking "Ada " or an empty value that the
+        directories' CN expressions would turn into a malformed Distinguished Name. A rule that already flows
+        into Display Name is left as it is, so setup stays repeatable.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        $SyncRuleId,
+
+        [Parameter(Mandatory = $true)]
+        $DisplayNameAttributeId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FirstNameAttribute,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LastNameAttribute
+    )
+
+    $existing = @(Get-JIMSyncRuleMapping -SyncRuleId $SyncRuleId) |
+        Where-Object { $_.targetMetaverseAttributeId -eq $DisplayNameAttributeId }
+    if ($existing) {
+        Write-Host "  Display Name mapping already exists; leaving it as configured" -ForegroundColor Gray
+        return
+    }
+
+    $expression = Get-DisplayNameExpression -FirstNameAttribute $FirstNameAttribute -LastNameAttribute $LastNameAttribute
+    New-JIMSyncRuleMapping -SyncRuleId $SyncRuleId `
+        -TargetMetaverseAttributeId $DisplayNameAttributeId `
+        -Expression $expression `
+        -MissingInputBehaviour FailMapping | Out-Null
+    Write-Host "  ✓ Display Name mapping created ($expression, FailMapping)" -ForegroundColor Green
+}
+
+function Split-TestDisplayName {
+    <#
+    .SYNOPSIS
+        Splits a test user's display name into the first and last names that rebuild it.
+
+    .DESCRIPTION
+        Display Name is derived from first and last names (Get-DisplayNameExpression), so a test user given a
+        display name must carry names that rejoin to exactly it. Everything before the last space is the first
+        name, so "Test WLCD Recall" stays whole.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $lastSpace = $DisplayName.LastIndexOf(' ')
+    if ($lastSpace -lt 1) {
+        throw "Split-TestDisplayName: '$DisplayName' has no space, so no first and last name rebuild it."
+    }
+
+    return @{
+        FirstName = $DisplayName.Substring(0, $lastSpace)
+        LastName  = $DisplayName.Substring($lastSpace + 1)
+    }
+}
+
+function Set-TestUserDisplayName {
+    <#
+    .SYNOPSIS
+        Gives a New-TestUser user a display name, with the first and last names that rebuild it.
+    #>
+    # Changes only the in-memory test user it is given; there is no system state to confirm.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$User,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $names = Split-TestDisplayName -DisplayName $DisplayName
+    $User.DisplayName = $DisplayName
+    $User.FirstName = $names.FirstName
+    $User.LastName = $names.LastName
+}
+
 function Get-RandomSubset {
     <#
     .SYNOPSIS
