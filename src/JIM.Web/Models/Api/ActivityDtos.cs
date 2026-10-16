@@ -219,6 +219,46 @@ public class ActivityHeader
     public string? ScheduledByScheduleName { get; set; }
 
     /// <summary>
+    /// Security audit events only: why the authentication failed, as a short sanitised reason such as
+    /// "Access token expired" or "API key not found". Null for every other Activity, and for a successful sign-in.
+    /// </summary>
+    public string? SecurityEventReason { get; set; }
+
+    /// <summary>
+    /// Security audit events only: the client IP address the attempt came from, where one was available.
+    /// </summary>
+    public string? ClientIpAddress { get; set; }
+
+    /// <summary>
+    /// Security audit events only: the identifying prefix of the API key involved, for example <c>jim_ak_7f3a</c>.
+    /// Never the key itself. Null when no API key was involved.
+    /// </summary>
+    public string? ApiKeyPrefix { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix)
+    /// this Activity counts within its 15-minute window.
+    /// </summary>
+    public int? AttemptCount { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: when the first attempt this Activity counts was made (UTC).
+    /// </summary>
+    public DateTime? FirstSeen { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It
+    /// advances as further attempts arrive, so a poller can pick up a changed count by watching it.
+    /// </summary>
+    public DateTime? LastSeen { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts
+    /// after the window ends are counted on a new Activity, so once the window has passed this one no longer changes.
+    /// </summary>
+    public DateTime? AggregationWindowStart { get; set; }
+
+    /// <summary>
     /// Creates a header DTO from an Activity entity.
     /// </summary>
     public static ActivityHeader FromEntity(Activity activity)
@@ -275,7 +315,16 @@ public class ActivityHeader
             ScheduleExecutionId = activity.ScheduleExecutionId,
             ScheduleStepIndex = activity.ScheduleStepIndex,
             ScheduledByScheduleId = activity.ScheduledByScheduleId,
-            ScheduledByScheduleName = activity.ScheduledByScheduleName
+            ScheduledByScheduleName = activity.ScheduledByScheduleName,
+
+            // Security audit events; an aggregated failure stores "no API key" as "" so its index can dedupe
+            SecurityEventReason = activity.SecurityEventReason,
+            ClientIpAddress = activity.ClientIpAddress,
+            ApiKeyPrefix = string.IsNullOrEmpty(activity.ApiKeyPrefix) ? null : activity.ApiKeyPrefix,
+            AttemptCount = activity.AttemptCount,
+            FirstSeen = activity.FirstSeen,
+            LastSeen = activity.LastSeen,
+            AggregationWindowStart = activity.AggregationWindowStart
         };
     }
 
@@ -557,6 +606,46 @@ public class ActivityDetailDto
     public int? DetectedDeletionsWithheld { get; set; }
 
     /// <summary>
+    /// Security audit events only: why the authentication failed, as a short sanitised reason such as
+    /// "Access token expired" or "API key not found". Null for every other Activity, and for a successful sign-in.
+    /// </summary>
+    public string? SecurityEventReason { get; set; }
+
+    /// <summary>
+    /// Security audit events only: the client IP address the attempt came from, where one was available.
+    /// </summary>
+    public string? ClientIpAddress { get; set; }
+
+    /// <summary>
+    /// Security audit events only: the identifying prefix of the API key involved, for example <c>jim_ak_7f3a</c>.
+    /// Never the key itself. Null when no API key was involved.
+    /// </summary>
+    public string? ApiKeyPrefix { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix)
+    /// this Activity counts within its 15-minute window.
+    /// </summary>
+    public int? AttemptCount { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: when the first attempt this Activity counts was made (UTC).
+    /// </summary>
+    public DateTime? FirstSeen { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It
+    /// advances as further attempts arrive, so a poller can pick up a changed count by watching it.
+    /// </summary>
+    public DateTime? LastSeen { get; set; }
+
+    /// <summary>
+    /// Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts
+    /// after the window ends are counted on a new Activity, so once the window has passed this one no longer changes.
+    /// </summary>
+    public DateTime? AggregationWindowStart { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(
@@ -611,7 +700,16 @@ public class ActivityDetailDto
             ExportCreatesWithheld = activity.ExportCreatesWithheld,
             ExportUpdatesWithheld = activity.ExportUpdatesWithheld,
             ExportDeletesWithheld = activity.ExportDeletesWithheld,
-            DetectedDeletionsWithheld = activity.DetectedDeletionsWithheld
+            DetectedDeletionsWithheld = activity.DetectedDeletionsWithheld,
+
+            // Security audit events; an aggregated failure stores "no API key" as "" so its index can dedupe
+            SecurityEventReason = activity.SecurityEventReason,
+            ClientIpAddress = activity.ClientIpAddress,
+            ApiKeyPrefix = string.IsNullOrEmpty(activity.ApiKeyPrefix) ? null : activity.ApiKeyPrefix,
+            AttemptCount = activity.AttemptCount,
+            FirstSeen = activity.FirstSeen,
+            LastSeen = activity.LastSeen,
+            AggregationWindowStart = activity.AggregationWindowStart
         };
     }
 }

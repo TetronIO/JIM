@@ -173,7 +173,9 @@ userPassword: Password123!
             # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
             # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
             # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
-            # carries no password, so it is created disabled, which the join assertions do not depend on.
+            # carries Scenario 017's lab password: once JIM joins it, its export asks for the account enabled, and
+            # Active Directory will not enable an account with no password (0000052D). The Synchronisation Rule's
+            # Initial Password does not help here, because it reaches only accounts JIM provisions, not ones it joins.
             $directoryLabel = "Active Directory"
             $userDn = "CN=$DisplayName,OU=$Department,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
             $ldif = @"
@@ -191,6 +193,7 @@ userPrincipalName: $email
 mail: $email
 department: $Department
 employeeID: $EmployeeId
+unicodePwd:: $(ConvertTo-UnicodePwdValue -Password 'Chalkstream-7-Vault!')
 "@
         }
         $createResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
@@ -379,7 +382,7 @@ try {
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound",
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.2nd", "baseline.user1", "test.match.outbound",
         "test.expr.join", "test.expr.export", "test.ambig", "test.ambig.one", "test.ambig.two", "test.expr.failure")
     $deletedCount = 0
     foreach ($user in $testUsers) {
@@ -484,7 +487,7 @@ try {
         $testUser.EmployeeId = "EMP900001"
         $testUser.SamAccountName = "test.projection"
         $testUser.Email = "test.projection@panoply.local"
-        $testUser.DisplayName = "Test Projection User"
+        Set-TestUserDisplayName -User $testUser -DisplayName "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
@@ -553,7 +556,7 @@ try {
         $testUser.EmployeeId = "EMP900002"
         $testUser.SamAccountName = "test.join"
         $testUser.Email = "test.join@panoply.local"
-        $testUser.DisplayName = "Test Join User"
+        Set-TestUserDisplayName -User $testUser -DisplayName "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
@@ -653,7 +656,7 @@ try {
         $testUser1.EmployeeId = "EMP900003"
         $testUser1.SamAccountName = "test.importdup1"
         $testUser1.Email = "test.importdup1@panoply.local"
-        $testUser1.DisplayName = "Test Import Dup One"
+        Set-TestUserDisplayName -User $testUser1 -DisplayName "Test Import Dup One"
 
         $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
@@ -680,7 +683,7 @@ try {
         $testUser2.EmployeeId = "EMP900004"  # Different employeeId
         $testUser2.SamAccountName = "test.importdup2"
         $testUser2.Email = "test.importdup2@panoply.local"
-        $testUser2.DisplayName = "Test Import Dup Two"
+        Set-TestUserDisplayName -User $testUser2 -DisplayName "Test Import Dup Two"
 
         $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $dupUser2 = [PSCustomObject]@{
@@ -828,7 +831,7 @@ try {
                 $testUser1.EmployeeId = "EMP901000"
                 $testUser1.SamAccountName = "test.multirule.first"
                 $testUser1.Email = "test.multirule@panoply.local"  # This email will be shared
-                $testUser1.DisplayName = "Test MultiRule First"
+                Set-TestUserDisplayName -User $testUser1 -DisplayName "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
@@ -891,9 +894,9 @@ try {
                     $testUser2 = New-TestUser -Index 9011
                     $testUser2.HrId = "00009011-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
-                    $testUser2.SamAccountName = "test.multirule.second"
+                    $testUser2.SamAccountName = "test.multirule.2nd"
                     $testUser2.Email = "test.multirule@panoply.local"  # SAME email (rule 2 should match)
-                    $testUser2.DisplayName = "Test MultiRule Second"
+                    Set-TestUserDisplayName -User $testUser2 -DisplayName "Test MultiRule Second"
 
                     # DN is calculated dynamically by the export sync rule expression
                     $upn2 = "$($testUser2.SamAccountName)@panoply.local"
@@ -983,7 +986,7 @@ try {
         $testUser1.EmployeeId = "EMP900020"  # Same employeeId for both
         $testUser1.SamAccountName = "test.joinconflict1"
         $testUser1.Email = "test.joinconflict1@panoply.local"
-        $testUser1.DisplayName = "Test Join Conflict One"
+        Set-TestUserDisplayName -User $testUser1 -DisplayName "Test Join Conflict One"
 
         $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
@@ -1020,7 +1023,7 @@ try {
         $testUser2.EmployeeId = "EMP900020"  # SAME employeeId (will match the MVO)
         $testUser2.SamAccountName = "test.joinconflict2"
         $testUser2.Email = "test.joinconflict2@panoply.local"
-        $testUser2.DisplayName = "Test Join Conflict Two"
+        Set-TestUserDisplayName -User $testUser2 -DisplayName "Test Join Conflict Two"
 
         $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
@@ -1128,7 +1131,7 @@ try {
             $u.EmployeeId = $spEmployeeId
             $u.SamAccountName = $sam
             $u.Email = "$sam@panoply.local"
-            $u.DisplayName = $display
+            Set-TestUserDisplayName -User $u -DisplayName $display
             return @($rows) + [PSCustomObject]@{
                 hrId = $u.HrId; employeeId = $u.EmployeeId; firstName = $u.FirstName; lastName = $u.LastName
                 email = $u.Email; department = $u.Department; title = $u.Title; company = $u.Company
@@ -1269,7 +1272,7 @@ try {
             $srpUser.EmployeeId = $srpEmployeeId
             $srpUser.SamAccountName = $srpSam
             $srpUser.Email = "$srpSam@panoply.local"
-            $srpUser.DisplayName = $srpDisplayName
+            Set-TestUserDisplayName -User $srpUser -DisplayName $srpDisplayName
             $srpUser.Department = $srpDepartment
 
             # Local helper: append a fully-populated HR CSV row for the shared identity, varying only hrId.
@@ -1476,7 +1479,7 @@ try {
                 $testUser1.EmployeeId = "CASETEST123"  # UPPERCASE
                 $testUser1.SamAccountName = "test.casesens.upper"
                 $testUser1.Email = "test.casesens.upper@panoply.local"
-                $testUser1.DisplayName = "Test Case Upper"
+                Set-TestUserDisplayName -User $testUser1 -DisplayName "Test Case Upper"
 
                 $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@panoply.local"
@@ -1534,7 +1537,7 @@ try {
                     $testUser2.EmployeeId = "casetest123"  # lowercase - should match CASETEST123
                     $testUser2.SamAccountName = "test.casesens.lower"
                     $testUser2.Email = "test.casesens.lower@panoply.local"
-                    $testUser2.DisplayName = "Test Case Lower"
+                    Set-TestUserDisplayName -User $testUser2 -DisplayName "Test Case Lower"
 
                     $upn2 = "$($testUser2.SamAccountName)@panoply.local"
 
@@ -1628,7 +1631,7 @@ try {
         $omjSamAccountName = "test.match.outbound"
         $omjEmployeeId = "OMJ001"
         $omjDisplayName = "Test Match Outbound"
-        $omjFirstName = "TestMatch"
+        $omjFirstName = "Test Match"
         $omjLastName = "Outbound"
         $omjEmail = "$omjSamAccountName@panoply.local"
         # "Information Technology" is one of the department OUs Scenario 005 pre-creates for Samba AD (see

@@ -368,6 +368,10 @@ function New-OutOfBandLdapAccount {
         $ldif = ($lines -join "`n") + "`n"
 
         if (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig) {
+            # Active Directory only: the account carries Scenario 017's lab password. Once JIM joins it, its export
+            # asks for the account enabled, and Active Directory will not enable an account with no password
+            # (0000052D); the Initial Password reaches only accounts JIM provisions, not ones it joins.
+            $ldif += "unicodePwd:: $(ConvertTo-UnicodePwdValue -Password 'Chalkstream-7-Vault!')`n"
             $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
             if ($result.Outcome -eq 'Failed') {
                 throw "Failed to create out-of-band Active Directory account '$AccountName': $($result.Output)"
@@ -446,8 +450,8 @@ function Invoke-RawJimApi {
     .DESCRIPTION
         JIM.PowerShell's own Invoke-JIMApi (src/JIM.PowerShell/Private/Invoke-JIMApi.ps1) is a Private
         module function, not exported, so a scenario cannot call it to prove the REST surface
-        independent of the cmdlets that wrap it. This is that independent call: the same X-API-Key
-        header and JSON body shape, built locally so the "raw REST" half of a surface-parity assertion
+        independent of the cmdlets that wrap it. This is that independent call: the same bearer
+        Authorization header and JSON body shape, built locally so the "raw REST" half of a surface-parity assertion
         genuinely does not go through the module's own request-building code.
     #>
     param(
@@ -456,7 +460,7 @@ function Invoke-RawJimApi {
         [object]$Body
     )
     $uri = "$($JIMUrl.TrimEnd('/'))$Endpoint"
-    $headers = @{ 'Accept' = 'application/json'; 'X-API-Key' = $ApiKey }
+    $headers = @{ 'Accept' = 'application/json'; 'Authorization' = "Bearer $ApiKey" }
     $params = @{ Uri = $uri; Method = $Method; ContentType = 'application/json'; Headers = $headers }
     if ($Body) { $params.Body = $Body | ConvertTo-Json -Depth 10 }
     return Invoke-RestMethod @params

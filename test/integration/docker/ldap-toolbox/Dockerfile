@@ -6,8 +6,8 @@
 # The Samba AD, OpenLDAP and 389 Directory Server labs run the directory in a container, and the
 # harness runs ldapsearch, ldapmodify and friends inside it. The Active Directory lab is real Windows
 # Server domain controllers running as Hyper-V virtual machines, so there is no container to run the
-# tools in. This image is that container: the OpenLDAP client tools, and openssl to read a domain
-# controller's certificate, on the Docker network the rest of the lab uses. The harness runs
+# tools in. This image is that container: the OpenLDAP client tools, openssl to read a domain
+# controller's certificate, and kpasswd, on the Docker network the rest of the lab uses. The harness runs
 # "docker exec jim-ldap-toolbox ldapsearch -H ldaps://<dc fqdn>:636 ..." (see Invoke-LdapTool in
 # test/integration/utils/LDAP-Helpers.ps1).
 #
@@ -32,11 +32,17 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:d5633778c754e89a386882edd
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# krb5-user is MIT Kerberos's client tools, for kpasswd: an account an Initial Password leaves needing
+# a change cannot bind over LDAP (Active Directory answers data 773), so the account holder's first
+# change is made the way Windows makes it, by Kerberos password change (RFC 3244). The harness writes
+# a krb5.conf for each forest into /tmp (Set-LDAPUserPasswordAsAccountHolder, #2286). It installs
+# without asking for a default realm because DEBIAN_FRONTEND is noninteractive.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ldap-utils \
         openssl \
         ca-certificates \
+        krb5-user \
     && rm -rf /var/lib/apt/lists/*
 
 # The base image's built-in unprivileged user (UID 1654), as the JIM images run as. The tools only read

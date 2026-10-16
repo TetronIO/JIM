@@ -18,7 +18,7 @@ function Get-JIMUserInfo {
         Authorised is $false and Message says what to do.
 
     .EXAMPLE
-        Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+        Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
         Get-JIMUserInfo
 
     .EXAMPLE

@@ -464,7 +464,7 @@ Get-Module JIM    # Verify the module loaded and check the version
 Connect-JIM -Url "https://jim.example.com"
 
 # Automation -- use an API key (recommended for scripts and CI/CD)
-Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 
 # Verify the connection
 Test-JIMConnection

@@ -9,6 +9,7 @@ using System.Text.Encodings.Web;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Web.Authentication;
 using JIM.Web.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
@@ -18,7 +19,7 @@ namespace JIM.Web.Middleware.Api;
 
 /// <summary>
 /// Authentication handler for API key authentication.
-/// Validates API keys provided in the X-API-Key header.
+/// Validates API keys presented as bearer tokens: <c>Authorization: Bearer jim_ak_...</c>.
 /// </summary>
 public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthenticationOptions>
 {
@@ -28,57 +29,45 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     public const string SchemeName = "ApiKey";
 
     /// <summary>
-    /// The header name for the API key.
-    /// </summary>
-    public const string ApiKeyHeaderName = "X-API-Key";
-
-    /// <summary>
     /// The prefix for API keys (e.g., jim_ak_).
     /// </summary>
     public const string ApiKeyPrefix = "jim_ak_";
 
     // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
     // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
-    // The fire-and-forget usage/audit recording below outlives the request (failed authentications respond almost
-    // instantly), and CreateScope() on the disposed request provider throws ObjectDisposedException, silently
-    // dropping the write. IServiceScopeFactory is a root singleton; scopes created from it survive the request.
+    // The fire-and-forget usage recording below outlives the request, and CreateScope() on the disposed request
+    // provider throws ObjectDisposedException, silently dropping the write. IServiceScopeFactory is a root
+    // singleton; scopes created from it survive the request. Failed authentications are recorded through
+    // IFailedAuthenticationRecorder, which has the same property.
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IFailedAuthenticationRecorder _failedAuthenticationRecorder;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        IFailedAuthenticationRecorder failedAuthenticationRecorder)
         : base(options, logger, encoder)
     {
         _serviceScopeFactory = serviceScopeFactory;
+        _failedAuthenticationRecorder = failedAuthenticationRecorder;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        Log.Debug("ApiKeyAuthenticationHandler: Checking for X-API-Key header on path {Path}", Request.Path);
-
-        // Check if the X-API-Key header is present
-        if (!Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader))
+        // An API key arrives as a bearer token (RFC 6750), exactly as an SSO access token does; the key prefix is what
+        // tells the two apart. Anything else (no Authorization header, another scheme, a JWT) is not this handler's to
+        // judge, so it returns NoResult and leaves the request to the other schemes.
+        if (!BearerToken.TryRead(Request, out var providedKey) || !BearerToken.IsApiKey(providedKey))
         {
-            Log.Debug("ApiKeyAuthenticationHandler: No X-API-Key header found");
-            // No API key header - let other authentication schemes handle it
+            Log.Debug("ApiKeyAuthenticationHandler: No API key bearer token on path {Path}", Request.Path);
             return AuthenticateResult.NoResult();
         }
-
-        var providedKey = apiKeyHeader.ToString();
 
         // ForwardedHeaders middleware (when configured) rewrites RemoteIpAddress to the real client address even
         // behind a reverse proxy, so this is proxy-truthful for free; see docs/administration/security-headers.md.
         var clientIp = Context.Connection.RemoteIpAddress.ToNormalisedString();
-
-        // Validate the key format
-        if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix, StringComparison.Ordinal))
-        {
-            Log.Warning("ApiKeyAuthenticationHandler: Invalid API key format provided");
-            RecordFailedAuthenticationEvent("Invalid API key format", apiKeyPrefix: null, clientIp);
-            return AuthenticateResult.Fail("Invalid API key format");
-        }
 
         try
         {
@@ -158,28 +147,11 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     }
 
     /// <summary>
-    /// Records an aggregated failed-authentication security audit event on a background task with a fresh DI scope,
-    /// mirroring the non-blocking usage-recording pattern above: authentication must never be slowed or destabilised
-    /// by audit capture. <see cref="JIM.Application.Servers.SecurityAuditServer"/>'s
-    /// <c>RecordFailedAuthenticationAsync</c> itself never throws (audit-write failures are logged and swallowed
-    /// there), so the try/catch here is defence-in-depth against failures resolving the scope/service itself.
+    /// Records a failed API key authentication in the security audit log, off the request path: authentication must
+    /// never be slowed or destabilised by audit capture.
     /// </summary>
-    private void RecordFailedAuthenticationEvent(string reason, string? apiKeyPrefix, string? clientIp)
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var auditScope = _serviceScopeFactory.CreateScope();
-                var auditJim = auditScope.ServiceProvider.GetRequiredService<JimApplication>();
-                await auditJim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", reason, apiKeyPrefix, clientIp);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Warning(ex, "ApiKeyAuthenticationHandler: Failed to record failed authentication event");
-            }
-        });
-    }
+    private void RecordFailedAuthenticationEvent(string reason, string? apiKeyPrefix, string? clientIp) =>
+        _ = _failedAuthenticationRecorder.RecordAsync(FailedAuthenticationEventNames.ApiKey, reason, apiKeyPrefix, clientIp);
 
     /// <summary>
     /// Builds the claim set for an authenticated API key principal. Extracted as an internal static so the claim

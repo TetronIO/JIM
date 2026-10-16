@@ -27,7 +27,7 @@
 
 **Planned:**
 - Worker database performance optimisation (see `docs/plans/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`)
-- SCIM server connector (see `docs/plans/SCIM_SERVER_DESIGN.md`)
+- SCIM server connector (see `engineering/plans/doing/SCIM_SERVER_DESIGN.md`)
 
 **Nice to Have:**
 - Sync preview / what-if analysis (#288)

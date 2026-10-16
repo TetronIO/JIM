@@ -3528,6 +3528,60 @@ function Test-LabPlainLdapRefused {
     }
 }
 
+function Set-LabOldPasswordAllowedPeriod {
+    <#
+    .SYNOPSIS
+        Stops a domain controller accepting an account's previous password after it changes. Returns $true when it
+        changed the value, $false when it was already right.
+
+    .DESCRIPTION
+        By default a domain controller keeps accepting the previous password for network authentication for 5
+        minutes after a change, where password history keeps two or more passwords (the domain default keeps 24):
+            https://learn.microsoft.com/troubleshoot/windows-server/windows-security/new-setting-modifies-ntlm-network-authentication
+        A scenario that proves a delivered password replaced the old one (Scenario 020, #2287) checks well inside
+        that window, so the lab sets it to 0. LSA reads the value at each logon; no restart is needed.
+
+        Self-contained (no other module function, no module state), because Restore-LabDomainController.ps1 sends
+        it into the guest with Invoke-Command after every checkpoint revert, where the module is not loaded.
+
+    .PARAMETER Path
+        The LSA key. A parameter only so the tests can point it at a test registry.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Runs unattended in a lab guest through Invoke-Command, and is idempotent.')]
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [string]$Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+    )
+
+    $current = (Get-ItemProperty -LiteralPath $Path -ErrorAction Stop).PSObject.Properties['OldPasswordAllowedPeriod']
+    if (($null -ne $current) -and ($current.Value -is [int]) -and ($current.Value -eq 0)) {
+        return $false
+    }
+    $null = New-ItemProperty -LiteralPath $Path -Name 'OldPasswordAllowedPeriod' -Value 0 -PropertyType DWord -Force
+    return $true
+}
+
+function Get-LabOldPasswordAllowedPeriod {
+    <#
+    .SYNOPSIS
+        The minutes a domain controller keeps accepting a previous password (Set-LabOldPasswordAllowedPeriod), or
+        $null where the value is not set and the 5 minute default applies.
+
+    .PARAMETER Path
+        The LSA key. A parameter only so the tests can point it at a test registry.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [string]$Path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+    )
+
+    $current = (Get-ItemProperty -LiteralPath $Path -ErrorAction Stop).PSObject.Properties['OldPasswordAllowedPeriod']
+    if ($null -eq $current) { return $null }
+    return [int]$current.Value
+}
+
 Export-ModuleMember -Function @(
     'Test-LabIsWindows', 'Assert-LabWindows',
     'ConvertTo-LabDelegationSddl', 'Get-LabDaclAce', 'Test-LabSddlContainsSid', 'Test-LabAclGrant', 'Merge-LabDelegationSddl',
@@ -3544,7 +3598,7 @@ Export-ModuleMember -Function @(
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
-    'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused',
+    'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',

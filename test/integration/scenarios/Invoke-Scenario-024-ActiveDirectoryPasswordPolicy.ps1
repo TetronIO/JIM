@@ -403,6 +403,55 @@ function Get-HeldChangeCount {
     return [int]("$output".Trim())
 }
 
+function ConvertTo-UtcTime {
+    # An API timestamp as UTC, whether the JSON reader made it a DateTime or left it as text.
+    param([Parameter(Mandatory=$true)]$Value)
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+    return [datetime]::Parse("$Value", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
+
+function Get-PasswordDeliveryActivity {
+    <#
+    .SYNOPSIS
+        The Activities recording a password delivered to the Connected System since a moment, oldest first.
+
+    .DESCRIPTION
+        A delivery's Activity is a child of the Activity that queued the password change, and the Activity list
+        returns only top-level Activities, so searching the list cannot find it (#2288). This reads the top-level
+        Activities created since -Since (which must be before the change was queued), keeps any that are themselves
+        a delivery, and walks the children of the rest.
+
+    .PARAMETER Since
+        A moment before the password change was queued, in UTC.
+
+    .PARAMETER DeliveredFrom
+        Only deliveries created at or after this moment, in UTC.
+
+    .PARAMETER ConnectedSystemName
+        The Connected System delivered to: a delivery's Activity is named after it.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][datetime]$Since,
+        [Parameter(Mandatory=$true)][datetime]$DeliveredFrom,
+        [Parameter(Mandatory=$true)][string]$ConnectedSystemName
+    )
+
+    $candidates = [System.Collections.Generic.List[object]]::new()
+    foreach ($root in @(Get-JIMActivity -CreatedFrom $Since -PageSize 100)) {
+        $candidates.Add($root)
+        $childCount = Get-PropertyText -Object $root -Name 'childActivityCount'
+        if ($childCount -and [int]$childCount -gt 0) {
+            foreach ($child in @(Get-JIMActivityChildren -Id $root.id -All)) { $candidates.Add($child) }
+        }
+    }
+
+    return @($candidates | Where-Object {
+            (Get-PropertyText -Object $_ -Name 'targetType') -eq 'PasswordSynchronisation' -and
+            (Get-PropertyText -Object $_ -Name 'targetName') -eq $ConnectedSystemName -and
+            (ConvertTo-UtcTime -Value $_.created) -ge $DeliveredFrom.ToUniversalTime()
+        } | Sort-Object -Property { ConvertTo-UtcTime -Value $_.created })
+}
+
 function Invoke-DirectoryDeltaImportAndSync {
     <#
     .SYNOPSIS
@@ -889,6 +938,7 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
             # EnableWhileOwed: an Attribute Flow enables an account whose password is still owed (#2158)
             # ---------------------------------------------------------------------------------------------------------
             Write-TestSection "Test 9: Enabling a pre-hire whose Initial Password is parked holds the enable rather than failing"
+            $enableWhileOwedStartedAt = (Get-Date).ToUniversalTime()
 
             $preHireGivenName = "Juniper"
             $preHireSurname = "Hawthorne"
@@ -1023,12 +1073,16 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
                 -Detail "State read from the directory: $(if ($null -eq $enabledState) { 'the account does not exist' } else { "userAccountControl $($enabledState.UserAccountControl), password stamped $($enabledState.PasswordWasStamped)" })."
 
             # The delivery's Activity states why the account is enabled whatever the rule's Enable Account says:
-            # the CompletesWithheldEnable basis.
-            $deliveryActivities = @(Get-JIMActivity -Search $DirectoryConfig.ConnectedSystemName -CreatedFrom $correctedAt -PageSize 100 |
-                Where-Object { (Get-PropertyText -Object $_ -Name 'message') -match 'held the enable back until the account had a password' })
+            # the CompletesWithheldEnable basis. A delivery's Activity is a child of the Activity that queued the
+            # password, and the Activity list returns only top-level Activities (#2288), so the search walks the
+            # children of everything since Test 9 began, when the pre-hire's password was queued.
+            $passwordActivities = @(Get-PasswordDeliveryActivity -Since $enableWhileOwedStartedAt -DeliveredFrom $correctedAt -ConnectedSystemName $DirectoryConfig.ConnectedSystemName)
+            $deliveryActivities = @($passwordActivities | Where-Object { (Get-PropertyText -Object $_ -Name 'message') -match 'held the enable back until the account had a password' })
             Add-TestResult -Name "The delivery's Activity says the enable was held back until the account had a password" `
                 -Passed ($deliveryActivities.Count -eq 1) `
-                -Detail "Found $($deliveryActivities.Count) delivery Activit(ies) completing a withheld enable since the rule was corrected."
+                -Detail ("Found $($deliveryActivities.Count) delivery Activit(ies) completing a withheld enable since the rule was corrected. " +
+                         "Password Activities on $($DirectoryConfig.ConnectedSystemName) since then: " +
+                         $(if ($passwordActivities.Count -eq 0) { 'none' } else { ($passwordActivities | ForEach-Object { "[$(Get-PropertyText -Object $_ -Name 'status')] $(Get-PropertyText -Object $_ -Name 'message')" }) -join ' | ' }))
 
             Invoke-DirectoryDeltaImportAndSync -Label "enable completed" | Out-Null
             $remainingHeld = Get-HeldChangeCount -ConnectedSystemId $config.LDAPSystemId

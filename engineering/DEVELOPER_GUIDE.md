@@ -1542,7 +1542,7 @@ Use API keys for scripts and automation where interactive sign-in isn't possible
 
 ```powershell
 # Connect using an API key (recommended for automation)
-Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_ak_xxxxxxxxxxxx"
 ```
 
 #### Testing and Managing Connections

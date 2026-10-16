@@ -86,11 +86,11 @@ public enum ActivityTargetType
     DataGeneration = 21,
 
     /// <summary>
-    /// A security audit event: interactive sign-in success/failure or API key authentication failure. Sign-in
-    /// successes are recorded one per session establishment; failures are aggregated (see
+    /// A security audit event: interactive sign-in success/failure, or failed API key or SSO access token
+    /// authentication. Sign-in successes are recorded one per session establishment; failures are aggregated (see
     /// <see cref="Activity.AggregationWindowStart"/>, <see cref="Activity.AttemptCount"/>) into one Activity per
-    /// (API key prefix, client IP, failure reason) per 15-minute UTC window, so a failed-authentication spray of
-    /// any volume produces a bounded number of rows. Governed by its own retention class
+    /// (API key prefix, client IP, failure reason) per 15-minute UTC window, so a failed-authentication spray from
+    /// one source produces one row per window rather than one per attempt. Governed by its own retention class
     /// (see <see cref="JIM.Models.Core.Constants.SettingKeys.SecurityEventRetentionPeriod"/>), separate from general
     /// history and configuration-change retention.
     /// </summary>

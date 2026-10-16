@@ -1398,6 +1398,87 @@ public class ActivitiesControllerTests
 
     #endregion
 
+    #region Security audit events (#2108)
+
+    private static Activity FailedAuthenticationActivity(string apiKeyPrefix) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TargetType = ActivityTargetType.Authentication,
+        TargetOperationType = ActivityTargetOperationType.Authenticate,
+        TargetName = "Access token authentication failed",
+        Message = "Access token authentication failed",
+        InitiatedByType = ActivityInitiatorType.Anonymous,
+        ApiKeyPrefix = apiKeyPrefix,
+        ClientIpAddress = "203.0.113.7",
+        SecurityEventReason = "Access token signature invalid",
+        AggregationWindowStart = new DateTime(2026, 10, 11, 20, 15, 0, DateTimeKind.Utc),
+        FirstSeen = new DateTime(2026, 10, 11, 20, 16, 1, DateTimeKind.Utc),
+        LastSeen = new DateTime(2026, 10, 11, 20, 29, 42, DateTimeKind.Utc),
+        AttemptCount = 500
+    };
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_FailedAuthentication_CarriesTheAuditDetails()
+    {
+        // Read parity: the portal shows why an attempt failed, where it came from and how often. A SIEM polling the
+        // REST API, or Get-JIMActivity, has to be able to tell a 500-attempt forged-token spray from one expired token.
+        var dto = ActivityDetailDto.FromEntity(FailedAuthenticationActivity(apiKeyPrefix: string.Empty));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.SecurityEventReason, Is.EqualTo("Access token signature invalid"));
+            Assert.That(dto.ClientIpAddress, Is.EqualTo("203.0.113.7"));
+            Assert.That(dto.AttemptCount, Is.EqualTo(500));
+            Assert.That(dto.FirstSeen, Is.EqualTo(new DateTime(2026, 10, 11, 20, 16, 1, DateTimeKind.Utc)));
+            Assert.That(dto.LastSeen, Is.EqualTo(new DateTime(2026, 10, 11, 20, 29, 42, DateTimeKind.Utc)));
+            Assert.That(dto.AggregationWindowStart, Is.EqualTo(new DateTime(2026, 10, 11, 20, 15, 0, DateTimeKind.Utc)));
+            // Stored as "" so the aggregation index can dedupe; "no key involved" reads as null on the wire.
+            Assert.That(dto.ApiKeyPrefix, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ActivityHeader_FromEntity_FailedAuthentication_CarriesTheAuditDetails()
+    {
+        // The list is what a SIEM polls, so the details must not need a second request per Activity.
+        var header = ActivityHeader.FromEntity(FailedAuthenticationActivity(apiKeyPrefix: "jim_ak_7f3a"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.SecurityEventReason, Is.EqualTo("Access token signature invalid"));
+            Assert.That(header.ClientIpAddress, Is.EqualTo("203.0.113.7"));
+            Assert.That(header.ApiKeyPrefix, Is.EqualTo("jim_ak_7f3a"));
+            Assert.That(header.AttemptCount, Is.EqualTo(500));
+            Assert.That(header.FirstSeen, Is.EqualTo(new DateTime(2026, 10, 11, 20, 16, 1, DateTimeKind.Utc)));
+            Assert.That(header.LastSeen, Is.EqualTo(new DateTime(2026, 10, 11, 20, 29, 42, DateTimeKind.Utc)));
+            Assert.That(header.AggregationWindowStart, Is.EqualTo(new DateTime(2026, 10, 11, 20, 15, 0, DateTimeKind.Utc)));
+        }
+    }
+
+    [Test]
+    public void ActivityHeader_FromEntity_NotAnAuthenticationEvent_LeavesTheAuditDetailsNull()
+    {
+        var header = ActivityHeader.FromEntity(new Activity
+        {
+            Id = Guid.CreateVersion7(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.SecurityEventReason, Is.Null);
+            Assert.That(header.ClientIpAddress, Is.Null);
+            Assert.That(header.ApiKeyPrefix, Is.Null);
+            Assert.That(header.AttemptCount, Is.Null);
+            Assert.That(header.FirstSeen, Is.Null);
+            Assert.That(header.LastSeen, Is.Null);
+            Assert.That(header.AggregationWindowStart, Is.Null);
+        }
+    }
+
+    #endregion
+
     #region Preview provenance (#134)
 
     [Test]

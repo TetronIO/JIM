@@ -103,6 +103,13 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
 | `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
 | `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Empty when no Schedule produced this Activity. |
+| `SecurityEventReason` | `string` | Security audit events only: why the authentication failed, as a short sanitised reason such as "Access token expired" or "API key not found". Empty for every other Activity, and for a successful sign-in. |
+| `ClientIpAddress` | `string` | Security audit events only: the client IP address the attempt came from, where one was available. |
+| `ApiKeyPrefix` | `string` | Security audit events only: the identifying prefix of the API key involved, for example `jim_ak_7f3a`. Never the key itself. Empty when no API key was involved. |
+| `AttemptCount` | `int` | Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix) this Activity counts within its 15-minute window. |
+| `FirstSeen` | `datetime` | Failed authentication events only: when the first attempt this Activity counts was made (UTC). |
+| `LastSeen` | `datetime` | Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It advances as further attempts arrive, so a poller can pick up a changed count by watching it. |
+| `AggregationWindowStart` | `datetime` | Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts after the window ends are counted on a new Activity, so once the window has passed this one no longer changes. |
 
 **With `-Id` or `-Follow`**:
 
@@ -154,6 +161,13 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ExportUpdatesWithheld` | `int` | How many updates the Run Profile's Max updates limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
 | `ExportDeletesWithheld` | `int` | How many deletes the Run Profile's Max deletes limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
 | `DetectedDeletionsWithheld` | `int` | How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; empty on every other Activity, including a Full Import that imported zero objects and so skipped detection entirely. |
+| `SecurityEventReason` | `string` | Security audit events only: why the authentication failed, as a short sanitised reason such as "Access token expired" or "API key not found". Empty for every other Activity, and for a successful sign-in. |
+| `ClientIpAddress` | `string` | Security audit events only: the client IP address the attempt came from, where one was available. |
+| `ApiKeyPrefix` | `string` | Security audit events only: the identifying prefix of the API key involved, for example `jim_ak_7f3a`. Never the key itself. Empty when no API key was involved. |
+| `AttemptCount` | `int` | Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix) this Activity counts within its 15-minute window. |
+| `FirstSeen` | `datetime` | Failed authentication events only: when the first attempt this Activity counts was made (UTC). |
+| `LastSeen` | `datetime` | Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It advances as further attempts arrive, so a poller can pick up a changed count by watching it. |
+| `AggregationWindowStart` | `datetime` | Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts after the window ends are counted on a new Activity, so once the window has passed this one no longer changes. |
 
 **With `-ExecutionItems`**:
 

@@ -1839,13 +1839,15 @@ function Invoke-ActiveDirectoryLabReset {
 function Invoke-ActiveDirectoryLabToolbox {
     # Starts or stops the LDAP toolbox container (compose profile ad-lab). Stop leaves the stopped container
     # in place on purpose: the end-of-run image prune keeps the image of any existing container, so the next
-    # run does not rebuild it.
+    # run does not rebuild it from nothing.
     param([ValidateSet("Up", "Stop")][string]$Action)
 
     if ($Action -eq "Up") {
         # The certificates folder is bind-mounted into the toolbox; create it first, or Docker creates it as root.
         New-Item -ItemType Directory -Path (Join-Path $scriptRoot "ad-lab-certs") -Force | Out-Null
-        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d ldap-toolbox 2>&1
+        # --build, as the SCIM provider: the lab runner keeps its images between runs, so without it a change to
+        # the toolbox's Dockerfile (kpasswd, #2286) would never reach the image. Unchanged, the build is cached.
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d --build ldap-toolbox 2>&1
     }
     else {
         $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab stop ldap-toolbox 2>&1

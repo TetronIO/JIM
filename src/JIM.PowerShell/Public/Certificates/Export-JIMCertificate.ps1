@@ -75,12 +75,12 @@ function Export-JIMCertificate {
         try {
             $uri = "$($script:JIMConnection.Url)/api/v1/certificates/$Id/download"
 
-            $headers = @{
-                'X-API-Key' = $script:JIMConnection.ApiKey
-            }
+            Update-JIMExpiringAccessToken
+
+            $headers = Get-JIMCredentialHeader
 
             # Use Invoke-WebRequest to get binary data
-            # -Debug:$false: the debug record would print the X-API-Key header verbatim.
+            # -Debug:$false: the debug record would print the Authorization header verbatim.
             # See the same guard in Invoke-JIMApi.
             $response = Invoke-WebRequest -Uri $uri -Headers $headers -Method Get -Debug:$false
 

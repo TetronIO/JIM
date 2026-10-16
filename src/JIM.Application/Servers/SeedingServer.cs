@@ -1298,7 +1298,7 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.SecurityEventRetentionPeriod,
             DisplayName = "Security event retention period",
-            Description = "The duration for which security audit event Activities (interactive sign-in success/failure, API key authentication failure) are retained. Kept separately from the history and configuration change retention periods. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).",
+            Description = "The duration for which security audit event Activities (interactive sign-in success/failure, and failed API key or SSO access token authentication) are retained. Kept separately from the history and configuration change retention periods. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).",
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.TimeSpan,
             DefaultValue = "365.00:00:00", // ~1 year

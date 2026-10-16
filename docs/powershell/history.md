@@ -330,7 +330,7 @@ With `-PassThru`, what the pass removed and the retention settings it applied; o
 | `ActivitiesDeleted` | `int` | Number of Activity records deleted. |
 | `ConfigurationChangeActivitiesDeleted` | `int` | Number of configuration-change Activity records (versioned configuration snapshots) deleted, per the configuration change retention period. |
 | `ConfigurationChangeRetentionPeriodDays` | `int` | Configured configuration change retention period in days. |
-| `SecurityEventActivitiesDeleted` | `int` | Number of security event Activity records (TargetType Authentication: interactive sign-in success/failure, API key authentication failure) deleted, per the security event retention period. |
+| `SecurityEventActivitiesDeleted` | `int` | Number of security event Activity records (TargetType Authentication: interactive sign-in success/failure, failed API key or SSO access token authentication) deleted, per the security event retention period. |
 | `SecurityEventRetentionPeriodDays` | `int` | Configured security event retention period in days. |
 | `PasswordEventActivitiesDeleted` | `int` | Number of Password Synchronisation Activity records deleted (the delivery passes, the fan-out records, and the per-system outcome children), per the Password Synchronisation retention period. |
 | `PasswordQueueRecordsDeleted` | `int` | Number of queued password changes removed: those parked, expired or cancelled for longer than the Password Synchronisation retention period. Changes still owed to a Connected System are never removed, however old. This is also the number of encrypted passwords JIM stopped holding. |

@@ -28,7 +28,9 @@
                          reverts Primary to its baseline checkpoint in the middle of the run, and asserts that
                          the next Delta Import FAILS FAST, naming the change of invocationId (both the previous
                          and the current) and the remedy, importing nothing; that a Full Import then succeeds and
-                         reconciles what the restore lost; and that the Delta Import after it is clean.
+                         reconciles what the restore lost (with a user written to the restored domain controller,
+                         because a Full Import that reads nothing at all deliberately detects no deletions); and
+                         that the Delta Import after it is clean.
 
     Both steps use their own Connected System, built by Setup-Scenario-025.ps1 from nothing (an import with no
     Synchronisation Rules), so a count here is a count of what the import reported and nothing else.
@@ -38,7 +40,8 @@
     such a line into an abort of the very wait that would read the result, and Assert-NoWorkerErrors would fail the
     scenario at the end. The failing run is therefore started without -Wait and polled here, the watcher is
     drained after it (and the lines it held checked to be the expected refusal and nothing else), and the final
-    log scan is told about the one run whose Error line is expected.
+    log scan is told about the one run whose Error line is expected, both through its own allowance and through the
+    expected-errors declaration the runner's post-scenario scan reads.
 
     Active Directory lab only. Primary and Source are reverted to their baseline checkpoint by the runner before
     the scenario starts; the users the scenario creates are gone with the next revert.
@@ -515,14 +518,25 @@ function Invoke-RestoreFromBackupTest {
 
     # Started without -Wait, and polled here: the worker logs an Error line for a failed run, the runner's error
     # watcher would abort a -Wait on it, and the result being asserted would never be read. See this script's help.
-    $failedRun = Start-JIMRunProfile -ConnectedSystemId $system.ConnectedSystemId -RunProfileId $system.DeltaImportProfileId -PassThru
-    $script:ExpectedFailureActivityId = "$($failedRun.activityId)"
-    $failedActivity = Wait-ActivityTerminal -ActivityId "$($failedRun.activityId)"
+    # The refusal is also declared to the runner's log scan, which reads the expected-errors file rather than this
+    # script's own allowance (#2289). The activity id is not known until the run has started, and the worker may log
+    # the line before then, so the declaration names the refusal's own text: the worker's line for a failed run, and
+    # the exception that says the invocationId changed. It is scoped to this step, the only run in it.
+    $refusalStep = "$label DeltaImportAfterRevert"
+    Add-JimExpectedError -Step $refusalStep -Pattern '(?i)SafeFailActivityAsync: Unhandled exception whilst executing sync run|invocationId has changed' | Out-Null
+    try {
+        $failedRun = Start-JIMRunProfile -ConnectedSystemId $system.ConnectedSystemId -RunProfileId $system.DeltaImportProfileId -PassThru
+        $script:ExpectedFailureActivityId = "$($failedRun.activityId)"
+        $failedActivity = Wait-ActivityTerminal -ActivityId "$($failedRun.activityId)"
 
-    # Give the watcher time to write the Error line the failure logged, then take it: a sentinel left non-empty
-    # would abort the next Run Profile wait. What it held must be the expected refusal and nothing else.
-    Start-Sleep -Seconds 5
-    $errorLines = @(Clear-JimErrorWatcher)
+        # Give the watcher time to write the Error line the failure logged, then take it: a sentinel left non-empty
+        # would abort the next Run Profile wait. What it held must be the expected refusal and nothing else.
+        Start-Sleep -Seconds 5
+        $errorLines = @(Clear-JimErrorWatcher)
+    }
+    finally {
+        Complete-JimExpectedError -Step $refusalStep
+    }
     $unexpectedLines = @($errorLines | Where-Object { $_ -notmatch [regex]::Escape($script:ExpectedFailureActivityId) -and $_ -notmatch 'invocationId' })
 
     $failedStatus = Get-PropertyText -Object $failedActivity -Name "status"
@@ -562,11 +576,18 @@ function Invoke-RestoreFromBackupTest {
         -Passed ($unexpectedLines.Count -eq 0) `
         -Detail "$($unexpectedLines.Count) other Error/Fatal line(s) reached JIM's logs during the run: $(($unexpectedLines | Select-Object -First 3) -join ' | ')"
 
+    # A Full Import that reads no objects at all leaves deletion detection out on purpose: an empty read is more
+    # likely a fault collecting the data than every object having gone (SyncImportTaskProcessor.PerformImportAsync).
+    # The baseline checkpoint's OU=Corp holds no users, so without this the Full Import below reads nothing and the
+    # deletion is never looked for (#2289). A real restored domain controller is not empty either: this is a user
+    # written to it after the restore.
+    $afterDisplayName = Add-ScenarioUser -Config $Config -SamAccountName "s25after" -GivenName "Ines" -Surname "Calloway"
+
     Write-Host "  [5/7] Full Import (re-establishes the baseline)..." -ForegroundColor DarkGray
     $reconcile = Invoke-ImportRun -System $system -Kind Full -Name "$label Full Import (after the revert)"
     Add-TestResult -Name "$label Full Import after the revert succeeds and reconciles what the restore lost" `
-        -Passed ($reconcile.Deleted -eq 1 -and $reconcile.Added -eq 0) `
-        -Detail "The user '$displayName' was created after the checkpoint, so the revert removed it: expected one deletion detected and no adds. Reported: $(Format-ImportChange -Change $reconcile)"
+        -Passed ($reconcile.Deleted -eq 1 -and $reconcile.Added -eq 1) `
+        -Detail "The user '$displayName' was created after the checkpoint, so the revert removed it, and '$afterDisplayName' was created after the revert: expected one deletion detected and one add. Reported: $(Format-ImportChange -Change $reconcile)"
 
     $recordedAfter = Get-RecordedInvocationId -ConnectedSystemId $system.ConnectedSystemId
     Add-TestResult -Name "$label Full Import records the new invocationId as the baseline" `
