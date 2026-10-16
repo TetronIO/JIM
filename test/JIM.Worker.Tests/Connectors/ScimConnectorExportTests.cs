@@ -625,6 +625,40 @@ public class ScimConnectorExportTests
     #endregion
 
     #region batches
+    /// <summary>
+    /// #2197: a request that fails in a way the provider did not answer (the transport, or an authentication refresh,
+    /// failing unexpectedly) fails that change alone. Escaping the batch instead lost the results of every request
+    /// already made, so the resources already created were posted again.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RequestFailingUnexpectedly_FailsThatChangeAndKeepsTheResultsAlreadyMadeAsync()
+    {
+        var provider = new MockScimProvider();
+        var posts = 0;
+        using var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.Method == HttpMethod.Post && ++posts == 2)
+                throw new InvalidOperationException("The authentication token could not be refreshed.");
+            return provider.Respond(request);
+        });
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Create(user, Change("userName", user, "alice")),
+            Create(user, Change("userName", user, "bob")),
+            Create(user, Change("userName", user, "carol")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(3));
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo("generated-1"), "the resource already created keeps its id");
+            Assert.That(results[1].Success, Is.False);
+            Assert.That(results[1].ErrorMessage, Does.Contain("authentication token could not be refreshed"));
+            Assert.That(results[2].Success, Is.True);
+        }
+    }
+
     [Test]
     public async Task ExportAsync_OneObjectFailing_DoesNotAbandonTheRestOfTheBatchAsync()
     {

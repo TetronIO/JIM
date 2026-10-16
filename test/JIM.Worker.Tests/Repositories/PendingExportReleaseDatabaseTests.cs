@@ -25,6 +25,9 @@ public class PendingExportReleaseDatabaseTests
 {
     private string _connectionString = null!;
 
+    /// <summary>The mark every seeded Pending Export carries, as a batch marked Executing would.</summary>
+    private static readonly DateTime MarkedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-1));
+
     private JimDbContext NewContext(QueryTrackingBehavior tracking = QueryTrackingBehavior.NoTracking, IInterceptor? interceptor = null)
     {
         var builder = new DbContextOptionsBuilder<JimDbContext>()
@@ -83,7 +86,7 @@ public class PendingExportReleaseDatabaseTests
                 ChangeType = PendingExportChangeType.Update,
                 Status = status,
                 ErrorCount = 4,
-                LastAttemptedAt = TruncateToMicroseconds(DateTime.UtcNow),
+                LastAttemptedAt = MarkedAt,
                 NextRetryAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(30)),
                 LastErrorMessage = "written when the batch was marked",
                 LastErrorStackTrace = "at Marked()",
@@ -111,7 +114,7 @@ public class PendingExportReleaseDatabaseTests
 
         IReadOnlySet<Guid> released;
         await using (var context = NewContext())
-            released = await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync([populated, empty]);
+            released = await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync([populated, empty], MarkedAt);
 
         await using var read = NewContext();
         var stored = await read.PendingExports.AsNoTracking().Where(pe => ids.Contains(pe.Id)).ToDictionaryAsync(pe => pe.Id);
@@ -138,7 +141,7 @@ public class PendingExportReleaseDatabaseTests
 
         IReadOnlySet<Guid> released;
         await using (var context = NewContext())
-            released = await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync(states);
+            released = await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync(states, MarkedAt);
 
         await using var after = NewContext();
         var recorded = await after.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == ids[0]);
@@ -148,6 +151,54 @@ public class PendingExportReleaseDatabaseTests
             Assert.That(released, Is.EquivalentTo(new[] { ids[1] }));
             Assert.That(PendingExportRetryState.Of(recorded), Is.EqualTo(PendingExportRetryState.Of(before[ids[0]])));
         }
+    }
+
+    /// <summary>
+    /// #2197: cancelling a run lets the next one start before the first has finished putting its batch back, and the new
+    /// run can mark the same row Executing. The guard on status alone would then write the old run's release over the new
+    /// run's mark; the row carries the new run's mark, and is left to it.
+    /// </summary>
+    [Test]
+    public async Task ReleaseExecutingPendingExportsAsync_RowMarkedAgainByALaterRun_IsLeftToItAsync()
+    {
+        var ids = await SeedPendingExportsAsync(PendingExportStatus.Executing);
+        var laterMark = MarkedAt.AddSeconds(5);
+        await using (var remark = NewContext())
+            await remark.PendingExports.Where(pe => pe.Id == ids[0]).ExecuteUpdateAsync(set => set.SetProperty(pe => pe.LastAttemptedAt, laterMark));
+
+        IReadOnlySet<Guid> released;
+        await using (var context = NewContext())
+            released = await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync(
+                [new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 5, null, null, "the earlier run's failure", null)], MarkedAt);
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == ids[0]);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(released, Is.Empty);
+            Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Executing));
+            Assert.That(stored.LastAttemptedAt, Is.EqualTo(laterMark));
+            Assert.That(stored.ErrorCount, Is.EqualTo(4), "the later run's attempt is not counted as failed");
+        }
+    }
+
+    /// <summary>
+    /// #2197: the mark compares equal to what the database holds, which keeps only microseconds.
+    /// </summary>
+    [Test]
+    public async Task MarkPendingExportsAsExecutingAsync_ReturnsTheMarkAsTheDatabaseHoldsItAsync()
+    {
+        var ids = await SeedPendingExportsAsync(PendingExportStatus.Pending);
+        DateTime markedAt;
+        await using (var context = NewContext())
+        {
+            var export = await context.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == ids[0]);
+            markedAt = await new PostgresDataRepository(context).Sync.MarkPendingExportsAsExecutingAsync([export]);
+        }
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == ids[0]);
+        Assert.That(stored.LastAttemptedAt, Is.EqualTo(markedAt));
     }
 
     [Test]
@@ -160,7 +211,7 @@ public class PendingExportReleaseDatabaseTests
         _ = await context.PendingExports.SingleAsync(pe => pe.Id == ids[0]);
 
         await new PostgresDataRepository(context).Sync.ReleaseExecutingPendingExportsAsync(
-            [new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 0, null, null, null, null)]);
+            [new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 0, null, null, null, null)], MarkedAt);
 
         Assert.That(context.ChangeTracker.Entries<PendingExport>().Any(e => e.Entity.Id == ids[0]), Is.False);
     }
@@ -201,6 +252,71 @@ public class PendingExportReleaseDatabaseTests
         await using var after = NewContext();
         var stored = await after.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == ids[0]);
         Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Executing));
+    }
+
+    /// <summary>
+    /// #2197: an export's recorded result and the External ID it assigned land together. Written in one transaction that
+    /// is not committed (the batch failed before it was), neither is left behind: no status without the object's id, and
+    /// no id on an object whose export still reads as not yet sent.
+    /// </summary>
+    [Test]
+    public async Task BeginTransactionAsync_ResultAndExternalIdWrittenThenNotCommitted_LeavesNeitherAsync()
+    {
+        var (exportId, csoId, values) = await WriteResultAndExternalIdAsync(commit: false);
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Executing));
+            Assert.That(await read.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == csoId), Is.Zero);
+            Assert.That(values, Is.EqualTo(1), "the write was made inside the transaction");
+        }
+    }
+
+    [Test]
+    public async Task BeginTransactionAsync_ResultAndExternalIdWrittenAndCommitted_LeavesBothAsync()
+    {
+        var (exportId, csoId, _) = await WriteResultAndExternalIdAsync(commit: true);
+
+        await using var read = NewContext();
+        var stored = await read.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(await read.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == csoId), Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// Writes an Executing export as Exported and an External ID value onto its object, through the same repository
+    /// methods the export path uses, inside <c>BeginTransactionAsync</c>; returns how many values the transaction saw.
+    /// </summary>
+    private async Task<(Guid ExportId, Guid CsoId, int ValuesSeenInside)> WriteResultAndExternalIdAsync(bool commit)
+    {
+        var ids = await SeedPendingExportsAsync(PendingExportStatus.Executing);
+        var attributeId = await SeedAttributeAsync();
+
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var export = await context.PendingExports.AsNoTracking().Include(pe => pe.AttributeValueChanges).SingleAsync(pe => pe.Id == ids[0]);
+        var cso = await context.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == export.ConnectedSystemObjectId);
+        var attribute = await context.ConnectedSystemAttributes.AsNoTracking().SingleAsync(a => a.Id == attributeId);
+
+        int seen;
+        await using (var transaction = await repository.Sync.BeginTransactionAsync())
+        {
+            Assert.That(transaction, Is.Not.Null, "a relational provider with no transaction open begins one");
+            var value = new ConnectedSystemObjectAttributeValue { AttributeId = attribute.Id, StringValue = "CN=Test User" };
+            await repository.Sync.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync([(cso, [value])]);
+            export.Status = PendingExportStatus.Exported;
+            await repository.Sync.UpdatePendingExportsAsync([export]);
+            seen = await context.ConnectedSystemObjectAttributeValues.CountAsync(v => v.ConnectedSystemObject.Id == cso.Id);
+            if (commit)
+                await transaction!.CommitAsync();
+        }
+
+        return (export.Id, cso.Id, seen);
     }
 
     private async Task<int> SeedAttributeAsync()

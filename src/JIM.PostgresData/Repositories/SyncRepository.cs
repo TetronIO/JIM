@@ -671,11 +671,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
 
-    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
-        => _repo.ConnectedSystems.ReleaseExecutingPendingExportsAsync(states);
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
+        => _repo.ConnectedSystems.ReleaseExecutingPendingExportsAsync(states, markedAt);
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
@@ -700,6 +700,25 @@ public partial class SyncRepository : ISyncRepository
 
         var transaction = await _context.Database.BeginTransactionAsync();
         return new RollbackOnlyTransactionScope(transaction);
+    }
+
+    /// <inheritdoc />
+    public async Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+    {
+        if (!_context.Database.IsRelational() || _context.Database.CurrentTransaction != null)
+            return null;
+
+        return new SyncRepositoryTransaction(await _context.Database.BeginTransactionAsync());
+    }
+
+    /// <summary>
+    /// A transaction the caller commits; disposed uncommitted, it rolls back (EF Core's own disposal behaviour).
+    /// </summary>
+    private sealed class SyncRepositoryTransaction(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction) : ISyncRepositoryTransaction
+    {
+        public Task CommitAsync() => transaction.CommitAsync();
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
     }
 
     /// <summary>
