@@ -86,6 +86,20 @@ public static class ConfigurationTestCaseDisplay
     }
 
     /// <summary>
+    /// Why the save gate's "Accept new results" cannot go ahead, naming each case whose new result cannot be expected
+    /// (it needs review, could not run, or its Scope cannot be determined); null when every new result can be.
+    /// </summary>
+    public static string? AcceptBlockedReason(IReadOnlyList<ConfigurationTestRegression> regressions)
+    {
+        var blocked = regressions.Where(r => !r.CanAccept).Select(r => $"'{r.TestCase.Name}'").ToList();
+        if (blocked.Count == 0)
+            return null;
+        return blocked.Count == 1
+            ? $"{blocked[0]} cannot take its new result as expected: edit the case, or save anyway."
+            : $"{string.Join(", ", blocked)} cannot take their new results as expected: edit the cases, or save anyway.";
+    }
+
+    /// <summary>
     /// The label an expectation is chosen by.
     /// </summary>
     public static string ExpectationLabel(ConfigurationTestExpectationKind kind) => kind switch

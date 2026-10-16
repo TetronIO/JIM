@@ -64,6 +64,8 @@ public class SyncRuleMappingUpdateApiTests
         var mockActivityRepo = new Mock<IActivityRepository>();
         var mockApiKeyRepo = new Mock<IApiKeyRepository>();
         mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.

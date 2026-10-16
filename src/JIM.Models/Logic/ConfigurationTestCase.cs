@@ -52,6 +52,12 @@ public class ConfigurationTestCase : IAuditable
     /// </summary>
     public const int MaxAttributeNameLength = 400;
 
+    /// <summary>
+    /// The most test cases one owner may hold: a Synchronisation Rule, or a Connected System's Simple mode Object
+    /// Matching Rules. Every save of what a case covers runs it twice in the save gate, so the number is bounded.
+    /// </summary>
+    public const int MaxTestCasesPerOwner = 200;
+
     // The stored-JSON conventions (MvoDeletionPolicySnapshot, ConfigurationSnapshotService): camelCase, enums as text.
     private static readonly JsonSerializerOptions SerialiserOptions = new()
     {

@@ -978,6 +978,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(omr => omr.Id == id);
     }
 
+    public async Task<ObjectMatchingRule?> GetObjectMatchingRuleUntrackedAsync(int id)
+    {
+        return await Repository.Database.ObjectMatchingRules
+            .AsNoTrackingWithIdentityResolution()
+            .AsSplitQuery()
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(omr => omr.TargetMetaverseAttribute)
+            .Include(omr => omr.ConnectedSystemObjectType)
+            .Include(omr => omr.MetaverseObjectType)
+            .SingleOrDefaultAsync(omr => omr.Id == id);
+    }
+
     public async Task<List<ObjectMatchingRule>> GetObjectMatchingRulesAsync(IReadOnlyCollection<int> ids)
     {
         if (ids.Count == 0)
@@ -7722,42 +7735,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // references, which nulled the child rows rather than removing them, and each delete
         // silently left the rule's whole configuration behind belonging to nothing. Adding or
         // removing an Include here is now a read-path decision only.
-        var syncRule = await Repository.Database.SyncRules
+        var syncRule = await WithFullGraph(Repository.Database.SyncRules
             .AsTracking()
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(sr => sr.AttributeFlowRules)
-            .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
-            .Include(sr => sr.AttributeFlowRules)
-            .ThenInclude(afr => afr.TargetMetaverseAttribute)
-            .Include(sr => sr.AttributeFlowRules)
-            .ThenInclude(afr => afr.Sources)
-            .ThenInclude(s =>s.ConnectedSystemAttribute)
-            .Include(sr => sr.AttributeFlowRules)
-            .ThenInclude(afr => afr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
-            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
-            // sources do, so the editor, the API and the engine can all read whether a loaded mapping is
-            // generated and what it excludes.
-            .Include(sr => sr.AttributeFlowRules)
-            .ThenInclude(afr => afr.Generation)
-            .ThenInclude(g => g!.Exclusions)
-            .Include(sr => sr.ConnectedSystem)
-            // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
-            // navigation is indistinguishable from an unconfigured one. Without the Include, every change
-            // history entry would record the initial password as switched off, however it was really set.
-            .Include(sr => sr.InitialPassword)
-            .Include(sr => sr.ConnectedSystemObjectType)
-            .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
-            // CreatedByName is now a string property on SyncRule (IAuditable) - no Include needed
-            .Include(sr => sr.MetaverseObjectType)
-            .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
-            .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.TargetMetaverseAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.MetaverseObjectType)
+            .AsSplitQuery()) // Use split query to avoid cartesian explosion from multiple collection includes
             .SingleOrDefaultAsync(x => x.Id == id);
 
         // Tracked, like the rest of this graph, so an edit anywhere in the scoping tree persists on save. The tree
@@ -7766,6 +7746,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await SyncRuleScopingTreeLoader.LoadAsync(Repository.Database, [syncRule], asTrackingRequested: true);
         return syncRule;
     }
+
+    public async Task<SyncRule?> GetSyncRuleUntrackedAsync(int id)
+    {
+        // Identity resolution without tracking: one instance per attribute across the graph, as GetSyncRuleAsync gives,
+        // and none of them the instances an editing caller holds on this context.
+        var syncRule = await WithFullGraph(Repository.Database.SyncRules
+            .AsNoTrackingWithIdentityResolution()
+            .AsSplitQuery())
+            .SingleOrDefaultAsync(x => x.Id == id);
+
+        if (syncRule != null)
+            await SyncRuleScopingTreeLoader.LoadUntrackedAsync(Repository.Database, [syncRule]);
+        return syncRule;
+    }
+
+    /// <summary>
+    /// The graph <see cref="GetSyncRuleAsync"/> and <see cref="GetSyncRuleUntrackedAsync"/> load, apart from the scoping
+    /// tree, which no Include chain can express.
+    /// </summary>
+    private static IQueryable<SyncRule> WithFullGraph(IQueryable<SyncRule> syncRules) => syncRules
+        .Include(sr => sr.AttributeFlowRules)
+        .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
+        .Include(sr => sr.AttributeFlowRules)
+        .ThenInclude(afr => afr.TargetMetaverseAttribute)
+        .Include(sr => sr.AttributeFlowRules)
+        .ThenInclude(afr => afr.Sources)
+        .ThenInclude(s => s.ConnectedSystemAttribute)
+        .Include(sr => sr.AttributeFlowRules)
+        .ThenInclude(afr => afr.Sources)
+        .ThenInclude(s => s.MetaverseAttribute)
+        // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+        // sources do, so the editor, the API and the engine can all read whether a loaded mapping is
+        // generated and what it excludes.
+        .Include(sr => sr.AttributeFlowRules)
+        .ThenInclude(afr => afr.Generation)
+        .ThenInclude(g => g!.Exclusions)
+        .Include(sr => sr.ConnectedSystem)
+        // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
+        // navigation is indistinguishable from an unconfigured one. Without the Include, every change
+        // history entry would record the initial password as switched off, however it was really set.
+        .Include(sr => sr.InitialPassword)
+        .Include(sr => sr.ConnectedSystemObjectType)
+        .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+        // CreatedByName is now a string property on SyncRule (IAuditable) - no Include needed
+        .Include(sr => sr.MetaverseObjectType)
+        .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+        .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
+        .ThenInclude(omr => omr.Sources)
+        .ThenInclude(s => s.ConnectedSystemAttribute)
+        .Include(sr => sr.ObjectMatchingRules)
+        .ThenInclude(omr => omr.TargetMetaverseAttribute)
+        .Include(sr => sr.ObjectMatchingRules)
+        .ThenInclude(omr => omr.MetaverseObjectType);
 
     public async Task CreateSyncRuleAsync(SyncRule syncRule)
     {

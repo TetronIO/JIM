@@ -49,6 +49,8 @@ public class SyncRuleAttributeFlowExpressionValidationTests
         _metaverseRepository = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.Activity).Returns(activityRepository.Object);
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        repository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         repository.Setup(r => r.Metaverse).Returns(_metaverseRepository.Object);
         repository.Setup(r => r.Sync).Returns(syncRepository.Object);
         activityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
