@@ -47,6 +47,8 @@ The central identity store and the searches over it.
 - [Metaverse](metaverse.md): Object Types, attributes, objects, and pending deletions
     - [Metaverse Objects](metaverse-objects.md): where each value comes from, and why an object is connected, or not
 - [Predefined Searches](predefined-searches.md): named, reusable searches over Metaverse Objects
+- [Deleted Objects](deleted-objects.md): the record JIM keeps of each object it deletes
+- [Example Data](example-data.md): realistic users and groups generated for a demonstration or a proof of concept
 
 ## Automation and Operations
 

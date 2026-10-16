@@ -19,14 +19,14 @@ function Watch-JIMLog {
         for the pipeline, use Get-JIMLogEntry instead.
 
     .PARAMETER Service
-        The service whose entries to show: web, worker or scheduler. Omit it for every service.
+        The service whose entries to show: web, worker, scheduler or database. Omit it for every service.
 
     .PARAMETER Level
         The log levels to include: Verbose, Debug, Information, Warning, Error or Fatal. Omit it for every
         level.
 
     .PARAMETER Search
-        Text the message must contain, ignoring case.
+        Text the message or its exception must contain, ignoring case.
 
     .PARAMETER IntervalSeconds
         The number of seconds to wait between polls.

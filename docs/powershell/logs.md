@@ -7,7 +7,7 @@ audience: automation-author
 
 # Logs
 
-Log cmdlets provide read-only access to JIM's structured service logs (Web, Worker, Scheduler), with filtering by service, date, level, and search text. Useful for remote troubleshooting without needing container/host access.
+Log cmdlets provide read-only access to JIM's structured service logs (Web, Worker, Scheduler and Database), with filtering by service, date, level, and search text. Useful for remote troubleshooting without needing container/host access. The portal's [Logs](../administration/logs.md) page shows the same entries.
 
 ---
 
@@ -33,10 +33,10 @@ Get-JIMLogEntry -ListServices
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Service` | `string` | No (Entries) |  | The service whose entries to return: web, worker or scheduler. Omit it for every service. |
+| `Service` | `string` | No (Entries) |  | The service whose entries to return: web, worker, scheduler or database. Omit it for every service. |
 | `Date` | `datetime` | No (Entries) |  | The day whose entries to return. Omit it for today (UTC). |
 | `Level` | `string[]` | No (Entries) |  | The log levels to include: Verbose, Debug, Information, Warning, Error or Fatal. Omit it for every level. |
-| `Search` | `string` | No (Entries) |  | Text the message must contain, ignoring case. |
+| `Search` | `string` | No (Entries) |  | Text the message or its exception must contain, ignoring case. |
 | `Limit` | `int` | No (Entries) | `500` | The most entries to return. From 1 to 5,000. |
 | `Offset` | `int` | No (Entries) | `0` | The number of entries to skip, for paging. At least 0. |
 | `ListLevels` | `switch` | Yes (Levels) |  | Returns the log level names instead of log entries. |
@@ -55,7 +55,7 @@ Each log entry; `-ListLevels` and `-ListServices` return each name as a string.
 | `LevelShort` | `string` | The short log level abbreviation (VRB, DBG, INF, WRN, ERR, FTL). |
 | `Message` | `string` | The rendered log message. |
 | `Exception` | `string` | The exception details, if any. |
-| `Service` | `string` | The service that generated the log entry (web, worker, scheduler). |
+| `Service` | `string` | The service that generated the log entry (web, worker, scheduler, database). |
 | `Properties` | `object` | Additional structured properties from the log entry. |
 
 **With `-ListLevels` or `-ListServices`**: a `string`.
@@ -99,7 +99,7 @@ Each log file's service, date and size.
 | Property | Type | Description |
 |----------|------|-------------|
 | `FileName` | `string` | The file name without path. |
-| `Service` | `string` | The service that generated the log file (web, worker, scheduler). |
+| `Service` | `string` | The service that generated the log file (web, worker, scheduler, database). |
 | `Date` | `datetime` | The date of the log file. |
 | `SizeBytes` | `long` | The file size in bytes. |
 | `SizeFormatted` | `string` | Human-readable file size. |
@@ -134,9 +134,9 @@ Watch-JIMLog [-Service <string>] [-Level <string[]>] [-Search <string>] [-Interv
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Service` | `string` | No |  | The service whose entries to show: web, worker or scheduler. Omit it for every service. |
+| `Service` | `string` | No |  | The service whose entries to show: web, worker, scheduler or database. Omit it for every service. |
 | `Level` | `string[]` | No |  | The log levels to include: Verbose, Debug, Information, Warning, Error or Fatal. Omit it for every level. |
-| `Search` | `string` | No |  | Text the message must contain, ignoring case. |
+| `Search` | `string` | No |  | Text the message or its exception must contain, ignoring case. |
 | `IntervalSeconds` | `int` | No | `2` | The number of seconds to wait between polls. From 1 to 300. |
 | `MaxPolls` | `int` | No |  | The number of polls to run before stopping. Omit it to run until interrupted with Ctrl+C; useful for bounded watches in scripts. At least 1. |
 

@@ -36,7 +36,7 @@ public class LogEntryDto
     public string? Exception { get; set; }
 
     /// <summary>
-    /// The service that generated the log entry (web, worker, scheduler).
+    /// The service that generated the log entry (web, worker, scheduler, database).
     /// </summary>
     public string Service { get; set; } = string.Empty;
 
@@ -85,7 +85,7 @@ internal class CompactJsonLogEntry
     /// <summary>
     /// Converts to a LogEntryDto.
     /// </summary>
-    /// <param name="service">The service name (web, worker, scheduler).</param>
+    /// <param name="service">The service name (web, worker, scheduler, database).</param>
     /// <param name="additionalProperties">Any additional properties from the JSON.</param>
     /// <returns>A LogEntryDto instance.</returns>
     public LogEntryDto ToDto(string service, Dictionary<string, object>? additionalProperties = null)
