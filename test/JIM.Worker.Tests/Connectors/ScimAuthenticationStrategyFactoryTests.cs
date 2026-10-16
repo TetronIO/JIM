@@ -187,6 +187,38 @@ public class ScimAuthenticationStrategyFactoryTests
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingTokenEndpointUrl));
     }
 
+    [TestCase("http://keycloak.example.com/realms/jim/protocol/openid-connect/token")]
+    [TestCase("http://jim.keycloak:8080/realms/jim/protocol/openid-connect/token")]
+    [TestCase("ftp://provider.example.com/oauth2/token")]
+    public void Create_OAuthTokenEndpointNotHttpsOrLoopbackHttp_ThrowsNamingTheSetting(string tokenEndpoint)
+    {
+        var exception = Assert.Throws<ScimAuthenticationException>(
+            () => ScimAuthenticationStrategyFactory.Create(OAuthSettings(tokenEndpoint), _credentialProtection.Object, _tokenClient));
+
+        Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingTokenEndpointUrl));
+    }
+
+    [TestCase("http://localhost:8080/realms/jim/protocol/openid-connect/token")]
+    [TestCase("http://127.0.0.1:8080/realms/jim/protocol/openid-connect/token")]
+    [TestCase("http://[::1]:8080/realms/jim/protocol/openid-connect/token")]
+    public void Create_OAuthTokenEndpointHttpLoopback_ReturnsOAuthStrategy(string tokenEndpoint)
+    {
+        var strategy = ScimAuthenticationStrategyFactory.Create(OAuthSettings(tokenEndpoint), _credentialProtection.Object, _tokenClient);
+
+        Assert.That(strategy, Is.InstanceOf<ScimOAuthClientCredentialsAuthentication>());
+    }
+
+    private static List<ConnectedSystemSettingValue> OAuthSettings(string tokenEndpoint)
+    {
+        return
+        [
+            Setting(ScimConnectorConstants.SettingAuthenticationMethod, ScimConnectorConstants.AuthMethodOAuthClientCredentials),
+            Setting(ScimConnectorConstants.SettingTokenEndpointUrl, tokenEndpoint),
+            Setting(ScimConnectorConstants.SettingClientId, "scim-client"),
+            Setting(ScimConnectorConstants.SettingClientSecret, encryptedValue: "encrypted:top-secret")
+        ];
+    }
+
     [Test]
     public void Create_BasicMissingUsername_ThrowsNamingTheSetting()
     {
@@ -214,6 +246,17 @@ public class ScimAuthenticationStrategyFactoryTests
         var exception = Assert.Throws<ScimAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
-        Assert.That(exception!.ToString(), Does.Not.Contain("s3cr3t"));
+        // A refused Token Endpoint URL is reported before the secret is touched, and must not carry it
+        // (or credentials embedded in the URL itself) either.
+        var transportException = Assert.Throws<ScimAuthenticationException>(
+            () => ScimAuthenticationStrategyFactory.Create(
+                OAuthSettings("http://client:p4ssw0rd@keycloak.example.com/token"), _credentialProtection.Object, _tokenClient));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.ToString(), Does.Not.Contain("s3cr3t"));
+            Assert.That(transportException!.ToString(), Does.Not.Contain("top-secret"));
+            Assert.That(transportException.ToString(), Does.Not.Contain("p4ssw0rd"));
+        }
     }
 }

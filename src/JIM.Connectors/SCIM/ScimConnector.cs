@@ -123,7 +123,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             },
 
             // OAuth 2.0 Client Credentials settings
-            new() { Name = ScimConnectorConstants.SettingTokenEndpointUrl, RequiredWhenSetting = ScimConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = ScimConnectorConstants.AuthMethodOAuthClientCredentials, Description = "The OAuth 2.0 token endpoint URL used to acquire access tokens via the Client Credentials flow.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+            new() { Name = ScimConnectorConstants.SettingTokenEndpointUrl, RequiredWhenSetting = ScimConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = ScimConnectorConstants.AuthMethodOAuthClientCredentials, Description = "The OAuth 2.0 token endpoint URL used to acquire access tokens via the Client Credentials flow. HTTPS is required, except for loopback addresses when testing locally, because the Client Secret is sent to this address.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = ScimConnectorConstants.SettingClientId, RequiredWhenSetting = ScimConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = ScimConnectorConstants.AuthMethodOAuthClientCredentials, Description = "The OAuth 2.0 client identifier.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = ScimConnectorConstants.SettingClientSecret, RequiredWhenSetting = ScimConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = ScimConnectorConstants.AuthMethodOAuthClientCredentials, Description = "The OAuth 2.0 client secret.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
             new() { Name = ScimConnectorConstants.SettingOAuthScope, Required = false, Description = "Optional OAuth 2.0 scope(s) to request, space-separated. Only used with the OAuth 2.0 Client Credentials authentication method.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
@@ -195,40 +195,39 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (baseUrlSetting == null || string.IsNullOrEmpty(baseUrl))
             return response;
 
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
+        // JIM is deployed in high-trust environments; neither identity data nor credentials may travel over
+        // cleartext HTTP. Loopback is permitted to support local test service providers.
+        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out _, out var baseUrlError))
         {
             response.Add(new ConnectorSettingValueValidationResult
             {
                 IsValid = false,
-                ErrorMessage = $"Base URL '{baseUrl}' is not a valid absolute URL. Supply the full SCIM endpoint URL, i.e. https://example.com/scim/v2.",
+                ErrorMessage = baseUrlError,
                 SettingValue = baseUrlSetting
             });
-            return response;
         }
 
-        if (baseUri.Scheme != Uri.UriSchemeHttps && baseUri.Scheme != Uri.UriSchemeHttp)
+        // The Token Endpoint URL only matters for OAuth; a value left over from switching Authentication
+        // Method is ignored, matching how RequiredWhenSetting treats it.
+        var authenticationMethod = settingValues.SingleOrDefault(q => q.Setting.Name == ScimConnectorConstants.SettingAuthenticationMethod)?.StringValue;
+        var tokenEndpointSetting = settingValues.SingleOrDefault(q => q.Setting.Name == ScimConnectorConstants.SettingTokenEndpointUrl);
+        if (authenticationMethod == ScimConnectorConstants.AuthMethodOAuthClientCredentials
+            && tokenEndpointSetting != null
+            && !string.IsNullOrWhiteSpace(tokenEndpointSetting.StringValue)
+            && !ScimTransportSecurity.TryValidate(tokenEndpointSetting.StringValue, ScimConnectorConstants.SettingTokenEndpointUrl, ScimTransportSecurity.TokenEndpointPayload, out _, out var tokenEndpointError))
         {
             response.Add(new ConnectorSettingValueValidationResult
             {
                 IsValid = false,
-                ErrorMessage = $"Base URL '{baseUrl}' must use the https scheme (or http for loopback addresses only).",
-                SettingValue = baseUrlSetting
+                ErrorMessage = tokenEndpointError,
+                SettingValue = tokenEndpointSetting
             });
-            return response;
         }
 
-        // JIM is deployed in high-trust environments; identity data must not travel over cleartext HTTP.
-        // Loopback is permitted to support local test service providers.
-        if (baseUri.Scheme == Uri.UriSchemeHttp && !baseUri.IsLoopback)
-        {
-            response.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"Base URL '{baseUrl}' uses http against a non-loopback host. HTTPS is required for SCIM service providers; http is only permitted for loopback addresses.",
-                SettingValue = baseUrlSetting
-            });
+        // The connectivity test acquires a token before its first request, so it must not run while either
+        // address is refused: that would send the Client Secret before validation had rejected the configuration.
+        if (response.Count > 0)
             return response;
-        }
 
         // Only worth attempting once the URL is well formed, and only then does a failure mean anything.
         var connectivityResult = TestServiceProviderConnectivity(settingValues, baseUrlSetting, logger);
