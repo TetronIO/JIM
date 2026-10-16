@@ -102,6 +102,16 @@ else if (_syncRule != null)
             <SyncRuleAttributeFlowTab @ref="_attributeFlowTab" SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
+        @* Saved rules only: a test case covers configuration that exists. It saves and runs on its own, against the rule
+           as saved, so the rule's save bar is hidden here as on the read-only tabs. MudTabs renders only the tab on
+           show, so the panel loads afresh each time it is opened, after any save made on another tab. *@
+        @if (_syncRule.Id > 0)
+        {
+            <MudTabPanel Text="Tests">
+                <ConfigurationTestCasesPanel SyncRuleId="_syncRule.Id" />
+            </MudTabPanel>
+        }
+
         @if (_syncRule.Id > 0)
         {
             <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
@@ -334,12 +344,12 @@ else if (_syncRule != null)
     /// </summary>
     private bool ShowIdentityStrip => _syncRule is { Id: > 0, ConnectedSystem: not null };
 
-    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
-    // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
-    // either is active. Computed rather than a constant because the Passwords tab is conditional, and a
-    // fixed index would put the save bar back on a read-only tab whenever it is present.
-    private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
-    private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
+    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule Tests,
+    // Changes and Danger Zone follow. Tests saves and runs test cases on its own, and the other two are read-only
+    // views, so the editing save bar is hidden when any of them is active. Computed rather than a constant because the
+    // Passwords tab is conditional, and a fixed index would put the save bar back on one of them whenever it is present.
+    private int TestsTabIndex => ShowInitialPasswordTab ? 5 : 4;
+    private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= TestsTabIndex;
 
     /// <summary>
     /// The recall-or-keep choices for the Attribute Flow mapping removals staged in the editor this session

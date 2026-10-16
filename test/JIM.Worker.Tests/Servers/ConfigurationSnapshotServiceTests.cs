@@ -39,6 +39,7 @@ public class ConfigurationSnapshotServiceTests
         TestUtilities.SetEnvironmentVariables();
         _protection = new RoundTripCredentialProtection();
         _repository = new Mock<IRepository>();
+        _repository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _jim = new JimApplication(_repository.Object) { CredentialProtection = _protection };
         _service = _jim.ConfigurationSnapshots;
     }
