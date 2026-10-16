@@ -48,10 +48,9 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// How a scope transition is written into a delta row's value columns, so the drill-down reads as the change
     /// the administrator just made rather than as an internal transition name.
     /// </summary>
-    private const string ScopeAttributeName = "Scoping Criteria";
-    private const string InScopeValue = "In scope";
-    private const string OutOfScopeValue = "Out of scope";
-    private const string UndecidedValue = "Scope could not be decided";
+    private const string ScopeAttributeName = PreviewScopeAnswer.AttributeName;
+    private const string InScopeValue = PreviewScopeAnswer.InScopeValue;
+    private const string OutOfScopeValue = PreviewScopeAnswer.OutOfScopeValue;
 
     /// <summary>
     /// How many objects entering scope are put to the preview engine per batch. Batched because the engine builds
@@ -375,11 +374,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
         // The stream carries each value's attribute id, which an attribute criterion reads; an expression reads the
         // object by attribute name, so the names are supplied from the type's schema when either scope needs them.
-        var readsByName = ScopingEvaluationServer.HasExpressionCriteria(rule) || ScopingEvaluationServer.HasExpressionCriteria(standIn);
-        var metaverseAttributesById = (standIn.MetaverseObjectType?.Attributes ?? [])
-            .Concat(rule.MetaverseObjectType?.Attributes ?? [])
-            .DistinctBy(attribute => attribute.Id)
-            .ToDictionary(attribute => attribute.Id);
+        var metaverseAttributesById = PreviewMetaverseObjectAttributes.WhenReadByName(standIn, rule);
 
         await foreach (var mvo in _application.Metaverse
             .StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId)
@@ -387,8 +382,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (readsByName)
-                AttachAttributes(mvo, metaverseAttributesById);
+            PreviewMetaverseObjectAttributes.Attach(mvo, metaverseAttributesById);
 
             var targetObject = mvo.ConnectedSystemObjects
                 .FirstOrDefault(cso => cso.ConnectedSystemId == rule.ConnectedSystemId);
@@ -458,42 +452,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     #region helpers
 
-    /// <summary>
-    /// Whether an object is in a rule's scope, or why that cannot be decided for it: the run reports such an object
-    /// as an error and changes nothing about it (#2054).
-    /// </summary>
-    private readonly record struct ScopeAnswer(bool InScope, string? Failure)
-    {
-        public string Describe() => Failure != null
-            ? $"{UndecidedValue}: {Failure}"
-            : InScope ? InScopeValue : OutOfScopeValue;
-    }
-
-    private static ScopeAnswer Decide(Func<bool> isInScope)
-    {
-        try
-        {
-            return new ScopeAnswer(isInScope(), null);
-        }
-        catch (ScopingCriterionFailedException ex)
-        {
-            return new ScopeAnswer(false, ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Gives each of <paramref name="mvo"/>'s values its attribute entity from the type's schema, where the stream
-    /// left it unset, so an expression can read the value by name. The stream's objects are untracked copies.
-    /// </summary>
-    private static void AttachAttributes(MetaverseObject mvo, IReadOnlyDictionary<int, MetaverseAttribute> attributesById)
-    {
-        var unattached = mvo.AttributeValues
-            .Where(value => value.Attribute == null)
-            .Select(value => (Value: value, Attribute: attributesById.GetValueOrDefault(value.AttributeId)))
-            .Where(pair => pair.Attribute != null);
-        foreach (var (value, attribute) in unattached)
-            value.Attribute = attribute!;
-    }
+    private static PreviewScopeAnswer Decide(Func<bool> isInScope) => PreviewScopeAnswer.Decide(isInScope);
 
     /// <summary>
     /// What the preview engine said an object entering scope would become.

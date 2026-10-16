@@ -223,11 +223,20 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             // A flow change cannot reach an object the rule does not manage. The engine reaches the same verdict on
             // its own, so this gate is about cost rather than correctness: every object costs two full evaluations,
             // and paying that for objects outside the rule's scope would evaluate a whole system to answer for a
-            // subset of it.
-            if (rule.ObjectScopingCriteriaGroups.Count > 0
-                && !_application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, asAt))
+            // subset of it. An object whose scope cannot be decided is one the run stops with an error and changes
+            // nothing about (#2264): reported as such, never put to the engine, and the walk carries on.
+            if (rule.ObjectScopingCriteriaGroups.Count > 0)
             {
-                continue;
+                var scope = PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, asAt));
+                if (scope.Undecided)
+                {
+                    yield return InboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, cso,
+                        PreviewScopeAnswer.AttributeName, null, scope.Describe());
+                    continue;
+                }
+
+                if (!scope.InScope)
+                    continue;
             }
 
             batch.Add(cso);
@@ -285,17 +294,28 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     {
         var asAt = DateTime.UtcNow;
         var batch = new List<MetaverseObject>(EngineBatchSize);
+        var metaverseAttributesById = PreviewMetaverseObjectAttributes.WhenReadByName(rule);
 
         await foreach (var mvo in _application.Metaverse
             .StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId)
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            PreviewMetaverseObjectAttributes.Attach(mvo, metaverseAttributesById);
 
-            if (rule.ObjectScopingCriteriaGroups.Count > 0
-                && !_application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt))
+            // As inbound: an object whose scope cannot be decided is one the run fails, never put to the engine.
+            if (rule.ObjectScopingCriteriaGroups.Count > 0)
             {
-                continue;
+                var scope = PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt));
+                if (scope.Undecided)
+                {
+                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, mvo, null,
+                        PreviewScopeAnswer.AttributeName, null, scope.Describe());
+                    continue;
+                }
+
+                if (!scope.InScope)
+                    continue;
             }
 
             batch.Add(mvo);

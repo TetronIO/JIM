@@ -165,6 +165,23 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
         rule.ObjectScopingCriteriaGroups.Add(group);
     }
 
+    /// <summary>
+    /// Scopes <paramref name="rule"/> on its side's department compared as a Number greater than 5, so an object whose
+    /// department is not a number cannot have its scope decided (#2264).
+    /// </summary>
+    private static void GivenRuleScopedByNumericDepartment(SyncRule rule)
+    {
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = rule.Direction == SyncRuleDirection.Import ? "cs[\"department\"]" : "mv[\"Department\"]",
+            CompareAs = AttributeDataType.Number,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            IntValue = 5
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+    }
+
     private void GivenExportRule()
     {
         _rule.Direction = SyncRuleDirection.Export;
@@ -201,6 +218,7 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
         {
             Id = Guid.CreateVersion7(),
             AttributeId = CsoDeptAttributeId,
+            Attribute = _csoDeptAttribute,
             StringValue = department
         });
         _csos.Add(cso);
@@ -350,6 +368,56 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
             Assert.That(deltas.Count(d => d.TransitionType ==
                 ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible), Is.EqualTo(1),
                 "the disconnection takes the Metaverse Object's last connector, so its deletion rule fires");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_InboundScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        // #2264: the run stops an object whose import scope cannot be decided, joins and all, so the proposed
+        // Out-of-Scope Action never reaches it. The preview says so with the reason and previews everyone else.
+        GivenRuleScopedByNumericDepartment(_rule);
+        var undecidable = GivenJoinedCso("Engineering");
+        var outOfScope = GivenJoinedCso("3");
+        GivenJoinedCso("9");
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect });
+
+        using (Assert.EnterMultipleScope())
+        {
+            var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided").And.Contain("Engineering"));
+            Assert.That(deltas.Single(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject)
+                .ConnectedSystemObjectId, Is.EqualTo(outOfScope.Id));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_OutboundScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        // An undecidable export scope is neither imminent nor exposure: the run touches the object under neither action.
+        // The rule carries its type's attributes, as GetSyncRuleAsync loads it, so an expression can tell a missing
+        // value from a missing attribute.
+        GivenExportRule();
+        _mvoType.Attributes = [_mvoDeptAttribute];
+        _rule.MetaverseObjectType = _mvoType;
+        GivenRuleScopedByNumericDepartment(_rule);
+        var undecidable = GivenJoinedCso("Engineering");
+        var leaving = GivenJoinedCso("3");
+        var managed = GivenJoinedCso("9");
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        using (Assert.EnterMultipleScope())
+        {
+            var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided"));
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == leaving.Id).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == managed.Id).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction));
         }
     }
 

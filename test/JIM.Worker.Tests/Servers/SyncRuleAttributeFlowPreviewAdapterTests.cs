@@ -342,6 +342,76 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        // #2264: "Engineering" cannot be compared as a number, so the run would stop that object with its scope
+        // undecided; the preview says so, with the reason, and still previews the object it can decide.
+        GivenRuleScopedByNumericExpressionOn("cs[\"sn\"]");
+        var undecidable = GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local", firstName: "ada.lovelace@corp.local");
+        AddValue(undecidable, _csLastName, "Engineering");
+        var decidable = GivenJoinedCso(email: "alan@corp.local", currentMetaverseEmail: "alan@corp.local", firstName: "alan.turing@corp.local");
+        AddValue(decidable, _csLastName, "7");
+
+        var deltas = await EvaluateAsync(ProposalWritingEmailFrom(CsFirstNameAttributeId));
+
+        var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided").And.Contain("Engineering"));
+            Assert.That(_syncRepo.RequestedConnectedSystemObjectIds, Does.Not.Contain(undecidable.Id), "the run reaches no flow for it");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == decidable.Id).NewValue, Is.EqualTo("alan.turing@corp.local"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportExpressionCriterion_ReadsStreamedMetaverseValuesByNameAsync()
+    {
+        // The Metaverse Object stream carries each value's attribute id but not its attribute, and an expression
+        // criterion reads the object by attribute name. Read as no value, the object would fall outside the gate
+        // and its flow change would go unreported (#2264).
+        GivenExportRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = "mv[\"Email\"]",
+            CompareAs = AttributeDataType.Text,
+            ComparisonType = SearchComparisonType.StartsWith,
+            StringValue = "ada"
+        });
+        _rule.ObjectScopingCriteriaGroups.Add(group);
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local", targetStoredEmail: "ada@corp.local");
+        foreach (var value in _mvos[^1].AttributeValues)
+            value.Attribute = null!;
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        Assert.That(deltas.SingleOrDefault(d => d.AttributeName == "mail")?.NewValue, Is.EqualTo("ada.lovelace@corp.local"));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        GivenExportRule();
+        GivenRuleScopedByNumericExpressionOn("mv[\"Email\"]");
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local", targetStoredEmail: "ada@corp.local");
+        var undecidable = _mvos[^1];
+        GivenMvoWithJoinedTargetObject(email: "42", alternateEmail: "alan.turing@corp.local", targetStoredEmail: "42");
+        var decidable = _mvos[^1];
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        var failure = deltas.SingleOrDefault(d => d.MetaverseObjectId == undecidable.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided"));
+            Assert.That(deltas.Single(d => d.MetaverseObjectId == decidable.Id && d.AttributeName == "mail").NewValue,
+                Is.EqualTo("alan.turing@corp.local"));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ProposedExpressionFailsForOneObject_ReportsItRatherThanNoChangeAsync()
     {
         // The motivating case: an Expression that fails on a fraction of the population. Reported as no change,
@@ -912,6 +982,23 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
             AttributeId = attribute.Id,
             StringValue = value
         });
+
+    /// <summary>
+    /// Scopes the rule on <paramref name="expression"/> compared as a Number greater than 5, so an object whose value
+    /// is not a number cannot have its scope decided (#2264).
+    /// </summary>
+    private void GivenRuleScopedByNumericExpressionOn(string expression)
+    {
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = expression,
+            CompareAs = AttributeDataType.Number,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            IntValue = 5
+        });
+        _rule.ObjectScopingCriteriaGroups.Add(group);
+    }
 
     private void GivenRuleScopedToEngineering()
     {
