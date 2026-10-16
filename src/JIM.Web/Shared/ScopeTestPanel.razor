@@ -6,6 +6,7 @@
 @using JIM.Models.Logic.Scoping
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -77,6 +78,11 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">As of @explanation.EvaluatedAt.ToFriendlyDate() UTC</MudText>
             <ScopingExplanationView Explanation="explanation" />
             <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-scope-test-next-change">@DescribeNextChange(tested, explanation)</MudText>
+            @if (Draft is { } draft)
+            {
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Outlined.FactCheck" Class="mt-2"
+                           OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-scope-test-save-as-case">Save as test case</MudButton>
+            }
         </div>
     }
 </MudPaper>
@@ -99,6 +105,16 @@
     private DateTime? _asOf;
     private bool _fromObject;
     private ScopeTestResult? _result;
+    private DateTime _ranAtUtc;
+
+    /// <summary>
+    /// The test as a test case to save, with the values tested and today's outcome expected (#2055 Phase 4); null when
+    /// there is nothing to save. A saved case runs against the criteria as saved.
+    /// </summary>
+    private ConfigurationTestCase? Draft => _result == null
+        ? null
+        : ConfigurationTestCaseDrafts.FromScopeTest(SyncRule, _inputs.Select(input => (input.AttributeName, StateOf(input.AttributeName))).ToList(),
+            _result, _asOf, _ranAtUtc);
 
     private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
 
@@ -176,8 +192,13 @@
         var inputs = _inputs
             .Select(input => new AttributeSample(input.AttributeName, StateOf(input.AttributeName).TestValues))
             .ToList();
-        _result = ScopeTester.Test(SyncRule, inputs, _asOf ?? DateTime.UtcNow);
+        _ranAtUtc = DateTime.UtcNow;
+        _result = ScopeTester.Test(SyncRule, inputs, _asOf ?? _ranAtUtc);
     }
+
+    private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>
+        await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft, "Scope, run against the criteria as saved",
+            _inputs.Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality)).ToList());
 
     private static string DescribeNextChange(ScopeTestResult tested, ScopingExplanation explanation)
     {

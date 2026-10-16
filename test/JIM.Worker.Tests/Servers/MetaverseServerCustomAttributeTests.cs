@@ -503,6 +503,53 @@ public class MetaverseServerCustomAttributeTests
         _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
     }
 
+    /// <summary>
+    /// Submitting the attribute's current type and plurality is a no-op, whether or not Metaverse Objects hold values:
+    /// it succeeds, writes nothing, and records no Activity, because no change happened.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, 77, TestName = "No-op on a multi-valued attribute holding values")]
+    [TestCase(AttributeDataType.DateTime, AttributePlurality.SingleValued, 3, TestName = "No-op on a single-valued attribute holding values")]
+    [TestCase(AttributeDataType.Number, AttributePlurality.SingleValued, 0, TestName = "No-op on an attribute holding no values")]
+    public async Task ChangeMetaverseAttributeSchemaAsync_UnchangedTypeAndPlurality_SucceedsAndRecordsNoChangeAsync(
+        AttributeDataType type, AttributePlurality plurality, int objectsWithValues)
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = type, AttributePlurality = plurality };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(objectsWithValues);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(42, type, plurality, TestUtilities.GetInitiatedBy(), "Resubmitted");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.True, "the requested schema is in effect");
+            Assert.That(impact.IsUnchanged, Is.True);
+            Assert.That(impact.BlockedByValues, Is.False);
+            Assert.That(attribute.Type, Is.EqualTo(type));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(plurality));
+            Assert.That(_createdActivities, Is.Empty, "a change that did not happen must not be audited");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The Boolean rule runs before the no-op check, so resubmitting a multi-valued Boolean (one saved before the rule
+    /// existed) is still refused rather than waved through as no change.
+    /// </summary>
+    [Test]
+    public void ChangeMetaverseAttributeSchemaAsync_UnchangedMultiValuedBoolean_StillThrowsAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(5);
+
+        Assert.ThrowsAsync<UnsupportedAttributePluralityException>(
+            () => _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+                42, AttributeDataType.Boolean, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy()));
+
+        Assert.That(_createdActivities, Is.Empty);
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
     [Test]
     public async Task EvaluateAttributeSchemaChangeAsync_ReportsTheCurrentAndProposedSchemaAsync()
     {

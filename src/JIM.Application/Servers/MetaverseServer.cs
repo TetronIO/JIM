@@ -970,6 +970,7 @@ public partial class MetaverseServer
     /// Evaluates the impact of changing a Metaverse Attribute to a proposed data type and plurality without making any
     /// change. While any Metaverse Object holds a value, only a lossless widening (same type, single-valued to
     /// multi-valued) is allowed; <see cref="AttributeSchemaChangeImpact.BlockedByValues"/> reports any other change.
+    /// Proposing the current type and plurality is no change, and is never blocked.
     /// </summary>
     public async Task<AttributeSchemaChangeImpact> EvaluateAttributeSchemaChangeAsync(MetaverseAttribute attribute, AttributeDataType proposedType, AttributePlurality proposedPlurality)
     {
@@ -992,10 +993,11 @@ public partial class MetaverseServer
     /// <summary>
     /// Changes a custom Metaverse Attribute's data type and/or plurality through the audited path. While any Metaverse
     /// Object holds a stored value, only a lossless widening (same type, single-valued to multi-valued) is applied;
-    /// any other change is refused with no change made, and the returned impact reports the block. Built-in attributes
-    /// cannot be changed.
+    /// any other change is refused with no change made, and the returned impact reports the block. Requesting the
+    /// attribute's current type and plurality is a no-op: it succeeds, writes nothing and records no Activity or change
+    /// history. Built-in attributes cannot be changed.
     /// </summary>
-    /// <returns>The evaluated impact; <see cref="AttributeSchemaChangeImpact.Applied"/> is true when the change was applied.</returns>
+    /// <returns>The evaluated impact; <see cref="AttributeSchemaChangeImpact.Applied"/> is true when the requested schema is in effect.</returns>
     public Task<AttributeSchemaChangeImpact> ChangeMetaverseAttributeSchemaAsync(int attributeId, AttributeDataType newType, AttributePlurality newPlurality, MetaverseObject? initiatedBy, string? changeReason = null) =>
         ChangeMetaverseAttributeSchemaCoreAsync(attributeId, newType, newPlurality, attribute => UpdateMetaverseAttributeAsync(attribute, initiatedBy, changeReason));
 
@@ -1016,6 +1018,14 @@ public partial class MetaverseServer
         EnsureAttributeCapability(newType, newPlurality);
 
         var impact = await EvaluateAttributeSchemaChangeAsync(attribute, newType, newPlurality);
+
+        // The requested schema is already in effect: report success without writing or auditing a change that did not
+        // happen. This follows the capability check above, so a no-op cannot wave through a multi-valued Boolean.
+        if (impact.IsUnchanged)
+        {
+            impact.Applied = true;
+            return impact;
+        }
 
         // Stored values block every change except a lossless widening (same type, single-valued to multi-valued);
         // make no change and report the refusal via the impact.

@@ -689,6 +689,21 @@ Describe 'Set-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Sends the plurality the attribute already has, leaving the no-op to the API rather than raising an error' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } | Should -Not -Throw
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'Text' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
         It 'Sends an explicit multi-valued Boolean as asked and surfaces the API''s refusal' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

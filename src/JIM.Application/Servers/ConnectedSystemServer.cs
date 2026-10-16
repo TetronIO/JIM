@@ -80,7 +80,7 @@ public partial class ConnectedSystemServer
     {
         await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
-            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey)),
+            async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
@@ -97,7 +97,7 @@ public partial class ConnectedSystemServer
     // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
     // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
     // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
-    private async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
     {
         if (syncRuleId <= 0)
             return;
@@ -167,7 +167,7 @@ public partial class ConnectedSystemServer
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
-    private async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    internal async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
     {
         if (connectedSystemId <= 0)
             return;
@@ -225,7 +225,7 @@ public partial class ConnectedSystemServer
             async hashKey =>
             {
                 var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-                return connectedSystem == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+                return connectedSystem == null ? null : await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey);
             },
             $"Connected System {connectedSystemId}");
     }

@@ -11,6 +11,7 @@ public interface IRepository : IDisposable
     public IApiKeyRepository ApiKeys { get; }
     public IChangeHistoryRepository ChangeHistory { get; }
     public IConfigurationChangePreviewRepository ConfigurationChangePreviews { get; }
+    public IConfigurationTestRepository ConfigurationTests { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IExampleDataRepository ExampleData { get; }
     public IMetaverseRepository Metaverse { get; }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Collections;
+using System.Globalization;
 using System.Text.Json;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
@@ -51,6 +52,31 @@ public static class TestExpressionSampleValues
         attributes == null
             ? []
             : attributes.Select(attribute => new AttributeSample(attribute.Key, Values(attribute.Value)));
+
+    /// <summary>
+    /// The samples in <paramref name="attributes"/> as a saved configuration test case's inputs (#2055 Phase 4) on
+    /// <paramref name="source"/>'s side (null for a Scope or Object Matching Rule case), each value as culture-invariant
+    /// text: null is an input with no value, an array several values.
+    /// </summary>
+    public static IEnumerable<ConfigurationTestInput> ToTestCaseInputs(Dictionary<string, object?>? attributes, ExpressionInputSource? source) =>
+        attributes == null
+            ? []
+            : attributes.Select(attribute => new ConfigurationTestInput(source, attribute.Key, Values(attribute.Value).Select(InvariantText).ToList()));
+
+    /// <summary>
+    /// <paramref name="values"/> (each text, a number or a Boolean, an array flattened) as culture-invariant text; a
+    /// null is left out.
+    /// </summary>
+    public static IReadOnlyList<string> ToInvariantText(IEnumerable<object?>? values) =>
+        values == null ? [] : values.SelectMany(Values).Select(InvariantText).ToList();
+
+    private static string InvariantText(object value) => value switch
+    {
+        string text => text,
+        bool flag => flag ? "true" : "false",
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => value.ToString() ?? string.Empty
+    };
 
     private static List<object> Values(object? sample) => sample switch
     {

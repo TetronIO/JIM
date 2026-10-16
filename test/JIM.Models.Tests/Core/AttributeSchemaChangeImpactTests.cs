@@ -61,6 +61,37 @@ public class AttributeSchemaChangeImpactTests
         }
     }
 
+    /// <summary>
+    /// Submitting the attribute's current type and plurality asks for no change at all, so stored values have nothing
+    /// to protect and must not block it. It is not a widening either: nothing is widened.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued)]
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued)]
+    [TestCase(AttributeDataType.Reference, AttributePlurality.MultiValued)]
+    [TestCase(AttributeDataType.Boolean, AttributePlurality.SingleValued)]
+    public void UnchangedTypeAndPlurality_WithStoredValues_IsUnchangedAndNotBlocked(AttributeDataType type, AttributePlurality plurality)
+    {
+        var impact = Impact(type, plurality, type, plurality, objectsWithValues: 77);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.IsUnchanged, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.False);
+            Assert.That(impact.BlockedByValues, Is.False);
+        }
+    }
+
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Text, AttributePlurality.MultiValued, TestName = "Widening is a change")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, AttributeDataType.Text, AttributePlurality.SingleValued, TestName = "Narrowing is a change")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Number, AttributePlurality.SingleValued, TestName = "A type change is a change")]
+    public void AnyDifferentTypeOrPlurality_IsNotUnchanged(AttributeDataType currentType, AttributePlurality currentPlurality,
+        AttributeDataType proposedType, AttributePlurality proposedPlurality)
+    {
+        var impact = Impact(currentType, currentPlurality, proposedType, proposedPlurality, objectsWithValues: 77);
+
+        Assert.That(impact.IsUnchanged, Is.False);
+    }
+
     [Test]
     public void AnyChange_WithNoStoredValues_IsNotBlocked()
     {
