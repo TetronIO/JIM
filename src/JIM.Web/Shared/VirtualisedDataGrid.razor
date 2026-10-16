@@ -287,6 +287,11 @@ else if (ReservesHeight)
     private bool _preferencesLoaded;
     private string? _appliedStateKey;
 
+    // The query string this grid last wrote in place. history.replaceState is invisible to NavigationManager, so
+    // its Uri still holds the query from the last real navigation; reading that back would undo the previous
+    // in-place write (a page filter set or cleared, then a scroll reset putting it back). Forgotten on navigation.
+    private string? _writtenQuery;
+
     private string ScrollContainerSelector => $"#{ContainerId} .mud-table-container";
 
     // Whether this grid's state belongs in the address bar at all; see TrackUrlState and Embedded.
@@ -351,6 +356,11 @@ else if (ReservesHeight)
     // rendering, the first window read and the virtualiser sizing its scroll area, and because the cost of giving up
     // early (landing at the top of a list the reader was sent into the middle of) is worse than a moment's delay.
     private const int ScrollRestoreTimeoutMilliseconds = 5000;
+
+    protected override void OnInitialized()
+    {
+        NavManager.LocationChanged += OnLocationChanged;
+    }
 
     protected override void OnParametersSet()
     {
@@ -530,12 +540,34 @@ else if (ReservesHeight)
     /// other parameter. For chips and filters whose deep-link parameter the page owns but whose removal must not
     /// cost a navigation (which would re-run the page's whole load).
     /// </summary>
-    public async Task ClearQueryParameterAsync(string name)
+    public Task ClearQueryParameterAsync(string name) => SetQueryParameterAsync(name, null);
+
+    /// <summary>
+    /// Sets a page-owned query parameter in the URL in place, or removes it when the value is null, preserving
+    /// this grid's own state and every other parameter. For page-owned filters that must survive a reload or a
+    /// shared link without the change costing a navigation.
+    /// </summary>
+    public async Task SetQueryParameterAsync(string name, string? value)
     {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        query.Remove(name);
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(query.ToString(), DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
+        var query = System.Web.HttpUtility.ParseQueryString(GetCurrentQuery());
+        if (value == null)
+            query.Remove(name);
+        else
+            query[name] = value;
+        await ReplaceQueryAsync(query.ToString() ?? string.Empty);
+    }
+
+    private string GetCurrentQuery() => _writtenQuery ?? NavManager.ToAbsoluteUri(NavManager.Uri).Query;
+
+    private async Task ReplaceQueryAsync(string query)
+    {
+        _writtenQuery = BuildUrlState().Write(query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
+        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", _writtenQuery);
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _writtenQuery = null;
     }
 
     private async Task OnSearchAsync(string text)
@@ -573,8 +605,7 @@ else if (ReservesHeight)
     /// </summary>
     private async Task WriteUrlStateAsync()
     {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(uri.Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
+        await ReplaceQueryAsync(GetCurrentQuery());
     }
 
     private VirtualisedListUrlState BuildUrlState() => new()
@@ -635,6 +666,7 @@ else if (ReservesHeight)
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        NavManager.LocationChanged -= OnLocationChanged;
         await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
         await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);
         _selfReference?.Dispose();
