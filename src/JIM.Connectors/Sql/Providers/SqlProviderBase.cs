@@ -3,6 +3,7 @@
 
 using JIM.Models.Connectors;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using System.Data.Common;
 using System.Globalization;
 using System.Text;
@@ -506,6 +507,11 @@ internal abstract class SqlProviderBase : ISqlProvider
     public bool ColumnCarriesAnOffset(SqlColumnType columnType)
     {
         return SqlTypeMapper.CarriesAnOffset(columnType);
+    }
+
+    public DateTimeResolution? ColumnDateTimeResolution(SqlColumnType columnType)
+    {
+        return SqlTypeMapper.DateTimeResolutionOf(DatabaseType, columnType);
     }
 
     #endregion

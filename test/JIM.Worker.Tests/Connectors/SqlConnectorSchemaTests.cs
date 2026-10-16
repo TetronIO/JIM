@@ -357,6 +357,55 @@ public class SqlConnectorSchemaTests
 
     #endregion
 
+    #region Date and time resolution (#2153, D2)
+
+    [Test]
+    public async Task GetSchemaAsync_DateColumns_DeclareTheResolutionTheirTypeHoldsAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("START_DATE", "date", Scale: 0),
+            new FakeCatalogueColumn("LAST_SEEN", "datetime2", Scale: 3));
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_REVIEWS",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("REVIEWED_AT", "datetime2", Scale: 0));
+
+        var schema = await GetSchemaAsync(provider, """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "schema": "HR",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    {
+                      "attributeName": "ReviewDates",
+                      "schema": "HR",
+                      "table": "EMPLOYEE_REVIEWS",
+                      "valueColumn": "REVIEWED_AT",
+                      "joinColumns": [ "EMPLOYEE_ID" ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var attributes = schema.ObjectTypes.Single().Attributes;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attributes.Single(a => a.Name == "START_DATE").DateTimeResolution, Is.EqualTo(DateTimeResolution.Day));
+            Assert.That(attributes.Single(a => a.Name == "LAST_SEEN").DateTimeResolution, Is.EqualTo(DateTimeResolution.Millisecond));
+            Assert.That(attributes.Single(a => a.Name == "ReviewDates").DateTimeResolution, Is.EqualTo(DateTimeResolution.Second),
+                "A related table's value column decides its attribute's resolution.");
+            Assert.That(attributes.Single(a => a.Name == "EMPLOYEE_ID").DateTimeResolution, Is.Null);
+        }
+    }
+
+    #endregion
+
     #region Related tables
 
     [Test]
