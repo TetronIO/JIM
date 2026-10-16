@@ -512,6 +512,45 @@ public class ObjectMatchingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRest()
+    {
+        // #2264: "E1" cannot be compared as a number, so the run stops that object before the join step, under the
+        // stored matching and the proposal alike. The preview says so, with the reason, and previews the rest.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _importRule.ObjectScopingCriteriaGroups =
+        [
+            new SyncRuleScopingCriteriaGroup
+            {
+                Type = JIM.Models.Search.SearchGroupType.All,
+                Criteria =
+                [
+                    new SyncRuleScopingCriteria
+                    {
+                        Expression = "cs[\"employeeID\"]",
+                        CompareAs = AttributeDataType.Number,
+                        ComparisonType = JIM.Models.Search.SearchComparisonType.GreaterThan,
+                        IntValue = 5
+                    }
+                ]
+            }
+        ];
+        var undecidable = UnjoinedCso("E1", "alice.smith@example.com");
+        var decidable = UnjoinedCso("9", "alice@example.com");
+        _csos = [undecidable, decidable];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided").And.Contain("E1"));
+            Assert.That(deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == decidable.Id)?.TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject));
+        }
+    }
+
+    [Test]
     public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
     {
         _csoType.ObjectMatchingRules = [StoredRule()];

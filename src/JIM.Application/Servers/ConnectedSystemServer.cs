@@ -9,6 +9,7 @@ using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
@@ -23,6 +24,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
@@ -668,7 +670,9 @@ public partial class ConnectedSystemServer
     /// payload; <see cref="UpdateConnectedSystemAsync(ConnectedSystem, MetaverseObject?)"/> does not persist
     /// object type/attribute changes. See issue #782.
     /// </summary>
-    public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    /// <returns>Expressions that read an attribute this save deselected (#2265), also recorded as the Activity's
+    /// warning; empty when there are none.</returns>
+    public async Task<IReadOnlyList<AttributeReader>> UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -687,6 +691,8 @@ public partial class ConnectedSystemServer
         // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
         ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
         await ThrowIfDeselectedObjectTypesStillManagedAsync(connectedSystem.Id, connectedSystem.ObjectTypes ?? []);
+        var deselectionWarnings = await GuardAttributeDeselectionAsync(connectedSystem.Id,
+            (connectedSystem.ObjectTypes ?? []).SelectMany(objectType => (objectType.Attributes ?? []).Select(attribute => (attribute, objectType.Id))));
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -707,7 +713,8 @@ public partial class ConnectedSystemServer
 
         // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
+        return deselectionWarnings;
     }
 
     /// <summary>
@@ -1940,6 +1947,138 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Judges the attributes a save deselects (#2265). A deselected attribute stops being imported: the values already
+    /// held stay but are never refreshed, and objects imported afterwards have none. A Scoping Criterion reading it,
+    /// directly or in an Expression, would therefore decide which objects a Synchronisation Rule manages on stale or
+    /// missing values, so the save is refused, naming each criterion. An Attribute Flow or Object Matching Rule
+    /// Expression reading it is only warned about: it flows what is held, as a direct mapping of the attribute does.
+    /// </summary>
+    /// <remarks>
+    /// Only attributes changing from selected to deselected count, judged against the stored selection, so an
+    /// attribute deselected before this refusal existed does not block an unrelated save.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System the attributes belong to.</param>
+    /// <param name="proposed">Each attribute as it will be saved, with the Object Type it belongs to.</param>
+    /// <returns>The other Expressions reading a newly deselected attribute, to be reported as a warning.</returns>
+    /// <exception cref="AttributeReadByConfigurationException">A Scoping Criterion reads a newly deselected attribute.</exception>
+    private async Task<IReadOnlyList<AttributeReader>> GuardAttributeDeselectionAsync(
+        int connectedSystemId, IEnumerable<(ConnectedSystemObjectTypeAttribute Attribute, int ObjectTypeId)> proposed)
+    {
+        var readers = await FindNewlyDeselectedAttributeReadersAsync(connectedSystemId, proposed);
+        var scopeReaders = readers.Where(reader => reader.Kind == AttributeReaderKind.ScopingCriterion).ToList();
+        if (scopeReaders.Count > 0)
+        {
+            Log.Information("GuardAttributeDeselectionAsync: refusing to deselect attributes of Connected System {ConnectedSystemId}; {Count} Scoping Criteria read them",
+                connectedSystemId, scopeReaders.Count);
+            throw new AttributeReadByConfigurationException(DeselectionRefusal, scopeReaders);
+        }
+
+        return readers.Where(reader => reader.Kind != AttributeReaderKind.ScopingCriterion).ToList();
+    }
+
+    private const string DeselectionRefusal =
+        "An attribute a Scoping Criterion reads cannot be deselected: it would stop being imported, so the criterion would decide scope on values that are never refreshed, and on no value at all for objects imported afterwards. Change these first:";
+
+    /// <summary>
+    /// The bulk form of <see cref="GuardAttributeDeselectionAsync"/>: a deselection a Scoping Criterion refuses is
+    /// reverted and reported as that attribute's error, as every other per-attribute refusal of a bulk update is,
+    /// while the rest of the batch is saved.
+    /// </summary>
+    private async Task<IReadOnlyList<AttributeReader>> GuardBulkAttributeDeselectionAsync(
+        int connectedSystemId, ConnectedSystemObjectType objectType, List<ConnectedSystemObjectTypeAttribute> updated, List<(int AttributeId, string Error)> errors)
+    {
+        var readersByAttribute = new List<(ConnectedSystemObjectTypeAttribute Attribute, IReadOnlyList<AttributeReader> Readers)>();
+        foreach (var attribute in updated.Where(a => !a.Selected))
+            readersByAttribute.Add((attribute, await FindNewlyDeselectedAttributeReadersAsync(connectedSystemId, [(attribute, objectType.Id)])));
+
+        foreach (var (attribute, readers) in readersByAttribute)
+        {
+            var scopeReaders = readers.Where(reader => reader.Kind == AttributeReaderKind.ScopingCriterion).ToList();
+            if (scopeReaders.Count == 0)
+                continue;
+
+            attribute.Selected = true;
+            updated.Remove(attribute);
+            errors.Add((attribute.Id, new AttributeReadByConfigurationException(DeselectionRefusal, scopeReaders).Message));
+        }
+
+        return readersByAttribute
+            .Where(entry => updated.Contains(entry.Attribute))
+            .SelectMany(entry => entry.Readers)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<AttributeReader>> FindNewlyDeselectedAttributeReadersAsync(
+        int connectedSystemId, IEnumerable<(ConnectedSystemObjectTypeAttribute Attribute, int ObjectTypeId)> proposed)
+    {
+        var deselected = proposed.Where(entry => !entry.Attribute.Selected && entry.Attribute.Id != 0).ToList();
+        if (deselected.Count == 0)
+            return [];
+
+        var stored = await Application.Repository.ConnectedSystems.GetAttributeSelectionStatesAsync(connectedSystemId);
+        var newlyDeselected = deselected.Where(entry => stored.TryGetValue(entry.Attribute.Id, out var wasSelected) && wasSelected).ToList();
+        if (newlyDeselected.Count == 0)
+            return [];
+
+        var index = await GetAttributeReaderIndexAsync();
+        return newlyDeselected
+            .SelectMany(entry => index.ForConnectedSystemAttribute(entry.Attribute.Id, entry.Attribute.Name, entry.ObjectTypeId))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Completes a save's Activity, with a warning naming the Expressions that read an attribute it deselected.
+    /// </summary>
+    private async Task CompleteWithDeselectionWarningsAsync(Activity activity, IReadOnlyList<AttributeReader> deselectionWarnings)
+    {
+        if (deselectionWarnings.Count == 0)
+        {
+            await Application.Activities.CompleteActivityAsync(activity);
+            return;
+        }
+
+        activity.WarningMessage = "A deselected attribute is still read by: " +
+            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)) +
+            ". It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.";
+        await Application.Activities.CompleteActivityWithWarningAsync(activity);
+    }
+
+    /// <summary>
+    /// Refuses changing the Object Types of a saved Synchronisation Rule (#2265). Its Scoping Criteria, Attribute
+    /// Flows and Object Matching Rules name attributes of those Object Types, so moving the rule to another type
+    /// would leave them reading attributes the new type does not have. Create a new Synchronisation Rule instead.
+    /// </summary>
+    /// <remarks>
+    /// Judged against the stored ids, read untracked, never against the caller's copy.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Either Object Type differs from the stored one.</exception>
+    private async Task ThrowIfSyncRuleObjectTypesChangedAsync(SyncRule syncRule)
+    {
+        if (syncRule.Id == 0)
+            return;
+
+        var stored = await Application.Repository.ConnectedSystems.GetSyncRuleObjectTypeIdsAsync(syncRule.Id);
+        if (stored is not { } storedIds)
+            return;
+
+        var proposedConnectedSystemObjectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
+        var proposedMetaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
+        var connectedSystemTypeChanged = proposedConnectedSystemObjectTypeId != 0 && proposedConnectedSystemObjectTypeId != storedIds.ConnectedSystemObjectTypeId;
+        var metaverseTypeChanged = proposedMetaverseObjectTypeId != 0 && proposedMetaverseObjectTypeId != storedIds.MetaverseObjectTypeId;
+        if (!connectedSystemTypeChanged && !metaverseTypeChanged)
+            return;
+
+        var changed = connectedSystemTypeChanged && metaverseTypeChanged
+            ? "Connected System Object Type and Metaverse Object Type"
+            : connectedSystemTypeChanged ? "Connected System Object Type" : "Metaverse Object Type";
+        var message = $"The {changed} of Synchronisation Rule '{syncRule.Name}' cannot be changed once it is saved: its " +
+                      "Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of its Object Types. " +
+                      "Create a new Synchronisation Rule for the other Object Type instead.";
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
+    /// <summary>
     /// Refuses a schema selection that leaves an enabled Synchronisation Rule bound to a deselected Object Type
     /// (#1474). Deselecting a type takes it out of management, so the next Full Import obsoletes its objects; a rule
     /// still enabled against it contradicts that, and an outbound one would act on the objects again as soon as they
@@ -2248,6 +2387,7 @@ public partial class ConnectedSystemServer
     public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, MetaverseObject? initiatedBy)
     {
         ArgumentNullException.ThrowIfNull(removeDependents);
+        await EnsureSchemaRefreshRemovalAllowedAsync(previewResult);
 
         var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
         await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy, initiatedByApiKey: null);
@@ -2261,10 +2401,29 @@ public partial class ConnectedSystemServer
     public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, ApiKey initiatedByApiKey)
     {
         ArgumentNullException.ThrowIfNull(removeDependents);
+        await EnsureSchemaRefreshRemovalAllowedAsync(previewResult);
 
         var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
         await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy: null, initiatedByApiKey);
         return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Refuses Apply and Remove, before anything is persisted, while configuration reads an attribute the refresh
+    /// removes (#2265). Checked against the configuration as it stands now rather than the plan the caller previewed,
+    /// so a Scoping Criterion added since the preview still refuses it. Deleting the attribute row would leave a
+    /// Scoping Criterion comparing nothing, which takes objects out of scope and deprovisions them, and an Expression
+    /// reading nothing; neither is removed on the administrator's behalf.
+    /// </summary>
+    /// <exception cref="AttributeReadByConfigurationException">Configuration reads a removed attribute.</exception>
+    private async Task EnsureSchemaRefreshRemovalAllowedAsync(SchemaRefreshResult previewResult)
+    {
+        ArgumentNullException.ThrowIfNull(previewResult);
+
+        var readers = SchemaRefreshDependentDetector.FindRemovedAttributeReaders(previewResult, await GetAttributeReaderIndexAsync());
+        if (readers.Count > 0)
+            throw new AttributeReadByConfigurationException(
+                "Apply and Remove is refused: configuration reads an attribute the Connected System no longer reports. Change these first, or apply without removing:", readers);
     }
 
     /// <summary>
@@ -5032,12 +5191,15 @@ public partial class ConnectedSystemServer
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
             Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
+        var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
+            ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
+            : [];
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
         await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
     }
 
     /// <summary>
@@ -5091,12 +5253,15 @@ public partial class ConnectedSystemServer
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
             Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
+        var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
+            ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
+            : [];
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
         await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
     }
 
     /// <summary>
@@ -5210,6 +5375,9 @@ public partial class ConnectedSystemServer
             activity.ObjectsProcessed++;
         }
 
+        var deselectionWarnings = await GuardBulkAttributeDeselectionAsync(connectedSystem.Id, objectType, updated, errors);
+        activity.ObjectsProcessed = updated.Count;
+
         if (updated.Count > 0)
         {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
@@ -5219,10 +5387,10 @@ public partial class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
-        if (errors.Count > 0)
+        if (errors.Count > 0 && deselectionWarnings.Count == 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         else
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
 
         return (activity, updated, errors);
     }
@@ -5287,6 +5455,9 @@ public partial class ConnectedSystemServer
             activity.ObjectsProcessed++;
         }
 
+        var deselectionWarnings = await GuardBulkAttributeDeselectionAsync(connectedSystem.Id, objectType, updated, errors);
+        activity.ObjectsProcessed = updated.Count;
+
         if (updated.Count > 0)
         {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
@@ -5296,10 +5467,10 @@ public partial class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
-        if (errors.Count > 0)
+        if (errors.Count > 0 && deselectionWarnings.Count == 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         else
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
 
         return (activity, updated, errors);
     }
@@ -7532,9 +7703,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedBy">The user who initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null, configurationTestGate);
     }
 
     /// <summary>
@@ -7545,9 +7717,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedByApiKey">The API key that initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey, configurationTestGate);
     }
 
     /// <summary>
@@ -7559,7 +7732,8 @@ public partial class ConnectedSystemServer
     /// would save nothing while reporting success.
     /// </remarks>
     private async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsCoreAsync(
-        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -7598,6 +7772,13 @@ public partial class ConnectedSystemServer
         if (settings.Enabled == false || settings.Expression != null)
             await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
 
+        // The save gate (#2055 Phase 4b): the rule as stored, against the rule with this mapping as the update leaves
+        // it. Before the Activity below, whose save would flush this tracked mapping.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRulePartSaveAsync(
+            mapping.SyncRule?.Id ?? mapping.SyncRuleId,
+            proposed => ReplaceById(proposed.AttributeFlowRules, mapping, m => m.Id),
+            configurationTestGate);
+
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
@@ -7607,7 +7788,8 @@ public partial class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (initiatedByApiKey != null)
@@ -7632,6 +7814,7 @@ public partial class ConnectedSystemServer
         if (mapping.KeepUnique != keepUniqueBefore)
             await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, initiatedByApiKey);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -9264,6 +9447,18 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Synchronisation Rules
+    /// <summary>
+    /// Builds the index of what reads each attribute (#2265): Scoping Criteria, and the Expressions of Attribute
+    /// Flows, Object Matching Rules and Example Data Templates. Read fresh per call, so a refusal decides on the
+    /// configuration as it stands now.
+    /// </summary>
+    public async Task<AttributeReaderIndex> GetAttributeReaderIndexAsync()
+    {
+        var candidates = await Application.Repository.ConnectedSystems.GetAttributeReaderCandidatesAsync();
+        candidates.AddRange(await Application.Repository.ExampleData.GetAttributeReaderCandidatesAsync());
+        return new AttributeReaderIndex(candidates);
+    }
+
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
@@ -9306,7 +9501,7 @@ public partial class ConnectedSystemServer
     /// (#1537): the named mappings are deleted properly (rows and sources removed), and kept ones have their
     /// contributed values' provenance severed before the row deletion. Only valid when updating an existing rule.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -9354,6 +9549,8 @@ public partial class ConnectedSystemServer
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
+        // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
+        await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
@@ -9404,6 +9601,11 @@ public partial class ConnectedSystemServer
         // branches above, which clear the rules a simple mode system would never consult.
         await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
 
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
         // initial password. Switching the setting off with the provisioning it depended on keeps the stored
         // configuration honest, rather than leaving one that reads as on and can never run.
@@ -9442,7 +9644,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9503,6 +9706,9 @@ public partial class ConnectedSystemServer
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
+        // this change's Configuration History version.
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -9560,7 +9766,7 @@ public partial class ConnectedSystemServer
     /// The staged Attribute Flow mapping removals this save performs, each with its recall-or-keep choice
     /// (#1537); see the user-initiated overload above.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -9607,6 +9813,8 @@ public partial class ConnectedSystemServer
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
+        // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
+        await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
@@ -9649,6 +9857,11 @@ public partial class ConnectedSystemServer
         // branches above, which clear the rules a simple mode system would never consult.
         await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
 
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
@@ -9665,7 +9878,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9723,6 +9937,7 @@ public partial class ConnectedSystemServer
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -10419,20 +10634,23 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule.
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -10440,22 +10658,43 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule (initiated by API key).
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The save gate (#2055 Phase 4b) for an Object Matching Rule update: in Synchronisation Rule mode, the rule as
+    /// stored against the rule holding this one as the update leaves it; in Simple mode, this rule alone.
+    /// </summary>
+    private Task<ConfigurationTestGateOutcome> GateObjectMatchingRuleSaveAsync(ObjectMatchingRule rule, ConfigurationTestGateOptions? configurationTestGate) =>
+        rule.SyncRuleId is { } syncRuleId
+            ? Application.ConfigurationTests.GateSyncRulePartSaveAsync(syncRuleId,
+                proposed => ReplaceById(proposed.ObjectMatchingRules, rule, r => r.Id), configurationTestGate)
+            : Application.ConfigurationTests.GateSimpleModeMatchingRuleSaveAsync(rule, configurationTestGate);
+
+    /// <summary>Puts <paramref name="replacement"/> in place of the item in <paramref name="items"/> with its id.</summary>
+    private static void ReplaceById<T>(List<T> items, T replacement, Func<T, int> id)
+    {
+        var index = items.FindIndex(item => id(item) == id(replacement));
+        if (index >= 0)
+            items[index] = replacement;
     }
 
     /// <summary>

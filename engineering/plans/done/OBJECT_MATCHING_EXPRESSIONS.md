@@ -2,7 +2,7 @@
 
 - **Status:** Done (Layers 1, 2 and 3 complete)
 - **Issue:** [#2052](https://github.com/TetronIO/JIM/issues/2052)
-- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
+- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/done/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
 - **Builds on:** [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
 
 ## Overview

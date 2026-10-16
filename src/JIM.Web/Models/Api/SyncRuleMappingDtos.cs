@@ -447,8 +447,19 @@ public class UpdateSyncRuleMappingGenerationRequest
 /// its source is an attribute or an Expression, cannot be changed here: those revalidate against attribute types
 /// and reopen an import mapping's Attribute Priority position, so they remain a delete and a create.
 /// </remarks>
-public class UpdateSyncRuleMappingRequest
+public class UpdateSyncRuleMappingRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// Replaces the mapping's Expression. Expression mappings only; rejected for an attribute mapping, and for a
     /// mapping carrying more than one Expression source.

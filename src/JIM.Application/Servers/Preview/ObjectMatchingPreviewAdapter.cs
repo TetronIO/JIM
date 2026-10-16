@@ -222,7 +222,22 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
                     if (cso.Status != ConnectedSystemObjectStatus.Normal)
                         continue;
 
-                    var scopedImportRules = ScopedImportRules(cso, importRules);
+                    var (scopedImportRules, undecided) = ScopedImportRules(cso, importRules);
+                    if (undecided != null)
+                    {
+                        // The run stops an object whose scope it cannot decide before the join step, under the
+                        // stored matching and the proposal alike (#2264): said, with the reason, and the walk goes on.
+                        yield return new PreviewDelta(
+                            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail,
+                            ObjectDisplayName: cso.NameOrId,
+                            ObjectTypeName: objectTypeName ?? cso.Type?.Name,
+                            ConnectedSystemObjectId: cso.Id,
+                            ConnectedSystemId: configuration.ConnectedSystem.Id,
+                            AttributeName: PreviewScopeAnswer.AttributeName,
+                            NewValue: undecided);
+                        continue;
+                    }
+
                     if (scopedImportRules == null)
                         continue;
 
@@ -243,18 +258,25 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// The import Synchronisation Rules the object would be matched under, or null when it never reaches the join
     /// step at all. Mirrors the synchronisation processor exactly: an object out of scope of every import rule
     /// carrying criteria is handled as out-of-scope and never matched, and where no rule scopes it in, every rule
-    /// applies.
+    /// applies. Every rule is decided, as the processor decides them, and one it cannot decide stops the object:
+    /// <c>Undecided</c> then says why, and no rules are returned.
     /// </summary>
-    private List<SyncRule>? ScopedImportRules(ConnectedSystemObject cso, List<SyncRule> importRules)
+    private (List<SyncRule>? Rules, string? Undecided) ScopedImportRules(ConnectedSystemObject cso, List<SyncRule> importRules)
     {
-        var inScope = importRules
-            .Where(rule => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule))
+        var scopes = importRules
+            .Select(rule => (Rule: rule, Scope: PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule))))
             .ToList();
 
-        if (inScope.Count == 0 && importRules.Exists(rule => rule.ObjectScopingCriteriaGroups.Count > 0))
-            return null;
+        var undecided = scopes.Find(entry => entry.Scope.Undecided);
+        if (undecided.Rule != null)
+            return (null, undecided.Scope.Describe());
 
-        return inScope.Count > 0 ? inScope : importRules;
+        var inScope = scopes.Where(entry => entry.Scope.InScope).Select(entry => entry.Rule).ToList();
+
+        if (inScope.Count == 0 && importRules.Exists(rule => rule.ObjectScopingCriteriaGroups.Count > 0))
+            return (null, null);
+
+        return (inScope.Count > 0 ? inScope : importRules, null);
     }
 
     /// <summary>

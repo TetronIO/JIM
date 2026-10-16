@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Staging;
@@ -87,6 +88,24 @@ public class ExampleDataRepository : IExampleDataRepository
     #endregion
 
     #region ExampleDataTemplates
+    public async Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync()
+    {
+        return await Repository.Database.ExampleDataTemplates.AsNoTracking()
+            .SelectMany(t => t.ObjectTypes.SelectMany(ot => ot.TemplateAttributes
+                .Where(a => a.Expression != null)
+                .Select(a => new AttributeReaderCandidate
+                {
+                    Kind = AttributeReaderKind.ExampleDataTemplateExpression,
+                    ItemId = a.Id,
+                    ExampleDataTemplateId = t.Id,
+                    ExampleDataTemplateName = t.Name,
+                    MetaverseObjectTypeId = ot.MetaverseObjectType.Id,
+                    Expression = a.Expression,
+                    TargetName = a.MetaverseAttribute != null ? a.MetaverseAttribute.Name : null
+                })))
+            .ToListAsync();
+    }
+
     public async Task<List<ExampleDataTemplate>> GetTemplatesAsync()
     {
         var templates = await Repository.Database.ExampleDataTemplates.

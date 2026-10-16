@@ -11,7 +11,7 @@ public class ExampleDataSetHeader
     /// <summary>The unique identifier of the Example Data Set.</summary>
     public int Id { get; set; }
 
-    /// <summary>The name of the Example Data Set, for example "Firstnames (Female)".</summary>
+    /// <summary>The name of the Example Data Set, for example "Firstnames Female".</summary>
     public string Name { get; set; } = null!;
 
     /// <summary>Whether the Example Data Set ships with JIM, rather than being created by an administrator.</summary>

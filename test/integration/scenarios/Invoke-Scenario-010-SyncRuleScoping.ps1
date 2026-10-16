@@ -45,6 +45,14 @@
                                  joined, "Facilities" is not, and each object's scope explanation
                                  shows the value the expression computed (PRD Scenario 10)
 
+    Configuration test cases and the save gate (import rule, PRD Scenario 15):
+      - ConfigurationTests:      two Scope cases (Finance in scope, Sales out of scope) pass
+                                 under Invoke-JIMConfigurationTest -FailOnUnsuccessful, as a
+                                 deployment pipeline would run them; a criterion change that
+                                 breaks them is refused (409) and leaves the criterion as it
+                                 was; -SaveAnyway saves it, -FailOnUnsuccessful then fails the
+                                 run, and Configuration History names the cases saved past
+
     Coverage that lives in other scenarios (referenced, not duplicated here):
       - WhenAuthoritativeSourceDisconnected leaver cascade -> Scenario 001, Scenario 004
       - MVO deletion rule trigger from CSO disconnect      -> Scenario 004
@@ -81,7 +89,7 @@ param(
         "InboundEnterScope", "InboundInScopeUpdate",
         "InboundExitDisconnect", "InboundExitRemainJoined",
         "OutboundEnterScope", "OutboundExitDisconnect", "OutboundExitDelete",
-        "CrossSystemCascade", "CriteriaOperators", "ExpressionCriterion", "All")]
+        "CrossSystemCascade", "CriteriaOperators", "ExpressionCriterion", "ConfigurationTests", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -966,6 +974,114 @@ try {
                 catch {
                     Write-Host "  WARN could not restore the import rule's original scoping criterion: $_" -ForegroundColor Yellow
                 }
+            }
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Test 11: Configuration test cases and the save gate (#2055, PRD Scenario 15)
+    # Saved test cases run in a pipeline with -FailOnUnsuccessful; a Scope change
+    # that breaks them is refused until it is saved anyway, which is recorded. The
+    # rule's criterion and the cases are put back afterwards.
+    # ─────────────────────────────────────────────────────────────────────────
+    if (Test-StepEnabled "ConfigurationTests") {
+        Write-TestSection "Test 11: Configuration Test Cases and the Save Gate"
+        $createdCaseIds = @()
+        $gateGroupId = $null
+        $gateCriterion = $null
+        $createdGroup = $false
+        $importRuleId = $null
+        try {
+            $importRuleId = Get-RuleId -Name $importRuleName
+
+            # The cascade sub-tests clear the import rule's scope, so put the documented criterion back when it is gone.
+            $gateGroup = @(Get-JIMScopingCriteria -SyncRuleId $importRuleId) | Select-Object -First 1
+            if (-not $gateGroup) {
+                $gateGroup = New-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -Type All -PassThru
+                $createdGroup = $true
+            }
+            $gateGroupId = $gateGroup.id
+            $gateCriterion = @($gateGroup.criteria | Where-Object { $_ }) | Select-Object -First 1
+            if (-not $gateCriterion) {
+                $gateCriterion = New-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $gateGroupId `
+                    -ConnectedSystemAttributeName 'department' -ComparisonType Equals -StringValue 'Finance' -PassThru
+            }
+
+            foreach ($case in @(
+                    @{ Name = 'Finance is in scope'; Department = 'Finance'; Expect = 'InScope' },
+                    @{ Name = 'Sales is out of scope'; Department = 'Sales'; Expect = 'OutOfScope' })) {
+                $created = New-JIMConfigurationTestCase -SyncRuleId $importRuleId -Name $case.Name `
+                    -Attributes @{ department = $case.Department } -Expect $case.Expect -Confirm:$false
+                $createdCaseIds += $created.id
+            }
+
+            # As a deployment pipeline runs them: any case that does not pass stops the run.
+            $results = @(Invoke-JIMConfigurationTest -SyncRuleId $importRuleId -FailOnUnsuccessful)
+            $ours = @($results | Where-Object { $_.testCaseId -in $createdCaseIds })
+            if ($ours.Count -ne 2 -or @($ours | Where-Object { $_.status -ne 'Passed' }).Count -gt 0) {
+                throw "T11 expected both test cases to pass; got $(($ours | ForEach-Object { "$($_.testCaseName): $($_.status)" }) -join ', ')"
+            }
+
+            # A change that stops both passing is refused, and the criterion stays as it was.
+            $refusal = $null
+            try {
+                Set-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $gateGroupId -CriterionId $gateCriterion.id `
+                    -ConnectedSystemAttributeName 'department' -ComparisonType Equals -StringValue 'Sales' -Confirm:$false -ErrorAction Stop | Out-Null
+            }
+            catch {
+                $refusal = $_.Exception.Message
+            }
+            if (-not $refusal -or $refusal -notmatch '409' -or $refusal -notmatch 'Finance is in scope' -or $refusal -notmatch 'Sales is out of scope') {
+                throw "T11 expected the breaking change to be refused naming both cases; got: $refusal"
+            }
+            $stored = @((@(Get-JIMScopingCriteria -SyncRuleId $importRuleId) | Where-Object { $_.id -eq $gateGroupId }).criteria) |
+                Where-Object { $_.id -eq $gateCriterion.id }
+            if ($stored.stringValue -ne 'Finance') {
+                throw "T11 expected the refused change to leave the criterion comparing 'Finance'; it compares '$($stored.stringValue)'"
+            }
+
+            # Saved anyway, the cases now fail, the pipeline run fails, and Configuration History records it.
+            Set-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $gateGroupId -CriterionId $gateCriterion.id `
+                -ConnectedSystemAttributeName 'department' -ComparisonType Equals -StringValue 'Sales' -SaveAnyway -Confirm:$false | Out-Null
+            $pipelineFailed = $false
+            try {
+                Invoke-JIMConfigurationTest -SyncRuleId $importRuleId -FailOnUnsuccessful -ErrorAction Stop | Out-Null
+            }
+            catch {
+                $pipelineFailed = $true
+            }
+            if (-not $pipelineFailed) {
+                throw "T11 expected -FailOnUnsuccessful to fail the run once the change was saved anyway"
+            }
+            $entry = Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id $importRuleId | Select-Object -First 1
+            if ($entry.configurationTestGateNote -notmatch 'Saved past 2 configuration test cases') {
+                throw "T11 expected the change's history entry to record the two cases saved past; got '$($entry.configurationTestGateNote)'"
+            }
+
+            Add-StepResult -Name "ConfigurationTests" -Success $true -Note "2 cases passed; breaking change refused (409); saved anyway, -FailOnUnsuccessful failed the run, history v$($entry.version) records it"
+        }
+        catch {
+            Add-StepResult -Name "ConfigurationTests" -Success $false -ErrorMsg $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+        finally {
+            # Put the criterion back (the cases fail with it changed, so restoring it cannot be gated) and remove the cases.
+            try {
+                if ($gateGroupId -and $gateCriterion) {
+                    if ($createdGroup) {
+                        Remove-JIMScopingCriteriaGroup -SyncRuleId $importRuleId -GroupId $gateGroupId -SaveAnyway -Confirm:$false | Out-Null
+                    }
+                    else {
+                        Set-JIMScopingCriterion -SyncRuleId $importRuleId -GroupId $gateGroupId -CriterionId $gateCriterion.id `
+                            -ConnectedSystemAttributeName 'department' -ComparisonType Equals -StringValue 'Finance' -SaveAnyway -Confirm:$false | Out-Null
+                    }
+                }
+                foreach ($caseId in $createdCaseIds) {
+                    Remove-JIMConfigurationTestCase -Id $caseId -Confirm:$false | Out-Null
+                }
+            }
+            catch {
+                Write-Host "  WARN could not restore the import rule's scope or remove the test cases: $_" -ForegroundColor Yellow
             }
         }
     }

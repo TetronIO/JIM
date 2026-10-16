@@ -328,6 +328,39 @@ public class MetaverseServerProvenanceTests
         }
     }
 
+    /// <summary>
+    /// A date is shown in JIM's canonical text form (#2153), so the same instant held in two kinds or precisions is one
+    /// candidate, and a stale row held under another type is not shown, matching what the engine would flow.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingDates_ShowsCanonicalTextOncePerInstantAsync()
+    {
+        _attribute.Type = AttributeDataType.DateTime;
+        var mapping = NewAttributeMapping(1, 101);
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "startDate", Type = AttributeDataType.DateTime };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        var sourceDate = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234567);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, DateTimeValue = sourceDate });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = csoAttribute, AttributeId = 101, DateTimeValue = new DateTime(sourceDate.Ticks - 7, DateTimeKind.Utc).ToLocalTime()
+        });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, StringValue = "stale text" });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        Assert.That(result!.Sources.Single().CandidateValues, Is.EqualTo(new[] { "2026-03-01 09:00:00.123456Z" }));
+    }
+
     [Test]
     public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingIsCurrentContributor_ReturnsInUseAsync()
     {

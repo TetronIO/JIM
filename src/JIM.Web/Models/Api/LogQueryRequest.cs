@@ -9,7 +9,7 @@ namespace JIM.Web.Models.Api;
 public class LogQueryRequest
 {
     /// <summary>
-    /// Filter by service name (web, worker, scheduler). Null for all services.
+    /// Filter by service name (web, worker, scheduler, database). Null for all services.
     /// </summary>
     public string? Service { get; set; }
 
@@ -25,7 +25,7 @@ public class LogQueryRequest
     public List<string>? Levels { get; set; }
 
     /// <summary>
-    /// Text to search for in the log message (case-insensitive).
+    /// Text the message or its exception must contain, ignoring case.
     /// </summary>
     public string? Search { get; set; }
 

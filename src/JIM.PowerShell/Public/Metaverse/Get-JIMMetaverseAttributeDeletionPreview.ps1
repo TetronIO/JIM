@@ -9,9 +9,10 @@ function Get-JIMMetaverseAttributeDeletionPreview {
     .DESCRIPTION
         Returns a non-destructive assessment of what deleting a custom Metaverse Attribute would
         entail: whether it is built-in, how many Metaverse Objects hold a stored value for it (a
-        hard block on deletion), the per-Object-Type value breakdown, and the configuration
-        references (bindings, Attribute Flows, scoping criteria, Object Matching Rules) that would
-        be cascade-removed. Use this to inspect an attribute before calling
+        hard block on deletion), the per-Object-Type value breakdown, the configuration that reads
+        it (Scoping Criteria and Expressions, also a hard block, in Readers), and the configuration
+        references (bindings, and Attribute Flows and Object Matching Rules that map the attribute
+        directly) that would be cascade-removed. Use this to inspect an attribute before calling
         Remove-JIMMetaverseAttribute.
 
     .PARAMETER Id

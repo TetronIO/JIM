@@ -123,7 +123,7 @@ public class LogReaderService
     /// <summary>
     /// Gets log entries matching the specified criteria.
     /// </summary>
-    /// <param name="service">Filter by service name (web, worker, scheduler). Null for all.</param>
+    /// <param name="service">Filter by service name (web, worker, scheduler, database). Null for all.</param>
     /// <param name="date">The date to retrieve logs for. Null for today.</param>
     /// <param name="levels">Specific log levels to include. Null or empty for all.</param>
     /// <param name="search">Text to search for in messages. Null for no filter.</param>

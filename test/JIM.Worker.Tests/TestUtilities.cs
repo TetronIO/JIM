@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.TestSupport;
 using JIM.InMemoryData;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -143,19 +144,10 @@ public static class TestUtilities
 
     /// <summary>
     /// A configuration test case repository holding no cases (#2055 Phase 4), for a fixture that mocks
-    /// IRepository: change capture and the preflight read a Synchronisation Rule's or Connected System's
-    /// test cases into its snapshot, and a bare mock would hand them null.
+    /// IRepository: a save reads the cases covering what it saves for the save gate, and change capture and the
+    /// preflight read them into the snapshot; a bare mock would hand them null.
     /// </summary>
-    public static IConfigurationTestRepository CreateEmptyConfigurationTestRepository()
-    {
-        var repository = new Mock<IConfigurationTestRepository>();
-        repository.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ReturnsAsync([]);
-        repository.Setup(r => r.GetSimpleModeMatchingTestCasesAsync(It.IsAny<int>())).ReturnsAsync([]);
-        repository.Setup(r => r.GetTestCasesForConnectedSystemAsync(It.IsAny<int>())).ReturnsAsync([]);
-        repository.Setup(r => r.GetTestCasesAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync([]);
-        repository.Setup(r => r.GetAllTestCasesAsync()).ReturnsAsync([]);
-        return repository.Object;
-    }
+    public static IConfigurationTestRepository CreateEmptyConfigurationTestRepository() => new EmptyConfigurationTestRepository();
 
     /// <summary>
     /// Attaches empty <see cref="JimDbContext.ObjectMatchingRules"/> and

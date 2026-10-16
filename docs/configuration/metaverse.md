@@ -144,9 +144,16 @@ The change is audited like any other change to the attribute, in its [Configurat
 
 ### Deleting attributes and removing bindings
 
-Deleting a custom attribute, or removing one of its Object Type bindings, follows one rule: **the only hard block is stored data**. If any Metaverse Object holds a value for the attribute, the action is refused and the portal tells you how many objects are affected, so you clear the values first (for example by stopping the source flow and letting it deprovision).
+Deleting a custom attribute, or removing one of its Object Type bindings, is refused while either of these holds:
 
-When no values exist, the action is allowed even if configuration still references the attribute. Those references (the binding itself, Attribute Flows, scoping criteria, and Object Matching Rules) are **cascade-removed** as a single operation, in dependency order so nothing is left dangling. Because this changes your synchronisation configuration, it is guarded by a type-the-name confirmation, exactly as connector-space deletion is. The cascade is fully audited: each removed reference is recorded as a child Activity of the deletion.
+- **Stored data**<br /> A Metaverse Object holds a value for the attribute. The portal tells you how many objects are affected, so you clear the values first (for example by stopping the source flow and letting it deprovision).
+- **Configuration reads it**<br /> A [Scoping Criterion](scoping-criteria.md) compares the attribute or reads it in an Expression, or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template reads it by name. JIM names each one and links to the Synchronisation Rule or template that holds it; change or remove them first. JIM never removes them for you, because a Scoping Criterion taken out of a Synchronisation Rule changes which objects the rule manages. Removing a binding is refused only for configuration that applies to that Object Type.
+
+When neither holds, the action is allowed even if other configuration references the attribute. Those references (the binding itself, Attribute Flows and Object Matching Rules that map the attribute directly) are **cascade-removed** as a single operation, in dependency order so nothing is left dangling. Because this changes your synchronisation configuration, it is guarded by a type-the-name confirmation, exactly as connector-space deletion is. The cascade is fully audited: each removed reference is recorded as a child Activity of the deletion.
+
+Renaming a custom attribute is refused while an Expression reads it by its current name, for the same reason: the Expression would read nothing after the rename. JIM names each one; change them first. A rename that only changes the case of the name is allowed, because Expressions read attribute names ignoring case.
+
+The REST API answers `409 Conflict` to a refused deletion, unassignment or rename. For a deletion or an unassignment the response is the evaluated impact, whose `readers` list names each piece of configuration that reads the attribute; for a rename the error message names them.
 
 ## Objects
 

@@ -64,6 +64,7 @@ The list returns one record per change, newest first. `-Version` returns that ch
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
 | `When` | `datetime` | When the change was made (UTC). |
 | `Reason` | `string` | The reason given for the change, if one was. |
+| `ConfigurationTestGateNote` | `string` | Set when the change stopped configuration test cases passing and was saved anyway, or their new results were accepted: the cases, by name and status, never their values. |
 | `Summary` | `string` | A short description of what the change touched, for example "Scope, Attribute Flow". |
 | `Diff` | `object` | The structured diff of this version against its predecessor. For the first version (no predecessor) it shows the whole object as created. Empty only when the version carries no deserialisable snapshot. It has `ObjectType`, `ObjectId`, `ObjectGuidId`, `ObjectName`, `OldVersion`, `NewVersion`, `Root`, `AddedCount`, `RemovedCount`, `ModifiedCount` and `HasChanges`. |
 

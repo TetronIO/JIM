@@ -7,7 +7,7 @@ audience: administrator
 
 # Configuration Tests
 
-A configuration test case holds inputs, and what part of your configuration should give for them: an Attribute Flow's result, a Generated Value's base, whether an object is in a Synchronisation Rule's Scope, or an Object Matching Rule's match values. Running the cases after a change shows at once whether the change broke something that used to work, before a synchronisation runs on real objects. A case runs through the same code synchronisation runs, so it gives the result a synchronisation would give for the same inputs. It cannot test what depends on other objects, such as which Generated Value is free or which Metaverse Object a match finds.
+A configuration test case holds inputs, and what part of your configuration should give for them: an Attribute Flow's result, a Generated Value's base, whether an object is in a Synchronisation Rule's Scope, or an Object Matching Rule's match values. Saving a change runs the cases it could affect and stops the save if one of them stops passing, so a change cannot break something that used to work without you deciding it should. A case runs through the same code synchronisation runs, so it gives the result a synchronisation would give for the same inputs. It cannot test what depends on other objects, such as which Generated Value is free or which Metaverse Object a match finds.
 
 Each case covers exactly one thing: one Attribute Flow, one Synchronisation Rule's Scope, or one Object Matching Rule. It is deleted with what it covers.
 
@@ -43,6 +43,22 @@ On the **Tests** tab (or the **Matching** tab's test cases), choose **Run all**,
 Results are worked out each time the cases run and are never stored. Runs test the configuration as saved: an unsaved edit on another tab is not tested until you save it.
 
 From a script, [`Invoke-JIMConfigurationTest`](../powershell/configuration-tests.md#invoke-jimconfigurationtest) runs the cases covering a Synchronisation Rule or under a Connected System, and `-FailOnUnsuccessful` stops a deployment script when one does not pass. The REST API runs them through `POST /api/v1/configuration-tests/run`.
+
+## When a change stops a case passing
+
+Saving a change to a Synchronisation Rule (its Attribute Flows, Scope or Object Matching Rules), an Attribute Flow or an Object Matching Rule runs every case covering it twice: against the configuration as it was saved, and against the change. A case that passed before and does not with the change stops the save, and nothing is saved. You then choose:
+
+| Choice | What happens |
+|---|---|
+| **Keep editing** | The default. Nothing is saved, and your change stays on the page to correct. |
+| **Accept the new result** | The change is saved, and each case that stopped passing now expects what the configuration gives with it. Only those cases are changed. A case that needs review, could not run, or whose Scope cannot be determined cannot take a new result: edit it, or save anyway. |
+| **Save anyway** | The change is saved and the cases are left as they are, so they now fail. |
+
+Accepting or saving anyway is recorded with the change in [Configuration History](configuration-changes.md), naming each case and how it came out, never its values.
+
+A case that was already failing never stops a save, and a change cannot be stopped by a case it did not break. Disabling a Synchronisation Rule, removing an Attribute Flow and deleting either always save; a case covering what you remove is deleted with it. Both runs are as of the same instant, so a case that reads the clock gives the same result in each.
+
+From a script, the cmdlets that save these changes take `-AcceptNewResult` and `-SaveAnyway`; without either, a change that stops a case passing fails, naming each case and what it now gives. The REST API answers such a change with `409 Conflict`, listing each case; send it again with `acceptNewResults` or `saveAnyway` (in the body, or on the query string for a removal) to go ahead.
 
 ## Edit or delete a test case
 
@@ -88,6 +104,8 @@ A test case is refused when it is larger than these, in the portal, the REST API
 | Values | 100 per input, and 100 expected values |
 | Value length | 4,000 characters, for an input value or an expected value |
 | Input attribute name | 400 characters |
+
+A Synchronisation Rule holds at most 200 test cases, and so do a Connected System's Simple mode Object Matching Rules between them, because every save runs the cases it could affect. A new case past that is refused.
 
 ## Related
 

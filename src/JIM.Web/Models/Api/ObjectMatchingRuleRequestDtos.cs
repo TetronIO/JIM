@@ -128,8 +128,19 @@ public class SwitchObjectMatchingModeRequest
 /// <summary>
 /// Request DTO for updating an Object Matching Rule.
 /// </summary>
-public class UpdateObjectMatchingRuleRequest
+public class UpdateObjectMatchingRuleRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The new evaluation order for this rule.
     /// </summary>

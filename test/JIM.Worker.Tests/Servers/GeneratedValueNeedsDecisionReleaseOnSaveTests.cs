@@ -46,6 +46,10 @@ public class GeneratedValueNeedsDecisionReleaseOnSaveTests
         var mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         _mockCsRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(mockMvRepo.Object);

@@ -11,6 +11,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Models.Core.DTOs;
 namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
@@ -880,6 +881,13 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
+    /// Returns every Scoping Criterion, and every Attribute Flow source and Object Matching Rule source carrying an
+    /// Expression, flattened with the Object Types they evaluate against, for the attribute reader index (#2265).
+    /// Untracked; a projection, so nothing is materialised beyond what the index reads.
+    /// </summary>
+    public Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync();
+
+    /// <summary>
     /// Retrieves all the Synchronisation Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
@@ -1243,6 +1251,13 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// A Synchronisation Rule as it is stored, with the same graph as <see cref="GetSyncRuleAsync"/>, untracked: never the
+    /// instance a caller on the same context has loaded and is editing. The save gate (#2055 Phase 4b) runs test cases
+    /// against it as the "before" of a save, so it must be read before the save flushes.
+    /// </summary>
+    public Task<SyncRule?> GetSyncRuleUntrackedAsync(int id);
+
+    /// <summary>
     /// Gets just the <c>Name</c> of every requested Synchronisation Rule, keyed by id (#1519 follow-up). An id
     /// with no corresponding row (the rule has been deleted) is simply absent from the result; callers resolve
     /// that as "name unknown" rather than treating it as an error. Used to back a change-history attribution
@@ -1290,6 +1305,18 @@ public interface IConnectedSystemRepository
     /// from one it leaves as it was (whose problems are only warned about). Ids with no stored row are absent.
     /// </summary>
     public Task<Dictionary<int, SyncRuleScopingCriterionState>> GetSyncRuleScopingCriterionStatesAsync(IReadOnlyCollection<int> criterionIds);
+
+    /// <summary>
+    /// Returns whether each of a Connected System's attributes is selected, as stored (#2265): a deselection is judged
+    /// against this, never against a copy the caller has already changed. Untracked.
+    /// </summary>
+    public Task<Dictionary<int, bool>> GetAttributeSelectionStatesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns a Synchronisation Rule's Connected System Object Type and Metaverse Object Type ids, as stored; null
+    /// when the rule does not exist. Untracked, so an Object Type change on the caller's copy is visible against it.
+    /// </summary>
+    public Task<(int ConnectedSystemObjectTypeId, int MetaverseObjectTypeId)?> GetSyncRuleObjectTypeIdsAsync(int syncRuleId);
 
     /// <summary>
     /// Returns the settings that decide which Metaverse Objects a stored Synchronisation Rule covers (enabled,
@@ -1893,6 +1920,12 @@ public interface IConnectedSystemRepository
     /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+
+    /// <summary>
+    /// An Object Matching Rule as it is stored, untracked: never the instance a caller on the same context is editing.
+    /// The save gate (#2055 Phase 4b) runs test cases against it as the "before" of a save.
+    /// </summary>
+    Task<ObjectMatchingRule?> GetObjectMatchingRuleUntrackedAsync(int id);
 
     /// <summary>
     /// The Object Matching Rules with these ids that still exist, each with its source's Connected System attribute
