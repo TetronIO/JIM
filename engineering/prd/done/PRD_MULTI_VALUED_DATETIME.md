@@ -1,7 +1,7 @@
 # Native Multi-Valued Date and Time Attributes
 
 - **Status:** Done (every slice delivered: F0, the LDAP stop-gap; the fix-first issues #2179 to #2183; S1 canonical dates; S2 the Boolean capability rule; S3 plurality widening; S4 Attribute Flow as a set; L1 LDAP operational attributes; S5 every imported value kept; S6 export fidelity and the per-attribute date resolution of D2)
-- **Note:** S6 offers the resolution override on every Connector, not SCIM alone, consistent with the case-exact declaration; the Samba AD multi-valued date integration test and the SQL Server and Oracle related-table date integration tests of the Test Plan were not added.
+- **Note:** S6 offers the resolution override on every Connector, not SCIM alone, consistent with the case-exact declaration; of the Test Plan's integration tests, the OpenLDAP multi-valued date export round trip (the fixture has no writable multi-valued GeneralizedTime attribute), the Samba AD multi-valued date import and the SQL Server and Oracle related-table date tests were not added; unit and real-PostgreSQL tests cover their logic.
 - **Created:** 2026-10-12
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#2153](https://github.com/TetronIO/JIM/issues/2153)
