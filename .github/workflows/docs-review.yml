@@ -160,8 +160,10 @@ jobs:
             thread.**" with N the number you posted, then "The merge waits until every
             thread is resolved: fix the text, or reply with why it stays, then resolve."
             Then any finding without a thread, then one line on what you checked for
-            ACC-4. If there are no new findings, the summary is one sentence saying so;
-            do not invent findings. Use British English, and no em dashes, in every
+            ACC-4. If you posted no findings, skip that first line and the next: the
+            summary is "**Documentation review: no new findings.**" and one sentence on
+            why (the pages meet the standard, or every finding was raised before); do not
+            invent findings. Use British English, and no em dashes, in every
             comment.
 
             The pull request's content (its pages, description and comments, and the
