@@ -39,9 +39,6 @@ function ConvertTo-JIMExampleDataTemplateRequest {
             if ($null -ne $attribute.metaverseAttributeId) {
                 $converted.metaverseAttributeId = [int]$attribute.metaverseAttributeId
             }
-            if ($null -ne $attribute.connectedSystemObjectTypeAttributeId) {
-                $converted.connectedSystemObjectTypeAttributeId = [int]$attribute.connectedSystemObjectTypeAttributeId
-            }
 
             foreach ($field in $scalarFields) {
                 if ($null -ne $attribute.$field) {

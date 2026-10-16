@@ -1398,7 +1398,6 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             AddReference(children, "metaverseAttributeId", attribute.MetaverseAttribute?.Id, attribute.MetaverseAttribute?.Name, "Metaverse Attribute");
-            AddReference(children, "connectedSystemObjectTypeAttributeId", attribute.ConnectedSystemObjectTypeAttribute?.Id, attribute.ConnectedSystemObjectTypeAttribute?.Name, "Connected System Attribute");
             Add(children, "populatedValuesPercentage", Render(attribute.PopulatedValuesPercentage), "Populated values (%)");
             Add(children, "pattern", attribute.Pattern, "Pattern");
             Add(children, "expression", attribute.Expression, "Expression");

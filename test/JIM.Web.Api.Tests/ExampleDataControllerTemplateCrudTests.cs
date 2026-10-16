@@ -298,22 +298,6 @@ public class ExampleDataControllerTemplateCrudTests
     }
 
     [Test]
-    public async Task CreateTemplateAsync_UnknownConnectedSystemAttributeId_ReturnsNotFoundAsync()
-    {
-        var request = BuildValidCreateRequest();
-        request.ObjectTypes[0].Attributes[0].MetaverseAttributeId = null;
-        request.ObjectTypes[0].Attributes[0].ConnectedSystemObjectTypeAttributeId = 777;
-        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(777))
-            .ReturnsAsync((JIM.Models.Staging.ConnectedSystemObjectTypeAttribute?)null);
-
-        var result = await _controller.CreateTemplateAsync(request);
-
-        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
-        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
-        _mockExampleDataRepo.Verify(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
-    }
-
-    [Test]
     public async Task CreateTemplateAsync_UnknownExampleDataSetId_ReturnsNotFoundAsync()
     {
         var request = BuildValidCreateRequest();
