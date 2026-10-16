@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
+using Serilog;
 
 namespace JIM.Application.Servers;
 
@@ -35,23 +37,167 @@ public static class ImportValueNormaliser
     }
 
     /// <summary>
-    /// Normalises one import object in place.
+    /// Normalises one import object in place: every date of a date attribute takes its canonical form
+    /// (<see cref="DateTimeAttributeValue.ToCanonical"/>) and exact duplicates collapse; two or more dates that differ by
+    /// less than a microsecond, and a true or false attribute carrying both true and false, are reported per value with
+    /// <see cref="ImportAttributeValueErrorSource.Jim"/>, which leaves the attribute as JIM already held it.
     /// </summary>
+    /// <param name="importObject">The object the Connector returned.</param>
+    /// <param name="dateAndBooleanAttributes">The object's Object Type's date and true or false attributes
+    /// (<see cref="BuildDateAndBooleanLookup"/>); null when the Object Type is unknown, which leaves the object alone
+    /// for the import to reject.</param>
+    /// <param name="summary">The run's counts, added to.</param>
+    /// <remarks>
+    /// An object already carrying an object-level error is left alone: reporting a value would mark it as carrying an
+    /// attribute value error instead, turning a skip-the-object error into an import-the-rest one. An attribute the
+    /// Connector already reported is left alone too; JIM leaves it as held either way. A single value allocates nothing.
+    /// </remarks>
     public static void Normalise(ConnectedSystemImportObject importObject, IReadOnlyDictionary<string, AttributeDataType>? dateAndBooleanAttributes, ImportValueNormalisationSummary summary)
     {
-        foreach (var attribute in importObject.Attributes.Where(a => a.HasDateTimeValues))
-        {
-            var values = attribute.DateTimeValues;
-            for (var i = 0; i < values.Count; i++)
-            {
-                var held = values[i];
-                var canonical = DateTimeAttributeValue.ToCanonical(held);
-                if (canonical.Ticks == held.Ticks && canonical.Kind == held.Kind)
-                    continue;
+        if (dateAndBooleanAttributes is not { Count: > 0 })
+            return;
 
-                values[i] = canonical;
-                summary.DatesCanonicalised++;
-            }
+        if (importObject.ErrorType is not (null or ConnectedSystemImportObjectError.NotSet or ConnectedSystemImportObjectError.AttributeValueError))
+            return;
+
+        // Indexed rather than foreach: reporting a value adds to the object's error list, not to its attributes, but the
+        // loop must not allocate an enumerator per object on the hot path either.
+        var attributes = importObject.Attributes;
+        for (var i = 0; i < attributes.Count; i++)
+        {
+            var attribute = attributes[i];
+            var hasDates = attribute.HasDateTimeValues;
+            var hasBools = attribute.HasBoolValues;
+            if (!hasDates && !hasBools)
+                continue;
+
+            if (!dateAndBooleanAttributes.TryGetValue(attribute.Name, out var type))
+                continue;
+
+            if (IsReportedByConnector(importObject, attribute.Name))
+                continue;
+
+            if (type == AttributeDataType.DateTime && hasDates)
+                NormaliseDates(importObject, attribute, summary);
+            else if (type == AttributeDataType.Boolean && hasBools)
+                NormaliseBooleans(importObject, attribute, summary);
         }
     }
+
+    private static void NormaliseDates(ConnectedSystemImportObject importObject, ConnectedSystemImportObjectAttribute attribute, ImportValueNormalisationSummary summary)
+    {
+        var values = attribute.DateTimeValues;
+
+        // The fast path: one value, canonicalised in place.
+        if (values.Count == 1)
+        {
+            values[0] = Canonicalise(values[0], summary);
+            return;
+        }
+
+        // Each value as an instant at the full 100ns (UTC ticks), so the same instant in two Kinds is one value, and two
+        // instants less than a microsecond apart are two values with one canonical key.
+        var instants = new List<long>(values.Count);
+        var seenInstants = new HashSet<long>();
+        foreach (var value in values)
+        {
+            var instant = ToUtcTicks(value);
+            if (seenInstants.Add(instant))
+                instants.Add(instant);
+            else
+                summary.DuplicatesCollapsed++;
+        }
+
+        var byKey = new Dictionary<long, int>(instants.Count);
+        foreach (var instant in instants)
+            byKey[Floor(instant)] = byKey.TryGetValue(Floor(instant), out var count) ? count + 1 : 1;
+
+        if (byKey.Count < instants.Count)
+        {
+            foreach (var instant in instants.Where(instant => byKey[Floor(instant)] > 1))
+            {
+                importObject.AddAttributeValueError(attribute.Name, ToSevenDigitString(instant), SubMicrosecondCollisionReason, ImportAttributeValueErrorSource.Jim);
+                summary.CollisionsReported++;
+            }
+
+            return;
+        }
+
+        if (instants.Count < values.Count)
+            Log.Debug("ImportValueNormaliser: Collapsed {DuplicateCount} duplicate date value(s) of attribute '{AttributeName}'",
+                values.Count - instants.Count, LogSanitiser.Sanitise(attribute.Name));
+
+        foreach (var value in values)
+            Canonicalise(value, summary);
+
+        // The distinct values in the order first read, each in its canonical form.
+        var canonicalValues = new List<DateTime>(instants.Count);
+        foreach (var instant in instants)
+            canonicalValues.Add(new DateTime(Floor(instant), DateTimeKind.Utc));
+
+        attribute.DateTimeValues = canonicalValues;
+    }
+
+    private static void NormaliseBooleans(ConnectedSystemImportObject importObject, ConnectedSystemImportObjectAttribute attribute, ImportValueNormalisationSummary summary)
+    {
+        var values = attribute.BoolValues;
+        if (values.Count == 1)
+            return;
+
+        var first = values[0];
+        var mixed = values.Exists(v => v != first);
+        if (mixed)
+        {
+            // Whatever plurality the schema declares: a true or false attribute holds one value, and JIM cannot tell
+            // which of the two is meant, so it reports both and leaves the attribute as it held it.
+            importObject.AddAttributeValueError(attribute.Name, "true", BooleanSurplusReason, ImportAttributeValueErrorSource.Jim);
+            importObject.AddAttributeValueError(attribute.Name, "false", BooleanSurplusReason, ImportAttributeValueErrorSource.Jim);
+            summary.BooleanSurplusesReported += 2;
+            return;
+        }
+
+        summary.DuplicatesCollapsed += values.Count - 1;
+        Log.Debug("ImportValueNormaliser: Collapsed {DuplicateCount} duplicate true or false value(s) of attribute '{AttributeName}'",
+            values.Count - 1, LogSanitiser.Sanitise(attribute.Name));
+        values.RemoveRange(1, values.Count - 1);
+    }
+
+    private static DateTime Canonicalise(DateTime held, ImportValueNormalisationSummary summary)
+    {
+        var canonical = DateTimeAttributeValue.ToCanonical(held);
+        if (canonical.Ticks != held.Ticks || canonical.Kind != held.Kind)
+            summary.DatesCanonicalised++;
+
+        return canonical;
+    }
+
+    private static bool IsReportedByConnector(ConnectedSystemImportObject importObject, string attributeName)
+    {
+        if (importObject.AttributeValueErrors is not { Count: > 0 } errors)
+            return false;
+
+        foreach (var error in errors)
+        {
+            if (error.AttributeName.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The instant a date names, in UTC ticks at its full precision; the canonical key's input.</summary>
+    private static long ToUtcTicks(DateTime value)
+    {
+        if (value == DateTime.MinValue || value == DateTime.MaxValue)
+            return value.Ticks;
+
+        return value.Kind == DateTimeKind.Local ? value.ToUniversalTime().Ticks : value.Ticks;
+    }
+
+    private static long Floor(long utcTicks) => DateTimeAttributeValue.Key(new DateTime(utcTicks, DateTimeKind.Utc));
+
+    /// <summary>A value as received, at the seven digits a DateTime holds, so two values less than a microsecond apart
+    /// read as different in the report.</summary>
+    private static string ToSevenDigitString(long utcTicks) =>
+        new DateTime(utcTicks, DateTimeKind.Utc).ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
 }
