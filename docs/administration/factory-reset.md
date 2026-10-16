@@ -41,7 +41,7 @@ The whole wipe is a single database transaction: if any part of it fails, nothin
 3. To remove administrators as well, tick **Also delete administrator users**.
 
     !!! danger "You can lock yourself out"
-        With administrators removed, only two ways back in remain. One is the initial administrator (`JIM_SSO_INITIAL_ADMIN`), recreated when that person next signs in through single sign-on, which works only if it is configured; see [SSO / Authentication](configuration.md#sso-authentication). The other is the [infrastructure API key](configuration.md#infrastructure-api-key), which works only within 24 hours of JIM first creating it: restarting JIM does not renew it. With neither, nobody can administer JIM. Everything else survives as the table above lists.
+        With administrators removed, only two ways back in remain. One is the initial administrator (`JIM_SSO_INITIAL_ADMIN`), recreated when that person next signs in through single sign-on, which works only if it is configured; see [SSO / Authentication](configuration.md#sso-authentication). The other is the [infrastructure API key](configuration.md#infrastructure-api-key), which works for 24 hours, and which restarting JIM renews once it has expired, provided `JIM_INFRASTRUCTURE_API_KEY` is still set. With neither, nobody can administer JIM. Everything else survives as the table above lists.
 
     Then tick **I understand the administrator lockout risk and want to proceed**.
 

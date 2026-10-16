@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`, as the type you choose, and explanations show what it read and computed. An object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
 - ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values: every value is kept, the change is audited, and single-valued targets still receive one value. (#2153)
+- ✨ LDAP schema discovery on OpenLDAP, 389 Directory Server and other RFC 4512 directories now offers operational attributes such as `pwdFailureTime`, `createTimestamp` and `memberOf` on every structural Object Type, unselected and read-only, grouped on the Schema tab and flagged `isOperational` over REST and PowerShell. (#2153)
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
 - ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
 - ✨ Scripts can list the expression functions, with each one's signature, parameters and an example, filtered by name or category: `Get-JIMExpressionFunction -Name '*Date*'`, or REST (`/api/v1/synchronisation/expression-functions`). (#2253)
@@ -113,12 +114,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ `Add-JIMExampleDataTemplateAttribute -ConnectedSystemObjectTypeAttributeId`, and the `ConnectedSystemObjectTypeAttributeId` key in `New-JIMExampleDataTemplate` and `Set-JIMExampleDataTemplate` attribute hashtables, are removed: templates generate Metaverse Attribute values only, so they produced nothing.
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
 ### Fixed
 
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
+- 🐛 Restarting JIM now renews the infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) for another 24 hours once it has expired, so it can be used to recover access, such as after a Factory Reset that removed every administrator. A disabled key stays disabled. (#2278)
 - 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
 - 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Synchronisation Rule's Scoping Criteria still compared, leaving the rule's scope reading nothing and deprovisioning its objects. It is now refused, before anything changes, while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
 - 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values now succeeds as no change, instead of being refused, and records nothing in its change history. (#2153)

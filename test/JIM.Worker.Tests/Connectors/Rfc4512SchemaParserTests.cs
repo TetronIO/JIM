@@ -537,6 +537,26 @@ public class Rfc4512SchemaParserTests
         Assert.That(result!.Usage, Is.EqualTo(Rfc4512AttributeUsage.DistributedOperation));
     }
 
+    [Test]
+    public void ParseAttributeType_Obsolete_ParsesAsObsolete()
+    {
+        var definition = "( 1.3.6.1.4.1.4203.666.1.99 NAME 'retiredCounter' OBSOLETE SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 NO-USER-MODIFICATION USAGE dSAOperation )";
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.True);
+    }
+
+    [Test]
+    public void ParseAttributeType_NotObsolete_DefaultsToNotObsolete()
+    {
+        var definition = "( 2.5.4.3 NAME 'cn' SUP name SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{64} )";
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.False);
+    }
+
     #endregion
 
     #region GetRfcAttributeDataType (SYNTAX OID mapping)

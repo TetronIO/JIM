@@ -30,7 +30,7 @@ function Connect-JIM {
 
         Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has no record of, or one
         that is disabled or has expired. An infrastructure key, set in JIM_INFRASTRUCTURE_API_KEY, exists only once
-        JIM has started with it set, and expires 24 hours later.
+        JIM has started with it set, and expires 24 hours later; restarting JIM renews an expired one.
 
     .PARAMETER Force
         Signs in again even when a valid session exists, ignoring any persisted refresh token and overwriting it

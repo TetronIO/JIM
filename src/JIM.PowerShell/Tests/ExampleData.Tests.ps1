@@ -777,6 +777,17 @@ Describe 'New-JIMExampleDataTemplate' {
             }
         }
 
+        It 'Throws on a ConnectedSystemObjectTypeAttributeId key in an attribute hashtable, which would generate nothing' {
+            InModuleScope JIM {
+                {
+                    New-JIMExampleDataTemplate -Name 'Demo Users' -ObjectType @{
+                        MetaverseObjectType = 1
+                        Attributes          = @(@{ ConnectedSystemObjectTypeAttributeId = 55; Pattern = '{0}' })
+                    } -Confirm:$false -ErrorAction Stop
+                } | Should -Throw '*ConnectedSystemObjectTypeAttributeId*'
+            }
+        }
+
         It 'Throws on an unknown key in an attribute hashtable' {
             InModuleScope JIM {
                 {
@@ -1408,21 +1419,15 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
             }
         }
 
-        It 'Errors when both -MetaverseAttribute and -ConnectedSystemObjectTypeAttributeId are supplied' {
-            InModuleScope JIM {
-                {
-                    Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -ConnectedSystemObjectTypeAttributeId 55 -Pattern 'x' -Confirm:$false -ErrorAction Stop
-                } | Should -Throw '*one of*'
-
-                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PUT' }
-            }
+        It 'Has no -ConnectedSystemObjectTypeAttributeId parameter, since generation produces Metaverse Attribute values only' {
+            (Get-Command Add-JIMExampleDataTemplateAttribute).Parameters.Keys | Should -Not -Contain 'ConnectedSystemObjectTypeAttributeId'
         }
 
-        It 'Errors when neither -MetaverseAttribute nor -ConnectedSystemObjectTypeAttributeId is supplied' {
+        It 'Errors when -MetaverseAttribute is not supplied' {
             InModuleScope JIM {
                 {
                     Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -Pattern 'x' -Confirm:$false -ErrorAction Stop
-                } | Should -Throw '*one of*'
+                } | Should -Throw '*-MetaverseAttribute*'
 
                 Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PUT' }
             }

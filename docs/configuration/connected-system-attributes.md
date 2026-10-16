@@ -118,7 +118,7 @@ Your answer survives a schema refresh. JIM records that the declaration was set 
 
 Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:
 
-`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`
+`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`, `pwdHistory`, `passwordHistory`
 
 There are two reasons. Most of these cannot be read back meaningfully (a directory returns nothing at all for `unicodePwd`, and opaque blobs for the history attributes), so anything imported would be empty or meaningless and every subsequent synchronisation would see a spurious change. The rest hold live credential material, and anything that reaches the Metaverse is replicated onward to every other Connected System in scope, written into change history, and rendered in the portal.
 

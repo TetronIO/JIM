@@ -56,6 +56,12 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public bool CaseExact { get; set; }
 
+    /// <summary>
+    /// Whether this is an operational attribute: one the Connected System maintains for its own operation. See
+    /// <see cref="ConnectedSystemObjectTypeAttribute.IsOperational"/>.
+    /// </summary>
+    public bool IsOperational { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

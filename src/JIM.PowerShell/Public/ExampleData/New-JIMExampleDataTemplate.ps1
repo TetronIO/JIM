@@ -21,7 +21,7 @@ function New-JIMExampleDataTemplate {
         (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate,
         BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues,
         ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds,
-        AttributeDependency, ConnectedSystemObjectTypeAttributeId), except that MetaverseAttribute may be a
+        AttributeDependency), except that MetaverseAttribute may be a
         Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order.
         Unknown keys throw, so a typo is caught before anything is sent.
 

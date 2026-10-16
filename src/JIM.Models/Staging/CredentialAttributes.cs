@@ -47,7 +47,12 @@ public static class CredentialAttributes
         "lmPwdHistory",
         "supplementalCredentials",
         "unixUserPassword",
-        "msDS-ManagedPassword"
+        "msDS-ManagedPassword",
+
+        // The password policy history of OpenLDAP (ppolicy) and 389 Directory Server: hashes of previous passwords.
+        // Operational attributes, offered by schema discovery since #2153 (D8).
+        "pwdHistory",
+        "passwordHistory"
     ]);
 
     private static readonly HashSet<string> DeniedNameLookup = new(DeniedNames, StringComparer.OrdinalIgnoreCase);
