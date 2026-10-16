@@ -72,6 +72,12 @@ public class SyncRepository : ISyncRepository
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
     /// <summary>
+    /// When set, <see cref="UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/> throws it, so a test can prove
+    /// that a batch failing after its exports succeeded still takes every one of them out of Executing (#2270).
+    /// </summary>
+    public Exception? FailConnectedSystemObjectUpdateWith { get; set; }
+
+    /// <summary>
     /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
     /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
     /// </summary>
@@ -1194,6 +1200,9 @@ public class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
     {
+        if (FailConnectedSystemObjectUpdateWith != null)
+            throw FailConnectedSystemObjectUpdateWith;
+
         foreach (var (cso, newAvs) in updates)
         {
             if (_csos.TryGetValue(cso.Id, out var stored))

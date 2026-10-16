@@ -11,6 +11,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Models.Core.DTOs;
 namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
@@ -880,6 +881,13 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
+    /// Returns every Scoping Criterion, and every Attribute Flow source and Object Matching Rule source carrying an
+    /// Expression, flattened with the Object Types they evaluate against, for the attribute reader index (#2265).
+    /// Untracked; a projection, so nothing is materialised beyond what the index reads.
+    /// </summary>
+    public Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync();
+
+    /// <summary>
     /// Retrieves all the Synchronisation Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
@@ -1297,6 +1305,18 @@ public interface IConnectedSystemRepository
     /// from one it leaves as it was (whose problems are only warned about). Ids with no stored row are absent.
     /// </summary>
     public Task<Dictionary<int, SyncRuleScopingCriterionState>> GetSyncRuleScopingCriterionStatesAsync(IReadOnlyCollection<int> criterionIds);
+
+    /// <summary>
+    /// Returns whether each of a Connected System's attributes is selected, as stored (#2265): a deselection is judged
+    /// against this, never against a copy the caller has already changed. Untracked.
+    /// </summary>
+    public Task<Dictionary<int, bool>> GetAttributeSelectionStatesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns a Synchronisation Rule's Connected System Object Type and Metaverse Object Type ids, as stored; null
+    /// when the rule does not exist. Untracked, so an Object Type change on the caller's copy is visible against it.
+    /// </summary>
+    public Task<(int ConnectedSystemObjectTypeId, int MetaverseObjectTypeId)?> GetSyncRuleObjectTypeIdsAsync(int syncRuleId);
 
     /// <summary>
     /// Returns the settings that decide which Metaverse Objects a stored Synchronisation Rule covers (enabled,

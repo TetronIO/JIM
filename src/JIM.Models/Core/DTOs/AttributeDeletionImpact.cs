@@ -37,10 +37,19 @@ public class AttributeDeletionImpact
     public List<AttributeObjectTypeValueCount> ObjectTypeValueCounts { get; set; } = [];
 
     /// <summary>
-    /// The configuration references (bindings, Attribute Flows, scoping criteria, Object Matching Rules) that would
-    /// be cascade-removed, in dependency order, when the deletion proceeds. Empty when the attribute is unreferenced.
+    /// The configuration references (bindings, and Attribute Flows and Object Matching Rules that map the attribute
+    /// directly) that would be cascade-removed, in dependency order, when the deletion proceeds. Empty when the
+    /// attribute is unreferenced.
     /// </summary>
     public List<AttributeReference> References { get; set; } = [];
+
+    /// <summary>
+    /// The configuration that reads the attribute: Scoping Criteria comparing it or reading it in an Expression, and
+    /// Expressions in Attribute Flows, Object Matching Rules and Example Data Templates. Any reader refuses the
+    /// deletion; change or remove each one first. These are never removed for you, because a Scoping Criterion
+    /// removed from under a Synchronisation Rule changes which objects it manages.
+    /// </summary>
+    public List<AttributeReader> Readers { get; set; } = [];
 
     /// <summary>
     /// Whether the attribute was deleted: always false in a preview, and false when the deletion was refused.
@@ -53,8 +62,13 @@ public class AttributeDeletionImpact
     public bool BlockedByValues => TotalObjectsWithValues > 0;
 
     /// <summary>
+    /// Whether configuration reads the attribute (see <see cref="Readers"/>), which refuses the deletion.
+    /// </summary>
+    public bool BlockedByReaders => Readers.Count > 0;
+
+    /// <summary>
     /// Whether deleting would also remove configuration that uses the attribute, so JIM asks for the attribute's
     /// name to confirm it.
     /// </summary>
-    public bool RequiresConfirmation => !BuiltIn && !BlockedByValues && References.Count > 0;
+    public bool RequiresConfirmation => !BuiltIn && !BlockedByValues && !BlockedByReaders && References.Count > 0;
 }

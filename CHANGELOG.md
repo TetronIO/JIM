@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
 - 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
 - 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
@@ -117,6 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
+- 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Synchronisation Rule's Scoping Criteria still compared, leaving the rule's scope reading nothing and deprovisioning its objects. It is now refused, before anything changes, while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
+- 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values now succeeds as no change, instead of being refused, and records nothing in its change history. (#2153)
 - 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
 - 🐛 File Connector imports match headers ignoring case, and fail naming a column the file lacks instead of clearing that attribute on every object. On upgrade, a file lacking a selected attribute's column fails to import until you add the column or deselect the attribute. (#2051)
 - 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when the key is written in a different case. (#2051)
@@ -127,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
 - 🐛 An account provisioned while the person's own password change was already waiting is now given that password and enabled as its Synchronisation Rule's Initial Password says, rather than left disabled with nothing recorded. (#2160)
+- 🐛 A password change made by the person moments after their account was created is no longer overwritten by the account's Initial Password; it is delivered as the account's first password instead. (#2270)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
 - 🐛 The portal now refuses to save an Attribute Flow whose expression does not parse, naming the problem under the field (and suggesting the right case for a mistyped function name), instead of failing at synchronisation. (#2053)
 - 🐛 A scoping pattern that runs past its time limit on one object now stops only that object, with an error, when JIM evaluates exports, cleans up references to deleted objects or deletes a Connected System, instead of failing the whole run. (#2053)
@@ -165,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An LDAP Boolean or DateTime attribute holding more than one value no longer clears the value JIM held: JIM holds one value for these types, so it lists each under **Attribute Values Not Imported** and leaves the attribute as it was. (#2153)
 - 🐛 A date with finer than microsecond precision, such as a SQL `datetime2(7)` value, no longer reads as changed on every Full Import, and no longer raises a false Verification Mode disagreement. JIM holds every date in UTC, to the microsecond. (#2153)
 - 🐛 A date exported by JIM now confirms on the next import and is no longer reported as drift, however the server's time zone is set. (#2153)
+- 🐛 Import Attribute Flows compare every type's values as a set: a multi-valued date or Boolean flows every value instead of the first, a Metaverse Object holding two dates no longer fails synchronisation, a reordered set changes nothing, and an object holding no value of the attribute's type follows "Null is a value" and priority instead of clearing it. (#2153)
 - 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 **Deleted By** on the Deleted Objects page linked the person who deleted an object to a page that does not exist; it now opens their Metaverse Object. (#2066)

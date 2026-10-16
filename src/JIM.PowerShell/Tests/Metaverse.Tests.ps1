@@ -689,6 +689,21 @@ Describe 'Set-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Sends the plurality the attribute already has, leaving the no-op to the API rather than raising an error' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } | Should -Not -Throw
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'Text' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
         It 'Sends an explicit multi-valued Boolean as asked and surfaces the API''s refusal' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -831,6 +846,25 @@ Describe 'Remove-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Refuses deletion, names each reader and does not call DELETE when configuration reads the attribute' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*deletion-preview*' } {
+                    [PSCustomObject]@{
+                        attributeId = 1; attributeName = 'CostCentre'; builtIn = $false; blockedByValues = $false; totalObjectsWithValues = 0; references = @()
+                        blockedByReaders = $true
+                        readers = @([PSCustomObject]@{ description = "Scoping Criterion on 'CostCentre' in Synchronisation Rule 'Export users'" })
+                    }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseAttribute -Id 1 -Force -ErrorAction SilentlyContinue -ErrorVariable refusal
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+                "$refusal" | Should -BeLike "*Export users*"
+            }
+        }
+
         It 'Sends the attribute name as confirmationName when references cascade' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -917,6 +951,25 @@ Describe 'Remove-JIMMetaverseObjectTypeAttribute' {
                 Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force -WarningAction SilentlyContinue
 
                 Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Refuses, names each reader and does not call DELETE when configuration on the type reads the attribute' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*unassign-preview*' } {
+                    [PSCustomObject]@{
+                        attributeName = 'CostCentre'; metaverseObjectTypeName = 'User'; builtIn = $false; wasBound = $true; blockedByValues = $false; objectsWithValues = 0; references = @()
+                        blockedByReaders = $true
+                        readers = @([PSCustomObject]@{ description = "Attribute Flow Expression into 'description' in Synchronisation Rule 'Export users'" })
+                    }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force -ErrorAction SilentlyContinue -ErrorVariable refusal
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+                "$refusal" | Should -BeLike "*Export users*"
             }
         }
 

@@ -3,6 +3,7 @@
 
 using JIM.Application.Services;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -264,6 +265,60 @@ public class SchemaRefreshDependentDetectorTests
     /// The pre-refresh schema snapshot the merge captures in production: the detector resolves removal names
     /// against it, because the merged graph no longer holds removed entries.
     /// </summary>
+    [Test]
+    public void Detect_ScopingCriterionComparingARemovedAttribute_IsAReaderThatRefusesRemoval()
+    {
+        // #2265: deleting the attribute row would leave the criterion comparing nothing, which takes every object
+        // out of the rule's scope; the reader is named so Apply and Remove can be refused before anything persists.
+        var result = new SchemaRefreshResult { Success = true };
+        result.RemovedAttributes["user"] = ["faxNumber"];
+        var rule = ImportRule(11, "HR Users Inbound", _userType);
+        var readers = new AttributeReaderIndex(
+        [
+            new AttributeReaderCandidate
+            {
+                Kind = AttributeReaderKind.ScopingCriterion, ItemId = 70, SyncRuleId = 11, SyncRuleName = "HR Users Inbound",
+                ConnectedSystemObjectTypeId = _userType.Id, ConnectedSystemAttributeId = _faxAttr.Id, AttributeName = "faxNumber"
+            },
+            new AttributeReaderCandidate
+            {
+                Kind = AttributeReaderKind.ObjectMatchingRuleExpression, ItemId = 71, SyncRuleId = 11, SyncRuleName = "HR Users Inbound",
+                ConnectedSystemObjectTypeId = _userType.Id, Expression = "Lower(cs[\"faxnumber\"])"
+            }
+        ]);
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt, readers);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependents.RemovedAttributeReaders.Select(r => r.ItemId), Is.EquivalentTo(new[] { 70, 71 }));
+            Assert.That(dependents.RemovalRefused, Is.True);
+            Assert.That(dependents.HasAny, Is.True, "a reader alone is something the preview must show");
+        }
+    }
+
+    [Test]
+    public void Detect_ReaderOfAnAttributeOnARemovedObjectType_FallsWithItsRuleAndIsNotListed()
+    {
+        var result = new SchemaRefreshResult { Success = true, RemovedObjectTypes = ["computer"] };
+        result.RemovedAttributes["computer"] = ["hostName"];
+        var rule = ImportRule(10, "Directory Computers Inbound", _computerType);
+        var readers = new AttributeReaderIndex(
+        [
+            new AttributeReaderCandidate
+            {
+                Kind = AttributeReaderKind.ScopingCriterion, ItemId = 72, SyncRuleId = 10, SyncRuleName = "Directory Computers Inbound",
+                ConnectedSystemObjectTypeId = _computerType.Id, ConnectedSystemAttributeId = 301, AttributeName = "hostName"
+            }
+        ]);
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt, readers);
+
+        Assert.That(dependents.RemovedAttributeReaders, Is.Empty);
+    }
+
     private void SeedPreRefreshSchema(SchemaRefreshResult result) =>
         result.PreRefreshSchema = new List<SchemaRefreshPreRefreshType>
         {

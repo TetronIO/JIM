@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -6733,6 +6734,120 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Synchronisation Rules
+    public async Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync()
+    {
+        var db = Repository.Database;
+        var rules = await db.SyncRules.AsNoTracking()
+            .Select(r => new { r.Id, r.Name, r.ConnectedSystemObjectTypeId, r.MetaverseObjectTypeId })
+            .ToDictionaryAsync(r => r.Id);
+
+        // A criterion hangs off a group, and a nested group off its parent rather than off the rule, so each group is
+        // walked up to the root group that names the rule. Scoping configuration is small; one read of each table.
+        var groups = await db.SyncRuleScopingCriteriaGroups.AsNoTracking()
+            .Select(g => new { g.Id, ParentGroupId = EF.Property<int?>(g, "ParentGroupId"), SyncRuleId = EF.Property<int?>(g, "SyncRuleId") })
+            .ToDictionaryAsync(g => g.Id);
+        var criteria = await db.SyncRuleScopingCriteria.AsNoTracking()
+            .Select(c => new
+            {
+                c.Id,
+                GroupId = EF.Property<int?>(c, "SyncRuleScopingCriteriaGroupId"),
+                c.MetaverseAttributeId,
+                c.ConnectedSystemAttributeId,
+                AttributeName = c.MetaverseAttribute != null ? c.MetaverseAttribute.Name : c.ConnectedSystemAttribute != null ? c.ConnectedSystemAttribute.Name : null,
+                c.Expression
+            })
+            .ToListAsync();
+
+        int? RuleOfGroup(int? groupId)
+        {
+            // Bounded by the group count, so a malformed cycle cannot loop forever.
+            for (var hops = 0; groupId is { } id && groups.TryGetValue(id, out var group) && hops <= groups.Count; hops++)
+            {
+                if (group.SyncRuleId.HasValue)
+                    return group.SyncRuleId;
+                groupId = group.ParentGroupId;
+            }
+            return null;
+        }
+
+        var candidates = new List<AttributeReaderCandidate>();
+        foreach (var criterion in criteria)
+        {
+            if (RuleOfGroup(criterion.GroupId) is not { } ruleId || !rules.TryGetValue(ruleId, out var rule))
+                continue;
+
+            candidates.Add(new AttributeReaderCandidate
+            {
+                Kind = AttributeReaderKind.ScopingCriterion,
+                ItemId = criterion.Id,
+                SyncRuleId = rule.Id,
+                SyncRuleName = rule.Name,
+                ConnectedSystemObjectTypeId = rule.ConnectedSystemObjectTypeId,
+                MetaverseObjectTypeId = rule.MetaverseObjectTypeId,
+                MetaverseAttributeId = criterion.MetaverseAttributeId,
+                ConnectedSystemAttributeId = criterion.ConnectedSystemAttributeId,
+                AttributeName = criterion.AttributeName,
+                Expression = criterion.Expression
+            });
+        }
+
+        var flowSources = await db.SyncRules.AsNoTracking()
+            .SelectMany(r => r.AttributeFlowRules.SelectMany(m => m.Sources
+                .Where(s => s.Expression != null)
+                .Select(s => new
+                {
+                    s.Id,
+                    SyncRuleId = r.Id,
+                    s.Expression,
+                    TargetName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null
+                })))
+            .ToListAsync();
+        candidates.AddRange(flowSources.Select(source => new AttributeReaderCandidate
+        {
+            Kind = AttributeReaderKind.AttributeFlowExpression,
+            ItemId = source.Id,
+            SyncRuleId = source.SyncRuleId,
+            SyncRuleName = rules[source.SyncRuleId].Name,
+            ConnectedSystemObjectTypeId = rules[source.SyncRuleId].ConnectedSystemObjectTypeId,
+            MetaverseObjectTypeId = rules[source.SyncRuleId].MetaverseObjectTypeId,
+            Expression = source.Expression,
+            TargetName = source.TargetName
+        }));
+
+        // An Object Matching Rule belongs to a Synchronisation Rule or, in advanced matching mode, to a Connected
+        // System Object Type; the latter carries its own Object Types.
+        var matchingSources = await db.ObjectMatchingRules.AsNoTracking()
+            .SelectMany(omr => omr.Sources
+                .Where(s => s.Expression != null)
+                .Select(s => new
+                {
+                    omr.Id,
+                    omr.SyncRuleId,
+                    omr.ConnectedSystemObjectTypeId,
+                    ConnectedSystemObjectTypeName = omr.ConnectedSystemObjectType != null ? omr.ConnectedSystemObjectType.Name : null,
+                    omr.MetaverseObjectTypeId,
+                    s.Expression
+                }))
+            .ToListAsync();
+        foreach (var source in matchingSources)
+        {
+            var rule = source.SyncRuleId is { } ruleId && rules.TryGetValue(ruleId, out var owner) ? owner : null;
+            candidates.Add(new AttributeReaderCandidate
+            {
+                Kind = AttributeReaderKind.ObjectMatchingRuleExpression,
+                ItemId = source.Id,
+                SyncRuleId = rule?.Id,
+                SyncRuleName = rule?.Name,
+                ConnectedSystemObjectTypeId = rule?.ConnectedSystemObjectTypeId ?? source.ConnectedSystemObjectTypeId,
+                ConnectedSystemObjectTypeName = source.ConnectedSystemObjectTypeName,
+                MetaverseObjectTypeId = rule?.MetaverseObjectTypeId ?? source.MetaverseObjectTypeId,
+                Expression = source.Expression
+            });
+        }
+
+        return candidates;
+    }
+
     public async Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false)
     {
         IQueryable<SyncRule> allQuery = Repository.Database.SyncRules
@@ -7561,6 +7676,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 c.MetaverseAttributeId, c.ConnectedSystemAttributeId, c.Expression, c.CompareAs, c.ComparisonType, c.CaseSensitive,
                 c.ValueMode, c.RelativeCount, c.RelativeUnit, c.RelativeDirection, c.StringValue, c.IntValue, c.LongValue,
                 c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue));
+    }
+
+    public async Task<Dictionary<int, bool>> GetAttributeSelectionStatesAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemAttributes
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemObjectType.ConnectedSystemId == connectedSystemId)
+            .ToDictionaryAsync(a => a.Id, a => a.Selected);
+    }
+
+    public async Task<(int ConnectedSystemObjectTypeId, int MetaverseObjectTypeId)?> GetSyncRuleObjectTypeIdsAsync(int syncRuleId)
+    {
+        var row = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(sr => sr.Id == syncRuleId)
+            .Select(sr => new { sr.ConnectedSystemObjectTypeId, sr.MetaverseObjectTypeId })
+            .SingleOrDefaultAsync();
+        return row == null ? null : (row.ConnectedSystemObjectTypeId, row.MetaverseObjectTypeId);
     }
 
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)

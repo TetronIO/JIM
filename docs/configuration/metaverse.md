@@ -130,23 +130,30 @@ Alongside JIM's built-in attributes (which are read-only and cannot be deleted),
 - **Create and bind in one step**<br /> When creating an attribute you can optionally bind it to zero or more Object Types there and then; leave the binding empty to create it unbound and assign it later. An unbound attribute collects no data until it is bound, which the list flags as "Not assigned".
 - **Bindings**<br /> Bind an existing attribute to an Object Type from that Object Type's **Attributes** tab (the "Add Attribute" picker), or unbind it with the row's remove action. Built-in attributes cannot be re-bound or unbound.
 - **Rendering**<br /> Multi-valued attributes can carry a rendering hint (default, table, chip set, or list) controlling how their values display on object detail pages.
-- **Data type and plurality**<br /> While no Metaverse Object holds a value for the attribute, you can change its data type and plurality freely. Once values exist, the one change JIM makes is **widening** the attribute from single-valued to multi-valued with its data type unchanged; see [Widening an attribute to multi-valued](#widening-an-attribute-to-multi-valued). Any other change (a different data type, or multi-valued to single-valued) is refused until the values are cleared.
+- **Data type and plurality**<br /> While no Metaverse Object holds a value for the attribute, you can change its data type and plurality freely. Once values exist, the one change JIM makes is **widening** the attribute from single-valued to multi-valued with its data type unchanged; see [Widening an attribute to multi-valued](#widening-an-attribute-to-multi-valued). Any other change (a different data type, or multi-valued to single-valued) is refused until the values are cleared. Submitting the data type and plurality the attribute already has is not a change: it always succeeds, and nothing is recorded in the attribute's change history.
 
 ### Widening an attribute to multi-valued
 
 A Connected System sometimes holds several values for something you first modelled as single-valued: a directory attribute that turns out to be multi-valued, say. Widen the Metaverse Attribute to multi-valued and every value a Metaverse Object already holds is kept, so there is nothing to clear first. The next synchronisation flows every value its sources hold. A single-valued Connected System attribute it flows to still receives one value, exactly as before.
 
 - **Portal**<br /> In the attribute's edit dialog, choose **Multi-valued** for **Plurality**. While values exist, **Data Type** stays locked, and so does **Plurality** on an attribute that is already multi-valued; each says why beneath it.
-- **REST API**<br /> `PATCH /api/v1/metaverse/attributes/{id}/schema` with the attribute's current type and a plurality of `MultiValued`. A refused change answers `409 Conflict` with the number of Metaverse Objects holding values, and changes nothing.
+- **REST API**<br /> `PATCH /api/v1/metaverse/attributes/{id}/schema` with the attribute's current type and a plurality of `MultiValued`. A refused change answers `409 Conflict` with the number of Metaverse Objects holding values, and changes nothing. Sending the type and plurality the attribute already has answers `200 OK` with the attribute as it stands.
 - **PowerShell**<br /> `Set-JIMMetaverseAttribute -Id 42 -AttributePlurality MultiValued`. A refused change is reported as an error.
 
 The change is audited like any other change to the attribute, in its [Configuration Change History](activities.md#configuration-change-history).
 
 ### Deleting attributes and removing bindings
 
-Deleting a custom attribute, or removing one of its Object Type bindings, follows one rule: **the only hard block is stored data**. If any Metaverse Object holds a value for the attribute, the action is refused and the portal tells you how many objects are affected, so you clear the values first (for example by stopping the source flow and letting it deprovision).
+Deleting a custom attribute, or removing one of its Object Type bindings, is refused while either of these holds:
 
-When no values exist, the action is allowed even if configuration still references the attribute. Those references (the binding itself, Attribute Flows, scoping criteria, and Object Matching Rules) are **cascade-removed** as a single operation, in dependency order so nothing is left dangling. Because this changes your synchronisation configuration, it is guarded by a type-the-name confirmation, exactly as connector-space deletion is. The cascade is fully audited: each removed reference is recorded as a child Activity of the deletion.
+- **Stored data**<br /> A Metaverse Object holds a value for the attribute. The portal tells you how many objects are affected, so you clear the values first (for example by stopping the source flow and letting it deprovision).
+- **Configuration reads it**<br /> A [Scoping Criterion](scoping-criteria.md) compares the attribute or reads it in an Expression, or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template reads it by name. JIM names each one and links to the Synchronisation Rule or template that holds it; change or remove them first. JIM never removes them for you, because a Scoping Criterion taken out of a Synchronisation Rule changes which objects the rule manages. Removing a binding is refused only for configuration that applies to that Object Type.
+
+When neither holds, the action is allowed even if other configuration references the attribute. Those references (the binding itself, Attribute Flows and Object Matching Rules that map the attribute directly) are **cascade-removed** as a single operation, in dependency order so nothing is left dangling. Because this changes your synchronisation configuration, it is guarded by a type-the-name confirmation, exactly as connector-space deletion is. The cascade is fully audited: each removed reference is recorded as a child Activity of the deletion.
+
+Renaming a custom attribute is refused while an Expression reads it by its current name, for the same reason: the Expression would read nothing after the rename. JIM names each one; change them first. A rename that only changes the case of the name is allowed, because Expressions read attribute names ignoring case.
+
+The REST API answers `409 Conflict` to a refused deletion, unassignment or rename. For a deletion or an unassignment the response is the evaluated impact, whose `readers` list names each piece of configuration that reads the attribute; for a rename the error message names them.
 
 ## Objects
 

@@ -1,4 +1,4 @@
-@using JIM.Application.Services
+@using JIM.Application.Exceptions
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Staging
@@ -1075,10 +1075,9 @@
                 // counts what Apply & Remove would take with it (#1485).
                 if (_schemaRefreshPreview.HasRemovalsOrDefinitionChanges)
                 {
-                    _schemaRefreshDependents = SchemaRefreshDependentDetector.Detect(
-                        _schemaRefreshPreview,
-                        await jim.ConnectedSystems.GetSyncRulesAsync(ConnectedSystem.Id, includeDisabledSyncRules: true),
-                        DateTime.UtcNow);
+                    // Through the server's single entry point, so the preview names the same dependents the REST
+                    // API does, readers of removed attributes included (#2265).
+                    _schemaRefreshDependents = await jim.ConnectedSystems.DetectSchemaRefreshDependentsAsync(ConnectedSystem.Id, _schemaRefreshPreview);
                     _schemaRefreshRemovalImpact = await jim.ConnectedSystems.ComputeSchemaRefreshRemovalImpactAsync(ConnectedSystem.Id, _schemaRefreshPreview);
                 }
                 else
@@ -1447,9 +1446,10 @@
             return;
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        IReadOnlyList<JIM.Models.Core.DTOs.AttributeReader> deselectionWarnings;
         try
         {
-            await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
+            deselectionWarnings = await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
         }
         catch (InvalidSettingValuesException ex)
         {
@@ -1459,8 +1459,18 @@
             Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
             return;
         }
+        catch (AttributeReadByConfigurationException ex)
+        {
+            // an attribute a Scoping Criterion reads was deselected (#2265); nothing was saved, and the message names
+            // each criterion to change first.
+            Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
+            return;
+        }
         DiscardSchemaPreview();
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
+        if (deselectionWarnings.Count > 0)
+            Snackbar.Add($"A deselected attribute is still read by: {string.Join("; ", deselectionWarnings.Select(r => r.Description))}. It is no longer imported, so these read values that are never refreshed.",
+                Severity.Warning, options => options.RequireInteraction = true);
 
         await OnConnectedSystemChanged.InvokeAsync();
     }

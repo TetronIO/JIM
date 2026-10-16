@@ -1039,10 +1039,12 @@ try {
                 }
                 @{
                     # userAccountControl: Conditional expression based on Status
-                    # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2) on the existing value
-                    # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
+                    # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2): 514
+                    # - All other statuses → EnableUser() clears it: 512
+                    # An export flow reads only the Metaverse Object, so the value is built from 512 (a normal account)
+                    # rather than from the directory's current value, which the flow cannot see.
                     LdapAttr = "userAccountControl"
-                    Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))'
+                    Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(512), EnableUser(512))'
                 }
                 @{
                     LdapAttr = "accountExpires"

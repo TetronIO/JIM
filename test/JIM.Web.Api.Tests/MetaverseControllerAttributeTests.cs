@@ -34,6 +34,9 @@ public class MetaverseControllerAttributeTests
     private Mock<IMetaverseRepository> _mv = null!;
     private Mock<IActivityRepository> _activity = null!;
     private Mock<IApiKeyRepository> _apiKeys = null!;
+    private Mock<IConnectedSystemRepository> _cs = null!;
+    private Mock<IExampleDataRepository> _exampleData = null!;
+    private List<AttributeReaderCandidate> _readerCandidates = null!;
     private JimApplication _application = null!;
     private MetaverseController _controller = null!;
 
@@ -47,6 +50,15 @@ public class MetaverseControllerAttributeTests
         _repo.Setup(r => r.Metaverse).Returns(_mv.Object);
         _repo.Setup(r => r.Activity).Returns(_activity.Object);
         _repo.Setup(r => r.ApiKeys).Returns(_apiKeys.Object);
+
+        // Nothing reads any attribute unless a test says so (#2265).
+        _readerCandidates = [];
+        _cs = new Mock<IConnectedSystemRepository>();
+        _exampleData = new Mock<IExampleDataRepository>();
+        _cs.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => _readerCandidates.ToList());
+        _exampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ConnectedSystems).Returns(_cs.Object);
+        _repo.Setup(r => r.ExampleData).Returns(_exampleData.Object);
 
         _activity.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activity.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
@@ -259,6 +271,30 @@ public class MetaverseControllerAttributeTests
     }
 
     [Test]
+    public async Task UpdateAttributeAsync_RenameOfAnAttributeAnExpressionReads_ReturnsConflictNamingTheReaderAsync()
+    {
+        Attr(1, "oldName");
+        _readerCandidates.Add(ExpressionCriterionReading("oldName"));
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { Name = "newName" });
+
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+        var error = (((ConflictObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain("Export users"));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    private static AttributeReaderCandidate ExpressionCriterionReading(string attributeName, int metaverseObjectTypeId = 2) => new()
+    {
+        Kind = AttributeReaderKind.ScopingCriterion,
+        ItemId = 40,
+        SyncRuleId = 9,
+        SyncRuleName = "Export users",
+        MetaverseObjectTypeId = metaverseObjectTypeId,
+        Expression = $"Lower(mv[\"{attributeName}\"])"
+    };
+
+    [Test]
     public async Task UpdateAttributeAsync_RenameToCaseInsensitiveClash_ReturnsConflictAsync()
     {
         Attr(1, "oldName");
@@ -418,6 +454,29 @@ public class MetaverseControllerAttributeTests
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Once);
     }
 
+    /// <summary>
+    /// Submitting the attribute's current type and plurality while values exist is a no-op, not a conflict: the
+    /// endpoint returns 200 with the attribute as it stands and writes nothing.
+    /// </summary>
+    [Test]
+    public async Task ChangeAttributeSchemaAsync_UnchangedWithStoredValues_ReturnsOkAndWritesNothingAsync()
+    {
+        var attribute = Attr(1);
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        _mv.Setup(r => r.GetAttributeValueObjectCountAsync(1)).ReturnsAsync(77);
+
+        var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = attribute.Type, AttributePlurality = AttributePlurality.MultiValued });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = (((OkObjectResult)result).Value as MetaverseAttributeDetailDto)!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Type, Is.EqualTo(attribute.Type));
+            Assert.That(dto.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+        }
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
     [Test]
     public async Task ChangeAttributeSchemaAsync_NarrowingWithStoredValues_ReturnsConflictAndAppliesNothingAsync()
     {
@@ -523,6 +582,20 @@ public class MetaverseControllerAttributeTests
         var impact = (((ConflictObjectResult)result).Value as AttributeDeletionImpact)!;
         Assert.That(impact!.TotalObjectsWithValues, Is.EqualTo(1523));
         Assert.That(impact.ObjectTypeValueCounts, Has.Count.EqualTo(2));
+        _mv.Verify(r => r.CascadeDeleteMetaverseAttributeAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteAttributeAsync_ReadByAScopingCriterion_ReturnsConflictNamingTheReaderAsync()
+    {
+        Attr(1);
+        _readerCandidates.Add(ExpressionCriterionReading("costCentre"));
+
+        var result = await _controller.DeleteAttributeAsync(1, confirmationName: "costCentre");
+
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+        var impact = (((ConflictObjectResult)result).Value as AttributeDeletionImpact)!;
+        Assert.That(impact.Readers.Single().SyncRuleName, Is.EqualTo("Export users"));
         _mv.Verify(r => r.CascadeDeleteMetaverseAttributeAsync(It.IsAny<int>()), Times.Never);
     }
 
@@ -680,6 +753,20 @@ public class MetaverseControllerAttributeTests
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
         var impact = (((ConflictObjectResult)result).Value as AttributeUnassignImpact)!;
         Assert.That(impact!.ObjectsWithValues, Is.EqualTo(450));
+        _mv.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_ReadOnThatType_ReturnsConflictNamingTheReaderAsync()
+    {
+        SetupUnassign(1, 2, builtIn: false, objectsWithValues: 0, references: [Binding()]);
+        _readerCandidates.Add(ExpressionCriterionReading("costCentre", metaverseObjectTypeId: 2));
+
+        var result = await _controller.UnassignAttributeFromObjectTypeAsync(1, 2);
+
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+        var impact = (((ConflictObjectResult)result).Value as AttributeUnassignImpact)!;
+        Assert.That(impact.Readers.Single().SyncRuleName, Is.EqualTo("Export users"));
         _mv.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }
 
