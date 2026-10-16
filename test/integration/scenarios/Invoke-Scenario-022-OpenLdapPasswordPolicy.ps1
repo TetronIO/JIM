@@ -612,6 +612,16 @@ WHERE a."Name" = 'pwdFailureTime' AND av."DateTimeValue" IS NOT NULL
             return $value
         }
 
+        # slapo-ppolicy records failed binds only up to pwdMaxRecordedFailure, which defaults to pwdMaxFailure, which
+        # this policy leaves at 0 (no lockout), so nothing would be recorded. Recording failures changes no
+        # enforcement; replace is idempotent on a re-run. Written as the rootdn: the policy entry is the
+        # administrator's.
+        $recordLdif = "dn: $policyDN`nchangetype: modify`nreplace: pwdMaxRecordedFailure`npwdMaxRecordedFailure: 10`n"
+        $recordResult = $recordLdif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H $ldapUri -D $DirectoryConfig.BindDN -w $DirectoryConfig.BindPassword 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not set pwdMaxRecordedFailure on $policyDN (exit code $LASTEXITCODE): $recordResult"
+        }
+
         Invoke-FailedBind
         Invoke-FailedBind
         $directoryTimes = @(Get-DirectoryFailureTimes)
@@ -620,7 +630,7 @@ WHERE a."Name" = 'pwdFailureTime' AND av."DateTimeValue" IS NOT NULL
             # Not subject to -ContinueOnError: with fewer than two values in the directory, nothing below
             # can say anything about a multi-valued date.
             throw "FIXTURE: two failed binds left $($directoryTimes.Count) pwdFailureTime value(s) on $failureDn. " +
-                  "The overlay records failures only where a policy applies; check olcPPolicyDefault names $policyDN."
+                  "The overlay records failures only where a policy applies and pwdMaxRecordedFailure allows; check olcPPolicyDefault names $policyDN."
         }
 
         # pwdFailureTime is operational: schema discovery offers it unselected (#2153 L1), so select it.
