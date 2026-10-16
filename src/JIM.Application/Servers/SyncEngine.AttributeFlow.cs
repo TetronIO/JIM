@@ -1097,15 +1097,33 @@ public partial class SyncEngine
 
     /// <summary>
     /// The rows that hold a value of <paramref name="type"/>. When every row does, which is the usual case, the list
-    /// itself is returned and nothing is allocated.
+    /// itself is returned and nothing is allocated (plain loops rather than predicates, which would allocate a closure
+    /// over <paramref name="type"/> on this hot path).
     /// </summary>
     private static List<ConnectedSystemObjectAttributeValue> RowsHoldingValueOfType(
         List<ConnectedSystemObjectAttributeValue> rows, AttributeDataType type)
     {
-        if (rows.TrueForAll(row => HoldsValueOfType(row, type)))
+        var firstWithout = -1;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (!HoldsValueOfType(rows[i], type))
+            {
+                firstWithout = i;
+                break;
+            }
+        }
+
+        if (firstWithout < 0)
             return rows;
 
-        return rows.FindAll(row => HoldsValueOfType(row, type));
+        var typedRows = new List<ConnectedSystemObjectAttributeValue>(rows.Count - 1);
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (i != firstWithout && HoldsValueOfType(rows[i], type))
+                typedRows.Add(rows[i]);
+        }
+
+        return typedRows;
     }
 
     /// <summary>
