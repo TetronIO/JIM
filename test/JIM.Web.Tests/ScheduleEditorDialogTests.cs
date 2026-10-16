@@ -29,6 +29,8 @@ public class ScheduleEditorDialogTests : JimComponentTestContext
 {
     private const string IndicatorMarker = "jim-step-failure-behaviour";
     private const int StepsTabIndex = 2;
+    private const int TriggerTabIndex = 1;
+    private const string RunTimesMinuteMarker = "jim-run-times-minute-error";
 
     private Mock<ISchedulingRepository> _schedulingRepository = null!;
     private JimApplication _jim = null!;
@@ -203,6 +205,66 @@ public class ScheduleEditorDialogTests : JimComponentTestContext
             Assert.That(stepSelect.Instance.GetState(x => x.Value), Is.EqualTo(ScheduleStepFailureBehaviour.FollowSchedule));
             Assert.That(stepSelect.Instance.ToStringFunc!(ScheduleStepFailureBehaviour.FollowSchedule),
                 Is.EqualTo("Follow the Schedule (currently: continue)"));
+        }
+    }
+
+    /// <summary>
+    /// Opens the editor for a Cron Schedule that runs on Mondays at <paramref name="runTimes"/> and switches to its
+    /// Trigger tab.
+    /// </summary>
+    private IRenderedComponent<MudDialogProvider> OpenTriggerTabForSpecificTimes(string runTimes)
+    {
+        _schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Twice daily HR sync",
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "1",
+            RunTimes = runTimes,
+            CronExpression = "0 6,18 * * 1"
+        };
+
+        var provider = Render<MudDialogProvider>();
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        var parameters = new DialogParameters<ScheduleEditorDialog> { { x => x.ScheduleId, _schedule.Id } };
+        provider.InvokeAsync(() => dialogService.ShowAsync<ScheduleEditorDialog>("Edit Schedule", parameters));
+        provider.WaitForState(() => provider.FindComponents<MudTabs>().Count > 0);
+
+        var tabs = provider.FindComponent<MudTabs>();
+        provider.InvokeAsync(() => tabs.Instance.ActivatePanelAsync(TriggerTabIndex, false));
+        provider.WaitForState(() => provider.FindComponents<MudTimePicker>().Count > 0);
+        return provider;
+    }
+
+    private static bool SaveIsDisabled(IRenderedComponent<MudDialogProvider> provider) =>
+        provider.FindAll("button").Single(b => b.TextContent.Trim() == "Save").HasAttribute("disabled");
+
+    [Test]
+    public void SpecificTimes_TimesAtDifferentMinutes_BlocksSaveAndSaysWhyBesideTheTimes()
+    {
+        // 06:00 and 18:30 can only be saved as one expression with one minute, which ran the Schedule at 18:00 (#2070).
+        var provider = OpenTriggerTabForSpecificTimes("06:00,18:30");
+        ScheduleCronExpression.RunTimesShareAMinute([new TimeSpan(6, 0, 0), new TimeSpan(18, 30, 0)], out var expected);
+
+        var warnings = provider.FindAll($"[data-testid='{RunTimesMinuteMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SaveIsDisabled(provider), Is.True);
+            Assert.That(warnings, Has.Count.EqualTo(1));
+            Assert.That(warnings[0].TextContent.Trim(), Is.EqualTo(expected));
+        }
+    }
+
+    [Test]
+    public void SpecificTimes_TimesAtTheSameMinute_AllowsSaveWithNoWarning()
+    {
+        var provider = OpenTriggerTabForSpecificTimes("06:30,18:30");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SaveIsDisabled(provider), Is.False);
+            Assert.That(provider.FindAll($"[data-testid='{RunTimesMinuteMarker}']"), Is.Empty);
         }
     }
 
