@@ -203,6 +203,7 @@ function Invoke-Scenario16Row {
         'MultiValued.Import'               { return Test-S16MultiValuedImport -Context $Context -Config $Config }
         'Reference.Import'                 { return Test-S16ReferenceImport -Context $Context -Config $Config }
         'Delta.ChangeLogTable'             { return Test-S16DeltaChangeLog -Context $Context -Config $Config }
+        'Delta.ChangeLogReinsert'          { return Test-S16DeltaChangeLogReinsert -Context $Context -Config $Config }
         'Delta.WatermarkColumn'            { return Test-S16DeltaWatermarkColumn -Context $Context -Config $Config }
         'Delta.Fallback'                   { return Test-S16DeltaFallback -Context $Context -Config $Config }
         'Delta.RowversionWatermark'        { return Test-S16DeltaRowversionWatermark -Context $Context -Config $Config }
@@ -613,6 +614,58 @@ function Test-S16DeltaChangeLog {
     }
     finally {
         Undo-S16DeltaMutations -Config $Config -NewEmployeeIds @(51)
+    }
+}
+
+function Test-S16DeltaChangeLogReinsert {
+    <#
+    .SYNOPSIS
+        A row deleted and re-inserted, with more than a page of other changes between them, ends Normal.
+    .DESCRIPTION
+        The connector pages the change log in order and collapses repeated changes only within a page, so with
+        a page boundary between them the Delta Import returns the deletion on one page and the re-insert on a
+        later one. The later page's copy is the row as it now stands and must take the deletion's place; a run
+        that rejected it as a duplicate left the object deleted, for the next synchronisation to disconnect (#2074).
+    #>
+    param([hashtable]$Context, [hashtable]$Config)
+
+    if ($Context.DeltaImportMode -ne 'Change-Log Table') {
+        Set-S16DeltaImportMode -Context $Context -Mode 'Change-Log Table' -ObjectTypesJson $Context.ObjectTypesJson
+    }
+    Invoke-S16RunProfile -Context $Context -Name "Full Import" | Out-Null
+
+    $employeeId = 55
+    $schema = $Config.Schema
+    try {
+        Invoke-Scenario16NonQuery -Config $Config -Statement (Get-S16NewEmployeeInsert -Config $Config -EmployeeId $employeeId)
+        Invoke-S16DeltaImport -Context $Context -Purpose "the employee to be re-inserted" | Out-Null
+        $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+        if (-not (Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue "$employeeId")) {
+            return @{ Status = 'fail'; Detail = "Employee $employeeId was inserted but the Delta Import created no Connected System Object for it." }
+        }
+
+        # Delete, then more than a page of other changes, then the same employee again. Touching a row without
+        # changing it still logs it, and the Delta Import finds nothing to change when it re-reads it.
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;"
+        $touched = $Context.PageSize + 2
+        Invoke-Scenario16NonQuery -Config $Config -Statement "UPDATE $schema.EMPLOYEES SET FIRST_NAME = FIRST_NAME WHERE EMPLOYEE_ID <= $touched;"
+        Invoke-Scenario16NonQuery -Config $Config -Statement (Get-S16NewEmployeeInsert -Config $Config -EmployeeId $employeeId)
+
+        $reinsert = Invoke-S16DeltaImport -Context $Context -Purpose "a deletion and a re-insert a page apart"
+        $returned = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue "$employeeId"
+        if (-not $returned -or $returned.status -ne 'Normal') {
+            return @{ Status = 'fail'; Detail = "Employee $employeeId was deleted and re-inserted with $touched other changes between them, but its Connected System Object is $(if ($returned) { "'$($returned.status)'" } else { 'gone' }) after the Delta Import; the re-insert must supersede the deletion." }
+        }
+        $counts = Get-S16DeltaReadCount -ActivityId $reinsert.activityId
+        if ($counts.Deletes -ne 0) {
+            return @{ Status = 'fail'; Detail = "The Delta Import reported $($counts.Deletes) deletion(s); a deletion its own later page undid did not stand, and must not be reported." }
+        }
+
+        return @{ Status = 'pass'; Detail = "A deletion and a re-insert $touched changes apart (page size $($Context.PageSize)) left employee $employeeId Normal, with no deletion reported." }
+    }
+    finally {
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEE_PHONES WHERE EMPLOYEE_ID = $employeeId;"
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;"
     }
 }
 
