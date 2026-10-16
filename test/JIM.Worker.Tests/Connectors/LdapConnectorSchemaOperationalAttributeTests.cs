@@ -189,19 +189,22 @@ public class LdapConnectorSchemaOperationalAttributeTests
         }
     }
 
-    [Test]
-    public async Task GetSchemaAsync_DirectoryServer389_AddsOperationalAttributesThroughTheSamePathAsync()
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389))]
+    [TestCase(nameof(LdapDirectoryType.Generic))]
+    public async Task GetSchemaAsync_OtherRfc4512Directory_AddsOperationalAttributesThroughTheSamePathAsync(string directoryType)
     {
-        var schema = await DiscoverRfc4512Async(LdapDirectoryType.DirectoryServer389);
+        var schema = await DiscoverRfc4512Async(Enum.Parse<LdapDirectoryType>(directoryType));
 
         Assert.That(OperationalAttributeNames(schema, "inetOrgPerson"), Does.Contain("modifyTimestamp"));
     }
 
-    [Test]
-    public async Task GetSchemaAsync_ActiveDirectory_TagsNoAttributeOperationalAsync()
+    [TestCase(nameof(LdapDirectoryType.ActiveDirectory))]
+    [TestCase(nameof(LdapDirectoryType.SambaAD))]
+    public async Task GetSchemaAsync_ActiveDirectoryFamily_TagsNoAttributeOperationalAsync(string directoryType)
     {
-        // Active Directory publishes no RFC 4512 usage: its operational attributes (whenChanged, uSNChanged,
-        // memberOf) are on top's MAY sets, so its own discovery already offers them and must not change.
+        // Active Directory and Samba AD are discovered from the schema partition, not the subschema subentry, so they
+        // never reach the RFC 4512 path: their operational attributes (whenChanged, uSNChanged, memberOf) are on
+        // top's MAY sets, so their own discovery already offers them and must not change.
         var attributes = new[]
         {
             AdAttributeSchema("whenChanged", omSyntax: 24, systemOnly: true),
@@ -226,9 +229,11 @@ public class LdapConnectorSchemaOperationalAttributeTests
                 return LdapTestResponses.EmptySearchResponse();
             });
 
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = Enum.Parse<LdapDirectoryType>(directoryType) };
         var schema = await new LdapConnectorSchema(executor.Object, Logger, rootDse).GetSchemaAsync();
 
+        Assert.That(schema.ObjectTypes.Single(t => t.Name == "user").Attributes.Select(a => a.Name), Does.Contain("whenChanged"),
+            "The fixture must reach the schema partition path, or the assertion below proves nothing.");
         Assert.That(schema.ObjectTypes.SelectMany(t => t.Attributes).Where(a => a.Tags.Count > 0), Is.Empty);
     }
 
