@@ -3324,6 +3324,11 @@ if ($scenarioNumber -eq 16) {
     })
 
     Write-Step "Starting database containers for Scenario 016 ($($phase2Services -join ', '))..."
+    # Kept between runs, but jim-network is not: a kept container still naming a network since removed would never
+    # start, so it is recreated over its volumes. Each service's container_name is the service name.
+    foreach ($recreated in (Remove-ContainerWithMissingNetwork -ContainerName $phase2Services)) {
+        Write-Host "  ${GRAY}$recreated named a network that no longer exists; recreating it over its volumes${NC}"
+    }
     $phase2Result = docker compose @script:IntegrationComposeArgs --profile phase2 up -d @phase2Services 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start the Scenario 016 database containers"

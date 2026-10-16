@@ -1521,3 +1521,65 @@ Describe 'Display Name from first and last names' {
         }
     }
 }
+
+Describe 'Remove-ContainerWithMissingNetwork' {
+    # Scenario 016's database containers are kept between runs, but jim-network is not: the stack's teardown removes
+    # it once nothing running is attached, and the next run creates it again under a new id. Docker then refused to
+    # start the kept containers: "failed to set up container networking: network a6ed... not found" (AD lab, 2026-10-16).
+    BeforeAll {
+        function docker { }
+    }
+
+    BeforeEach {
+        $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
+        $script:containerNetworks = @{ 'sqlserver-hris-a' = 'live0001'; 'oracle-hris-b' = 'gone0002' }
+        $script:liveNetworks = @('live0001')
+        Mock docker {
+            $joined = @($args) -join ' '
+            $script:dockerCalls.Add($joined)
+            $global:LASTEXITCODE = 0
+            if ($joined -like 'inspect *') {
+                $name = @($args)[-1]
+                if (-not $script:containerNetworks.ContainsKey($name)) { $global:LASTEXITCODE = 1; return "Error: No such object: $name" }
+                return "$($script:containerNetworks[$name]) "
+            }
+            if ($joined -like 'network inspect *') {
+                if ($script:liveNetworks -notcontains @($args)[-1]) { $global:LASTEXITCODE = 1; return 'Error: No such network' }
+                return '[]'
+            }
+        }
+    }
+
+    It 'removes a container whose network no longer exists, and returns its name' {
+        $removed = Remove-ContainerWithMissingNetwork -ContainerName 'oracle-hris-b'
+
+        $removed | Should -Be @('oracle-hris-b')
+        $script:dockerCalls | Should -Contain 'rm -f oracle-hris-b'
+    }
+
+    It 'keeps a container whose network exists' {
+        $removed = Remove-ContainerWithMissingNetwork -ContainerName 'sqlserver-hris-a'
+
+        $removed | Should -BeNullOrEmpty
+        @($script:dockerCalls | Where-Object { $_ -like 'rm *' }) | Should -BeNullOrEmpty
+    }
+
+    It 'leaves a container that does not exist yet to Compose' {
+        $removed = Remove-ContainerWithMissingNetwork -ContainerName 'not-created'
+
+        $removed | Should -BeNullOrEmpty
+        @($script:dockerCalls | Where-Object { $_ -like 'rm *' }) | Should -BeNullOrEmpty
+    }
+
+    It 'never removes the container''s volumes, which hold the databases' {
+        Remove-ContainerWithMissingNetwork -ContainerName 'oracle-hris-b' | Out-Null
+
+        @($script:dockerCalls | Where-Object { $_ -like 'rm *' }) | Should -Be @('rm -f oracle-hris-b')
+    }
+
+    It 'checks each container of several' {
+        $removed = Remove-ContainerWithMissingNetwork -ContainerName 'sqlserver-hris-a', 'oracle-hris-b'
+
+        $removed | Should -Be @('oracle-hris-b')
+    }
+}
