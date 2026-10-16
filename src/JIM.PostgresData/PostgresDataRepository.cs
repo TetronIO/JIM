@@ -35,6 +35,7 @@ public class PostgresDataRepository : IRepository
     public ISystemRepository System { get; }
     public ITaskingRepository Tasking { get; }
     public ITrustedCertificateRepository TrustedCertificates { get; }
+    public IConfigurationTestRepository ConfigurationTests { get; }
 
     /// <summary>
     /// The synchronisation engine's raw-SQL hot-path repository, sharing this repository's database session.
@@ -87,6 +88,7 @@ public class PostgresDataRepository : IRepository
         System = new SystemRepository(this);
         Tasking = new TaskingRepository(this);
         TrustedCertificates = new TrustedCertificateRepository(this);
+        ConfigurationTests = new ConfigurationTestRepository(this);
         Sync = new SyncRepository(this);
     }
 
