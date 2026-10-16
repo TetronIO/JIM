@@ -1,8 +1,8 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1 to 3, 4a and 4b complete)
+- **Status:** Done (all phases delivered)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
-- **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
+- **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/done/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
 - **UI mocks:** [Matching Expressions (#207)](https://claude.ai/artifact/U7urHxpx49uGm4EBi5Ckme), bottom row (private to the product owner)
 
@@ -56,7 +56,7 @@ One PR, kept tight because #2053's multi-valued change starts once it merges.
 - **Surfaces:** the portal tester in the Attribute Flow editor tests the flow being edited; `POST /synchronisation/test-expression` and `Test-JIMExpression` accept a saved Attribute Flow (`syncRuleId`, `mappingId`) and return the outcome and final values. Without a flow they behave as before.
 - **Fidelity tests:** paired tests run each case through synchronisation (`FlowInboundAttributes`, `CreateAttributeValueChanges`) and through the tester, and assert the same values, no value or error, including typed, multi-valued and absent inputs.
 
-### Phase 2: Testers per kind
+### Phase 2: Testers per kind ✅
 
 Split by kind into reviewable PRs, in the order other work needs them.
 
@@ -122,11 +122,12 @@ Saved test cases on every surface, run on demand. The save gate is Phase 4b.
 - **As built (surfaces):** the 409 body is `{ message, regressions: [{ result, canAccept, acceptedExpectation }] }`; PowerShell turns it into an error naming each case and its new result. The portal's gate dialog follows the Configuration Change acknowledgement; Keep editing leaves the edit on the page.
 - **Fix found on the way:** Phase 4a ran a Synchronisation Rule mode Object Matching Rule case with its Synchronisation Rule's Metaverse Object Type set on a copy, which `DescribeInvalidity` refuses, so every such case needed review. The runner now runs the rule as stored.
 
-### Phase 5: Docs and pipelines
+### Phase 5: Docs and pipelines ✅
 
 - The Attribute Flow, Scope, Object Matching and Generated Values pages link to the **Configuration Tests** page (which gained the save gate in 4b), and `expressions.md` once its word budget allows.
 - An integration scenario step running `Invoke-JIMConfigurationTest -FailOnUnsuccessful` in a pipeline.
 - Plan closeout: Status Done, moved to `done/`, in the PR that closes #2055.
+- **As built:** Scenario 010 Test 11 (`-Step ConfigurationTests`) is PRD Scenario 15 end to end over PowerShell: two Scope cases pass under `-FailOnUnsuccessful`, a criterion change that breaks them is refused naming both and leaves the criterion as stored, `-SaveAnyway` saves it, the next pipeline run fails, and Configuration History records the cases saved past. `expressions.md` stays unlinked: it is already over the 5,000-word budget (STR-8), and its testing section links the Attribute Flow and Generated Value pages, which now link on.
 
 ## Decisions
 
