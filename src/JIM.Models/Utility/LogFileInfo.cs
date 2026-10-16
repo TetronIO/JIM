@@ -19,7 +19,7 @@ public class LogFileInfo
     public string FilePath { get; set; } = string.Empty;
 
     /// <summary>
-    /// The service that generated the log file (web, worker, scheduler).
+    /// The service that generated the log file (web, worker, scheduler, database).
     /// </summary>
     public string Service { get; set; } = string.Empty;
 

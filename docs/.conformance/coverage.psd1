@@ -65,13 +65,6 @@
             'src/JIM.Web/Pages/Admin/ThemePreview.razor'          = 'A design specimen page for developers, not a feature an administrator uses.'
             'src/JIM.Web/Pages/Admin/LoadingPreview.razor'        = 'A design specimen page for developers, showing the loading states; not a feature an administrator uses.'
             'src/JIM.Web/Pages/Dev/ErrorPagePreview.razor'        = 'A design specimen page for developers, previewing the error pages; not a feature an administrator uses.'
-            'src/JIM.Web/Pages/Admin/DeletedObjects.razor'        = 'No docs page covers Deleted Objects yet (#2114).'
-            'src/JIM.Web/Pages/Admin/ExampleDataSetDetail.razor'  = 'No docs page covers Example Data yet (#2114).'
-            'src/JIM.Web/Pages/Admin/ExampleDataSetList.razor'    = 'No docs page covers Example Data yet (#2114).'
-            'src/JIM.Web/Pages/Admin/ExampleDataTemplateDetail.razor' = 'No docs page covers Example Data yet (#2114).'
-            'src/JIM.Web/Pages/Admin/ExampleDataTemplateList.razor'   = 'No docs page covers Example Data yet (#2114).'
-            'src/JIM.Web/Pages/Admin/FactoryReset.razor'          = 'No docs page covers the Factory Reset yet (#2114).'
-            'src/JIM.Web/Pages/Admin/Logs.razor'                  = 'No docs page covers the Logs page yet (#2114).'
         }
         # Read by the NUnit coverage tests in test/JIM.Worker.Tests/Docs (COV-3 and the Connector settings of
         # COV-6), which need the compiled product to take their inventories. A Connector setting is keyed
