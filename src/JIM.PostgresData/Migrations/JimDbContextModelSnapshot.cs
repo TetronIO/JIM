@@ -3661,6 +3661,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("IsExternalId")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsOperational")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSecondaryExternalId")
                         .HasColumnType("boolean");
 

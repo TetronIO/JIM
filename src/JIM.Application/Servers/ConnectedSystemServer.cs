@@ -3011,6 +3011,9 @@ public partial class ConnectedSystemServer
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
+
+                        // Connector-owned, so a refresh restates it.
+                        existingAttribute.IsOperational = schemaAttribute.IsOperational;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -3026,7 +3029,8 @@ public partial class ConnectedSystemServer
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
                             Required = schemaAttribute.Required,
-                            CaseExact = schemaAttribute.CaseExact
+                            CaseExact = schemaAttribute.CaseExact,
+                            IsOperational = schemaAttribute.IsOperational
                         });
                     }
                 }
@@ -3078,7 +3082,8 @@ public partial class ConnectedSystemServer
                         ClassName = a.ClassName,
                         Writability = a.Writability,
                         Required = a.Required,
-                        CaseExact = a.CaseExact
+                        CaseExact = a.CaseExact,
+                        IsOperational = a.IsOperational
                     }).ToList()
                 };
 

@@ -120,4 +120,32 @@ public class ConnectedSystemAttributeDtoTests
             Assert.That(dto.ReferencedObjectTypeName, Is.Null);
         }
     }
+
+    [Test]
+    public void FromEntity_OperationalAttribute_ReportsItOperational()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 7,
+            Name = "pwdFailureTime",
+            Type = AttributeDataType.DateTime,
+            AttributePlurality = AttributePlurality.MultiValued,
+            Writability = AttributeWritability.ReadOnly,
+            IsOperational = true
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        Assert.That(dto.IsOperational, Is.True);
+    }
+
+    [Test]
+    public void FromEntity_OrdinaryAttribute_ReportsNotOperational()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "mail", Type = AttributeDataType.Text };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        Assert.That(dto.IsOperational, Is.False);
+    }
 }

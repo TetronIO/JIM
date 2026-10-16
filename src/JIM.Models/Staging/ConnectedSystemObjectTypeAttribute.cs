@@ -112,6 +112,18 @@ public class ConnectedSystemObjectTypeAttribute
     public AttributeWritability Writability { get; set; }
 
     /// <summary>
+    /// Whether the Connector reported this as an operational attribute: one the Connected System maintains for its own
+    /// operation rather than one that describes the object, i.e. an RFC 4512 attribute type whose usage is not
+    /// <c>userApplications</c> (<c>createTimestamp</c>, <c>memberOf</c>, OpenLDAP's <c>pwdFailureTime</c>).
+    /// </summary>
+    /// <remarks>
+    /// Connector-owned: a schema refresh restates it, like <see cref="Writability"/>; administrators cannot set it.
+    /// Such an attribute belongs to no class, is always read-only, and is discovered unselected; the schema screen
+    /// holds unselected ones back until asked for, because a directory publishes many.
+    /// </remarks>
+    public bool IsOperational { get; set; }
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
     /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
     /// Null when the schema does not say; import reference resolution then searches every Object Type and
