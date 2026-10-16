@@ -488,6 +488,18 @@
     {
         using var jim = JimFactory.Create();
 
+        if (_isEdit && !string.Equals(_name.Trim(), _originalName, StringComparison.OrdinalIgnoreCase))
+        {
+            // An Expression reading the attribute by name would read nothing after a rename, so the rename is refused;
+            // checked before anything is saved, so a refused rename never leaves the dialog's other edits half-applied.
+            var readers = await jim.Metaverse.GetMetaverseAttributeExpressionReadersAsync(Attribute!.Id, _originalName);
+            if (readers.Count > 0)
+            {
+                Snackbar.Add($"\"{_originalName}\" cannot be renamed while Expressions read it by name. Change these first: {string.Join("; ", readers.Select(r => r.Description))}.", Severity.Error);
+                return;
+            }
+        }
+
         if (_isEdit)
         {
             // ask the administrator to acknowledge anything sync-affecting first (a type or plurality change reshapes

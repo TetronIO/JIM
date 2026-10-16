@@ -24,6 +24,8 @@ Each rule also has a name and an optional **description**, a free-text note for 
 
 A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-system-schema.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
 
+A saved rule's Object Types cannot be changed: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of those types, and would read nothing on another. Neither the portal, the REST API nor PowerShell offers a way to change them once the rule is saved, and JIM refuses a save that would. To manage another Object Type, create a new Synchronisation Rule.
+
 A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).

@@ -671,7 +671,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Attribute updated successfully.</response>
     /// <response code="400">Invalid request, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">The requested name is already used by another attribute (compared case-insensitively).</response>
+    /// <response code="409">The requested name is already used by another attribute (compared case-insensitively), or an Expression reads the attribute by its current name; the message names each one.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}", Name = "UpdateAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -707,6 +707,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                     await _application.Metaverse.RenameMetaverseAttributeAsync(id, request.Name, user, request.ChangeReason);
             }
             catch (MetaverseAttributeNameConflictException ex)
+            {
+                return Conflict(ApiErrorResponse.Conflict(ex.Message));
+            }
+            catch (AttributeReadByConfigurationException ex)
             {
                 return Conflict(ApiErrorResponse.Conflict(ex.Message));
             }
@@ -837,8 +841,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Delete a Metaverse Attribute
     /// </summary>
     /// <remarks>
-    /// Stored values are the only hard block: if any Metaverse Object holds a value a 409 is returned with the
-    /// per-Object-Type counts. When only configuration references exist they are cascade-removed, but only when
+    /// Stored values block the deletion, and so does any configuration that reads the attribute (a Scoping Criterion,
+    /// or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template): either returns a 409 with
+    /// the per-Object-Type counts and the readers, and nothing is changed. Readers are never removed for you. When only configuration references exist they are cascade-removed, but only when
     /// <paramref name="confirmationName"/> exactly matches the attribute's name (the server-enforced type-the-name
     /// gate); a missing or mismatched confirmation returns 400. On success the response lists what was removed.
     /// Built-in attributes cannot be deleted.
@@ -849,7 +854,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Attribute deleted; returns the impact listing any references removed.</response>
     /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values, or because configuration reads the attribute (a Scoping Criterion, or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template); returns the blocking impact, whose <c>readers</c> name each reader.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
     [ProducesResponseType(typeof(AttributeDeletionImpact), StatusCodes.Status200OK)]
@@ -870,8 +875,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var impact = await _application.Metaverse.EvaluateAttributeDeletionAsync(attribute);
 
-        // Stored values are the only hard block.
-        if (impact.BlockedByValues)
+        // Stored values, and configuration reading the attribute, block the deletion.
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return Conflict(impact);
 
         // Cascade deletes require the type-the-name confirmation, enforced here so REST/PowerShell callers cannot
@@ -959,7 +964,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Unassign a Metaverse Attribute from a Metaverse Object Type
     /// </summary>
     /// <remarks>
-    /// Stored values held by Metaverse Objects of that type are the only hard block (409 with the count). When the
+    /// Stored values held by Metaverse Objects of that type, and configuration evaluating against the type that reads
+    /// the attribute, block the unassignment (409 with the count and the readers). When the
     /// unassignment would cascade type-scoped references it requires <paramref name="confirmationName"/> to exactly
     /// match the attribute's name (400 otherwise). Attribute-global references and the attribute itself are untouched.
     /// Built-in attributes cannot be unassigned.
@@ -971,7 +977,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Unassigned; returns the impact listing what was removed.</response>
     /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
     /// <response code="404">Attribute not found, or it is not bound to the Object Type.</response>
-    /// <response code="409">Refused because Metaverse Objects of the type hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects of the type hold stored values, or because configuration evaluating against the type reads the attribute; returns the blocking impact, whose <c>readers</c> name each reader.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}/object-types/{objectTypeId:int}", Name = "UnassignAttributeFromObjectType")]
     [ProducesResponseType(typeof(AttributeUnassignImpact), StatusCodes.Status200OK)]
@@ -995,7 +1001,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (!impact.WasBound)
             return NotFound(ApiErrorResponse.NotFound($"Attribute {id} is not bound to Object Type {objectTypeId}."));
 
-        if (impact.BlockedByValues)
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return Conflict(impact);
 
         if (impact.RequiresConfirmation && !string.Equals(confirmationName, attribute.Name, StringComparison.Ordinal))

@@ -33,7 +33,24 @@
                         Clear these values first, then remove the binding.
                     </MudText>
                 }
-                else
+                @if (_impact.BlockedByReaders)
+                {
+                    <MudAlert Severity="Severity.Error">
+                        <MudText Typo="Typo.subtitle2">@_impact.Readers.Count.ToString("N0") configuration item(s) read this attribute on @_impact.MetaverseObjectTypeName</MudText>
+                        <MudList T="string" Dense="true" Class="mt-1">
+                            @foreach (var reader in _impact.Readers)
+                            {
+                                <MudListItem T="string" Icon="@Icons.Material.Filled.Link" Href="@Helpers.AttributeReaderHref(reader)">
+                                    @reader.Description
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudAlert>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Change or remove each one first, then remove the binding.
+                    </MudText>
+                }
+                @if (!_impact.BlockedByValues && !_impact.BlockedByReaders)
                 {
                     <MudAlert Severity="Severity.Success" Dense="true">
                         No @_impact.MetaverseObjectTypeName has a value for this attribute. Safe to remove; no object data will be lost.
@@ -104,7 +121,7 @@
 
     private bool CanRemove()
     {
-        if (_impact == null || _impact.BlockedByValues || _impact.BuiltIn || !_impact.WasBound)
+        if (_impact == null || _impact.BlockedByValues || _impact.BlockedByReaders || _impact.BuiltIn || !_impact.WasBound)
             return false;
 
         return _cascadeReferences.Count == 0 || ConfirmMatches();
@@ -128,7 +145,7 @@
             var impact = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(AttributeId, MetaverseObjectTypeId, user, changeReason);
             if (!impact.Unassigned)
             {
-                Snackbar.Add("The binding could not be removed; it may now hold stored values. Refresh and try again.", Severity.Warning);
+                Snackbar.Add("The binding could not be removed; it may now hold stored values, or configuration may now read it. Refresh and try again.", Severity.Warning);
                 return;
             }
             Snackbar.Add($"Removed \"{impact.AttributeName}\" from {impact.MetaverseObjectTypeName}.", Severity.Success);

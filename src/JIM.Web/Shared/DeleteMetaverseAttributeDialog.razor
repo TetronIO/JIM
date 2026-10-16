@@ -73,6 +73,21 @@
             });
         }
 
+        if (_impact.BlockedByReaders)
+        {
+            blockers.Add(new ConsequenceBlocker
+            {
+                Headline = $"{_impact.Readers.Count:N0} configuration item(s) read this attribute",
+                Items = _impact.Readers.Select(reader => new ConsequenceItem
+                {
+                    Text = reader.Description,
+                    Icon = Icons.Material.Filled.Link,
+                    Href = Helpers.AttributeReaderHref(reader)
+                }).ToList(),
+                Body = "Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronisation Rule changes which objects the rule manages."
+            });
+        }
+
         return blockers;
     }
 
@@ -119,7 +134,7 @@
             var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(Attribute, user, changeReason);
             if (!impact.Deleted)
             {
-                Snackbar.Add("The attribute could not be deleted; it may now hold stored values. Refresh and try again.", Severity.Warning);
+                Snackbar.Add("The attribute could not be deleted; it may now hold stored values, or configuration may now read it. Refresh and try again.", Severity.Warning);
                 return false;
             }
 

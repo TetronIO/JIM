@@ -629,8 +629,29 @@ public partial class MetaverseServer
         if (!await Application.Repository.Metaverse.IsMetaverseAttributeNameUniqueAsync(newName, attributeId))
             throw new MetaverseAttributeNameConflictException(newName);
 
+        // An Expression reads an attribute by name, so a rename leaves every Expression naming the old one reading
+        // nothing; it is refused, never rewritten. Names ignore case in Expressions, so a case-only rename breaks none.
+        if (!string.Equals(attribute.Name, newName, StringComparison.OrdinalIgnoreCase))
+        {
+            var readers = await GetMetaverseAttributeExpressionReadersAsync(attribute.Id, attribute.Name);
+            if (readers.Count > 0)
+                throw new AttributeReadByConfigurationException(
+                    $"Metaverse Attribute '{attribute.Name}' cannot be renamed while Expressions read it by name. Change these first:", readers);
+        }
+
         attribute.Name = newName;
         await auditedUpdateAsync(attribute);
+    }
+
+    /// <summary>
+    /// Returns the Expressions that read a Metaverse Attribute by name (#2265): what a rename would leave reading
+    /// nothing, and so what refuses one. Scoping Criteria comparing the attribute directly follow a rename and are
+    /// not included.
+    /// </summary>
+    public async Task<IReadOnlyList<AttributeReader>> GetMetaverseAttributeExpressionReadersAsync(int attributeId, string attributeName)
+    {
+        var index = await Application.ConnectedSystems.GetAttributeReaderIndexAsync();
+        return index.ForMetaverseAttribute(attributeId, attributeName, expressionsOnly: true);
     }
 
     /// <summary>
@@ -764,9 +785,11 @@ public partial class MetaverseServer
 
         var valueCounts = await Application.Repository.Metaverse.GetAttributeValueObjectCountsByTypeAsync(attribute.Id);
         var references = await Application.Repository.Metaverse.GetAttributeReferencesAsync(attribute.Id);
+        var readers = (await Application.ConnectedSystems.GetAttributeReaderIndexAsync()).ForMetaverseAttribute(attribute.Id, attribute.Name);
 
         return new AttributeDeletionImpact
         {
+            Readers = readers.ToList(),
             AttributeId = attribute.Id,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
@@ -802,8 +825,10 @@ public partial class MetaverseServer
 
         var impact = await EvaluateAttributeDeletionAsync(attribute);
 
-        // Stored values are the only hard block. Refuse without making any change; the caller surfaces the counts.
-        if (impact.BlockedByValues)
+        // Stored values and configuration reading the attribute refuse the delete without making any change; the
+        // caller surfaces the counts and names each reader. A reader is never cascade-removed (#2265): a Scoping
+        // Criterion removed from under a Synchronisation Rule changes which objects the rule manages.
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return impact;
 
         Log.Debug("DeleteMetaverseAttributeWithCascadeAsync() removing {Attribute} with {ReferenceCount} reference(s)", attribute.Name, impact.References.Count);
@@ -879,9 +904,11 @@ public partial class MetaverseServer
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false);
         var objectsWithValues = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attributeId, metaverseObjectTypeId);
         var references = await Application.Repository.Metaverse.GetAttributeReferencesForObjectTypeAsync(attributeId, metaverseObjectTypeId);
+        var readers = (await Application.ConnectedSystems.GetAttributeReaderIndexAsync()).ForMetaverseAttribute(attributeId, attribute.Name, metaverseObjectTypeId);
 
         return new AttributeUnassignImpact
         {
+            Readers = readers.ToList(),
             AttributeId = attributeId,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
@@ -919,8 +946,9 @@ public partial class MetaverseServer
         if (impact.BuiltIn)
             throw new InvalidOperationException($"Cannot unassign built-in Metaverse Attribute '{impact.AttributeName}'.");
 
-        // Nothing bound to remove, or blocked by stored values: make no change and report via the impact.
-        if (!impact.WasBound || impact.BlockedByValues)
+        // Nothing bound to remove, or blocked by stored values or by configuration reading the attribute on this
+        // type: make no change and report via the impact.
+        if (!impact.WasBound || impact.BlockedByValues || impact.BlockedByReaders)
             return impact;
 
         var parent = new Activity
