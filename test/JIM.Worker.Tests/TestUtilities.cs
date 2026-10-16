@@ -142,6 +142,22 @@ public static class TestUtilities
     }
 
     /// <summary>
+    /// A configuration test case repository holding no cases (#2055 Phase 4), for a fixture that mocks
+    /// IRepository: change capture and the preflight read a Synchronisation Rule's or Connected System's
+    /// test cases into its snapshot, and a bare mock would hand them null.
+    /// </summary>
+    public static IConfigurationTestRepository CreateEmptyConfigurationTestRepository()
+    {
+        var repository = new Mock<IConfigurationTestRepository>();
+        repository.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetSimpleModeMatchingTestCasesAsync(It.IsAny<int>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetTestCasesForConnectedSystemAsync(It.IsAny<int>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetTestCasesAsync(It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetAllTestCasesAsync()).ReturnsAsync([]);
+        return repository.Object;
+    }
+
+    /// <summary>
     /// Attaches empty <see cref="JimDbContext.ObjectMatchingRules"/> and
     /// <see cref="JimDbContext.ConnectedSystemContainers"/> mocks to the supplied
     /// <paramref name="mockDbContext"/>. These DbSets are queried by

@@ -39,6 +39,8 @@ public class AttributePriorityOrderTests
         TestUtilities.SetEnvironmentVariables();
 
         _mockRepository = new Mock<IRepository>();
+
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _mockCsRepo = new Mock<IConnectedSystemRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
 

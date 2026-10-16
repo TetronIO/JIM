@@ -200,6 +200,22 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `comparisonType`, `caseSensitive` | B |
 | `stringValue`, `intValue`, `longValue`, `decimalValue`, `dateTimeValue`, `boolValue`, `guidValue` | B |
 
+### Configuration test cases (`testCases`, `testCase`)
+
+Saved configuration test cases (#2055) covering the rule's Scope, its Attribute Flows and its own Object Matching Rules. Every key is Class C: a test case checks the configuration and changes nothing that synchronises.
+
+They sit in a top-level `testCases` collection rather than beside the Attribute Flow or Object Matching Rule each covers. Classification takes the class of every changed node, containers included. A case nested in an Attribute Flow would therefore make adding it a Class B change to that flow. When a cascade deletes cases with what they cover, they still appear as removed items of `testCases`. The collection is omitted when there are none, so snapshots captured before test cases existed compare as unchanged.
+
+| Key | Class | Reason |
+|---|---|---|
+| `testCases`, `testCase` | C | The collection and one case; the case's name is its label. |
+| `name`, `description` | C | Label only (the keys the rule itself uses, at the same class). |
+| `testCaseKind` | C | What the case tests. |
+| `testCaseAttributeFlowId`, `testCaseObjectMatchingRuleId` | C | Which Attribute Flow or Object Matching Rule it covers. |
+| `testCaseRunAsOf` | C | The instant the case runs as of. |
+| `testCaseExpectation`, `testCaseInOrder` | C | What the case expects, and whether its values must come in order. |
+| `testCaseExpectedValues`, `testCaseInputs` | C | Recorded as keyed hashes, as a secret is. Inputs loaded from a real object can be personal data, so history records that they changed and never what they were. |
+
 ## Connected System
 
 | Key | Class | Reason |
@@ -232,6 +248,10 @@ Simple Mode matching rules attach to a Connected System Object Type rather than 
 | `sources`, `source` | B | Changes what is compared. |
 | `connectedSystemAttributeId` | B | Changes the Connected System attribute matched on. |
 | `expression` | B | Changes the computed value matched on. |
+
+### Configuration test cases (`testCases`, `testCase`)
+
+The saved configuration test cases of Simple Mode Object Matching Rules, under the same keys and classes as on a Synchronisation Rule (see above). A Synchronisation Rule's own cases are recorded in its own snapshot.
 
 ### Run Profiles (`runProfiles`)
 
