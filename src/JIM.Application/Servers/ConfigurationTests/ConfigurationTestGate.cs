@@ -134,9 +134,10 @@ public sealed class ConfigurationTestGate
         {
             return subject.Run(_runner, testCase, nowUtc);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The exception's type only: its message can quote the case's input values.
+            // The exception's type only: its message can quote the case's input values. A cancelled save is not a
+            // case that could not run, so cancellation propagates.
             return ConfigurationTestRunner.CouldNotRun(testCase, $"{ex.GetType().Name}.", nowUtc);
         }
     }

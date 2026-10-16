@@ -4,6 +4,7 @@
 using JIM.Application.Expressions;
 using JIM.Application.Servers.ConfigurationTests;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -147,6 +148,20 @@ public class ConfigurationTestGateTests
             Assert.That(regressions[0].After.Actual!.Outcome, Is.EqualTo(ConfigurationTestOutcome.Error));
             Assert.That(regressions[0].AcceptedExpectation, Is.EqualTo(Expect(ConfigurationTestExpectationKind.Error)));
         }
+    }
+
+    [Test]
+    public void FindRegressions_RunIsCancelled_LetsTheCancellationThrough()
+    {
+        // A cancelled save is not a case that stopped passing: the cancellation propagates, it is never a regression.
+        var cancelling = new Moq.Mock<IExpressionEvaluator>();
+        cancelling.Setup(e => e.Evaluate(Moq.It.IsAny<string>(), Moq.It.IsAny<ExpressionContext>())).Throws(new OperationCanceledException());
+        cancelling.Setup(e => e.Test(Moq.It.IsAny<string>(), Moq.It.IsAny<ExpressionContext>())).Throws(new OperationCanceledException());
+        var gate = new ConfigurationTestGate(new ConfigurationTestRunner(cancelling.Object));
+        var testCase = FlowCase(Values("Bloggs"), Cs("sn", "Bloggs"));
+
+        Assert.That(() => gate.FindRegressions([testCase], Subject(FlowRule("cs[\"sn\"]")), Subject(FlowRule("cs[\"sn\"]")), Now),
+            Throws.InstanceOf<OperationCanceledException>());
     }
 
     #endregion

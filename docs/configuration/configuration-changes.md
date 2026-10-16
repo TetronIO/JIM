@@ -27,7 +27,7 @@ Where a change is sync-affecting or destructive, JIM shows a confirmation before
 
 Cancelling the confirmation abandons the save. Nothing is written.
 
-A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is stopped too, until you keep editing, accept its new result or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
+A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is not saved until you choose: keep editing (nothing is saved), accept the new result, or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
 
 !!! note "Saving is not applying"
 
