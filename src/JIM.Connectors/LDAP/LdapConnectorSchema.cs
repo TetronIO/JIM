@@ -612,7 +612,7 @@ internal class LdapConnectorSchema
         {
             // Usage alone makes it read-only (DetermineRfcAttributeWritability), and it belongs to no object class.
             attribute.ClassName = null;
-            attribute.Tags.Add(AttributeTags.Operational);
+            attribute.IsOperational = true;
             objectType.Attributes.Add(attribute);
         }
     }

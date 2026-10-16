@@ -57,10 +57,10 @@ public class ConnectorSchemaAttribute
     public bool CaseExact { get; set; }
 
     /// <summary>
-    /// Classification the Connector reports for this attribute, i.e. <see cref="AttributeTags.Operational"/>. Empty
-    /// when the Connector classifies nothing, which is the norm. See <see cref="AttributeTags"/>.
+    /// Whether this is an operational attribute: one the Connected System maintains for its own operation. See
+    /// <see cref="ConnectedSystemObjectTypeAttribute.IsOperational"/>.
     /// </summary>
-    public List<string> Tags { get; set; } = [];
+    public bool IsOperational { get; set; }
 
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {

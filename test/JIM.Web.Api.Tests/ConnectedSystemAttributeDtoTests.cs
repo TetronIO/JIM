@@ -122,7 +122,7 @@ public class ConnectedSystemAttributeDtoTests
     }
 
     [Test]
-    public void FromEntity_OperationalAttribute_CarriesItsTagsAndReportsItOperational()
+    public void FromEntity_OperationalAttribute_ReportsItOperational()
     {
         var entity = new ConnectedSystemObjectTypeAttribute
         {
@@ -131,29 +131,21 @@ public class ConnectedSystemAttributeDtoTests
             Type = AttributeDataType.DateTime,
             AttributePlurality = AttributePlurality.MultiValued,
             Writability = AttributeWritability.ReadOnly,
-            Tags = [AttributeTags.Operational]
+            IsOperational = true
         };
 
         var dto = ConnectedSystemAttributeDto.FromEntity(entity);
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(dto.Tags, Is.EqualTo(new[] { AttributeTags.Operational }));
-            Assert.That(dto.IsOperational, Is.True);
-        }
+        Assert.That(dto.IsOperational, Is.True);
     }
 
     [Test]
-    public void FromEntity_UntaggedAttribute_ReportsEmptyTagsAndNotOperational()
+    public void FromEntity_OrdinaryAttribute_ReportsNotOperational()
     {
         var entity = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "mail", Type = AttributeDataType.Text };
 
         var dto = ConnectedSystemAttributeDto.FromEntity(entity);
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(dto.Tags, Is.Empty);
-            Assert.That(dto.IsOperational, Is.False);
-        }
+        Assert.That(dto.IsOperational, Is.False);
     }
 }

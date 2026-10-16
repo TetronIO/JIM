@@ -47,12 +47,12 @@ public class LdapConnectorImportRequestedAttributeTests
             new()
             {
                 Name = "pwdFailureTime", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.MultiValued,
-                Writability = AttributeWritability.ReadOnly, Selected = true, Tags = [AttributeTags.Operational], ConnectedSystemObjectType = objectType
+                Writability = AttributeWritability.ReadOnly, Selected = true, IsOperational = true, ConnectedSystemObjectType = objectType
             },
             new()
             {
                 Name = "createTimestamp", Type = AttributeDataType.DateTime, Writability = AttributeWritability.ReadOnly,
-                Selected = false, Tags = [AttributeTags.Operational], ConnectedSystemObjectType = objectType
+                Selected = false, IsOperational = true, ConnectedSystemObjectType = objectType
             }
         ];
         return objectType;

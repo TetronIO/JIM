@@ -520,7 +520,7 @@
                     </div>
                 </MudAlert>
             }
-            else if (_showOperationalAttributes && selectedObjectType.Attributes.Any(a => a.IsOperational()))
+            else if (_showOperationalAttributes && selectedObjectType.Attributes.Any(a => a.IsOperational))
             {
                 <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                     <div class="d-flex align-center flex-wrap" style="gap: 8px;">
@@ -610,7 +610,7 @@
                         <VirtualisedSortHeader Title="Class" Name="class" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (context.Item.IsOperational())
+                        @if (context.Item.IsOperational)
                         {
                             <MudTooltip Text="An operational attribute: the Connected System maintains it for its own operation, and it belongs to no class. JIM can import it but never export it." Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Color="Color.Default" Variant="Variant.Text">Operational</MudChip>
@@ -1614,7 +1614,7 @@
     /// <see cref="SchemaFilterFunc"/>, so they all describe the rows the grid can show.
     /// </summary>
     private bool IsListed(ConnectedSystemObjectTypeAttribute element) =>
-        _showOperationalAttributes || element.Selected || !element.IsOperational();
+        _showOperationalAttributes || element.Selected || !element.IsOperational;
 
     /// <summary>
     /// How many operational attributes the current view is holding back, which is what the disclosure above the grid

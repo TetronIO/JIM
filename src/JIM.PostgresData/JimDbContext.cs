@@ -386,12 +386,6 @@ public class JimDbContext : DbContext
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
 
-        // Connector-reported attribute classification (#2153, D8). Defaults to an empty list so the column can be added
-        // beside every attribute already discovered, none of which a Connector had tagged.
-        modelBuilder.Entity<ConnectedSystemObjectTypeAttribute>()
-            .PrimitiveCollection(csa => csa.Tags)
-            .HasDefaultValueSql("'{}'::text[]");
-
         // The Object Type a Reference attribute declares as its target (#1285). Distinct from the owning
         // relationship above, so it is configured explicitly. SetNull: removing an Object Type must not take
         // attributes of other Object Types with it; the reference simply loses its declared target and

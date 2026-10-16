@@ -16,13 +16,13 @@ using Serilog;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// A Connector can tag an attribute it discovers (an LDAP directory's operational attributes, #2153 D8), and schema
-/// import persists the tag so the schema screen can group the attribute. Tags are connector-owned, exactly as an
-/// Object Type's are: a refresh restates them. These tests also hold a refresh of an existing Connected System to
+/// A Connector can report an attribute it discovers as operational (an LDAP directory's operational attributes, #2153
+/// D8), and schema import persists the flag so the schema screen can hold the attribute back. The flag is
+/// connector-owned: a refresh restates it. These tests also hold a refresh of an existing Connected System to
 /// reporting newly offered attributes as unselected additions, without disturbing anything already selected.
 /// </summary>
 [TestFixture]
-public class ConnectedSystemSchemaAttributeTagTests
+public class ConnectedSystemSchemaOperationalAttributeTests
 {
     private Mock<IRepository> _repository = null!;
     private Mock<IActivityRepository> _activityRepository = null!;
@@ -63,7 +63,7 @@ public class ConnectedSystemSchemaAttributeTagTests
     }
 
     [Test]
-    public async Task ImportConnectedSystemSchemaAsync_NewObjectType_PersistsTheConnectorsAttributeTagsAsync()
+    public async Task ImportConnectedSystemSchemaAsync_NewObjectType_PersistsTheOperationalFlagAsync()
     {
         _connector.SetSchema("inetOrgPerson", Identifier(), Mail(), PwdFailureTime());
 
@@ -72,8 +72,8 @@ public class ConnectedSystemSchemaAttributeTagTests
         var objectType = SingleObjectType();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(Attribute(objectType, "pwdFailureTime").Tags, Is.EqualTo(new[] { AttributeTags.Operational }));
-            Assert.That(Attribute(objectType, "mail").Tags, Is.Empty);
+            Assert.That(Attribute(objectType, "pwdFailureTime").IsOperational, Is.True);
+            Assert.That(Attribute(objectType, "mail").IsOperational, Is.False);
         }
     }
 
@@ -94,7 +94,7 @@ public class ConnectedSystemSchemaAttributeTagTests
             Assert.That(result.HasRemovalsOrDefinitionChanges, Is.False, "Additions cannot break anything that already works.");
             Assert.That(Attribute(objectType, "pwdFailureTime").Selected, Is.False);
             Assert.That(Attribute(objectType, "pwdFailureTime").Writability, Is.EqualTo(AttributeWritability.ReadOnly));
-            Assert.That(Attribute(objectType, "pwdFailureTime").Tags, Is.EqualTo(new[] { AttributeTags.Operational }));
+            Assert.That(Attribute(objectType, "pwdFailureTime").IsOperational, Is.True);
             Assert.That(Attribute(objectType, "createTimestamp").Selected, Is.False);
             Assert.That(Attribute(objectType, "mail").Selected, Is.True, "A refresh must leave the administrator's selection alone.");
             Assert.That(Attribute(objectType, "mail").Id, Is.EqualTo(21), "An existing attribute keeps its row.");
@@ -112,7 +112,7 @@ public class ConnectedSystemSchemaAttributeTagTests
         objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
         {
             Id = 22, Name = "pwdFailureTime", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.MultiValued,
-            Writability = AttributeWritability.ReadOnly, Selected = true, Tags = [AttributeTags.Operational], ConnectedSystemObjectType = objectType
+            Writability = AttributeWritability.ReadOnly, Selected = true, IsOperational = true, ConnectedSystemObjectType = objectType
         });
         connectedSystem.ObjectTypes = [objectType];
         _connector.SetSchema("inetOrgPerson", Identifier(), Mail(), PwdFailureTime());
@@ -124,24 +124,24 @@ public class ConnectedSystemSchemaAttributeTagTests
         {
             Assert.That(pwdFailureTime.Selected, Is.True);
             Assert.That(pwdFailureTime.Id, Is.EqualTo(22));
-            Assert.That(pwdFailureTime.Tags, Is.EqualTo(new[] { AttributeTags.Operational }));
+            Assert.That(pwdFailureTime.IsOperational, Is.True);
             Assert.That(result.AddedAttributes, Does.Not.ContainKey("inetOrgPerson"));
         }
     }
 
     [Test]
-    public async Task ImportConnectedSystemSchemaAsync_ConnectorStopsTaggingAnAttribute_ClearsTheStaleTagAsync()
+    public async Task ImportConnectedSystemSchemaAsync_ConnectorStopsReportingAnAttributeOperational_ClearsTheStaleFlagAsync()
     {
         var connectedSystem = CreateConnectedSystem();
         var objectType = ExistingInetOrgPerson();
-        Attribute(objectType, "mail").Tags = [AttributeTags.Operational];
+        Attribute(objectType, "mail").IsOperational = true;
         connectedSystem.ObjectTypes = [objectType];
         _connector.SetSchema("inetOrgPerson", Identifier(), Mail());
 
         await _jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, NewInitiator());
 
-        Assert.That(Attribute(SingleObjectType(), "mail").Tags, Is.Empty,
-            "Tags are connector-owned, so a refresh restates them rather than keeping one nothing stands behind.");
+        Assert.That(Attribute(SingleObjectType(), "mail").IsOperational, Is.False,
+            "The flag is connector-owned, so a refresh restates it rather than keeping one nothing stands behind.");
     }
 
     private static ConnectorSchemaAttribute Identifier() =>
@@ -153,13 +153,13 @@ public class ConnectedSystemSchemaAttributeTagTests
     private static ConnectorSchemaAttribute PwdFailureTime() =>
         new("pwdFailureTime", AttributeDataType.DateTime, AttributePlurality.MultiValued, writability: AttributeWritability.ReadOnly)
         {
-            Tags = [AttributeTags.Operational]
+            IsOperational = true
         };
 
     private static ConnectorSchemaAttribute CreateTimestamp() =>
         new("createTimestamp", AttributeDataType.DateTime, AttributePlurality.SingleValued, writability: AttributeWritability.ReadOnly)
         {
-            Tags = [AttributeTags.Operational]
+            IsOperational = true
         };
 
     private static ConnectedSystemObjectType ExistingInetOrgPerson()

@@ -3661,6 +3661,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("IsExternalId")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsOperational")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSecondaryExternalId")
                         .HasColumnType("boolean");
 
@@ -3679,12 +3682,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<bool>("SelectionLocked")
                         .HasColumnType("boolean");
-
-                    b.PrimitiveCollection<List<string>>("Tags")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text[]")
-                        .HasDefaultValueSql("'{}'::text[]");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");

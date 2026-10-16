@@ -1,29 +1,28 @@
-﻿using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace JIM.PostgresData.Migrations
 {
     /// <inheritdoc />
-    public partial class AddConnectedSystemAttributeTags : Migration
+    public partial class AddConnectedSystemAttributeIsOperational : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<List<string>>(
-                name: "Tags",
+            migrationBuilder.AddColumn<bool>(
+                name: "IsOperational",
                 table: "ConnectedSystemAttributes",
-                type: "text[]",
+                type: "boolean",
                 nullable: false,
-                defaultValueSql: "'{}'::text[]");
+                defaultValue: false);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Tags",
+                name: "IsOperational",
                 table: "ConnectedSystemAttributes");
         }
     }

@@ -14,7 +14,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// An RFC 4512 directory keeps some of the most useful facts about an entry in operational attributes (USAGE other
 /// than userApplications): OpenLDAP's password policy failure times, creation and modification stamps, memberOf.
 /// They belong to no object class, so discovery that only walks MUST and MAY never offered them (#2153, D8). These
-/// tests hold discovery to adding each one to every structural Object Type as an unselected, read-only, tagged
+/// tests hold discovery to adding each one to every structural Object Type as an unselected, read-only, operational
 /// attribute, and to leaving out what can never carry a value on an ordinary entry.
 /// </summary>
 [TestFixture]
@@ -95,8 +95,8 @@ public class LdapConnectorSchemaOperationalAttributeTests
                     "pwdFailureTime is not SINGLE-VALUE: it holds one timestamp per consecutive failure.");
                 Assert.That(attribute!.Writability, Is.EqualTo(AttributeWritability.ReadOnly),
                     "An operational attribute is maintained by the directory, so it must never be an export target.");
-                Assert.That(attribute!.Tags, Is.EqualTo(new[] { AttributeTags.Operational }),
-                    "The attribute must be tagged so the schema screen can group it.");
+                Assert.That(attribute!.IsOperational, Is.True,
+                    "The attribute must be flagged operational so the schema screen can hold it back.");
                 Assert.That(attribute!.Required, Is.False);
                 Assert.That(attribute!.ClassName, Is.Null, "An operational attribute belongs to no object class.");
                 Assert.That(attribute!.Description, Is.EqualTo("The timestamps of the last consecutive authentication failures"));
@@ -180,11 +180,11 @@ public class LdapConnectorSchemaOperationalAttributeTests
         var distinguishedName = FindAttribute(schema, "inetOrgPerson", "distinguishedName");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(entryUuid!.Tags, Is.Empty, "The External ID is synthesised as before, so a refresh does not restate it.");
+            Assert.That(entryUuid!.IsOperational, Is.False, "The External ID is synthesised as before, so a refresh does not restate it.");
             Assert.That(entryUuid!.ClassName, Is.EqualTo("inetOrgPerson"));
             Assert.That(entryUuid!.Description, Is.EqualTo("System-assigned unique identifier for this entry"));
-            Assert.That(mail!.Tags, Is.Empty);
-            Assert.That(distinguishedName!.Tags, Is.Empty);
+            Assert.That(mail!.IsOperational, Is.False);
+            Assert.That(distinguishedName!.IsOperational, Is.False);
             Assert.That(schema.ObjectTypes.Single(t => t.Name == "inetOrgPerson").Attributes.Count(a => a.Name == "pwdFailureTime"), Is.EqualTo(1));
         }
     }
@@ -200,7 +200,7 @@ public class LdapConnectorSchemaOperationalAttributeTests
 
     [TestCase(nameof(LdapDirectoryType.ActiveDirectory))]
     [TestCase(nameof(LdapDirectoryType.SambaAD))]
-    public async Task GetSchemaAsync_ActiveDirectoryFamily_TagsNoAttributeOperationalAsync(string directoryType)
+    public async Task GetSchemaAsync_ActiveDirectoryFamily_ReportsNoAttributeOperationalAsync(string directoryType)
     {
         // Active Directory and Samba AD are discovered from the schema partition, not the subschema subentry, so they
         // never reach the RFC 4512 path: their operational attributes (whenChanged, uSNChanged, memberOf) are on
@@ -234,7 +234,7 @@ public class LdapConnectorSchemaOperationalAttributeTests
 
         Assert.That(schema.ObjectTypes.Single(t => t.Name == "user").Attributes.Select(a => a.Name), Does.Contain("whenChanged"),
             "The fixture must reach the schema partition path, or the assertion below proves nothing.");
-        Assert.That(schema.ObjectTypes.SelectMany(t => t.Attributes).Where(a => a.Tags.Count > 0), Is.Empty);
+        Assert.That(schema.ObjectTypes.SelectMany(t => t.Attributes).Where(a => a.IsOperational), Is.Empty);
     }
 
     private static ConnectorSchemaAttribute? FindAttribute(ConnectorSchema schema, string objectTypeName, string attributeName) =>
@@ -243,7 +243,7 @@ public class LdapConnectorSchemaOperationalAttributeTests
 
     private static List<string> OperationalAttributeNames(ConnectorSchema schema, string objectTypeName) =>
         schema.ObjectTypes.Single(t => t.Name == objectTypeName).Attributes
-            .Where(a => a.Tags.Contains(AttributeTags.Operational))
+            .Where(a => a.IsOperational)
             .Select(a => a.Name)
             .ToList();
 

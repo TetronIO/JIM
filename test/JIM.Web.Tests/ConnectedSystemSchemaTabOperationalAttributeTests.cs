@@ -95,7 +95,7 @@ public class ConnectedSystemSchemaTabOperationalAttributeTests : JimComponentTes
     public void SchemaTab_ForAnObjectTypeWithNoOperationalAttributes_SaysNothingAboutThem()
     {
         var objectType = InetOrgPerson();
-        objectType.Attributes.RemoveAll(a => a.Tags.Count > 0);
+        objectType.Attributes.RemoveAll(a => a.IsOperational);
 
         var component = RenderSchemaTab(ConnectedSystemWith(objectType));
 
@@ -153,7 +153,7 @@ public class ConnectedSystemSchemaTabOperationalAttributeTests : JimComponentTes
         Selected = selected,
         IsExternalId = isExternalId,
         SelectionLocked = isExternalId,
-        Tags = operational ? [AttributeTags.Operational] : [],
+        IsOperational = operational,
         ConnectedSystemObjectType = objectType
     };
 }

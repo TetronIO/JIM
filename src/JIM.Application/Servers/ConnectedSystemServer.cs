@@ -3012,8 +3012,8 @@ public partial class ConnectedSystemServer
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
 
-                        // Tags are the Connector's, so a refresh restates them rather than accumulating them.
-                        existingAttribute.Tags = schemaAttribute.Tags.Distinct().ToList();
+                        // Connector-owned, so a refresh restates it.
+                        existingAttribute.IsOperational = schemaAttribute.IsOperational;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -3030,7 +3030,7 @@ public partial class ConnectedSystemServer
                             Writability = schemaAttribute.Writability,
                             Required = schemaAttribute.Required,
                             CaseExact = schemaAttribute.CaseExact,
-                            Tags = schemaAttribute.Tags.Distinct().ToList()
+                            IsOperational = schemaAttribute.IsOperational
                         });
                     }
                 }
@@ -3083,7 +3083,7 @@ public partial class ConnectedSystemServer
                         Writability = a.Writability,
                         Required = a.Required,
                         CaseExact = a.CaseExact,
-                        Tags = a.Tags.Distinct().ToList()
+                        IsOperational = a.IsOperational
                     }).ToList()
                 };
 
