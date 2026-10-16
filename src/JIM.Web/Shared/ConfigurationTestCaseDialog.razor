@@ -1,0 +1,267 @@
+@using JIM.Models.Expressions
+@using JIM.Models.Logic
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Creates or edits a saved configuration test case (#2055 Phase 4): its name, its inputs (one row per input the
+   configuration reads, each value edited as its attribute's type), the instant it runs as of, and what it expects.
+   Saves through a fresh application, never the page's: the Synchronisation Rule page holds its rule change-tracked
+   while it is edited, and saving a test case through that context would save the half-edited rule with it. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(TestCase.Id > 0 ? "Edit test case" : "Save test case")</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@CoverageLabel</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" data-testid="jim-test-case-personal-data">
+            Test inputs are saved as configuration, unencrypted. If you copied them from a real object, replace any personal
+            data with made-up values before you save.
+        </MudAlert>
+
+        <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Required="true" MaxLength="@ConfigurationTestCase.MaxNameLength"
+                      HelperText="What the case checks, in your own words. It is recorded in Configuration History, so keep values out of it."
+                      data-testid="jim-test-case-name" />
+        <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Lines="2" Sizing="InputSizing.Auto" Class="mt-3" />
+
+        <MudText Typo="Typo.subtitle2" Class="mt-5">Inputs</MudText>
+        @if (_rows.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">What this case tests reads no attributes, so it gives the same result for every object.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Outlined="true" Class="mt-2" Style="overflow-x: auto">
+                <thead>
+                    <tr><th>Input</th><th>Value</th><th>No value</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        var current = row;
+                        <tr @key="@($"{current.Source}:{current.AttributeName}")">
+                            <td>
+                                @if (current.Source is { } side)
+                                {
+                                    <AttributeChip Kind="@(side == ExpressionInputSource.Metaverse ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
+                                                   Name="@current.AttributeName" />
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">@current.AttributeName</MudText>
+                                }
+                            </td>
+                            <td style="min-width: 16rem">
+                                @if (current is { Type: { } type, Plurality: { } plurality })
+                                {
+                                    <TestInputValueEditor Label="@current.AttributeName" Type="type" Plurality="plurality" State="current.State" OnChanged="StateHasChanged" />
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" class="mud-text-secondary">
+                                        No longer read: @string.Join(", ", current.State.Values)
+                                    </MudText>
+                                }
+                            </td>
+                            <td>
+                                @if (current.IsRead)
+                                {
+                                    <MudCheckBox T="bool" Value="current.State.NoValue" ValueChanged="@(v => current.State.NoValue = v)" Dense="true"
+                                                 aria-label="@($"{current.AttributeName} has no value")" />
+                                }
+                            </td>
+                            <td>
+                                @if (!current.IsRead)
+                                {
+                                    <MudTooltip Text="Remove this input" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => _rows.Remove(current))"
+                                                       aria-label="@($"Remove {current.AttributeName}")" />
+                                    </MudTooltip>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        <RunAsOfPicker @bind-Value="_runAsOf" Class="mt-4" />
+
+        <MudText Typo="Typo.subtitle2" Class="mt-5">Expects</MudText>
+        <MudSelect T="ConfigurationTestExpectationKind" @bind-Value="_expect" Label="Result" Variant="Variant.Outlined" Dense="true" Class="mt-2"
+                   data-testid="jim-test-case-expect">
+            @foreach (var kind in ConfigurationTestCase.ExpectationsFor(TestCase.Kind))
+            {
+                <MudSelectItem Value="kind">@ConfigurationTestCaseDisplay.ExpectationLabel(kind)</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (_expect == ConfigurationTestExpectationKind.Values)
+        {
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                @foreach (var value in _expectedValues.ToList())
+                {
+                    <MudChip T="string" Text="@value" OnClose="@(() => _expectedValues.Remove(value))" Size="Size.Small" />
+                }
+            </div>
+            <MudTextField @bind-Value="_pendingValue" Label="Add a value" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                          OnKeyDown="AddValueOnEnter" Immediate="true"
+                          HelperText="Press Enter to add. A date can be written as 2026-03-02; each value is compared as the type the configuration gives."
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddValue" AdornmentAriaLabel="Add value" />
+            @if (_expectedValues.Count > 1)
+            {
+                <MudCheckBox T="bool" @bind-Value="_inOrder" Label="In this order" Dense="true" Class="mt-1" />
+            }
+        }
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4" data-testid="jim-test-case-error">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="SaveAsync" Disabled="@(!CanSave() || _saving)"
+                   data-testid="jim-test-case-save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The case to edit, or a new one to save (a draft from a tester, or one covering what the administrator chose).
+    /// It is edited as a copy, so cancelling leaves it as it was.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ConfigurationTestCase TestCase { get; set; } = null!;
+
+    /// <summary>
+    /// What the case covers, as the panel names it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string CoverageLabel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The inputs the configuration the case covers reads now, which the case's inputs are laid against.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> Slots { get; set; } = [];
+
+    private string? _name;
+    private string? _description;
+    private List<ConfigurationTestCaseDisplay.InputRow> _rows = [];
+    private DateTime? _runAsOf;
+    private ConfigurationTestExpectationKind _expect;
+    private List<string> _expectedValues = [];
+    private string? _pendingValue;
+    private bool _inOrder;
+    private string? _error;
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        _name = TestCase.Name;
+        _description = TestCase.Description;
+        _rows = ConfigurationTestCaseDisplay.InputRows(TestCase, Slots);
+        _runAsOf = TestCase.RunAsOfUtc;
+        var expectation = TestCase.Expectation;
+        _expect = ConfigurationTestCase.ExpectationsFor(TestCase.Kind).Contains(expectation.Kind)
+            ? expectation.Kind
+            : ConfigurationTestCase.ExpectationsFor(TestCase.Kind)[0];
+        _expectedValues = expectation.Values.ToList();
+        _inOrder = expectation.InOrder;
+    }
+
+    /// <summary>
+    /// Mirrors the checks the save refuses on, so the button and the save agree: a name, and a value for each
+    /// expected value when values are expected.
+    /// </summary>
+    private bool CanSave() =>
+        !string.IsNullOrWhiteSpace(_name) && (_expect != ConfigurationTestExpectationKind.Values || _expectedValues.Count > 0 || !string.IsNullOrEmpty(_pendingValue));
+
+    private void AddValue()
+    {
+        if (string.IsNullOrEmpty(_pendingValue))
+            return;
+        _expectedValues.Add(_pendingValue);
+        _pendingValue = null;
+    }
+
+    private void AddValueOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            AddValue();
+    }
+
+    private async Task SaveAsync()
+    {
+        AddValue();
+        _error = null;
+        _saving = true;
+
+        // A copy, so a refused save leaves the caller's case as it was.
+        var testCase = new ConfigurationTestCase
+        {
+            Id = TestCase.Id,
+            Kind = TestCase.Kind,
+            SyncRuleMappingId = TestCase.SyncRuleMappingId,
+            SyncRuleId = TestCase.SyncRuleId,
+            ObjectMatchingRuleId = TestCase.ObjectMatchingRuleId,
+            Name = _name?.Trim() ?? string.Empty,
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            RunAsOfUtc = _runAsOf,
+            Inputs = ConfigurationTestCaseDisplay.ToInputs(_rows),
+            Expectation = new ConfigurationTestExpectation(_expect,
+                _expect == ConfigurationTestExpectationKind.Values ? _expectedValues.ToList() : [],
+                _expect == ConfigurationTestExpectationKind.Values && _expectedValues.Count > 1 && _inOrder)
+        };
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            if (testCase.Id > 0)
+                await jim.ConfigurationTests.UpdateTestCaseAsync(testCase, user);
+            else
+                await jim.ConfigurationTests.CreateTestCaseAsync(testCase, user);
+
+            Snackbar.Add($"Saved test case '{testCase.Name}'.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(testCase));
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Shows the dialog for <paramref name="testCase"/>, returning the case as saved, or null when it was cancelled.
+    /// </summary>
+    public static async Task<ConfigurationTestCase?> ShowAsync(IDialogService dialogService, ConfigurationTestCase testCase,
+        string coverageLabel, IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> slots)
+    {
+        var parameters = new DialogParameters<ConfigurationTestCaseDialog>
+        {
+            { d => d.TestCase, testCase },
+            { d => d.CoverageLabel, coverageLabel },
+            { d => d.Slots, slots }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<ConfigurationTestCaseDialog>(null, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: ConfigurationTestCase saved } ? saved : null;
+    }
+}

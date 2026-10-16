@@ -7,6 +7,7 @@
 @using JIM.Web.Models
 @inject IExpressionEvaluator ExpressionEvaluator
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -313,6 +314,13 @@ else
     }
 }
 
+@* A saved Attribute Flow's test can be kept as a test case (#2055 Phase 4), which runs against the flow as saved. *@
+@if (Draft is { } draft)
+{
+    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Outlined.FactCheck" Class="mt-2"
+               OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-attribute-flow-test-save-as-case">Save as test case</MudButton>
+}
+
 @code {
     /// <summary>
     /// The Expression to test, as typed in the editor.
@@ -363,6 +371,17 @@ else
     private string _targetName = string.Empty;
     private bool _fromObject;
     private AttributeFlowTestResult? _result;
+    private SyncRuleMappingSource? _testedSource;
+    private DateTime _ranAtUtc;
+
+    /// <summary>
+    /// The test as a test case to save, with the values tested and today's result expected; null when there is
+    /// nothing to save, or the Attribute Flow is not saved yet.
+    /// </summary>
+    private ConfigurationTestCase? Draft => _result == null
+        ? null
+        : ConfigurationTestCaseDrafts.FromAttributeFlowTest(Mapping, _testedSource,
+            _inputs.Select(input => (input, StateOf(input.Accessor))).ToList(), _result, _asOf, _ranAtUtc);
     private string? _parseError;
     private int? _errorPosition;
 
@@ -479,8 +498,17 @@ else
 
         // The source as it stands in the editor, with the Expression as typed.
         var source = new SyncRuleMappingSource { Expression = Expression, MissingInputBehaviour = Source.MissingInputBehaviour };
-        _result = AttributeFlowTester.Test(SyncRule, Mapping, source, inputs, ExpressionEvaluator, _asOf);
+        _testedSource = source;
+        _ranAtUtc = DateTime.UtcNow;
+        _result = AttributeFlowTester.Test(SyncRule, Mapping, source, inputs, ExpressionEvaluator, _asOf ?? _ranAtUtc);
     }
+
+    private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>
+        await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft,
+            $"{(Generating ? "Generated Value for" : "Attribute Flow to")} {_targetName}, run against the Attribute Flow as saved",
+            _inputs.Where(input => input is { Type: not null, Plurality: not null })
+                .Select(input => new ConfigurationTestCaseDisplay.InputSlot(input.Source, input.AttributeName, input.Type!.Value, input.Plurality!.Value))
+                .ToList());
 
     private static string DescribeType(AttributeFlowTestInputDescriptor input) => input.Type is { } type
         ? $"{type} · {(input.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")}"

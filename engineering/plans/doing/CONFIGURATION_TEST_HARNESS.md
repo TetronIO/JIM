@@ -1,6 +1,6 @@
 # Configuration Test Harness - Implementation Plan
 
-- **Status:** Doing (Phases 1 to 3 complete)
+- **Status:** Doing (Phases 1 to 3 and 4a complete)
 - **Issue:** [#2055](https://github.com/TetronIO/JIM/issues/2055) (sub-issue of [#207](https://github.com/TetronIO/JIM/issues/207))
 - **PRD:** [`PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md`](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md), "Configuration test harness (#2055)", Scenarios 14 and 15
 - **Builds on:** [`OBJECT_MATCHING_EXPRESSIONS.md`](../done/OBJECT_MATCHING_EXPRESSIONS.md) (#2052, Try it and the match-value pipeline)
@@ -10,7 +10,7 @@
 
 An administrator should know whether an expression, a scoping criterion or an Object Matching Rule works before a synchronisation runs it. JIM has an Expression tester (#1405), Configuration Change Preview (#827) and Sync Preview (#288), but the tester is not synchronisation: it passes every sample as text, one value per attribute, and stops after evaluating. It skips value processing, Missing Input Behaviour and conversion to the target's type, so it gives false failures (`(DateTime)cs["hireDate"]`) and false passes (a result the target cannot hold).
 
-This plan delivers #2055 in five reviewable PRs. The first makes the tester and synchronisation one code path, so everything later is built on code that cannot disagree with a synchronisation.
+This plan delivers #2055 in a series of reviewable PRs (Phase 4 is split in two). The first makes the tester and synchronisation one code path, so everything later is built on code that cannot disagree with a synchronisation.
 
 ## Business Value
 
@@ -99,19 +99,28 @@ Saving refuses, with the message shown, an expression that does not parse, uses 
 - **Warnings (decision 2A):** non-repeatable functions warn, never refuse. `SyncRule.AttributeFlowSaveWarnings` is the one list the portal shows as snackbars and the REST API returns as `warnings`; PowerShell writes them as warnings. The portal's Attribute Flow dialog and the Generated Value base editor show the same check live (`ExpressionSyntaxCheck.ErrorForAttributeFlow`).
 - **As built (Example Data):** `ExampleDataServer` checks template expressions on create and full update: a new or changed one that does not parse or reads `cs[...]` is refused, and otherwise only warned about. Reading an attribute the template does not generate is only ever a warning, because `Add-JIMExampleDataTemplateAttribute` builds a template an attribute at a time. Warnings reach REST as `warnings` on the template and PowerShell as warnings from `New-`, `Set-JIMExampleDataTemplate` and `Add-JIMExampleDataTemplateAttribute`.
 
-### Phase 4: Saved test cases and the save gate
+### Phase 4a: Saved test cases ✅
 
-- **Model:** a test case holds a name, what it covers (an Attribute Flow, a Synchronisation Rule's Scope, an Object Matching Rule or a Generated Value), its inputs, an optional run-as-of time and an expectation (exact values, no value, an error, any value, in scope, out of scope, or match values). New table, cascading from what it covers; recorded in Configuration History and snapshots.
-- **Created from the tester**, today's result as the editable expectation; personal-data notice with made-up replacements when values were loaded from a real object.
-- **Run** on demand (the Synchronisation Rule's **Tests** tab; the Connected System's Object Matching tab for Simple mode) and automatically on saving what they cover.
-- **The save gate:** Keep editing (default), Accept the new result as expected, or Save anyway (recorded with the change in Configuration History).
-- **Needs review** when the covered configuration reads an input the test case has no value for, or an input attribute left the schema.
+Saved test cases on every surface, run on demand. The save gate is Phase 4b.
 
-### Phase 5: Full parity and docs
+- **Model:** one `ConfigurationTestCases` table. `Kind` is AttributeFlow, GeneratedValue, Scope or ObjectMatchingRule; exactly one of three cascading references (`SyncRuleMappingId`, `SyncRuleId`, `ObjectMatchingRuleId`) is set, enforced by `CK_ConfigurationTestCases_CoversWhatItsKindTests`. Inputs and expectation are jsonb, every value as culture-invariant text. Expectations: these values (an unordered multiset unless "in this order"), no value, an error, any value, in scope, out of scope.
+- **Run:** `ConfigurationTestRunner` dispatches each kind to the tester the portal, REST and PowerShell already use, and compares on one canonical value form (`ConfigurationTestValues`), the expected text read as the type the configuration gives. Statuses: Passed, Failed (expected and actual), Needs review (an input the configuration reads is not given, an input left the schema or no longer fits its type, or the covered configuration changed shape) and Error. An Object Matching Rule case compares match values and never looks them up; a Scope that cannot be determined fails. A case with no run-as-of time whose configuration reads the clock says it ran as of now. Results are computed per run, never stored.
+- **History:** a top-level, Class C `testCases` collection in the Synchronisation Rule's snapshot (its Scope's, Attribute Flows' and own Object Matching Rules' cases) and the Connected System's (Simple mode Object Matching Rules' cases). Top level because classification takes the class of every changed node, containers included; nested in an Attribute Flow, adding a case would classify as B. Inputs and expected values are keyed hashes; a cascade lists the cases it removed.
+- **Personal data:** inputs never reach a log or an Activity (an Activity names the case only); the REST list leaves inputs out unless `include=inputs`; inputs are stored unencrypted as other configuration is; the portal says so before a save.
+- **Surfaces:** `/api/v1/configuration-tests` CRUD and `POST /run`; `Get-`, `New-`, `Set-`, `Remove-JIMConfigurationTestCase` and `Invoke-JIMConfigurationTest`; the Synchronisation Rule's **Tests** tab, the Connected System's Matching tab in Simple mode, and **Save as test case** in the Attribute Flow and Scope testers. The Object Matching Rule editor's Try it tests a rule before it is added, so it has nothing saved to cover.
+- **As built:** every portal save and run of a case goes through a fresh `JimApplication`: the Synchronisation Rule page holds its rule change-tracked for the edit session, and an Activity's save on that context would save the half-edited rule with the case.
 
-- Test case create, read, update and delete, and the run endpoint, across REST and PowerShell.
-- `docs/` page "Testing configuration", linked from the Attribute Flow, Scope, Object Matching and Generated Values pages; changelog ✨.
-- An integration scenario step running `Invoke-JIMConfigurationTest` in a pipeline.
+### Phase 4b: The save gate
+
+- **Run on save:** saving what a case covers runs its cases, deciding "a save changes something a case covers" with Phase 3's unchanged comparison (`SyncRuleMappingExpressionState.IsUnchangedIn` and its counterparts).
+- **The gate:** Keep editing (default), Accept the new result as expected, or Save anyway (recorded with the change in Configuration History). REST answers 409 unless `saveAnyway`; PowerShell takes `-SaveAnyway`.
+- **Never a lockout:** disabling a Synchronisation Rule, removing an Attribute Flow and deleting either always save, whatever their cases give; tests prove it.
+
+### Phase 5: Docs and pipelines
+
+- The **Configuration Tests** page gains the save gate; the Attribute Flow, Scope, Object Matching and Generated Values pages link to it; changelog ✨.
+- An integration scenario step running `Invoke-JIMConfigurationTest -FailOnUnsuccessful` in a pipeline.
+- Plan closeout: Status Done, moved to `done/`, in the PR that closes #2055.
 
 ## Decisions
 
@@ -123,8 +132,8 @@ Names are settled here so every phase uses them.
 | Scope | `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria/test` | `Test-JIMScope` | 2 |
 | Object Matching Rule | `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-rules/{ruleId}/test`, and `.../sync-rules/{syncRuleId}/matching-rules/{ruleId}/test` | `Test-JIMMatchingRule` (parameter sets by `-ConnectedSystemId` or `-SyncRuleId`; `-Lookup`) | 2 |
 | Example Data template expression | `POST /api/v1/example-data/templates/{templateId}/test-expression` | `Test-JIMExampleDataExpression` | 2 |
-| Test cases | `GET/POST /api/v1/configuration-tests`, `GET/PUT/DELETE /api/v1/configuration-tests/{id}` | `Get-`, `New-`, `Set-`, `Remove-JIMConfigurationTestCase` | 4-5 |
-| Run test cases | `POST /api/v1/configuration-tests/run` (by Synchronisation Rule, Connected System or ids) | `Invoke-JIMConfigurationTest` | 4-5 |
+| Test cases | `GET/POST /api/v1/configuration-tests`, `GET/PUT/DELETE /api/v1/configuration-tests/{id}` | `Get-`, `New-`, `Set-`, `Remove-JIMConfigurationTestCase` | 4a |
+| Run test cases | `POST /api/v1/configuration-tests/run` (by Synchronisation Rule, Connected System or ids) | `Invoke-JIMConfigurationTest` | 4a |
 
 1. **The Attribute Flow tester keeps `test-expression` and `Test-JIMExpression`**, gaining a flow context, rather than adding `Test-JIMSyncRuleMapping` beside them. Two names over one endpoint for one thing break "one name per thing"; the issue asks to extend `test-expression`. Without a flow, both behave as before.
 2. **A saved flow is named by `syncRuleId` and `mappingId`** (ids, per the API identifier rules). The request's `expression` is what is tested, so an edit can be tried before saving it; the flow supplies its target, Missing Input Behaviour and value processing. Testing an unsaved flow over REST comes with Phase 2's inputs.
@@ -160,4 +169,4 @@ Names are settled here so every phase uses them.
 | The refactor changes synchronisation behaviour | Existing `SyncEngine` suites run unchanged; Scenario 008 at Medium; the translation from outcome to side effect is one switch per direction |
 | The tester's transient object diverges from a real one | It is built with the same attribute value fields the import path sets, and fidelity tests compare against a real `ConnectedSystemObject` through `FlowInboundAttributes` |
 | Run-as-of needs a clock the evaluator does not have today | Phase 2 introduces an injectable clock; until then tests of time-dependent expressions use the "any value" expectation |
-| Saved test cases hold personal data | Phase 4's notice and made-up replacements; test cases are configuration, deleted with what they cover |
+| Saved test cases hold personal data | Phase 4a's notice; values kept out of logs, Activities and history; test cases are configuration, deleted with what they cover |

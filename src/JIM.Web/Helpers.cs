@@ -887,13 +887,17 @@ public static class Helpers
     /// Gets the in-app link for a Synchronisation Rule activity target, or null when the rule id is unknown.
     /// Attribute Flow mapping activities carry the rule's target type (a mapping has no target type of its own) with
     /// a "Mapping to ..." name; their target deep-links to the rule's Attribute Flow tab, where mappings are managed.
+    /// Configuration test case activities carry it too, with a "Test case ..." name, and deep-link to its Tests tab.
     /// </summary>
     public static string? GetSyncRuleActivityHref(int? syncRuleId, string? targetName)
     {
         if (!syncRuleId.HasValue)
             return null;
-        return targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true
-            ? $"/admin/sync-rules/{syncRuleId}?t=attribute-flow"
+        if (targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true)
+            return $"/admin/sync-rules/{syncRuleId}?t=attribute-flow";
+        // A configuration test case (#2055 Phase 4) is managed on the rule's Tests tab.
+        return targetName?.StartsWith(Activity.ConfigurationTestCaseTargetNamePrefix, StringComparison.Ordinal) == true
+            ? $"/admin/sync-rules/{syncRuleId}?t=tests"
             : $"/admin/sync-rules/{syncRuleId}";
     }
 
