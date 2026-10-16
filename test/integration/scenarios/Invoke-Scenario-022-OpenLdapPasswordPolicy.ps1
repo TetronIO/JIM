@@ -37,8 +37,8 @@
          Present.
       7. Two failed binds against one provisioned entry make the overlay record two pwdFailureTime
          values, a multi-valued operational date (#2153). With pwdFailureTime selected, a Full Import
-         holds both on the Connected System Object to the microsecond, a second Full Import changes
-         nothing, and a Delta Import after a third failed bind brings the third value in.
+         holds both on the Connected System Object to the microsecond, and a second Full Import changes
+         nothing.
 
     OpenLDAP only. JIM binds as cn=jim-provisioner rather than the rootdn because slapo-ppolicy exempts
     the rootdn from every check; a scenario bound as cn=admin would see every password accepted.
@@ -667,14 +667,19 @@ WHERE a."Name" = 'pwdFailureTime' AND av."DateTimeValue" IS NOT NULL
 
         Invoke-FailedBind
         $directoryTimes = @(Get-DirectoryFailureTimes)
-        Write-Host "  Directory Delta Import after a third failed bind ($($directoryTimes.Count) value(s) in the directory)..." -ForegroundColor DarkGray
-        $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Delta Import"
+        Write-Host "  Directory Full Import after a third failed bind ($($directoryTimes.Count) value(s) in the directory)..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Full Import (a value added)"
         $expected = @($directoryTimes | ForEach-Object { ConvertTo-SixDigit $_ } | Sort-Object)
-        $heldValues = @(Get-HeldFailureTimes | ForEach-Object { $_.Value } | Sort-Object)
-        Add-TestResult -Name "A Delta Import brings in the new pwdFailureTime value beside the others" `
-            -Passed (($heldValues -join ',') -eq ($expected -join ',')) `
-            -Detail "Directory: $($expected -join ', '). Held: $($heldValues -join ', ')"
+        $heldAfterAdd = @(Get-HeldFailureTimes)
+        $keptIds = @($held | ForEach-Object { $_.Id } | Where-Object { @($heldAfterAdd | ForEach-Object { $_.Id }) -contains $_ })
+        Add-TestResult -Name "A new pwdFailureTime value is added beside the others, which are left alone" `
+            -Passed (((@($heldAfterAdd | ForEach-Object { $_.Value } | Sort-Object)) -join ',') -eq ($expected -join ',') -and $keptIds.Count -eq $held.Count) `
+            -Detail "Directory: $($expected -join ', '). Held: $(@($heldAfterAdd | ForEach-Object { $_.Value }) -join ', '). Rows kept: $($keptIds.Count) of $($held.Count)."
+
+        # No Delta Import here: this scenario binds as a provisioner that may not read cn=accesslog, so the
+        # Connector refuses one. A Delta Import converts entries with the same code as a Full Import, which the
+        # LDAP Connector's unit tests cover for several dates.
     }
 
     # The worker logs everything it does through the password channel; an error there means a
