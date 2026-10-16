@@ -43,7 +43,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
-| `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
+| `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created, in UTC. |
 | `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
@@ -54,7 +54,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
-| `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
+| `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
 | `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created (UTC). |
@@ -315,7 +315,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | Key | Type | Description |
 |-----|------|-------------|
 | `MetaverseAttribute` | `string` or `int` | The Metaverse Attribute values are generated for, by name or ID. |
-| `ConnectedSystemObjectTypeAttributeId` | `int` | The Connected System attribute values are generated for, when targeting a Connected System instead of the Metaverse. |
+| `ConnectedSystemObjectTypeAttributeId` | `int` | A Connected System attribute to generate values for. It is saved, but executing a template generates Metaverse Attribute values only, so it produces no values. |
 | `Pattern` | `string` | A variable-replacement pattern for constructing string values, e.g. `{0}.{1}@contoso.com`. |
 | `Expression` | `string` | An expression constructing the value from already-generated attributes via `mv["Attribute Name"]`. |
 | `ExampleDataSets` | `object[]` | The Example Data Sets values are drawn from, by name or ID. Order follows array order, which is what index-based patterns refer to. |
@@ -490,7 +490,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `TemplateName` | `string` | Yes (ByName) |  | The name of the Data Generation Template to add the attribute to. |
 | `ObjectType` | `object` | Yes |  | The Metaverse Object Type (name or id) identifying which of the template's Object Types receives the attribute. |
 | `MetaverseAttribute` | `object` | No |  | The Metaverse Attribute (name or id) values are generated for, when targeting the Metaverse. |
-| `ConnectedSystemObjectTypeAttributeId` | `int` | No |  | The id of the Connected System attribute values are generated for, when targeting a Connected System. |
+| `ConnectedSystemObjectTypeAttributeId` | `int` | No |  | The id of a Connected System attribute to generate values for. The attribute is saved on the template, but executing a template generates Metaverse Attribute values only, so it produces no values. |
 | `Pattern` | `string` | No |  | A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com". |
 | `Expression` | `string` | No |  | An expression that constructs the value from other already-generated attributes via mv["Attribute Name"]. |
 | `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |

@@ -146,6 +146,8 @@ nav:
       - Metaverse: configuration/metaverse.md
       - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
+      - Deleted Objects: configuration/deleted-objects.md
+      - Example Data: configuration/example-data.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
@@ -175,6 +177,8 @@ nav:
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
+      - Factory Reset: administration/factory-reset.md
+      - Logs: administration/logs.md
       - Troubleshooting: administration/troubleshooting.md
       - Troubleshooting Synchronisation: administration/troubleshooting-synchronisation.md
       - Troubleshooting Podman: administration/troubleshooting-podman.md

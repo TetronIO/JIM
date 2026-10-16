@@ -11,7 +11,7 @@ function Add-JIMExampleDataTemplateAttribute {
         Generation Template, without restating the rest of the template: the cmdlet reads the template,
         appends the new attribute to the named Object Type, and writes the whole configuration back.
         Supply exactly one of -MetaverseAttribute or -ConnectedSystemObjectTypeAttributeId to say which
-        attribute values are generated for.
+        attribute values are generated for. Executing a template generates Metaverse Attribute values only.
 
     .PARAMETER TemplateId
         The unique identifier of the Data Generation Template to add the attribute to.
@@ -27,7 +27,8 @@ function Add-JIMExampleDataTemplateAttribute {
         The Metaverse Attribute (name or id) values are generated for, when targeting the Metaverse.
 
     .PARAMETER ConnectedSystemObjectTypeAttributeId
-        The id of the Connected System attribute values are generated for, when targeting a Connected System.
+        The id of a Connected System attribute to generate values for. The attribute is saved on the template,
+        but executing a template generates Metaverse Attribute values only, so it produces no values.
 
     .PARAMETER Pattern
         A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com".

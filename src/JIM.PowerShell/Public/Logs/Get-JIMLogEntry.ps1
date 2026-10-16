@@ -12,7 +12,7 @@ function Get-JIMLogEntry {
         log levels and service names, so callers can discover valid -Level/-Service values.
 
     .PARAMETER Service
-        The service whose entries to return: web, worker or scheduler. Omit it for every service.
+        The service whose entries to return: web, worker, scheduler or database. Omit it for every service.
 
     .PARAMETER Date
         The day whose entries to return. Omit it for today (UTC).
@@ -22,7 +22,7 @@ function Get-JIMLogEntry {
         level.
 
     .PARAMETER Search
-        Text the message must contain, ignoring case.
+        Text the message or its exception must contain, ignoring case.
 
     .PARAMETER Limit
         The most entries to return.

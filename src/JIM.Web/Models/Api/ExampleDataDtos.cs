@@ -16,7 +16,7 @@ public class ExampleDataSetDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the Example Data Set, for example "Firstnames (Female)".
+    /// The name of the Example Data Set, for example "Firstnames Female".
     /// </summary>
     public string Name { get; set; } = null!;
 
