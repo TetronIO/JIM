@@ -812,9 +812,13 @@ Describe 'Set-LDAPUserPasswordAsAccountHolder' {
         }
     }
 
-    Context 'Active Directory (unicodePwd over LDAPS)' {
+    Context 'Active Directory (kpasswd through the toolbox)' {
         BeforeEach {
-            Mock Invoke-LdapTool { @{ ExitCode = 0; Output = 'modifying entry' } }
+            $script:toolboxCalls = [System.Collections.Generic.List[hashtable]]::new()
+            Mock Invoke-LdapToolboxCommand {
+                $script:toolboxCalls.Add(@{ Arguments = @($Arguments); InputObject = $InputObject; Environment = $Environment })
+                if ($Arguments[0] -eq 'kpasswd') { @{ ExitCode = 0; Output = 'Password changed.' } } else { @{ ExitCode = 0; Output = '' } }
+            }
             $script:adConfig = @{
                 ContainerName = $null; Host = 'dc1.panoply.local'; LdapSearchScheme = 'ldaps'; LdapSearchPort = 636
                 Domain = 'panoply.local'; ShortDomain = 'PANOPLY'; DirectoryType = 'ActiveDirectory'
@@ -823,48 +827,99 @@ Describe 'Set-LDAPUserPasswordAsAccountHolder' {
             }
         }
 
-        It 'binds as the account holder and changes unicodePwd with delete of the old value and add of the new' {
-            $dn = 'CN=Probe,OU=Users,OU=Corp,DC=panoply,DC=local'
-            $result = Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'Old@Pass1!' -NewPassword 'New@Pass1!' `
-                -AccountDN $dn -DirectoryConfig $script:adConfig
+        It 'writes a Kerberos configuration for the forest, then runs kpasswd as the account with it' {
+            $result = Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'Old@Pass1!' -NewPassword 'New@Pass1!' -DirectoryConfig $script:adConfig
 
-            $old = ConvertTo-UnicodePwdValue -Password 'Old@Pass1!'
-            $new = ConvertTo-UnicodePwdValue -Password 'New@Pass1!'
-            $expectedLdif = "dn: $dn`nchangetype: modify`ndelete: unicodePwd`nunicodePwd:: $old`n-`nadd: unicodePwd`nunicodePwd:: $new`n-`n"
-            Should -Invoke Invoke-LdapTool -Times 1 -Exactly -ParameterFilter {
-                $Tool -eq 'ldapmodify' -and $Arguments -contains 'ldaps://dc1.panoply.local:636' -and
-                $Arguments -contains 'PANOPLY\probe' -and $Arguments -contains 'Old@Pass1!' -and $InputObject -eq $expectedLdif
-            }
+            $script:toolboxCalls.Count | Should -Be 2
+            $write = $script:toolboxCalls[0]
+            $change = $script:toolboxCalls[1]
+
+            $write.Arguments[0] | Should -Be 'sh'
+            $configPath = $write.Arguments[-1]
+            $write.InputObject | Should -Be (Get-Krb5ConfigText -Realm 'PANOPLY.LOCAL' -Kdc 'dc1.panoply.local')
+
+            ($change.Arguments -join '|') | Should -Be 'kpasswd|probe@PANOPLY.LOCAL'
+            $change.Environment['KRB5_CONFIG'] | Should -Be $configPath
             $result.Success | Should -BeTrue
+            $result.ExitCode | Should -Be 0
             $result.Outcome | Should -Be 'Success'
         }
 
-        It 'looks the account''s DN up as the administrator when none is given' {
-            Mock Get-LDAPUser { @{ dn = 'CN=Probe,OU=Users,OU=Corp,DC=panoply,DC=local' } }
-
+        It 'gives kpasswd the passwords on standard input, current once and new twice, and never as arguments' {
             Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'Old@Pass1!' -NewPassword 'New@Pass1!' -DirectoryConfig $script:adConfig | Out-Null
 
-            Should -Invoke Get-LDAPUser -Times 1 -Exactly -ParameterFilter { $UserIdentifier -eq 'probe' }
-            Should -Invoke Invoke-LdapTool -Times 1 -Exactly -ParameterFilter { $InputObject -match '(?m)^dn: CN=Probe,OU=Users,OU=Corp,DC=panoply,DC=local$' }
+            $change = $script:toolboxCalls[1]
+            $change.InputObject | Should -Be "Old@Pass1!`nNew@Pass1!`nNew@Pass1!`n"
+            foreach ($call in $script:toolboxCalls) {
+                ($call.Arguments -join ' ') | Should -Not -Match 'Pass1'
+            }
         }
 
-        It 'throws when the account cannot be found' {
-            Mock Get-LDAPUser { $null }
+        It 'classifies a refusal under the domain''s password policy as a constraint violation' {
+            Mock Invoke-LdapToolboxCommand {
+                if ($Arguments[0] -eq 'kpasswd') { @{ ExitCode = 1; Output = "Password change rejected: Password change rejected.`n" } } else { @{ ExitCode = 0; Output = '' } }
+            }
 
-            { Set-LDAPUserPasswordAsAccountHolder -AccountName 'ghost' -CurrentPassword 'o' -NewPassword 'n' -DirectoryConfig $script:adConfig } |
-                Should -Throw '*ghost*'
-        }
-
-        It 'reports a refusal with its classified outcome' {
-            Mock Invoke-LdapTool { @{ ExitCode = 19; Output = "ldap_modify: Constraint violation (19)`n`tadditional info: 0000052D: AtrErr" } }
-
-            $result = Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'o' -NewPassword 'n' `
-                -AccountDN 'CN=Probe,DC=panoply,DC=local' -DirectoryConfig $script:adConfig
+            $result = Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'o' -NewPassword 'n' -DirectoryConfig $script:adConfig
 
             $result.Success | Should -BeFalse
-            $result.ExitCode | Should -Be 19
+            $result.ExitCode | Should -Be 1
             $result.Outcome | Should -Be 'ConstraintViolation'
         }
+
+        It 'classifies a wrong current password as invalid credentials' {
+            Mock Invoke-LdapToolboxCommand {
+                if ($Arguments[0] -eq 'kpasswd') { @{ ExitCode = 1; Output = 'kpasswd: Password incorrect while getting initial ticket' } } else { @{ ExitCode = 0; Output = '' } }
+            }
+
+            $result = Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'o' -NewPassword 'n' -DirectoryConfig $script:adConfig
+
+            $result.Success | Should -BeFalse
+            $result.Outcome | Should -Be 'InvalidCredentials'
+        }
+
+        It 'throws, without running kpasswd, when the configuration cannot be written' {
+            Mock Invoke-LdapToolboxCommand { @{ ExitCode = 1; Output = 'sh: cannot create /tmp/x: Permission denied' } }
+
+            { Set-LDAPUserPasswordAsAccountHolder -AccountName 'probe' -CurrentPassword 'o' -NewPassword 'n' -DirectoryConfig $script:adConfig } |
+                Should -Throw '*Kerberos configuration*Permission denied*'
+            Should -Invoke Invoke-LdapToolboxCommand -Times 0 -Exactly -ParameterFilter { $Arguments[0] -eq 'kpasswd' }
+        }
+    }
+}
+
+Describe 'Get-Krb5ConfigText' {
+    BeforeAll {
+        $script:text = Get-Krb5ConfigText -Realm 'PANOPLY.LOCAL' -Kdc 'dc1.panoply.local'
+    }
+
+    It 'makes the realm the default' {
+        $script:text | Should -Match '(?m)^\s*default_realm = PANOPLY\.LOCAL$'
+    }
+
+    It 'names the domain controller as the KDC and the password change server, with no DNS lookups (the lab has no DNS)' {
+        $script:text | Should -Match '(?m)^\s*kdc = dc1\.panoply\.local$'
+        $script:text | Should -Match '(?m)^\s*kpasswd_server = dc1\.panoply\.local$'
+        $script:text | Should -Match '(?m)^\s*dns_lookup_kdc = false$'
+        $script:text | Should -Match '(?m)^\s*dns_lookup_realm = false$'
+    }
+
+    It 'uses TCP, so an Active Directory ticket too large for UDP is not refused' {
+        $script:text | Should -Match '(?m)^\s*udp_preference_limit = 1$'
+    }
+}
+
+Describe 'Get-LdapToolboxCommandInvocation' {
+    It 'runs the command in the toolbox, with -i for standard input and -e for each environment variable before the container' {
+        $argv = Get-LdapToolboxCommandInvocation -Arguments @('kpasswd', 'probe@PANOPLY.LOCAL') -WithInput -Environment @{ KRB5_CONFIG = '/tmp/krb5.conf' }
+
+        ($argv -join '|') | Should -Be 'exec|-i|-e|KRB5_CONFIG=/tmp/krb5.conf|jim-ldap-toolbox|kpasswd|probe@PANOPLY.LOCAL'
+    }
+
+    It 'leaves out -i and -e when there is no input and no environment' {
+        $argv = Get-LdapToolboxCommandInvocation -Arguments @('true')
+
+        ($argv -join '|') | Should -Be 'exec|jim-ldap-toolbox|true'
     }
 }
 
