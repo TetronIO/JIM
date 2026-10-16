@@ -1,6 +1,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Core
 @using JIM.Utilities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -13,14 +14,18 @@
 }
 else if (Value.UnresolvedReferenceValue != null)
 {
-    <span class="jim-attr-unresolved">
-        <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
-        <span class="mud-text-secondary jim-text-code">@Value.UnresolvedReferenceValue</span>
+    @* The cause chip (#959) wraps under the value when the cell is narrow, rather than splitting the value. *@
+    <span class="jim-attr-unresolved jim-attr-unresolved-with-cause">
+        <span class="jim-attr-unresolved">
+            <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
+            <span class="mud-text-secondary jim-text-code">@Value.UnresolvedReferenceValue</span>
+        </span>
+        <UnresolvedReferenceCauseChip Diagnosis="@UnresolvedReferenceCauses?.For(Value)" />
     </span>
 }
 else if (Value.Attribute.Type == AttributeDataType.DateTime && Value.DateTimeValue.HasValue)
 {
-    <MudTooltip Text="@Value.DateTimeValue.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+    <MudTooltip Text="@Value.DateTimeValue.Value.ToFriendlyAttributeDate()" Arrow="true" Placement="Placement.Top">
         <span>@Value.DateTimeValue.Value.ToRelativeTime()</span>
     </MudTooltip>
 }
@@ -46,4 +51,8 @@ else
 @code {
     [Parameter]
     public ConnectedSystemObjectAttributeValue Value { get; set; } = null!;
+
+    /// <summary>The page's diagnoses, for the likely cause beside an unresolved reference (#959); absent elsewhere.</summary>
+    [CascadingParameter]
+    public UnresolvedReferenceCauses? UnresolvedReferenceCauses { get; set; }
 }

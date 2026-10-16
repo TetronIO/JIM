@@ -198,14 +198,20 @@ public partial class SyncRepository : ISyncRepository
 
     #region Object Matching — Data Access
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-        => _repo.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
+        => _repo.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject, ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
-        => _repo.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+        => _repo.Metaverse.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
+
+    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+        => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
+
+    public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+        => _repo.ConnectedSystems.StreamUnjoinedConnectedSystemObjectValues(connectedSystemId, connectedSystemObjectTypeId, attributeIds);
 
     public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName,
@@ -409,7 +415,7 @@ public partial class SyncRepository : ISyncRepository
             entry => entry.Value));
     }
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 
     // Bulk RPEI operations (BulkInsertRpeisAsync, BulkUpdateRpeiOutcomesAsync,
@@ -452,6 +458,15 @@ public partial class SyncRepository : ISyncRepository
             .Select(cs => new { cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt })
             .SingleOrDefaultAsync();
         return watermarks == null ? null : (watermarks.LastSyncCompletedAt, watermarks.ConfigurationLastFullyAppliedAt);
+    }
+
+    public async Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystems
+            .AsNoTracking()
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => (ObjectMatchingRuleMode?)cs.ObjectMatchingRuleMode)
+            .SingleOrDefaultAsync();
     }
 
     public async Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
@@ -574,8 +589,8 @@ public partial class SyncRepository : ISyncRepository
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
-        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined, joinSyncRuleId, joinSyncRuleName);
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName, int? joinObjectMatchingRuleId, string? joinMatchValue)
+        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined, joinSyncRuleId, joinSyncRuleName, joinObjectMatchingRuleId, joinMatchValue);
 
     #endregion
 
@@ -656,8 +671,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
+        => _repo.ConnectedSystems.ReleaseExecutingPendingExportsAsync(states, markedAt);
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
@@ -682,6 +700,25 @@ public partial class SyncRepository : ISyncRepository
 
         var transaction = await _context.Database.BeginTransactionAsync();
         return new RollbackOnlyTransactionScope(transaction);
+    }
+
+    /// <inheritdoc />
+    public async Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+    {
+        if (!_context.Database.IsRelational() || _context.Database.CurrentTransaction != null)
+            return null;
+
+        return new SyncRepositoryTransaction(await _context.Database.BeginTransactionAsync());
+    }
+
+    /// <summary>
+    /// A transaction the caller commits; disposed uncommitted, it rolls back (EF Core's own disposal behaviour).
+    /// </summary>
+    private sealed class SyncRepositoryTransaction(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction) : ISyncRepositoryTransaction
+    {
+        public Task CommitAsync() => transaction.CommitAsync();
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
     }
 
     /// <summary>

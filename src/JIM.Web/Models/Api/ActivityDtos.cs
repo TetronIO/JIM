@@ -13,27 +13,27 @@ namespace JIM.Web.Models.Api;
 public class ActivityHeader
 {
     /// <summary>
-    /// The unique identifier of the activity.
+    /// The unique identifier of the Activity.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// When the activity was created.
+    /// When the Activity was created.
     /// </summary>
     public DateTime Created { get; set; }
 
     /// <summary>
-    /// When the activity started executing.
+    /// When the Activity started executing.
     /// </summary>
     public DateTime? Executed { get; set; }
 
     /// <summary>
-    /// The current status of the activity.
+    /// The current status of the Activity.
     /// </summary>
     public ActivityStatus Status { get; set; }
 
     /// <summary>
-    /// The type of target this activity operates on.
+    /// The type of target this Activity operates on.
     /// </summary>
     public ActivityTargetType TargetType { get; set; }
 
@@ -49,27 +49,27 @@ public class ActivityHeader
 
     /// <summary>
     /// Additional context for the target, such as the parent entity name.
-    /// For example, for a Run Profile activity this would be the Connected System name.
+    /// For example, for a Run Profile Activity this would be the Connected System name.
     /// </summary>
     public string? TargetContext { get; set; }
 
     /// <summary>
-    /// Progress message for the activity.
+    /// Progress message for the Activity.
     /// </summary>
     public string? Message { get; set; }
 
     /// <summary>
-    /// The type of security principal that initiated this activity.
+    /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
 
     /// <summary>
-    /// The unique identifier of the security principal that initiated this activity.
+    /// The unique identifier of the security principal that initiated this Activity.
     /// </summary>
     public Guid? InitiatedById { get; set; }
 
     /// <summary>
-    /// Name of the user or API key that initiated this activity.
+    /// Name of the user or API key that initiated this Activity.
     /// </summary>
     public string? InitiatedByName { get; set; }
 
@@ -84,7 +84,7 @@ public class ActivityHeader
     public int ObjectsProcessed { get; set; }
 
     /// <summary>
-    /// How long the activity took to execute (once complete).
+    /// How long the Activity took to execute (once complete).
     /// </summary>
     public TimeSpan? ExecutionTime { get; set; }
 
@@ -94,35 +94,35 @@ public class ActivityHeader
     public TimeSpan? TotalActivityTime { get; set; }
 
     /// <summary>
-    /// The run type if this is a sync activity.
+    /// The run type, for a Run Profile execution.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
     #region Import Stats
     /// <summary>
-    /// Count of new CSOs added to the connector space during import.
+    /// Count of new Connected System Objects added to the Connector Space during import.
     /// </summary>
     public int TotalAdded { get; set; }
 
     /// <summary>
-    /// Count of existing CSOs updated during import.
+    /// Count of existing Connected System Objects updated during import.
     /// </summary>
     public int TotalUpdated { get; set; }
 
     /// <summary>
-    /// Count of CSOs marked as deleted (source system deletion detected).
+    /// Count of Connected System Objects marked as deleted (source system deletion detected).
     /// </summary>
     public int TotalDeleted { get; set; }
     #endregion
 
     #region Sync Stats
     /// <summary>
-    /// Count of new MVOs created via projection.
+    /// Count of new Metaverse Objects created via projection.
     /// </summary>
     public int TotalProjected { get; set; }
 
     /// <summary>
-    /// Count of CSOs joined to existing MVOs.
+    /// Count of Connected System Objects joined to existing Metaverse Objects.
     /// </summary>
     public int TotalJoined { get; set; }
 
@@ -132,27 +132,27 @@ public class ActivityHeader
     public int TotalAttributeFlows { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected from MVOs.
+    /// Count of Connected System Objects disconnected from Metaverse Objects.
     /// </summary>
     public int TotalDisconnected { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected because they fell out of scope of import Synchronisation Rule scoping criteria.
+    /// Count of Connected System Objects disconnected because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>
-    /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// Count of Connected System Objects that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
 
     /// <summary>
-    /// Count of CSOs where drift was detected and corrective Pending Exports were created.
+    /// Count of Connected System Objects where drift was detected and corrective Pending Exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
 
     /// <summary>
-    /// Count of CSOs provisioned to target Connected Systems during sync.
+    /// Count of Connected System Objects provisioned to target Connected Systems during synchronisation.
     /// </summary>
     public int TotalProvisioned { get; set; }
     #endregion
@@ -171,7 +171,7 @@ public class ActivityHeader
 
     #region Direct Creation Stats
     /// <summary>
-    /// Count of MVOs created directly (data generation, admin UI) rather than via projection/sync.
+    /// Count of Metaverse Objects created directly (by example data generation or in the portal) rather than by projection.
     /// </summary>
     public int TotalCreated { get; set; }
     #endregion
@@ -185,14 +185,14 @@ public class ActivityHeader
 
     #region Shared Stats
     /// <summary>
-    /// Count of RPEIs with errors.
+    /// Count of Run Profile Execution Items with errors.
     /// </summary>
     public int TotalErrors { get; set; }
     #endregion
 
     /// <summary>
-    /// The number of direct child activities linked to this activity.
-    /// Zero for activities with no children.
+    /// The number of direct child Activities linked to this Activity.
+    /// Zero for Activities with no children.
     /// </summary>
     public int ChildActivityCount { get; set; }
 
@@ -203,7 +203,7 @@ public class ActivityHeader
 
     /// <summary>
     /// The step within the Schedule Execution that produced this Activity (0-based). Read with
-    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// <c>ScheduleExecutionId</c> to identify exactly which step ran. Null when no Schedule produced it.
     /// </summary>
     public int? ScheduleStepIndex { get; set; }
 
@@ -329,7 +329,7 @@ public class ActivityHeader
     }
 
     /// <summary>
-    /// Creates a header DTO from an Activity entity with a known child activity count.
+    /// Creates a header DTO from an Activity entity with a known child Activity count.
     /// </summary>
     public static ActivityHeader FromEntity(Activity activity, int childActivityCount)
     {
@@ -345,32 +345,32 @@ public class ActivityHeader
 public class ActivityDetailDto
 {
     /// <summary>
-    /// The unique identifier of the activity.
+    /// The unique identifier of the Activity.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Parent activity ID if this was triggered by another activity.
+    /// Parent Activity ID if this was triggered by another Activity.
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
     /// <summary>
-    /// When the activity was created.
+    /// When the Activity was created.
     /// </summary>
     public DateTime Created { get; set; }
 
     /// <summary>
-    /// When the activity started executing.
+    /// When the Activity started executing.
     /// </summary>
     public DateTime? Executed { get; set; }
 
     /// <summary>
-    /// The current status of the activity.
+    /// The current status of the Activity.
     /// </summary>
     public ActivityStatus Status { get; set; }
 
     /// <summary>
-    /// The type of target this activity operates on.
+    /// The type of target this Activity operates on.
     /// </summary>
     public ActivityTargetType TargetType { get; set; }
 
@@ -386,27 +386,27 @@ public class ActivityDetailDto
 
     /// <summary>
     /// Additional context for the target, such as the parent entity name.
-    /// For example, for a Run Profile activity this would be the Connected System name.
+    /// For example, for a Run Profile Activity this would be the Connected System name.
     /// </summary>
     public string? TargetContext { get; set; }
 
     /// <summary>
-    /// Progress message for the activity.
+    /// Progress message for the Activity.
     /// </summary>
     public string? Message { get; set; }
 
     /// <summary>
-    /// The type of security principal that initiated this activity.
+    /// The type of security principal that initiated this Activity.
     /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
 
     /// <summary>
-    /// The unique identifier of the security principal that initiated this activity.
+    /// The unique identifier of the security principal that initiated this Activity.
     /// </summary>
     public Guid? InitiatedById { get; set; }
 
     /// <summary>
-    /// Name of the user or API key that initiated this activity.
+    /// Name of the user or API key that initiated this Activity.
     /// </summary>
     public string? InitiatedByName { get; set; }
 
@@ -421,7 +421,7 @@ public class ActivityDetailDto
     public int ObjectsProcessed { get; set; }
 
     /// <summary>
-    /// How long the activity took to execute (once complete).
+    /// How long the Activity took to execute (once complete).
     /// </summary>
     public TimeSpan? ExecutionTime { get; set; }
 
@@ -431,17 +431,17 @@ public class ActivityDetailDto
     public TimeSpan? TotalActivityTime { get; set; }
 
     /// <summary>
-    /// Warning message for non-fatal operational notes (e.g., delta import fell back to full import).
+    /// A warning that did not stop the Activity, for example that a Delta Import fell back to a Full Import.
     /// </summary>
     public string? WarningMessage { get; set; }
 
     /// <summary>
-    /// Error message if the activity failed.
+    /// Error message if the Activity failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// Error stack trace if the activity failed.
+    /// Error stack trace if the Activity failed.
     /// </summary>
     public string? ErrorStackTrace { get; set; }
 
@@ -454,7 +454,7 @@ public class ActivityDetailDto
     public string? ErrorDetail { get; set; }
 
     /// <summary>
-    /// The run type if this is a sync activity.
+    /// The run type, for a Run Profile execution.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
@@ -484,16 +484,17 @@ public class ActivityDetailDto
     public int? ExampleDataTemplateId { get; set; }
 
     /// <summary>
-    /// Execution statistics for Run Profile activities.
+    /// Execution statistics for Run Profile Activities.
     /// </summary>
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
     /// <summary>
-    /// The steps the Run Profile execution moved through (#454), in run order, each with how it
+    /// The steps the Run Profile execution moved through, in run order, each with how it
     /// turned out and how long it took. This is what answers "where did the four hours go?" on a
     /// run that finished days ago. Empty for other Activity types, and for runs that predate phase
     /// recording.
     /// </summary>
+    /// <remarks>Run Profile phases, #454.</remarks>
     public List<ActivityPhaseDto> Phases { get; set; } = [];
 
     /// <summary>
@@ -503,7 +504,7 @@ public class ActivityDetailDto
 
     /// <summary>
     /// The step within the Schedule Execution that produced this Activity (0-based). Read with
-    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// <c>ScheduleExecutionId</c> to identify exactly which step ran. Null when no Schedule produced it.
     /// </summary>
     public int? ScheduleStepIndex { get; set; }
 
@@ -519,85 +520,89 @@ public class ActivityDetailDto
     public string? ScheduledByScheduleName { get; set; }
 
     /// <summary>
-    /// For a configuration-change activity, the optional reason supplied for the change.
+    /// For a configuration-change Activity, the optional reason supplied for the change.
     /// </summary>
     public string? ChangeReason { get; set; }
 
     /// <summary>
-    /// For a configuration-change activity, the per-object version number this change produced.
+    /// For a configuration-change Activity, the per-object version number this change produced.
     /// </summary>
     public int? ConfigurationChangeVersion { get; set; }
 
     /// <summary>
-    /// For a configuration-change activity, the redacted snapshot of the object's state at this change; null otherwise.
+    /// For a configuration-change Activity, the redacted snapshot of the object's state at this change; null otherwise.
     /// </summary>
     public ConfigurationSnapshot? ConfigurationChangeSnapshot { get; set; }
 
     /// <summary>
     /// For a change made after reading a Configuration Change Preview, the preview's Activity id, as recorded by the
     /// change's <c>previewActivityId</c>; read it with <c>GET /api/v1/previews/{activityId}</c>. Null when no preview
-    /// informed the change, and for every other kind of activity.
+    /// informed the change, and for every other kind of Activity.
     /// </summary>
     public Guid? PreviewActivityId { get; set; }
 
     /// <summary>
-    /// When the preview in <see cref="PreviewActivityId"/> had been overtaken by the time the change was made: the latest
+    /// When the preview in <c>PreviewActivityId</c> had been overtaken by the time the change was made: the latest
     /// run or configuration change recorded after the preview started that could change its answer. Null when the
     /// preview was current, or when no preview informed the change.
     /// </summary>
     public DateTime? PreviewOvertakenAt { get; set; }
 
     /// <summary>
-    /// What had overtaken the preview in <see cref="PreviewActivityId"/> by the time the change was made, for example
-    /// "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Null when <see cref="PreviewOvertakenAt"/> is.
+    /// What had overtaken the preview in <c>PreviewActivityId</c> by the time the change was made, for example
+    /// "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Null when <c>PreviewOvertakenAt</c> is.
     /// </summary>
     public string? PreviewOvertakenBy { get; set; }
 
     /// <summary>
     /// For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded;
-    /// null for every other kind of activity.
+    /// null for every other kind of Activity.
     /// </summary>
     public int? ClearedPendingExportCount { get; set; }
 
     /// <summary>
     /// For a Connector Space clear, how many Connected System Objects the clear deleted; null for every
-    /// other kind of activity.
+    /// other kind of Activity.
     /// </summary>
     public int? ClearedConnectedSystemObjectCount { get; set; }
 
     /// <summary>
     /// For a Connector Space clear, how many Metaverse Objects were joined at the moment of the clear and
-    /// so recorded for the post-clear reconciliation to expect back (#1605); null for every other kind of
-    /// activity. Not a removal: these objects are what the next Full Synchronisation compares against once
+    /// so recorded for the post-clear reconciliation to expect back; null for every other kind of
+    /// Activity. Not a removal: these objects are what the next Full Synchronisation compares against once
     /// a Full Import has rebuilt the Connector Space.
     /// </summary>
+    /// <remarks>#1605.</remarks>
     public int? ClearedJoinRecordCount { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618): how many creates the Run Profile's Max creates limit withheld
-    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// How many creates the Run Profile's Max creates limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
+    /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportCreatesWithheld { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618): how many updates the Run Profile's Max updates limit withheld
-    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// How many updates the Run Profile's Max updates limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
+    /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportUpdatesWithheld { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618): how many deletes the Run Profile's Max deletes limit withheld
-    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// How many deletes the Run Profile's Max deletes limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
+    /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportDeletesWithheld { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618, Layer 2): how many Connected System Objects the Run Profile's
-    /// Max detected deletions/Max detected deletions percent limits withheld this run. Populated (zero
-    /// when nothing was withheld) on every Full Import activity that ran deletion detection; null on
-    /// every other activity, including a Full Import that imported zero objects and so skipped
-    /// detection entirely.
+    /// How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions
+    /// percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero
+    /// when nothing was withheld) on every Full Import Activity that ran deletion detection; null on every other Activity, including a Full Import that imported zero
+    /// objects and so skipped detection entirely.
     /// </summary>
+    /// <remarks>Run Profile Safeguards (#1618), Layer 2.</remarks>
     public int? DetectedDeletionsWithheld { get; set; }
 
     /// <summary>
@@ -721,7 +726,7 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalObjectsProcessed { get; set; }
 
     /// <summary>
-    /// Total number of object changes (RPEIs created).
+    /// Total number of object changes (Run Profile Execution Items created).
     /// </summary>
     public int TotalObjectChangeCount { get; set; }
 
@@ -744,65 +749,66 @@ public class ActivityRunProfileExecutionStatsDto
 
     #region Import Stats (CSO operations)
     /// <summary>
-    /// Number of CSOs added to the connector space during import.
+    /// Number of Connected System Objects added to the Connector Space during import.
     /// </summary>
     public int TotalCsoAdds { get; set; }
 
     /// <summary>
-    /// Number of existing CSOs updated during import.
+    /// Number of existing Connected System Objects updated during import.
     /// </summary>
     public int TotalCsoUpdates { get; set; }
 
     /// <summary>
-    /// Number of CSOs marked as deleted.
+    /// Number of Connected System Objects marked as deleted.
     /// </summary>
     public int TotalCsoDeletes { get; set; }
     #endregion
 
     #region Sync Stats (MVO operations)
     /// <summary>
-    /// Number of new MVOs created via projection.
+    /// Number of new Metaverse Objects created via projection.
     /// </summary>
     public int TotalProjections { get; set; }
 
     /// <summary>
-    /// Number of CSOs joined to existing MVOs.
+    /// Number of Connected System Objects joined to existing Metaverse Objects.
     /// </summary>
     public int TotalJoins { get; set; }
 
     /// <summary>
-    /// Number of Attribute Flows between CSOs and MVOs.
+    /// Number of Attribute Flows between Connected System Objects and Metaverse Objects.
     /// </summary>
     public int TotalAttributeFlows { get; set; }
 
     /// <summary>
-    /// Number of CSOs disconnected from MVOs.
+    /// Number of Connected System Objects disconnected from Metaverse Objects.
     /// </summary>
     public int TotalDisconnections { get; set; }
 
     /// <summary>
-    /// Number of CSOs disconnected from MVOs because they fell out of scope of import Synchronisation Rule scoping criteria.
+    /// Number of Connected System Objects disconnected from Metaverse Objects because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>
-    /// Number of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// Number of Connected System Objects that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
 
     /// <summary>
-    /// Number of CSOs where drift was detected and corrective Pending Exports were created.
+    /// Number of Connected System Objects where drift was detected and corrective Pending Exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
 
     /// <summary>
-    /// Number of CSOs provisioned to target Connected Systems during sync.
+    /// Number of Connected System Objects provisioned to target Connected Systems during synchronisation.
     /// </summary>
     public int TotalProvisioned { get; set; }
 
     /// <summary>
-    /// Number of values JIM generated for a target attribute during sync (Unique Value Generation, #242).
+    /// Number of values JIM generated for a target attribute during synchronisation.
     /// </summary>
+    /// <remarks>Unique Value Generation, #242.</remarks>
     public int TotalGeneratedValues { get; set; }
 
     /// <summary>
@@ -812,16 +818,24 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalGeneratedValueFailures { get; set; }
 
     /// <summary>
-    /// Number of generated values Collision Remediation corrected after a target rejected them as already in use
-    /// (Unique Value Generation, #242, release 4).
+    /// Number of generated values Collision Remediation corrected after a target rejected them as already in use.
     /// </summary>
+    /// <remarks>Unique Value Generation, #242, release 4.</remarks>
     public int TotalGeneratedValuesRemediated { get; set; }
 
     /// <summary>
     /// Number of rejected generated values that could not safely be corrected and wait on an administrator's
-    /// decision (Unique Value Generation, #242, release 4).
+    /// decision.
     /// </summary>
+    /// <remarks>Unique Value Generation, #242, release 4.</remarks>
     public int TotalGeneratedValuesNeedingDecision { get; set; }
+
+    /// <summary>
+    /// Number of generated values held back because a value built from them needs another input the object has no
+    /// value for yet. Not a failure: a later synchronisation generates the value once the input arrives.
+    /// </summary>
+    /// <remarks>Generated Value Forms, #2023.</remarks>
+    public int TotalGeneratedValuesWaiting { get; set; }
     #endregion
 
     #region Export Stats
@@ -859,15 +873,15 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalPendingExportsRetrying { get; set; }
 
     /// <summary>
-    /// Number of Pending Exports that failed after maximum retry attempts.
-    /// Manual intervention may be required to resolve these exports.
+    /// Number of Pending Exports that failed after their last retry. JIM does not attempt one again; it clears once an
+    /// import shows its values in place, for example after the change is made in the Connected System directly.
     /// </summary>
     public int TotalPendingExportsFailed { get; set; }
     #endregion
 
     #region Direct Creation Stats
     /// <summary>
-    /// Number of MVOs created directly (data generation, admin UI) rather than via projection/sync.
+    /// Number of Metaverse Objects created directly (by example data generation or in the portal) rather than by projection.
     /// </summary>
     public int TotalCreated { get; set; }
     #endregion
@@ -924,6 +938,7 @@ public class ActivityRunProfileExecutionStatsDto
             TotalGeneratedValueFailures = stats.TotalGeneratedValueFailures,
             TotalGeneratedValuesRemediated = stats.TotalGeneratedValuesRemediated,
             TotalGeneratedValuesNeedingDecision = stats.TotalGeneratedValuesNeedingDecision,
+            TotalGeneratedValuesWaiting = stats.TotalGeneratedValuesWaiting,
 
             // Export
             TotalExported = stats.TotalExported,

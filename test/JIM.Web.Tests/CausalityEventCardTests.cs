@@ -77,6 +77,39 @@ public class CausalityEventCardTests
     }
 
     [Test]
+    public async Task Render_JoinedByMatching_ShowsTheValueAndTheRuleItMatchedOnAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.JoinedByMatchingItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderCard(context, FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Joined));
+
+        var match = cut.Find(".evt-match").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(match, Does.Contain("48213"));
+            Assert.That(match, Does.Contain("Employee ID equals employeeNumber"));
+        }
+    }
+
+    [Test]
+    public async Task Render_JoinedWithNoMatchRecorded_ShowsNoMatchLineAsync()
+    {
+        // A join recorded before the match was captured carries neither, and says nothing rather than guessing.
+        await using var context = CausalityBunitContext.Create();
+        var item = CausalityTestData.JoinedByMatchingItem();
+        var joinedOutcome = item.SyncOutcomes.Single();
+        joinedOutcome.ObjectMatchingRuleId = null;
+        joinedOutcome.ObjectMatchingRuleDescriptionSnapshot = null;
+        joinedOutcome.MatchedValue = null;
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var cut = RenderCard(context, FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Joined));
+
+        Assert.That(cut.FindAll(".evt-match"), Is.Empty);
+    }
+
+    [Test]
     public async Task Render_EventWithAttributes_IsClickableAndKeyboardOperableAsync()
     {
         await using var context = CausalityBunitContext.Create();

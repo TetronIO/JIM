@@ -4,29 +4,26 @@
 function Set-JIMConnectedSystemPartition {
     <#
     .SYNOPSIS
-        Updates properties of a Connected System Partition in JIM.
+        Chooses whether JIM imports from a partition.
 
     .DESCRIPTION
-        Updates properties of a partition within a Connected System.
-        Use this to select partitions for import operations.
-        When a partition is selected, objects within it (and its selected containers)
-        will be imported during sync.
+        Chooses whether JIM imports objects from a partition of a Connected System. Objects are imported from the
+        selected containers of a selected partition.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER PartitionId
-        The unique identifier of the Partition to update.
+        The ID of the partition to change.
 
     .PARAMETER Selected
-        Whether the partition should be selected for import operations.
-        When set to $true, JIM will import objects from this partition.
+        Whether JIM imports objects from the partition.
 
     .PARAMETER PassThru
-        If specified, returns the updated partition.
+        Returns the partition as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Partition object.
+        With -PassThru, the partition as changed; otherwise nothing.
 
     .EXAMPLE
         Set-JIMConnectedSystemPartition -ConnectedSystemId 1 -PartitionId 5 -Selected $true
@@ -52,7 +49,7 @@ function Set-JIMConnectedSystemPartition {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemPartitionDto')]
     param(
         [Parameter(Mandatory)]
         [int]$ConnectedSystemId,

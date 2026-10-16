@@ -4,7 +4,7 @@
 function Set-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Updates the settings on an existing Synchronisation Rule Mapping (Attribute Flow).
+        Changes how an Attribute Flow behaves.
 
     .DESCRIPTION
         Changes how an existing Attribute Flow behaves, leaving what it reads and writes alone.
@@ -12,32 +12,31 @@ function Set-JIMSyncRuleMapping {
 
         What a mapping targets, and whether its source is an attribute or an Expression, cannot be
         changed here. Those revalidate against attribute types and plurality, and for an import
-        mapping they reopen its place in the attribute's priority order, so they remain a
+        mapping they reopen its place in the attribute's Attribute Priority order, so they remain a
         Remove-JIMSyncRuleMapping followed by a New-JIMSyncRuleMapping.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule the mapping belongs to.
+        The ID of the Synchronisation Rule the mapping belongs to.
 
     .PARAMETER MappingId
-        The unique identifier of the Mapping to update.
+        The ID of the mapping to change.
 
     .PARAMETER InputObject
-        Mapping object to update (from pipeline).
+        A mapping from Get-JIMSyncRuleMapping, through the pipeline.
 
     .PARAMETER Expression
         Replaces the mapping's expression. Expression mappings only.
 
     .PARAMETER MissingInputBehaviour
-        What the expression does when an attribute it reads has no value on the object being
-        synchronised. Expression mappings only.
-        - EvaluateAnyway: evaluate with the input absent and contribute whatever it returns.
-        - ContributeNoValue: do not evaluate; contribute nothing, resolved by Attribute Priority.
-        - FailMapping: do not evaluate; record an ExpressionMissingInput error. The object's other
-          attributes still flow.
-        - FailObject: do not evaluate anything for the object; it is errored and left untouched.
+        On an expression mapping, what happens when an attribute the expression reads has no value: EvaluateAnyway
+        runs it regardless and contributes what it returns; ContributeNoValue skips it and contributes nothing, so
+        Attribute Priority decides; FailMapping skips it and records an error, while the object's other attributes
+        still flow; and FailObject leaves the whole object untouched and errored.
 
     .PARAMETER NullIsValue
-        Whether a contribution of no value from this mapping is authoritative. Import mappings only.
+        On an import mapping, whether no value is authoritative: when the rule applies to a joined, in-scope
+        Connected System Object that has no value, the Metaverse attribute is cleared rather than taken from a
+        lower-priority mapping.
 
     .PARAMETER InboundValueProcessing
         Text value-processing transforms applied as the value flows to the Metaverse, as a
@@ -45,20 +44,25 @@ function Set-JIMSyncRuleMapping {
         Import mappings only.
 
     .PARAMETER CaseNormalisation
-        Case normalisation applied as the value flows to the Metaverse. Import mappings only.
+        On an import mapping, the case a text value is converted to.
 
     .PARAMETER InitialExportOnly
-        Whether the mapping flows only during the initial provisioning export. Export mappings only.
+        On an export mapping, whether the attribute is written only when the Connected System Object is created;
+        after that JIM leaves it alone, and Drift Correction does not put it back.
 
     .PARAMETER Enabled
-        Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both
-        directions until it is re-enabled; re-enabling clears any recorded disabled reason. Applies
-        to import and export mappings alike.
+        Enables or disables the mapping. A disabled mapping is skipped in both directions; enabling it clears the
+        reason JIM recorded for disabling it, if any.
+
+    .PARAMETER KeepUnique
+        On an Expression mapping whose value is built from a generated value (an Email built from a generated
+        Account Name), whether a target refusing the value as already in use is fixed by correcting the generated
+        value. $false reports the refusal as an ordinary export error instead. Changing it releases any decision the
+        generated value is waiting on. Refused on any other mapping.
 
     .PARAMETER TokenKind
-        Changes which uniqueness token a generated mapping appends: OnlyIfTaken, Sequence or Random.
-        Generated mappings only. Converting an ordinary mapping to or from a generated one is not
-        supported here (delete and create).
+        Changes a generated mapping's uniqueness token. A mapping cannot be made generated, or stop being generated,
+        here: delete it and create it again.
 
     .PARAMETER SuffixStyle
         OnlyIfTaken only: whether the collision suffix is a Number or a Letter.
@@ -84,7 +88,7 @@ function Set-JIMSyncRuleMapping {
         stops the object with an attributed error; AllowLonger lets the number grow past the width.
 
     .PARAMETER RandomFormat
-        Random only: the shape of the token (Guid, Hex or Digits).
+        Random only: the shape of the token.
 
     .PARAMETER RandomLength
         Random only: the length of the token in characters. Required alongside -RandomFormat Hex
@@ -115,20 +119,23 @@ function Set-JIMSyncRuleMapping {
         checked again; omit to leave the exclusions unchanged. Refused for a generated value on an export
         Synchronisation Rule, which is checked only in its own Connected System.
 
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
+
     .PARAMETER PassThru
-        Returns the updated mapping.
+        Returns the mapping as changed.
 
     .OUTPUTS
-        None by default. The updated mapping when -PassThru is supplied. A generated mapping's
-        Generation property carries its uniqueness token settings, Generation.Exclusions and
-        Generation.Participants (see Get-JIMSyncRuleMapping); Generation.SequenceSkippedAhead
-        is present only when -SequenceStart raised the target attribute's counter on this save.
-        Warnings lists any non-blocking warnings the save raised (empty when there were none); each is
-        written with Write-Warning whether or not -PassThru is supplied. Derived describes a mapping that
-        derives a Metaverse attribute from other Metaverse attributes (Step, StepCount, MetaverseInputs), and
-        is null for every other mapping. DependentDerivedFlows names the Attribute Flows deriving Metaverse
-        attributes that the update left with a missing input (for example by disabling the mapping); they are
-        also written with Write-Warning, a summary line then one line per flow.
+        With -PassThru, the mapping as changed; otherwise nothing. Its warnings, and any derived Attribute Flows the
+        change left with a missing input, are written to the warning stream either way.
 
     .EXAMPLE
         Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
@@ -146,6 +153,12 @@ function Set-JIMSyncRuleMapping {
 
         Disables one Attribute Flow without touching the Synchronisation Rule; the mapping is
         skipped by synchronisation until it is re-enabled with -Enabled $true.
+
+    .EXAMPLE
+        Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -KeepUnique $false
+
+        Stops correcting a generated Account Name when a target refuses the User Principal Name built
+        from it (mapping 12): such a refusal is then reported as an ordinary export error.
 
     .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1 |
@@ -185,6 +198,7 @@ function Set-JIMSyncRuleMapping {
         Restart-JIMGeneratedValues
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ById')]
+    [OutputType('JIM.SyncRuleMappingDto')]
     param(
         [Parameter(Mandatory)]
         [int]$SyncRuleId,
@@ -211,6 +225,9 @@ function Set-JIMSyncRuleMapping {
         [bool]$InitialExportOnly,
 
         [bool]$Enabled,
+
+        # Keep unique (Generated Value Forms, #2023), Expression mappings only.
+        [bool]$KeepUnique,
 
         # Unique Value Generation (#242): a generated mapping's uniqueness token settings. Refused by the
         # server for a mapping that is not currently a generated mapping.
@@ -247,6 +264,10 @@ function Set-JIMSyncRuleMapping {
         # Exclusions (release 3): replaces them; @() clears them, and is sent as an empty JSON array.
         [int[]]$ExcludeConnectedSystemId,
 
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
+
         [switch]$PassThru
     )
 
@@ -269,6 +290,7 @@ function Set-JIMSyncRuleMapping {
         if ($PSBoundParameters.ContainsKey('CaseNormalisation')) { $body.caseNormalisation = $CaseNormalisation }
         if ($PSBoundParameters.ContainsKey('InitialExportOnly')) { $body.initialExportOnly = $InitialExportOnly }
         if ($PSBoundParameters.ContainsKey('Enabled')) { $body.enabled = $Enabled }
+        if ($PSBoundParameters.ContainsKey('KeepUnique')) { $body.keepUnique = $KeepUnique }
 
         # Unique Value Generation (#242): only settings the caller named are sent, nested under `generation`
         # (matching UpdateSyncRuleMappingGenerationRequest). -FixedWidth 0 clears the padding; omitting it
@@ -293,7 +315,7 @@ function Set-JIMSyncRuleMapping {
         if ($generation.Count -gt 0) { $body.generation = $generation }
 
         if ($body.Count -eq 0) {
-            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse, -CollisionRemediation)."
+            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, -KeepUnique, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse, -CollisionRemediation)."
             return
         }
 
@@ -303,6 +325,9 @@ function Set-JIMSyncRuleMapping {
             Write-Verbose "Updating Synchronisation Rule Mapping: $mapId in Synchronisation Rule: $SyncRuleId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/$mapId" -Method 'PATCH' -Body $body
 
                 Write-Verbose "Updated Synchronisation Rule Mapping: $mapId"

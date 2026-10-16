@@ -22,25 +22,104 @@ namespace JIM.Models.Utility;
 /// </remarks>
 public class SystemResetResult
 {
+    /// <summary>
+    /// Connected Systems removed.
+    /// </summary>
     public int ConnectedSystemsRemoved { get; set; }
+
+    /// <summary>
+    /// Connected System Objects removed.
+    /// </summary>
     public int ConnectedSystemObjectsRemoved { get; set; }
+
+    /// <summary>
+    /// Metaverse Objects removed, counting the administrators when the wipe included them.
+    /// </summary>
     public int MetaverseObjectsRemoved { get; set; }
+
+    /// <summary>
+    /// Metaverse Object change records removed.
+    /// </summary>
     public int MetaverseObjectChangesRemoved { get; set; }
+
+    /// <summary>
+    /// Connected System Object change records removed.
+    /// </summary>
     public int ConnectedSystemObjectChangesRemoved { get; set; }
+
+    /// <summary>
+    /// Synchronisation Rules removed.
+    /// </summary>
     public int SyncRulesRemoved { get; set; }
+
+    /// <summary>
+    /// Object Matching Rules removed.
+    /// </summary>
     public int ObjectMatchingRulesRemoved { get; set; }
+
+    /// <summary>
+    /// Schedules removed.
+    /// </summary>
     public int SchedulesRemoved { get; set; }
+
+    /// <summary>
+    /// Records of Schedule runs removed.
+    /// </summary>
     public int ScheduleExecutionsRemoved { get; set; }
+
+    /// <summary>
+    /// Activities removed.
+    /// </summary>
     public int ActivitiesRemoved { get; set; }
+
+    /// <summary>
+    /// Pending Exports removed.
+    /// </summary>
     public int PendingExportsRemoved { get; set; }
+
+    /// <summary>
+    /// Metaverse Object Types removed; the built-in ones are kept.
+    /// </summary>
     public int CustomMetaverseObjectTypesRemoved { get; set; }
+
+    /// <summary>
+    /// Metaverse Attributes removed; the built-in ones are kept.
+    /// </summary>
     public int CustomMetaverseAttributesRemoved { get; set; }
+
+    /// <summary>
+    /// Roles removed; the built-in ones are kept.
+    /// </summary>
     public int CustomRolesRemoved { get; set; }
+
+    /// <summary>
+    /// Connector Definitions removed; the built-in ones are kept.
+    /// </summary>
     public int CustomConnectorDefinitionsRemoved { get; set; }
+
+    /// <summary>
+    /// Predefined Searches removed; the built-in ones are kept.
+    /// </summary>
     public int CustomPredefinedSearchesRemoved { get; set; }
+
+    /// <summary>
+    /// Example Data Sets removed; the built-in ones are kept.
+    /// </summary>
     public int CustomExampleDataSetsRemoved { get; set; }
+
+    /// <summary>
+    /// Example Data Templates removed; the built-in ones are kept.
+    /// </summary>
     public int CustomExampleDataTemplatesRemoved { get; set; }
+
+    /// <summary>
+    /// API Keys removed; infrastructure keys are kept.
+    /// </summary>
     public int CustomApiKeysRemoved { get; set; }
+
+    /// <summary>
+    /// Trusted Certificates removed.
+    /// </summary>
     public int TrustedCertificatesRemoved { get; set; }
 
     /// <summary>

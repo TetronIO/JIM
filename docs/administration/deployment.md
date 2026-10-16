@@ -1,67 +1,21 @@
 ---
 title: Deployment
+description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
+type: how-to
+audience: implementer
+validated: v0.16.0
 ---
 
-# Deployment Guide
+# Deployment
 
-This guide covers deploying JIM to a production environment, with Docker or Podman, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance. For what is particular to Podman, including rootless installations, see [Running on Podman](podman.md).
+This guide installs JIM in production, on Docker or Podman, connected to the internet or air-gapped, and covers its architecture, monitoring and readiness checklists. [Prerequisites](../getting-started/prerequisites.md) lists what to have in place first, [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers its certificate, and [Running on Podman](podman.md) what is particular to Podman, including rootless installations.
 
 !!! tip "Quick Start"
-    The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes. This page covers production hardening, certificates, reverse proxies, upgrades, and operational best practices.
+    The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes, for evaluation.
 
 ## Prerequisites
 
-### Hardware Requirements
-
-| Component | Minimum    | Recommended                                      |
-|-----------|------------|--------------------------------------------------|
-| CPU       | 2 cores    | 4+ cores                                         |
-| RAM       | 4 GB       | 8+ GB                                            |
-| Storage   | 20 GB      | 50+ GB (depends on identity data volume)         |
-
-Storage scales with the number of identity objects and the frequency of synchronisation runs (change history, logs, etc.).
-
-#### Memory Scaling by Identity Object Count
-
-During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
-
-These figures are for the **host machine** (or VM) running JIM (on Docker or Podman) -- they must cover the operating system, all JIM containers, and the database.
-
-| Connected System Size       | Minimum Host RAM | Recommended Host RAM |
-|-----------------------------|------------------|----------------------|
-| Up to 10,000 objects        | 4 GB             | 8 GB                 |
-| 10,000 -- 50,000 objects    | 8 GB             | 16 GB                |
-| 50,000 -- 100,000 objects   | 20 GB            | 24 GB                |
-| 100,000 -- 250,000 objects  | 24 GB            | 32 GB                |
-| 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
-
-!!! info "Why large imports need significant memory"
-    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1--2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
-
-!!! note
-    These requirements apply to the largest single Full Import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta Imports process only changed objects and require significantly less memory.
-
-!!! info "Large group memberships drive memory more than object count"
-    A group is loaded with its full member list during processing, so a single large group can dominate memory use: a group with 495,000 members loads 495,000 member references. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
-
-### Software Requirements
-
-- **Docker Engine** 24.0+ with **Docker Compose** v2.24+, or **Podman** 4.4+ with systemd (RHEL 9 and 10 include Podman 5; see [Running on Podman](podman.md))
-- **OpenSSL**, to create or check JIM's HTTPS certificate (part of every mainstream Linux distribution's base install)
-- **An OIDC identity provider** (e.g. Entra ID, Keycloak, AD FS) -- see [SSO Setup](sso-setup.md)
-
-### Network Requirements
-
-JIM's services communicate internally over a private container network (`jim-network` on Docker, `jim` on Podman). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the installation publishes on host port `443`.
-
-| Direction | Port                                                  | Purpose                                        |
-|-----------|-------------------------------------------------------|------------------------------------------------|
-| Inbound   | 443 (HTTPS), or the port you chose instead            | Web UI and REST API                            |
-| Outbound  | Varies                                                | OIDC provider, LDAP targets, file shares, etc. |
-
-In air-gapped environments, no outbound connectivity is required after initial deployment.
-
----
+[Prerequisites](../getting-started/prerequisites.md) lists what JIM needs: a container runtime, an identity provider, a TLS certificate and a PostgreSQL database, with the hardware to size for the number of objects you synchronise and the one port to open.
 
 ## Architecture Overview
 
@@ -95,7 +49,7 @@ On Podman, the containers are named `jim-web`, `jim-worker`, `jim-scheduler` and
 
 |                    | Bundled                                       | External                                    |
 |--------------------|-----------------------------------------------|---------------------------------------------|
-| **Setup**          | Automatic -- included in the installation     | You manage PostgreSQL separately            |
+| **Setup**          | Automatic: included in the installation      | You manage PostgreSQL separately            |
 | **Started with**   | `--profile with-db` (Docker), or the `jim-database` pod (Podman) | JIM alone                |
 | **Best for**       | Evaluations, small deployments                | Production, existing DBA team               |
 | **Backup**         | Volume snapshots                              | Your existing DB backup tooling             |
@@ -154,7 +108,7 @@ It downloads the latest release and installs it in `/opt/jim`; see [What the Ins
 
 ### By Hand
 
-On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the Podman files from the latest release:
+On Podman, follow [Installing on Podman by Hand](podman-by-hand.md), with the Podman files from the latest release:
 
 ```bash
 mkdir -p jim-podman && cd jim-podman
@@ -178,7 +132,7 @@ curl -fsSL -o .env \
 ```
 
 1. Edit `.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the release's version, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`; for your own server, give its name and JIM's credentials. Then `chmod 600 .env`, since it holds secrets.
-2. Put JIM's certificate and key in `tls/` (see [The Certificate](#the-certificate)).
+2. Put JIM's certificate and key in `tls/` (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)).
 3. Start JIM, leaving out `--profile with-db` if you use your own PostgreSQL server:
 
     ```bash
@@ -260,7 +214,7 @@ Run inside the bundle, the installer loads JIM's images from it and starts JIM w
 
 ### By Hand
 
-On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the files in the bundle's `podman` folder and the images in its `docker-images` folder.
+On Podman, follow [Installing on Podman by Hand](podman-by-hand.md), with the files in the bundle's `podman` folder and the images in its `docker-images` folder.
 
 On Docker, as root, in the extracted bundle:
 
@@ -282,7 +236,7 @@ cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
     ```
 
     Nothing is added if the IDs differ; then extract the bundle again and check it with `sha256sum -c checksums.sha256`.
-2. Put JIM's certificate and key in `/opt/jim/tls/` (see [The Certificate](#the-certificate)).
+2. Put JIM's certificate and key in `/opt/jim/tls/` (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)).
 3. Start JIM, leaving out `--profile with-db` if you use your own PostgreSQL server. `--pull never` makes Docker report a missing image rather than try the internet:
 
     ```bash
@@ -318,14 +272,11 @@ sudo /opt/jim/setup.sh --certificate         # change its names, or move to your
 
 On Docker, it also upgrades JIM, to the latest release or, run inside a newer release's bundle, to that release; see [Upgrading with the installer](upgrading.md#with-the-installer).
 
-For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with. If it stops before starting JIM, because it refuses a setting, a step fails or you press Ctrl+C, it puts the installation's files back as they were, so JIM carries on as before; a first installation that stops leaves nothing behind. Should the installer itself be killed part way, the files as they were stay in `.before-setup` in the installation's folder, and its next run stops and says what to do with them.
+For automation, every question can be answered in advance with an environment variable; see [Installer](configuration.md#installer). Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with. If it stops before starting JIM, because it refuses a setting, a step fails or you press Ctrl+C, it puts the installation's files back as they were, so JIM carries on as before; a first installation that stops leaves nothing behind. Should the installer itself be killed part way, the files as they were stay in `.before-setup` in the installation's folder, and its next run stops and says what to do with them.
 
 ---
 
-## After Installing
-
-1. **Trust the certificate authority**, if the installer created JIM's certificate: add `/opt/jim/tls/ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM (see [Distributing the certificate authority](#distributing-the-certificate-authority)). Until then, browsers warn about JIM's certificate.
-2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access.
+## Check it worked
 
 JIM prepares its database on first start, with no manual step, and does not serve requests until that has finished. The installer waits for it; after a manual start, `jim.web` shows as `healthy` once JIM is ready:
 
@@ -345,6 +296,11 @@ JIM prepares its database on first start, with no manual step, and does not serv
     ```
 
     If it does not become ready, the worker's log names the problem, for example a database permission it lacks: `sudo podman logs jim-worker`. For a rootless installation, see [Rootless commands](podman.md#rootless-commands).
+
+## After Installing
+
+1. **Trust the certificate authority**, if the installer created JIM's certificate: add `/opt/jim/tls/ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM (see [Distributing the certificate authority](tls-and-reverse-proxy.md#distributing-the-certificate-authority)). Until then, browsers warn about JIM's certificate.
+2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access.
 
 !!! warning "Always name the compose files"
     Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
@@ -385,276 +341,7 @@ If you need to integrate with an external system that writes to a fixed network 
 
 ## TLS and Reverse Proxy
 
-JIM serves HTTPS itself, on both runtimes. In production, `jim.web` listens for HTTPS on container port `8443`, which the installation publishes on the standard HTTPS port, 443, so a fresh install can be signed into from any machine at `https://jim.example.com` with no reverse proxy.
-
-!!! warning "Browsers on other machines must use HTTPS"
-    JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
-
-### The Certificate
-
-JIM reads its certificate and private key from two PEM files in the `tls` folder of the installation (`/opt/jim/tls` when the installer ran as root):
-
-| File          | Contents                                                                                              |
-|---------------|-------------------------------------------------------------------------------------------------------|
-| `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates, so that clients receive the whole chain |
-| `tls/tls.key` | Its private key, **unencrypted**, belonging to UID `1654` (the user JIM runs as) with mode `400`      |
-
-The certificate must name, as subject alternative names, every DNS name and IP address users and tools reach JIM at, including the name a reverse proxy uses to connect to it. JIM accepts TLS 1.2 and 1.3.
-
-Docker mounts both files into `jim.web` read-only, keeping their owner and mode, and JIM runs with every capability dropped: if the key does not belong to UID `1654`, `jim.web` cannot read it and fails to start. Until both files exist, `docker compose up` stops with an error naming the missing file.
-
-Podman reads the pair from the Podman secret `jim-tls` instead, which the installer stores from these files, so on Podman the key stays readable by root only and needs no change of owner. Installing by hand, store it as [Installing by Hand](podman.md#installing-by-hand) describes.
-
-The installer asks which of these two ways to provide them, and puts them in place:
-
-- **Your organisation's certificate** (recommended for production)<br /> Issued by your internal certificate authority (CA), such as Active Directory Certificate Services or Identity Management, which your browsers and servers already trust. Nothing needs distributing.
-- **A certificate the installer creates**<br /> `setup.sh` creates a certificate authority for this JIM server, and a server certificate from it, for the names and addresses you give it. Browsers show a warning until the CA is trusted; see [Distributing the certificate authority](#distributing-the-certificate-authority).
-
-When installing by hand, put your organisation's certificate in place as root:
-
-```bash
-mkdir -p /opt/jim/tls && chmod 700 /opt/jim/tls
-cp /path/to/jim.crt /opt/jim/tls/tls.crt   # the certificate, followed by any intermediate CA certificates
-cp /path/to/jim.key /opt/jim/tls/tls.key   # its unencrypted private key
-chown 1654:1654 /opt/jim/tls/tls.key && chmod 400 /opt/jim/tls/tls.key
-```
-
-If your key is encrypted, decrypt it first with `openssl pkey -in encrypted.key -out /opt/jim/tls/tls.key`.
-
-### A Certificate the Installer Creates
-
-`setup.sh` writes these files to `tls/`:
-
-| File      | What it is                                                         | Keep it          |
-|-----------|--------------------------------------------------------------------|------------------|
-| `ca.crt`  | The certificate authority's certificate, valid for ten years       | Distribute it    |
-| `ca.key`  | The certificate authority's private key; it signs JIM's certificates | Secret, readable by root only |
-| `tls.crt` | JIM's certificate, valid for one year                              |                  |
-| `tls.key` | JIM's private key                                                  | Secret           |
-| `names`   | The names and addresses the certificate covers, for renewal        |                  |
-
-The certificate authority is limited, by name constraints, to exactly the names and addresses you gave. A browser that trusts it accepts a certificate it signs for JIM, and rejects one for any other site, so even a stolen `ca.key` cannot be used to impersonate other servers to the machines that trust it.
-
-When installing by hand, create these files with the installer's certificate step alone, from a downloaded `setup.sh` or the one in the release bundle:
-
-```bash
-sudo JIM_INSTALL_DIR=/opt/jim ./setup.sh --certificate
-```
-
-#### Distributing the Certificate Authority
-
-Add `ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM, and of any reverse proxy that connects to JIM over HTTPS:
-
-- **Windows**<br /> Group Policy (Computer Configuration > Policies > Windows Settings > Security Settings > Public Key Policies > Trusted Root Certification Authorities), or `Import-Certificate -FilePath ca.crt -CertStoreLocation Cert:\LocalMachine\Root` on one machine.
-- **Red Hat Enterprise Linux and derivatives**<br /> Copy it to `/etc/pki/ca-trust/source/anchors/` and run `update-ca-trust`.
-- **Debian and Ubuntu**<br /> Copy it to `/usr/local/share/ca-certificates/jim-ca.crt` and run `update-ca-certificates`.
-- **macOS**<br /> `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt`.
-
-Depending on its configuration, Firefox may use its own list rather than the operating system's. If it still warns, import the CA under **Settings > Privacy & Security > Certificates > View Certificates > Authorities**.
-
-The PowerShell module relies on the operating system's list, so machines that run `Connect-JIM` need the CA too.
-
-### Renewing the Certificate
-
-JIM sends browsers an HSTS header, which tells them to refuse plain HTTP and certificate errors for JIM's name. Once a browser trusts JIM's certificate, an **expired** certificate therefore blocks access outright, with no option to continue. Renew before the expiry date, which the installer prints at install; to read it later:
-
-```bash
-openssl x509 -in /opt/jim/tls/tls.crt -noout -enddate
-```
-
-- **A certificate the installer created**<br /> Run the installation's copy of the installer. It issues a new certificate from the same certificate authority, for the same names, and restarts `jim.web` (on Podman, the whole JIM pod, so do it outside a synchronisation run); browsers that trust the CA carry on without a warning.
-
-    ```bash
-    sudo /opt/jim/setup.sh --renew-certificate
-    ```
-
-- **Your organisation's certificate**<br /> Install the renewed one as in [Replacing the certificate](#replacing-the-certificate).
-
-### Replacing the Certificate
-
-To install a renewed certificate from your CA, move to your organisation's certificate, or change the names a created certificate covers, run the installer's certificate step:
-
-```bash
-sudo /opt/jim/setup.sh --certificate
-```
-
-It asks the same questions as at install, checks the certificate and key before installing them, and restarts `jim.web` (on Podman, the whole JIM pod). A created certificate for new names needs a new certificate authority, which you distribute again; the installer says so when it creates one.
-
-To do the same by hand on Docker, as root:
-
-```bash
-cd /opt/jim
-cp /path/to/new.crt tls/tls.crt
-cp /path/to/new.key tls/tls.key.new && chmod 400 tls/tls.key.new && chown 1654:1654 tls/tls.key.new
-mv -f tls/tls.key.new tls/tls.key
-docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
-```
-
-On Podman, put the new files in `tls/` the same way (no `chown` needed), store them as the `jim-tls` secret again as in [Installing by Hand](podman.md#installing-by-hand), and restart `jim.service`.
-
-When you move away from a certificate the installer created, delete `tls/ca.key`, and remove the JIM certificate authority from the machines that trusted it.
-
-### Behind a Reverse Proxy or Load Balancer
-
-JIM does not need a reverse proxy, but you may already route web applications through one, or want JIM on port 443 behind a load balancer. Two configurations are supported:
-
-- **Re-encrypting to JIM** (recommended)<br /> The proxy terminates the browser's HTTPS connection and opens its own HTTPS connection to JIM, checking JIM's certificate. Traffic is encrypted end to end, which regulated environments commonly require, and nothing about JIM changes. The proxy must trust the CA that issued JIM's certificate, and JIM's certificate must carry both the name users type and the name the proxy connects to: nginx checks JIM's certificate against the host name in its `proxy_pass` line, while Apache httpd, which passes the name users typed on to JIM, checks it against that.
-- **Plain HTTP on the JIM host's loopback interface**<br /> A proxy on the JIM host itself terminates TLS and forwards plain HTTP to JIM, which listens on the host's loopback interface only. See [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
-
-Either way, set `JIM_TRUSTED_PROXIES` so that JIM records each client's real address; see [Trusting the Reverse Proxy](#trusting-the-reverse-proxy).
-
-!!! important "Pass WebSocket connections through"
-    The JIM portal keeps a live connection to the server over WebSockets. Your reverse proxy **must** pass WebSocket connections through (the `Upgrade` and `Connection` headers in the examples below). Without them the portal falls back to a slower connection method and responds sluggishly, and the browser's developer console reports `Failed to connect via WebSockets, using the Long Polling fallback transport`.
-
-#### nginx Example
-
-Users reach `jim.example.com`; the proxy connects to JIM at `jim-app.example.com`, and trusts the CA in `/etc/nginx/jim-ca.crt` (JIM's `tls/ca.crt`, or your organisation's CA certificate).
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name jim.example.com;
-
-    ssl_certificate     /etc/nginx/ssl/jim.example.com.crt;
-    ssl_certificate_key /etc/nginx/ssl/jim.example.com.key;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-
-    location / {
-        # Re-encrypt to JIM, checking its certificate
-        proxy_pass https://jim-app.example.com;
-        proxy_ssl_verify on;
-        proxy_ssl_trusted_certificate /etc/nginx/jim-ca.crt;
-        proxy_ssl_server_name on;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # JIM's sign-in response sets cookies larger than nginx's default buffer;
-        # without these, signing in fails with 502 Bad Gateway
-        proxy_buffer_size 16k;
-        proxy_buffers 8 16k;
-
-        # WebSocket support (required for the JIM portal)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-#### Apache httpd Example
-
-Apache httpd is the default web server on Red Hat Enterprise Linux. This example needs `mod_ssl`, `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, `mod_headers` and `mod_rewrite`. Because `ProxyPreserveHost` passes on the name users typed, Apache checks JIM's certificate against `jim.example.com`, not `jim-app.example.com`: if JIM's certificate lacks it, every request fails with `500 Internal Server Error` and Apache logs `AH02411: SSL Proxy: Peer certificate does not match for hostname`.
-
-```apache
-<VirtualHost *:443>
-    ServerName jim.example.com
-
-    SSLEngine on
-    SSLCertificateFile    /etc/pki/tls/certs/jim.example.com.crt
-    SSLCertificateKeyFile /etc/pki/tls/private/jim.example.com.key
-    SSLProtocol           -all +TLSv1.2 +TLSv1.3
-
-    # Re-encrypt to JIM, checking its certificate
-    SSLProxyEngine on
-    SSLProxyVerify require
-    SSLProxyCheckPeerName on
-    SSLProxyCACertificateFile /etc/pki/tls/certs/jim-ca.crt
-
-    ProxyPreserveHost On
-    RequestHeader set X-Forwarded-Proto "https"
-
-    # WebSocket support (required for the JIM portal)
-    RewriteEngine on
-    RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    RewriteRule ^/(.*) wss://jim-app.example.com/$1 [P,L]
-
-    ProxyPass        / https://jim-app.example.com/
-    ProxyPassReverse / https://jim-app.example.com/
-</VirtualHost>
-```
-
-On a host with SELinux enforcing, as Red Hat Enterprise Linux is by default, httpd may not open network connections until you allow it; without this, every request fails with `503 Service Unavailable` and the audit log records a `name_connect` denial:
-
-```bash
-setsebool -P httpd_can_network_connect 1
-```
-
-### Trusting the Reverse Proxy
-
-Set `JIM_TRUSTED_PROXIES` (in `.env` on Docker, `jim-config.yaml` on Podman) to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
-
-- The security audit log and API rate limiting see the proxy's address instead of each client's, so every client shares one rate limit.
-- **With plain HTTP to JIM only:** sign-in fails, because JIM sends your identity provider an `http://` callback address that does not match the `https://` one you registered, and JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
-
-The address to trust depends on where the proxy runs:
-
-- **Proxy on another machine**<br /> That machine's IP address.
-- **Proxy on the JIM host**<br /> The proxy takes port 443, so JIM moves to a port on the host's loopback interface: `JIM_WEB_PORT=127.0.0.1:8443` for a proxy that re-encrypts to `https://localhost:8443` (see [Port Mapping](#port-mapping)), or the plain HTTP setup [below](#plain-http-for-a-proxy-on-the-same-host). Either way, JIM sees the connection arrive from the gateway address of the `jim-network` Docker network, not from `127.0.0.1`. Find it with:
-
-    ```bash
-    docker network inspect jim-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
-    ```
-
-    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`. On Podman, a rootful JIM sees the gateway of the `jim` network (`podman network inspect jim`); a rootless JIM sees every client at one internal address, so do not run a rootless JIM behind a proxy that needs `JIM_TRUSTED_PROXIES` (see [Rootful or Rootless](podman.md#rootful-or-rootless)).
-
-For example:
-
-```bash
-JIM_TRUSTED_PROXIES=10.0.0.5
-```
-
-Then run your `docker compose ... up -d` command again so `jim.web` restarts with the setting. On startup `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es) and 0 known network(s)`, which confirms it read the value. List only your proxy: JIM believes whatever a trusted address tells it about the client's address and scheme. See the [Configuration Reference](configuration.md#reverse-proxy) for the setting's full format.
-
-### Plain HTTP for a Proxy on the Same Host
-
-If a reverse proxy on the JIM host terminates TLS, JIM can serve it plain HTTP on the host's loopback interface instead, with no certificate of its own. Create `docker-compose.local-proxy.yml` next to the other compose files:
-
-```yaml
-# JIM serves plain HTTP on this host's loopback interface only, for a reverse proxy on this host.
-services:
-  jim.web:
-    environment:
-      - ASPNETCORE_URLS=http://+:8080
-      # Empty, so that JIM does not look for a certificate
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=
-      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=
-    ports: !override
-      - "127.0.0.1:8080:8080"
-    secrets: !reset []
-
-secrets: !reset {}
-```
-
-Add `-f docker-compose.local-proxy.yml` after the other two files in every `docker compose` command for this deployment, point the proxy at `http://localhost:8080`, and set [`JIM_TRUSTED_PROXIES`](#trusting-the-reverse-proxy) to the `jim-network` gateway address. The `tls` folder is not needed. Traffic between the proxy and JIM is unencrypted, but it never leaves the host: other machines cannot reach port `8080`.
-
-### Port Mapping
-
-`jim.web` listens for HTTPS on port `8443` inside its container. The installation publishes it on the standard HTTPS port, 443, on every interface, so JIM's address needs no port. The installer asks for the port. To change it afterwards on Podman, edit `PublishPort=` in `jim.kube` (for example `PublishPort=8443:8443`), then reload systemd and restart `jim.service`; on Docker, set `JIM_WEB_PORT` in `.env` and run your `docker compose ... up -d` command again:
-
-```bash
-JIM_WEB_PORT=8443
-```
-
-JIM's address then carries the port (`https://jim.example.com:8443`), and so must the redirect URIs registered at your identity provider.
-
-To accept connections on one interface only, such as the loopback interface behind a reverse proxy on the same host, prefix its address:
-
-```bash
-JIM_WEB_PORT=127.0.0.1:8443
-```
-
-The base `docker-compose.yml` publishes no ports, so a deployment that leaves out `docker-compose.production.yml` is not reachable from the host.
-
-!!! note "Use `JIM_WEB_PORT` rather than a `ports` override"
-    Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one, unless it is marked `!override` as in [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
-
-!!! note "Rootless Docker or Podman and ports below 1024"
-    A rootless container engine cannot publish a port below the kernel's unprivileged-port threshold (1024 by default), which includes 443. For rootless Podman, the installer lowers the threshold to the port you choose; for rootless Docker, it gives the command that does. Alternatively choose a port of 1024 or above.
-
----
+JIM serves HTTPS itself, with a certificate for its host name that the installer creates or that your organisation's certificate authority issues. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers the certificate, renewing and replacing it, running JIM behind a reverse proxy or load balancer, and changing its port.
 
 ## Health Monitoring
 
@@ -668,7 +355,7 @@ The base `docker-compose.yml` publishes no ports, so a deployment that leaves ou
 
 The `jim.web` container includes a Docker healthcheck using the readiness endpoint. The two unauthenticated endpoints answer for the web tier only; `system/health` is how the three background services are observed from outside the portal, and the same report is shown on **Administration > Operations** and returned by `Get-JIMServiceHealth`. The `jim.worker` container hosts two of them, the synchronisation loop and the Password Delivery Service, and each reports on its own, so a Worker whose password delivery has stopped while imports still run is visible as exactly that. See [Operations > Service Health](../configuration/operations.md#service-health).
 
-The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and orchestrators like Docker Swarm or Kubernetes can detect when a worker or scheduler has stalled, even if the process itself has not exited.
+The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and any monitoring that reads container health can detect when a worker or scheduler has stalled, even if the process itself has not exited.
 
 On Podman, the same checks show in `podman ps`, and Podman 5 restarts a service whose check keeps failing; see [Health checks and restarts](podman.md#health-checks-and-restarts).
 
@@ -733,7 +420,7 @@ Update-Module -Name JIM
 
 There are two options for installing the module in disconnected environments.
 
-#### Option 1 -- From the Release Bundle (Recommended)
+#### Option 1: From the Release Bundle (Recommended)
 
 Each release bundle (`jim-release-X.Y.Z.tar.gz`) includes the module pre-packaged in `powershell/JIM/`. After extracting the bundle, copy the module to a PSModulePath directory:
 
@@ -745,7 +432,7 @@ Copy-Item -Recurse ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modul
 Copy-Item -Recurse ./powershell/JIM "~/.local/share/powershell/Modules/"
 ```
 
-#### Option 2 -- From the PowerShell Gallery via Save-Module
+#### Option 2: From the PowerShell Gallery via Save-Module
 
 On a connected machine, use `Save-Module` to download the module to a local directory without installing it:
 

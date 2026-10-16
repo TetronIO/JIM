@@ -4,42 +4,46 @@
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
-/// Result of switching the Object Matching Rule mode for a Connected System.
+/// What switching a Connected System's Object Matching Rule mode did.
 /// </summary>
 public class ObjectMatchingModeSwitchResult
 {
     /// <summary>
-    /// Whether the mode switch was successful.
+    /// Whether the switch was made.
     /// </summary>
     public bool Success { get; set; }
 
     /// <summary>
-    /// The new mode after the switch.
+    /// The mode the Connected System is now in: ConnectedSystem (simple mode, rules on Object Types) or SyncRule
+    /// (advanced mode, rules on Synchronisation Rules).
     /// </summary>
     public ObjectMatchingRuleMode NewMode { get; set; }
 
     /// <summary>
-    /// Number of Synchronisation Rules that were updated during the switch.
+    /// How many import Synchronisation Rules received a copy of their Object Type's rules, when switching to
+    /// advanced mode; 0 otherwise. One that already had rules of its own keeps them.
     /// </summary>
     public int SyncRulesUpdated { get; set; }
 
     /// <summary>
-    /// Number of object types that had matching rules set (when switching to Simple Mode).
+    /// How many Object Types received rules, when switching to simple mode; 0 otherwise.
     /// </summary>
     public int ObjectTypesUpdated { get; set; }
 
     /// <summary>
-    /// Warning messages about the switch (e.g., diverging rules).
+    /// What the switch left behind or discarded, one sentence each: rules kept but no longer consulted, export
+    /// Synchronisation Rules left with none, rules that differed between Synchronisation Rules, and rules discarded
+    /// because an Object Type already had its own.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 
     /// <summary>
-    /// Detailed information about what happened per object type.
+    /// When switching to simple mode, what happened on each Object Type; empty otherwise.
     /// </summary>
     public List<ObjectTypeMatchingRuleMigration> ObjectTypeMigrations { get; set; } = new();
 
     /// <summary>
-    /// Error message if the switch failed.
+    /// Why the switch failed; null when it succeeded.
     /// </summary>
     public string? ErrorMessage { get; set; }
 
@@ -104,53 +108,53 @@ public class ObjectMatchingModeSwitchResult
 }
 
 /// <summary>
-/// Details about matching rule migration for a single object type when switching to Simple Mode.
+/// What switching to simple mode did on one Object Type.
 /// </summary>
 public class ObjectTypeMatchingRuleMigration
 {
     /// <summary>
-    /// The ID of the object type.
+    /// The ID of the Connected System Object Type.
     /// </summary>
     public int ObjectTypeId { get; set; }
 
     /// <summary>
-    /// The name of the object type.
+    /// The name of the Connected System Object Type.
     /// </summary>
     public string ObjectTypeName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Number of import Synchronisation Rules for this object type.
+    /// How many import Synchronisation Rules the Object Type has.
     /// </summary>
     public int SyncRuleCount { get; set; }
 
     /// <summary>
-    /// Number of Synchronisation Rules that had matching rules defined.
+    /// How many of them had Object Matching Rules of their own.
     /// </summary>
     public int SyncRulesWithMatchingRules { get; set; }
 
     /// <summary>
-    /// Number of unique matching rule configurations found across Synchronisation Rules.
+    /// How many different sets of rules those Synchronisation Rules had between them.
     /// </summary>
     public int UniqueSyncRuleConfigurations { get; set; }
 
     /// <summary>
-    /// Whether the matching rules diverged across Synchronisation Rules (required best-guess selection).
+    /// Whether the Synchronisation Rules had different rules, in which case the most common set was used.
     /// </summary>
     public bool RulesDiverged => UniqueSyncRuleConfigurations > 1;
 
     /// <summary>
-    /// Whether the object type's pre-existing matching rules took precedence, meaning the Synchronisation Rules'
-    /// own rules were discarded rather than migrated (#1569).
+    /// Whether the Object Type already had rules, which stay, so the Synchronisation Rules' rules were discarded
+    /// rather than moved.
     /// </summary>
     public bool ObjectTypeRulesTookPrecedence { get; set; }
 
     /// <summary>
-    /// Number of matching rules that were set on the object type.
+    /// How many rules were put on the Object Type.
     /// </summary>
     public int MatchingRulesSet { get; set; }
 
     /// <summary>
-    /// Number of Synchronisation Rules that had their matching rules cleared.
+    /// How many Synchronisation Rules had their rules removed.
     /// </summary>
     public int SyncRulesCleared { get; set; }
 }

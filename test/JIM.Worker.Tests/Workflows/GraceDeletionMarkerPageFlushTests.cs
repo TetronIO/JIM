@@ -156,7 +156,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
     /// (<see cref="SyncDeltaSyncTaskProcessor.PerformDeltaSyncAsync"/>) and still observe the map doing its
     /// job. On real PostgreSQL, JIM's single tracking DbContext already resolves both loads to one instance
     /// via EF's own identity map, so this scenario is latent there, not live; the map is defence in depth
-    /// (see <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// (see <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening).
     /// </para>
     /// </summary>
@@ -863,7 +863,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
     /// Type) during the next <c>DetectChanges()</c>. Left tracked across two systems' Full Syncs, a stale
     /// instance from an earlier one collides with the <c>SpySyncRepository</c>'s deliberately-cloned
     /// instance a later system's matching-rule join returns (see
-    /// <see cref="SpySyncRepository.FindMetaverseObjectUsingMatchingRuleAsync"/>): DbContext reports
+    /// <see cref="SpySyncRepository.GetMetaverseObjectForJoinMatchAsync"/>): DbContext reports
     /// "another instance with the same key value is already being tracked" on the next
     /// <c>ChangeTracker.Entries()</c> call (inside <see cref="WorkflowTestBase.CreateRunProfileAsync"/>) -
     /// a test-harness artefact, not the production behaviour under test. <c>Clear()</c> (rather than a
@@ -1071,12 +1071,9 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         /// entirely. Deliberately does NOT copy the deletion-marker fields: a genuine separate load
         /// performed before Pass 1's in-memory-only marker write would not see them either.
         /// </summary>
-        public override async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-            ConnectedSystemObject connectedSystemObject,
-            MetaverseObjectType metaverseObjectType,
-            ObjectMatchingRule rule)
+        public override async Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         {
-            var match = await base.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, rule);
+            var match = await base.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
             if (match == null)
                 return null;
 

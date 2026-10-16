@@ -20,6 +20,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
     private LdapDirectoryType _directoryType = LdapDirectoryType.Generic;
+
+    // Whether the directory behind the open export connection advertised the Permissive Modify control in its rootDSE.
+    // Read once per export connection, never assumed: a directory that does not understand the (critical) control
+    // refuses every modify carrying it.
+    private bool _exportDirectoryAdvertisesPermissiveModify;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -131,6 +136,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public bool SupportsUniquenessProbe => true;
 
     public bool SupportsUniquenessRejectionClassification => true;
+
+    // objectGUID, entryUUID and nsUniqueId are each unique within a directory whatever class an entry has, so an
+    // entry arriving under a different Object Type is the same object having changed type (#2049).
+    public bool ExternalIdsUniqueAcrossObjectTypes => true;
 
     // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
     // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
@@ -771,7 +780,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             }
         }
 
-        connection.Bind();
+        try
+        {
+            connection.Bind();
+        }
+        catch (DirectoryException ex) when (LdapBindRefusal.Describe(ex, useSsl) is { } actionable)
+        {
+            // A domain controller enforcing LDAP signing refuses a simple bind over plain LDAP with bare protocol text
+            // (#2042). This is the only bind JIM makes, so every caller gets the remedy instead.
+            connection.Dispose();
+            throw actionable;
+        }
+
         return connection;
     }
 
@@ -952,6 +972,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         _exportSettings = settings;
+        _exportDirectoryAdvertisesPermissiveModify = false;
 
         // Reuse the same connection logic as import
         OpenImportConnection(settings.ToList(), persistedConnectorData, Log.Logger);
@@ -961,6 +982,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
             _directoryType = rootDse.DirectoryType;
+            _exportDirectoryAdvertisesPermissiveModify = rootDse.AdvertisesPermissiveModify;
+            Log.Logger.Information("OpenExportConnection: Directory type {DirectoryType}; Permissive Modify control advertised: {AdvertisesPermissiveModify}. " +
+                "Without it, a modify the directory refuses because a value is already present or already absent is applied again in parts.",
+                rootDse.DirectoryType, rootDse.AdvertisesPermissiveModify);
 
             // Pin creation (issue #230 Phase 2): export does not re-query rootDSE and re-pin on every run
             // the way import self-heals via LdapConnectorImport.GetRootDseInformation; it only needs to
@@ -1023,7 +1048,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // from it would replace a moving "N of M" with a message that says less. See
         // engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md.
         var executor = new LdapOperationExecutor(_connection);
-        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn,
+            _exportDirectoryAdvertisesPermissiveModify);
         _currentExport.SetManagedScope(_managedScope);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
@@ -1559,6 +1585,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAsync()!");
 
         return _uniquenessProbe.ProbeAsync(request, _probeSearchBases, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<UniquenessProbeResult>> ProbeAttributesAsync(IReadOnlyList<UniquenessProbeRequest> requests, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        if (_uniquenessProbe == null)
+            throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAttributesAsync()!");
+
+        return _uniquenessProbe.ProbeAttributesAsync(requests, _probeSearchBases, cancellationToken);
     }
 
     /// <inheritdoc />

@@ -9,9 +9,13 @@
 #     installed browser and the MCP server drift apart.
 #   - dotnet-ef, installed via `dotnet tool install` in .devcontainer/setup.sh.
 #     Not a .csproj reference, so Dependabot's nuget ecosystem never sees it.
+#   - lycheeverse/lychee, the docs site's link checker, pinned by tag and digest
+#     in scripts/Test-DocsSite.ps1, which `docker run`s it. Not a Dockerfile FROM
+#     line, so Dependabot's docker ecosystem never sees it. Tag and digest move
+#     together.
 #
-# See .github/scripts/check-tooling-pins.ps1 (detection: npm/NuGet registry
-# lookups, no Docker) and .github/scripts/open-pin-pr.ps1 (the shared
+# See .github/scripts/check-tooling-pins.ps1 (detection: npm, NuGet and Docker
+# Hub registry lookups, no Docker) and .github/scripts/open-pin-pr.ps1 (the shared
 # signed-commit PR opener, also used by apt-pin-check).
 #
 # Identity / token choice is identical to apt-pin-check: the PR is opened by the
@@ -79,7 +83,8 @@ jobs:
         run: |
           $intro = @'
           Newer versions of development tooling pinned outside any Dependabot-readable
-          manifest (.devcontainer/setup.sh, .mcp.json) are available upstream. Raised
+          manifest (.devcontainer/setup.sh, .mcp.json, scripts/Test-DocsSite.ps1) are
+          available upstream. Raised
           for evaluation by the tooling-pin-check workflow. Where a tool is pinned in
           more than one file, every location has been moved to the same version.
           '@
@@ -89,7 +94,7 @@ jobs:
           $nothingToPropose = '${{ steps.check.outputs.has_updates }}' -ne 'true'
           ./.github/scripts/open-pin-pr.ps1 `
             -BodyFile tooling-pin-pr-body.md `
-            -FilePattern '(^|/)(setup\.sh|\.mcp\.json)$' `
+            -FilePattern '(^|/)(setup\.sh|\.mcp\.json|Test-DocsSite\.ps1)$' `
             -Branch 'automation/tooling-pin-updates' `
             -CommitHeadline 'chore(deps): bump pinned development tooling versions' `
             -CommitBodyIntro $intro `

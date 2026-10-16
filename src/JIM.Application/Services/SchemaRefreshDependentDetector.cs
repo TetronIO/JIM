@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Application.Expressions;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -27,10 +28,12 @@ public static class SchemaRefreshDependentDetector
     /// <param name="result">The refresh preview's result, whose removals and definition changes name what fell.</param>
     /// <param name="syncRules">The Connected System's Synchronisation Rules, with mappings and matching rules loaded.</param>
     /// <param name="refreshedAtUtc">When the refresh ran; named in each reason so a disabled item says which refresh disabled it.</param>
+    /// <param name="readers">What reads each attribute (#2265); null leaves <see cref="SchemaRefreshDependents.RemovedAttributeReaders"/> empty.</param>
     public static SchemaRefreshDependents Detect(
         SchemaRefreshResult result,
         IReadOnlyList<SyncRule> syncRules,
-        DateTime refreshedAtUtc)
+        DateTime refreshedAtUtc,
+        AttributeReaderIndex? readers = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(syncRules);
@@ -38,35 +41,49 @@ public static class SchemaRefreshDependentDetector
         var dependents = new SchemaRefreshDependents();
         var refreshDescription = $"schema refresh of {refreshedAtUtc.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)}";
 
-        var typesByName = result.PreRefreshSchema.ToDictionary(type => type.Name, StringComparer.OrdinalIgnoreCase);
+        // Names resolve through the result, which follows a case-only rename back to the name the snapshot holds and
+        // keeps two names differing only in case apart (#2051).
         var typeNamesById = result.PreRefreshSchema.ToDictionary(type => type.Id, type => type.Name);
         var removedTypeIds = result.RemovedObjectTypes
-            .Where(typesByName.ContainsKey)
-            .Select(name => typesByName[name].Id)
+            .Select(result.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
             .ToHashSet();
 
         // Removed and redefined attributes, resolved per Object Type so a name shared by two types cannot
         // invalidate the wrong one's mappings.
         var removedAttributeIdsByTypeId = new Dictionary<int, HashSet<int>>();
         var removedAttributeNamesByTypeId = new Dictionary<int, HashSet<string>>();
-        foreach (var (typeName, attributeNames) in result.RemovedAttributes.Where(kvp => typesByName.ContainsKey(kvp.Key)))
+        foreach (var (type, attributeNames) in result.RemovedAttributes
+                     .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.AttributeNames)))
         {
-            var type = typesByName[typeName];
             removedAttributeNamesByTypeId[type.Id] = new HashSet<string>(attributeNames, StringComparer.OrdinalIgnoreCase);
+            // A removed attribute is reported under the name JIM held, so it is matched exactly: a case-exact
+            // Connected System can hold a second attribute whose name differs only in case, and that one stays.
             removedAttributeIdsByTypeId[type.Id] = type.Attributes
-                .Where(attribute => attributeNames.Contains(attribute.Name, StringComparer.OrdinalIgnoreCase))
+                .Where(attribute => attributeNames.Contains(attribute.Name, StringComparer.Ordinal))
                 .Select(attribute => attribute.Id)
                 .ToHashSet();
         }
 
+        if (readers != null)
+            dependents.RemovedAttributeReaders = FindRemovedAttributeReaders(result, readers);
+
         var changedByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
-        foreach (var (typeName, changes) in result.ChangedAttributes.Where(kvp => typesByName.ContainsKey(kvp.Key)))
+        foreach (var (type, changes) in result.ChangedAttributes
+                     .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), Changes: kvp.Value))
+                     .Where(entry => entry.Type != null)
+                     .Select(entry => (Type: entry.Type!, entry.Changes)))
         {
-            var type = typesByName[typeName];
             var byAttributeId = new Dictionary<int, SchemaAttributeDefinitionChange>();
             foreach (var change in changes)
             {
-                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
+                // A change names the attribute as the Connector now does, which may differ only in case from the
+                // snapshot's name; an exact name wins where both exist.
+                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.Ordinal))
+                    ?? type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
                 if (attribute != null)
                     byAttributeId[attribute.Id] = change;
             }
@@ -152,22 +169,63 @@ public static class SchemaRefreshDependentDetector
                     return (DescribeDefinitionChange(sourceChange, refreshDescription), false);
             }
 
-            if (string.IsNullOrWhiteSpace(source.Expression) || removedAttributeNames == null)
+            if (string.IsNullOrWhiteSpace(source.Expression) || (removedAttributeNames == null && changedAttributes == null))
                 continue;
 
-            var removedInput = ExpressionInputResolver.ResolveCached(source.Expression)
-                .FirstOrDefault(input => input.Source == ExpressionInputSource.ConnectedSystem && removedAttributeNames.Contains(input.AttributeName));
+            var expressionInputNames = ExpressionInputResolver.ResolveCached(source.Expression)
+                .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+                .Select(input => input.AttributeName)
+                .ToList();
+
+            var removedInput = removedAttributeNames == null ? null : expressionInputNames.FirstOrDefault(removedAttributeNames.Contains);
             if (removedInput != null)
-                return ($"Attribute '{removedInput.AttributeName}', read by this mapping's Expression, is no longer reported by the Connected System ({refreshDescription}).", true);
+                return ($"Attribute '{removedInput}', read by this mapping's Expression, is no longer reported by the Connected System ({refreshDescription}).", true);
+
+            // An Expression written against an attribute's old definition receives the new one (#2128: a Boolean
+            // comparison handed a number), so it is as invalidated as a mapping reading the attribute directly.
+            var redefinedInput = changedAttributes?.Values.FirstOrDefault(change => expressionInputNames.Contains(change.AttributeName, StringComparer.OrdinalIgnoreCase));
+            if (redefinedInput != null)
+                return (DescribeDefinitionChange(redefinedInput, refreshDescription, ", read by this mapping's Expression,"), true);
         }
 
         return null;
     }
 
-    private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription)
+    /// <summary>
+    /// The configuration reading each attribute the refresh removes from a surviving Object Type (#2265): what
+    /// refuses Apply and Remove. Readers on a removed Object Type are left out, because their Synchronisation Rule
+    /// falls whole, so nothing is left reading nothing.
+    /// </summary>
+    /// <param name="result">The refresh preview's result.</param>
+    /// <param name="readers">What reads each attribute, as the configuration stands now.</param>
+    public static List<AttributeReader> FindRemovedAttributeReaders(SchemaRefreshResult result, AttributeReaderIndex readers)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(readers);
+
+        var removedTypeIds = result.RemovedObjectTypes
+            .Select(result.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
+            .ToHashSet();
+
+        var seen = new HashSet<(AttributeReaderKind, int)>();
+        // Matched exactly, as the removal itself is: a case-exact Connected System can hold a second attribute whose
+        // name differs only in case, and that one stays.
+        return result.RemovedAttributes
+            .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value))
+            .Where(entry => entry.Type != null && !removedTypeIds.Contains(entry.Type.Id))
+            .SelectMany(entry => entry.Type!.Attributes
+                .Where(attribute => entry.AttributeNames.Contains(attribute.Name, StringComparer.Ordinal))
+                .SelectMany(attribute => readers.ForConnectedSystemAttribute(attribute.Id, attribute.Name, entry.Type.Id)))
+            .Where(reader => seen.Add((reader.Kind, reader.ItemId)))
+            .ToList();
+    }
+
+    private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription, string readBy = "")
     {
         var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
-        return $"Attribute '{change.AttributeName}' changed {aspect} from {change.OldValue} to {change.NewValue} at the Connected System ({refreshDescription}).";
+        return $"Attribute '{change.AttributeName}'{readBy} changed {aspect} from {change.OldValue} to {change.NewValue} at the Connected System ({refreshDescription}).";
     }
 
     private static void CollectMatchingRuleReferences(

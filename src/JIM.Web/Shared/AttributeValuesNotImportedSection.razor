@@ -1,0 +1,167 @@
+@using JIM.Models.Activities
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The values an import found on an object but could not read as their attributes' types (#2066): each value as
+   received, what its attribute expected, and why it was refused, with where to put it right. On a Run Profile Execution
+   Item's page in place of the bare error, whose message names the values but cannot lay them out. Always the item's
+   error, so always red. *@
+
+<MudPaper Outlined="true" Class="@PaperClass" data-testid="jim-attribute-values-not-imported">
+    <div class="jim-attribute-values-not-imported-head">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" />
+            <MudText Typo="Typo.h6">Attribute Values Not Imported</MudText>
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0">@Errors.Total.ToString("N0")</MudChip>
+        </MudStack>
+    </div>
+
+    <div class="pa-4">
+        <MudText Typo="Typo.body1" Class="mb-2">
+            JIM could not import @(Errors.Total == 1 ? "this value" : "these values"), so it left
+            @(AttributeCount == 1 ? "the attribute" : "each attribute") as it already held it and imported the rest of the object.
+            The Found By column says whether the Connector could not read a value, or JIM could not hold it as read.
+        </MudText>
+
+        <VirtualisedDataGrid T="ImportedAttributeValueError"
+                             ContainerId="jim-attribute-values-not-imported-grid"
+                             UrlParameterPrefix="av"
+                             DefaultSortBy="reported"
+                             LoadWindow="LoadWindowAsync"
+                             ExpectedItemCount="@Errors.Values.Count"
+                             MaxHeight="480px"
+                             GridClass="mt-3"
+                             SingularName="Value"
+                             PluralName="Values"
+                             SearchPlaceholder="Search attribute or value">
+            <Columns>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Attribute</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.AttributeName
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Value Received" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-column-cap">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Value Received</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.Value is { } value)
+                        {
+                            <span class="jim-one-line jim-text-code jim-attribute-value-unreadable" title="@value">@value</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Expected" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Expected</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (AttributeValueErrorDisplay.Expected(context.Item.AttributeType) is { } expected)
+                        {
+                            @expected
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Found By" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Found By</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @AttributeValueErrorDisplay.FoundBy(context.Item.Source)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Why It Could Not Be Imported" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Why It Could Not Be Imported</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <OneLineText Text="@context.Item.Reason" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No values match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            </EmptyContent>
+        </VirtualisedDataGrid>
+
+        @if (Errors.Total > Errors.Values.Count)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" data-testid="jim-attribute-values-kept-note">
+                The first @Errors.Values.Count.ToString("N0") of @Errors.Total.ToString("N0") values are kept with the item.
+            </MudText>
+        }
+
+        <div class="jim-attribute-values-next-step mt-4">
+            <MudIcon Icon="@Icons.Material.Outlined.Lightbulb" Class="mud-text-secondary" />
+            <MudText Typo="Typo.body1">
+                Correct @(Errors.Total == 1 ? "the value" : "the values") in
+                @if (string.IsNullOrEmpty(SourceLocation))
+                {
+                    @:the Connected System
+                }
+                else
+                {
+                    <span class="jim-text-code" data-testid="jim-attribute-values-source">@SourceLocation</span>
+                }
+                and run the import again. If @(Errors.Total == 1 ? "the value is" : "the values are") right and an
+                attribute's type is wrong, change it on the Schema tab.
+                @if (SchemaHref is { } schemaHref)
+                {
+                    <MudLink Href="@schemaHref" Class="ml-1" data-testid="jim-attribute-values-schema-link">Open Schema<span aria-hidden="true">&nbsp;&rarr;</span></MudLink>
+                }
+            </MudText>
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>What the item recorded of the values the import could not import.</summary>
+    [Parameter, EditorRequired]
+    public ImportedAttributeValueErrors Errors { get; set; } = null!;
+
+    /// <summary>Where in the Connected System the object was read from, where the Connector said.</summary>
+    [Parameter]
+    public string? SourceLocation { get; set; }
+
+    /// <summary>The Connected System whose Schema tab the next step links to; null leaves the link out.</summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>The object's Object Type, which the Schema tab opens on; null opens it without choosing one.</summary>
+    [Parameter]
+    public string? ObjectTypeName { get; set; }
+
+    /// <summary>The call site's spacing classes.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private int AttributeCount => Errors.Values.Select(v => v.AttributeName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+    private string? SchemaHref => ConnectedSystemId is { } connectedSystemId
+        ? AttributeValueErrorDisplay.SchemaHref(connectedSystemId, ObjectTypeName)
+        : null;
+
+    private string PaperClass => string.IsNullOrEmpty(Class)
+        ? "jim-attribute-values-not-imported"
+        : $"jim-attribute-values-not-imported {Class}";
+
+    private Task<VirtualisedWindow<ImportedAttributeValueError>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(AttributeValueErrorDisplay.Matching(Errors.Values, request.SearchText).ToWindow(request));
+}

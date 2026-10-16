@@ -18,11 +18,11 @@ function Test-JIMMetaverseAttributeName {
         The attribute name to test.
 
     .PARAMETER ExcludeId
-        Optional ID of an existing attribute to exclude from the check (use when renaming, so the
-        attribute's current name is not treated as a clash with itself).
+        The ID of an attribute to leave out of the check. Pass the attribute's own ID when renaming it, so its
+        current name does not count as taken.
 
     .OUTPUTS
-        [bool] $true if the name is available, otherwise $false.
+        $true when the name is free, or $false when an attribute already has it.
 
     .EXAMPLE
         Test-JIMMetaverseAttributeName -Name "CostCentre"

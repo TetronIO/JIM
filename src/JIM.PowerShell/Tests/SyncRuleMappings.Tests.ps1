@@ -294,6 +294,51 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 
+    Context 'Keep unique (#2023)' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'KeepUnique should be available only on expression parameter sets' {
+            # Only an Expression can build a value from a generated value; a direct attribute mapping copies one,
+            # and a generated mapping is the generated value itself.
+            $setNames = $command.Parameters['KeepUnique'].ParameterSets.Keys
+            $setNames | Should -Contain 'ImportExpression'
+            $setNames | Should -Contain 'ExportExpression'
+            $setNames | Should -Not -Contain 'ImportAttribute'
+            $setNames | Should -Not -Contain 'ExportAttribute'
+            $setNames | Should -Not -Contain 'ImportGenerated'
+            $setNames | Should -Not -Contain 'ExportGenerated'
+        }
+
+        It 'Sends keepUnique=false when -KeepUnique $false is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression 'mv["Account Name"] + "@panoply.local"' -KeepUnique $false -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('keepUnique') -and $Body.keepUnique -eq $false
+                }
+            }
+        }
+
+        It 'Omits keepUnique when the parameter is not supplied, leaving the server default of on' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -Expression 'mv["Account Name"] + "@panoply.local"' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('keepUnique')
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -402,6 +447,22 @@ Describe 'Set-JIMSyncRuleMapping' {
                     $Method -eq 'PATCH' -and
                     $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/mappings/8' -and
                     $Body.ContainsKey('enabled') -and $Body.enabled -eq $false
+                }
+            }
+        }
+
+        It 'Switches Keep unique off by sending only keepUnique=false' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -KeepUnique $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and
+                    $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/mappings/12' -and
+                    $Body.ContainsKey('keepUnique') -and $Body.keepUnique -eq $false -and
+                    $Body.Count -eq 1
                 }
             }
         }

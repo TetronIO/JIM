@@ -64,8 +64,10 @@
         'Get-JIMConnectedSystemAuxiliaryClassDiscovery',
         'Get-JIMConnectedSystemObjectAttributeValue',
         'Get-JIMConnectedSystemObjectChangeHistory',
+        'Get-JIMConnectedSystemObjectUnresolvedReference',
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
+        'Get-JIMConnectedSystemUnresolvedReferenceSummary',
         'Get-JIMConnectedSystemCapability',
         'Get-JIMConnectedSystemPasswordPolicy',
         'Get-JIMConnectedSystemPasswordSynchronisation',
@@ -109,6 +111,7 @@
         'New-JIMSyncRuleMatchingRule',
         'Set-JIMSyncRuleMatchingRule',
         'Remove-JIMSyncRuleMatchingRule',
+        'Test-JIMMatchingRule',
         'Switch-JIMMatchingMode',
 
         # Scoping Criteria
@@ -119,6 +122,14 @@
         'New-JIMScopingCriterion',
         'Set-JIMScopingCriterion',
         'Remove-JIMScopingCriterion',
+        'Test-JIMScope',
+
+        # Configuration test cases
+        'Get-JIMConfigurationTestCase',
+        'New-JIMConfigurationTestCase',
+        'Set-JIMConfigurationTestCase',
+        'Remove-JIMConfigurationTestCase',
+        'Invoke-JIMConfigurationTest',
 
         # Run Profiles
         'Get-JIMRunProfile',
@@ -147,6 +158,7 @@
         'Get-JIMActivity',
         'Get-JIMActivityChildren',
         'Get-JIMActivityExecutionItem',
+        'Get-JIMCausalCohortMember',
         'Get-JIMActivityStats',
 
         # Predefined Searches
@@ -217,6 +229,7 @@
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
+        'Test-JIMExampleDataExpression',
         'New-JIMExampleDataSet',
         'New-JIMExampleDataTemplate',
         'Remove-JIMExampleDataSet',
@@ -225,6 +238,7 @@
         'Set-JIMExampleDataTemplate',
 
         # Expressions
+        'Get-JIMExpressionFunction',
         'Test-JIMExpression',
 
         # History

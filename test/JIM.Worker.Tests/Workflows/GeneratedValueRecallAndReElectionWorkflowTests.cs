@@ -156,6 +156,29 @@ public class GeneratedValueRecallAndReElectionWorkflowTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// A generated value re-elected from another system's rule is checked with the values built from it on that rule
+    /// (Generated Value Forms, #2023), worked out from that system's own account.
+    /// </summary>
+    [Test]
+    public async Task ScopeExit_ReElectedGeneratedValuesEmailAlreadyHeld_IssuesACandidateWhoseEmailIsFreeAsync()
+    {
+        var ctx = await SetUpHrAndGeneratedTrainingFallbackAsync(scoped: true, withEmailBuiltOnTraining: true);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        var email = ctx.MvType.Attributes.First(a => a.Name == "Email");
+        var holder = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow, Type = ctx.MvType };
+        holder.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), Attribute = email, AttributeId = email.Id, StringValue = "emp001@corp.local", MetaverseObject = holder });
+        SyncRepo.SeedMetaverseObject(holder);
+
+        PushHrOutOfScope(ctx);
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("emp0011"),
+            "emp001 is passed over: the Email built from it on Training's rule is already held");
+    }
+
     [Test]
     public async Task Obsoletion_NextContributorIsGeneratedMapping_GeneratesValueAndCommitsAssignmentAsync()
     {
@@ -453,7 +476,7 @@ public class GeneratedValueRecallAndReElectionWorkflowTests : WorkflowTestBase
     /// contributes and which is cleared along with HR's withdrawal) means Training can still generate correctly
     /// after HR is completely gone, exactly as the "recall re-elects a generated import mapping" scenario needs.
     /// </summary>
-    private async Task<GeneratedFallbackContext> SetUpHrAndGeneratedTrainingFallbackAsync(bool scoped)
+    private async Task<GeneratedFallbackContext> SetUpHrAndGeneratedTrainingFallbackAsync(bool scoped, bool withEmailBuiltOnTraining = false)
     {
         var hrSystem = await CreateConnectedSystemAsync("HR Source");
         var hrExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -544,6 +567,30 @@ public class GeneratedValueRecallAndReElectionWorkflowTests : WorkflowTestBase
             },
             Sources = { new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"EmployeeId\"])" } }
         });
+        if (withEmailBuiltOnTraining)
+        {
+            // Generated Value Forms (#2023): an Email built from Training's generated Account Name on Training's own
+            // rule, which is checked with it.
+            var mvEmailAttr = new MetaverseAttribute
+            {
+                Name = "Email",
+                Type = AttributeDataType.Text,
+                AttributePlurality = AttributePlurality.SingleValued,
+                MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+                PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+            };
+            DbContext.MetaverseAttributes.Add(mvEmailAttr);
+            await DbContext.SaveChangesAsync();
+            mvType.Attributes.Add(mvEmailAttr);
+            trainingImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+            {
+                SyncRule = trainingImportRule,
+                SyncRuleId = trainingImportRule.Id,
+                TargetMetaverseAttribute = mvEmailAttr,
+                TargetMetaverseAttributeId = mvEmailAttr.Id,
+                Sources = { new SyncRuleMappingSource { Order = 0, Expression = "mv[\"AccountName\"] + \"@corp.local\"" } }
+            });
+        }
         trainingImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
         {
             SyncRule = trainingImportRule,

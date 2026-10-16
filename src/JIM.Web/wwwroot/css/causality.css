@@ -232,6 +232,21 @@
     margin: 0;
 }
 
+/* The After this run strip (#1811): labelled, because its pills are what followed the run rather than what it did. */
+.causality-panel .after-strip {
+    align-items: center;
+    margin-top: 8px;
+}
+
+.causality-panel .after-strip-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cz-text-dim);
+    margin-right: 4px;
+}
+
 /* ─── View canvas ─── */
 
 .causality-panel .canvas-wrap {
@@ -1062,6 +1077,11 @@
     color: var(--cz-text-dim);
 }
 
+/* The way to carry on past the walk's bound (#2100), on a line of its own under the ending it follows. */
+.causality-panel .ln-end-continue {
+    margin-top: 4px;
+}
+
 /* What became of the object after this run: an ending of a different kind, so it reads like one, but ruled
    off because it is the one thing under this object that no run on this page did. The rule is the dashed
    hairline the event card's own footer already uses. */
@@ -1081,6 +1101,253 @@
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
     border-radius: 4px;
+}
+
+/* ─── After this run (#1811): what later runs did, below a rule ─── */
+
+/* The rule reads as a caption across the column, in the same dashed hairline as the deleted-after-this-run note,
+   because it marks the same thing: everything below happened after the run this page describes. */
+.causality-panel .ln-after {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-after::after {
+    content: "";
+    flex: 1;
+    border-top: 1px dashed var(--cz-line);
+}
+
+/* A later run's card: its run and time above it, as this run's badge and time sit above this run's cards. */
+.causality-panel .ln-later {
+    display: flex;
+    flex-direction: column;
+}
+
+.causality-panel .ln-later-when {
+    margin-top: 0;
+    margin-bottom: 8px;
+    gap: 6px;
+}
+
+.causality-panel .ln-later .ln-actions {
+    margin-top: 6px;
+}
+
+.causality-panel .evt-note {
+    font-size: 0.875rem;
+}
+
+/* The setting that decided an outcome: a quiet key and value, with what it meant beneath. */
+.causality-panel .ln-setting {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+}
+
+.causality-panel .ln-setting-label {
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-setting-value {
+    font-weight: 650;
+    color: var(--cz-text);
+}
+
+.causality-panel .ln-setting-text {
+    width: 100%;
+    color: var(--cz-text-dim);
+}
+
+/* A confirmation folds to one line: it changes nothing, so it should cost the column almost nothing. */
+.causality-panel .ln-fold {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.causality-panel .ln-fold-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 0.8125rem;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-fold-toggle {
+    flex: none;
+    border: 1px solid var(--cz-line);
+    background: transparent;
+    color: var(--cz-text-dim);
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 1px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.causality-panel .ln-fold-toggle:hover {
+    background: var(--cz-inner);
+    color: var(--cz-text);
+}
+
+/* Where a branch stopped. Waiting is dashed, because it is not over; needing attention takes the error tone, because
+   nothing happens without someone; settled is quiet, because there is nothing left to do. */
+.causality-panel .ln-wait,
+.causality-panel .ln-settled,
+.causality-panel .ln-further {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 0.875rem;
+}
+
+.causality-panel .ln-wait {
+    border: 1px dashed var(--cz-warning);
+    background: var(--cz-warning-soft);
+}
+
+.causality-panel .ln-wait.attention {
+    border: 1px solid var(--cz-error);
+    background: var(--cz-error-soft);
+}
+
+.causality-panel .ln-settled {
+    border: 1px solid var(--cz-line-soft);
+    background: var(--cz-inner);
+}
+
+.causality-panel .ln-further {
+    padding: 4px 0;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-wait-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--cz-text);
+}
+
+.causality-panel .ln-wait .ln-wait-title .mud-icon-root {
+    color: var(--cz-warning-text);
+}
+
+.causality-panel .ln-wait.attention .ln-wait-title .mud-icon-root {
+    color: var(--cz-error-text);
+}
+
+.causality-panel .ln-settled .ln-wait-title .mud-icon-root,
+.causality-panel .ln-further .ln-wait-title .mud-icon-root {
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-wait-title .mud-icon-root {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.causality-panel .ln-wait-text {
+    color: var(--cz-text-dim);
+    font-size: 0.8125rem;
+}
+
+/* A cohort's members: the find box, the list, and how many of how many are showing. */
+.causality-panel .ln-members-find {
+    margin-top: 8px;
+}
+
+.causality-panel .ln-members-foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-members-more {
+    border: none;
+    background: transparent;
+    color: var(--cz-info);
+    font-size: 0.8125rem;
+    font-family: inherit;
+    padding: 0;
+    cursor: pointer;
+}
+
+.causality-panel .ln-members-more:hover {
+    text-decoration: underline;
+}
+
+.causality-panel .ln-members-more:disabled {
+    color: var(--cz-text-dim);
+    cursor: default;
+    text-decoration: none;
+}
+
+.causality-panel .ln-fold-toggle:focus-visible,
+.causality-panel .ln-members-more:focus-visible {
+    outline: 2px solid var(--cz-primary);
+    outline-offset: 2px;
+}
+
+/* The walk's reading, beneath the canvas: when it was taken, and whether anything is still to happen. */
+.causality-panel .ln-footer,
+.causality-panel .ln-consequences-loading {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--cz-line-soft);
+    font-size: 0.8125rem;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-footer-note {
+    margin-bottom: 8px;
+}
+
+.causality-panel .ln-state {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+}
+
+.causality-panel .ln-state .mud-icon-root {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.causality-panel .ln-state.done .mud-icon-root {
+    color: var(--cz-success-text);
+}
+
+.causality-panel .ln-state.waiting .mud-icon-root {
+    color: var(--cz-warning-text);
+}
+
+.causality-panel .ln-state-text {
+    color: var(--cz-text);
+    font-weight: 600;
 }
 
 /* ─── Table view (#1519 Phase 3) ─── */
@@ -1472,4 +1739,162 @@
     .causality-panel *::before {
         transition: none !important;
     }
+}
+
+/* ─── Causality Explorer (#2100): the trail, the focus header and an object's timeline ─── */
+
+/* The explorer's chrome sits outside .causality-panel, so it takes the theme's palette tokens directly rather than the
+   panel's --cz-* set. The Lineage itself renders inside the panel below it, unchanged. */
+.causality-explorer {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.jim-causality-trail {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.8125rem;
+    min-width: 0;
+}
+
+.jim-causality-trail-title,
+.jim-causality-focus-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-causality-trail-title {
+    margin-right: 4px;
+}
+
+.jim-causality-trail-sep {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Each step is a pill: its number, then what it names, clipped where long with the whole label on hover. */
+.jim-causality-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 14px;
+    padding: 2px 10px 2px 3px;
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-secondary);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+a.jim-causality-crumb:hover {
+    border-color: var(--mud-palette-primary);
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-causality-crumb.on {
+    border-color: var(--mud-palette-primary);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary);
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-causality-crumb-n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
+    color: var(--mud-palette-text-primary);
+    font-size: 0.6875rem;
+}
+
+.jim-causality-crumb.on .jim-causality-crumb-n {
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+.jim-causality-crumb-label {
+    min-width: 0;
+    max-width: 48ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jim-causality-focus {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+}
+
+.jim-causality-focus-what {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    min-width: 0;
+}
+
+.jim-causality-focus-when {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-causality-focus-acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.jim-causality-timeline-count {
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-causality-timeline-system {
+    font-size: 0.8125rem;
+}
+
+/* The reference attribute a cause acted through, highlighted as the Lineage's own card highlights it. */
+.jim-causality-attr {
+    color: var(--jim-chip-text-primary);
+}
+
+.jim-causality-timeline-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+}
+
+.jim-causality-timeline-note {
+    margin-top: 12px;
+    padding-left: 10px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-causality-queued-empty {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px dashed var(--mud-palette-lines-default);
+    border-radius: var(--jim-container-radius);
+}
+
+.jim-causality-queued-note {
+    margin-top: 10px;
+    padding-left: 10px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
 }

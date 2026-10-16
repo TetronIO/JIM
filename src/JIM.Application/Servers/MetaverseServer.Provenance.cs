@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -133,7 +132,7 @@ public partial class MetaverseServer
         {
             rank++;
             result.Sources.Add(await BuildAttributeSourceCandidateAsync(
-                mapping, rank, attribute.Type, currentContributorSyncRuleIds, joinedCsoCache, metaverseObjectId, candidateValueCap, generatedValue));
+                mapping, rank, attribute, currentContributorSyncRuleIds, joinedCsoCache, metaverseObjectId, candidateValueCap, generatedValue));
         }
 
         // History: raw Add/Remove rows, newest change first, paired into display entries by the pure
@@ -157,7 +156,7 @@ public partial class MetaverseServer
     private async Task<AttributeSourceCandidate> BuildAttributeSourceCandidateAsync(
         SyncRuleMapping mapping,
         int rank,
-        AttributeDataType targetAttributeType,
+        MetaverseAttribute targetAttribute,
         HashSet<int> currentContributorSyncRuleIds,
         Dictionary<(int ConnectedSystemId, int ConnectedSystemObjectTypeId), ConnectedSystemObject?> joinedCsoCache,
         Guid metaverseObjectId,
@@ -218,7 +217,7 @@ public partial class MetaverseServer
         // cso is non-null here: DetermineFixedState returns NotJoined otherwise, which is handled above.
         if (sourceType == SyncRuleMappingSourcesType.AttributeMapping)
         {
-            candidate.CandidateValues = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttributeType, candidateValueCap);
+            candidate.CandidateValues = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttribute.Type, candidateValueCap);
         }
         else if (sourceType == SyncRuleMappingSourcesType.GeneratedMapping)
         {
@@ -229,7 +228,7 @@ public partial class MetaverseServer
         }
         else if (sourceType == SyncRuleMappingSourcesType.ExpressionMapping)
         {
-            var (values, note) = EvaluateExpressionSourceCandidateValues(mapping, cso!, targetAttributeType, expressionSource, candidateValueCap);
+            var (values, note) = EvaluateExpressionSourceCandidateValues(mapping, cso!, targetAttribute, expressionSource, candidateValueCap);
             candidate.CandidateValues = values;
             if (note != null)
             {
@@ -266,8 +265,13 @@ public partial class MetaverseServer
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
                 .ToList()
+            // Only the rows the engine flows, those holding a value of the type (#2153), and a date in JIM's canonical
+            // text form, so one instant held in two kinds or precisions is one candidate, written as an Expression's is.
             : csoValues
-                .Select(v => v.ToStringNoName())
+                .Where(v => SyncEngine.HoldsValueOfType(v, targetAttributeType))
+                .Select(v => targetAttributeType == AttributeDataType.DateTime
+                    ? ExpressionText.FormatDate(v.DateTimeValue!.Value)
+                    : v.ToStringNoName())
                 .Where(v => !string.IsNullOrEmpty(v))
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
@@ -284,7 +288,7 @@ public partial class MetaverseServer
     /// evaluation failure returns an empty list with the failure message as the note.
     /// </summary>
     private (List<string> Values, string? Note) EvaluateExpressionSourceCandidateValues(
-        SyncRuleMapping mapping, ConnectedSystemObject cso, AttributeDataType targetAttributeType,
+        SyncRuleMapping mapping, ConnectedSystemObject cso, MetaverseAttribute targetAttribute,
         SyncRuleMappingSource? expressionSource, int cap)
     {
         if (expressionSource?.Expression == null)
@@ -298,52 +302,25 @@ public partial class MetaverseServer
         {
             result = _provenanceExpressionEvaluator.Evaluate(expressionSource.Expression, context);
         }
-        catch (DynamicExpressoException ex) { return (new List<string>(), ex.Message); }
-        catch (ArgumentException ex) { return (new List<string>(), ex.Message); }
-        catch (FormatException ex) { return (new List<string>(), ex.Message); }
-        catch (OverflowException ex) { return (new List<string>(), ex.Message); }
-        catch (InvalidOperationException ex) { return (new List<string>(), ex.Message); }
-        catch (ArithmeticException ex) { return (new List<string>(), ex.Message); }
-        catch (InvalidCastException ex) { return (new List<string>(), ex.Message); }
-        catch (KeyNotFoundException ex) { return (new List<string>(), ex.Message); }
-
-        if (result == null)
-            return (new List<string>(), null);
-
-        var isTextTarget = targetAttributeType == AttributeDataType.Text;
-
-        if (result is string[] stringArrayResult)
-            return (FormatExpressionArrayResult(stringArrayResult, mapping, isTextTarget, cap), null);
-
-        if (result is IEnumerable<string> stringEnumerableResult && result is not string)
-            return (FormatExpressionArrayResult(stringEnumerableResult, mapping, isTextTarget, cap), null);
-
-        var resultString = result.ToString();
-        if (isTextTarget)
+        catch (ExpressionEvaluationException ex)
         {
-            var processed = SyncEngine.ApplyInboundTextProcessing(resultString, mapping.InboundValueProcessing, mapping.CaseNormalisation);
-            return (processed != null ? new List<string> { processed } : new List<string>(), null);
+            return (new List<string>(), ex.Message);
         }
 
-        return (resultString != null ? new List<string> { resultString } : new List<string>(), null);
-    }
+        // The engine's own result handler (#2179), so the inspector shows exactly what a synchronisation would flow,
+        // and says so when the engine would flow nothing and report an error instead.
+        var resolution = SyncEngine.ResolveInboundExpressionResult(result, targetAttribute, mapping);
 
-    private static List<string> FormatExpressionArrayResult(
-        IEnumerable<string?> rawValues, SyncRuleMapping mapping, bool isTextTarget, int cap)
-    {
-        var values = isTextTarget
-            ? rawValues
-                .Select(v => SyncEngine.ApplyInboundTextProcessing(v, mapping.InboundValueProcessing, mapping.CaseNormalisation))
-                .Where(v => v != null)
-                .Select(v => v!)
-                .Distinct(StringComparer.Ordinal)
-                .ToList()
-            : rawValues
-                .Where(v => !string.IsNullOrEmpty(v))
-                .Select(v => v!)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-        return values.Take(cap).ToList();
+        return resolution.Kind switch
+        {
+            ExpressionResultResolutionKind.Values => (resolution.Values.Take(cap).Select(ExpressionText.Describe).ToList(), null),
+            ExpressionResultResolutionKind.NotConvertible => (new List<string>(),
+                $"The Expression returned '{resolution.UnconvertibleValue}', which this {targetAttribute.Type} attribute cannot hold, so this source " +
+                "would supply no value and synchronisation reports an expression error."),
+            ExpressionResultResolutionKind.SeveralValues => (new List<string>(),
+                $"The Expression returned {resolution.ValueCount} values, but this attribute is single-valued, so this source would supply " +
+                "no value and synchronisation reports an error."),
+            _ => (new List<string>(), null)
+        };
     }
 }

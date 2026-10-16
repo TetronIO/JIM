@@ -1,10 +1,13 @@
 ---
 title: Run Profiles
+description: "The cmdlets that list, create, change, remove and run a Connected System's Run Profiles."
+type: reference
+audience: automation-author
 ---
 
 # Run Profiles
 
-Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, synchronisation, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles.
+Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, synchronisation, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles. [Run Profiles](../configuration/run-profiles.md) explains the settings, including the [Safeguards](../configuration/run-profiles.md#safeguards) and [Allow Object Type Changes](../configuration/run-profiles.md#allow-object-type-changes-full-import).
 
 ---
 
@@ -12,13 +15,14 @@ Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected
 
 Retrieves one or more Run Profiles for a Connected System, identified either by Connected System ID or Connected System name, with an optional name filter.
 
+<!-- BEGIN GENERATED: Get-JIMRunProfile -->
 ### Syntax
 
 ```powershell
-# By Connected System ID (default)
+# ById (default)
 Get-JIMRunProfile -ConnectedSystemId <int> [-Name <string>]
 
-# By Connected System name
+# ByName
 Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 ```
 
@@ -26,13 +30,30 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System. Alias: `Id`. Accepts pipeline input by property name. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System. Must be an exact match. |
-| `Name` | `string` | No | | Filter Run Profiles by name. Supports wildcards (e.g., `"Full*"`). |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The Connected System whose Run Profiles to get. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System whose Run Profiles to get. Must be an exact match. |
+| `Name` | `string` | No |  | Return only the Run Profiles whose name matches, for example "Full*". Supports wildcards. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, `FilePath`, `VerifyImportContentHashes`, and `Safeguards` (an object with `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`; each is `$null` when that limit is not set). See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
+Each Run Profile on the Connected System, or each one whose name matches `-Name`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The unique identifier of the Run Profile. |
+| `Name` | `string` | The user-supplied name for this Run Profile. |
+| `ConnectedSystemId` | `int` | The Connected System this Run Profile belongs to. |
+| `RunType` | `string` | The type of synchronisation operation (FullImport, DeltaImport, FullSynchronisation, DeltaSynchronisation, Export). One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `PageSize` | `int` | How many items to process in one batch. |
+| `PartitionName` | `string` | The partition name if this Run Profile targets a specific partition. |
+| `TargetsDeselectedPartition` | `bool` | True when this Run Profile targets a partition that is no longer selected on the Connected System, which makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run Profile is refused rather than reading scope the administrator has withdrawn. |
+| `FilePath` | `string` | File path for file-based connectors. |
+| `VerifyImportContentHashes` | `bool` | Whether Verification Mode is enabled: the Full Import skips no object whose content looks unchanged, and instead raises an error for any object whose stored content hash disagrees with what was read. Only meaningful when `RunType` is `FullImport`. |
+| `AllowObjectTypeChanges` | `bool` | Whether this Full Import carries out an Object Type change rather than refusing it. Only ever true when `RunType` is `FullImport`, and only has an effect on a Connected System whose Connector can tell an Object Type change from a new object, as the LDAP Connector can. |
+| `Safeguards` | `object` | The limits on what this Run Profile may attempt. Always present. It has `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`. |
+<!-- END GENERATED: Get-JIMRunProfile -->
+
+`Safeguards` carries `MaxCreates`, `MaxUpdates` and `MaxDeletes` for an Export Run Profile, and `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent` for a Full Import; each is empty when that limit is not set.
 
 ### Examples
 
@@ -56,40 +77,45 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
 
 ## New-JIMRunProfile
 
-Creates a new Run Profile on a Connected System. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Creates a new Run Profile on a Connected System.
 
+<!-- BEGIN GENERATED: New-JIMRunProfile -->
 ### Syntax
 
 ```powershell
-# By Connected System ID (default)
-New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+# ById (default)
+New-JIMRunProfile [-Name] <string> -ConnectedSystemId <int> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-AllowObjectTypeChanges] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By Connected System name
-New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+# ByName
+New-JIMRunProfile [-Name] <string> -ConnectedSystemName <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-AllowObjectTypeChanges] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System to create the Run Profile on. Alias: `Id`. Accepts pipeline input by property name. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System to create the Run Profile on. |
-| `Name` | `string` | Yes (Position 0) | | Display name for the new Run Profile. |
-| `RunType` | `string` | Yes | | Operation type. Valid values: `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation`, `Export`. |
-| `PageSize` | `int` | No | `100` | How many items to process in one batch. |
-| `PartitionId` | `int` | No | | Optional partition to scope this Run Profile to. If omitted, the Run Profile applies to the default partition. |
-| `FilePath` | `string` | No | | Optional file path for file-based connectors. |
-| `VerifyImportContentHashes` | `switch` | No | `$false` | Enables Verification Mode. Only valid when `-RunType` is `FullImport`; the API rejects it otherwise. Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash. |
-| `MaxCreates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most creates that may be pending for a single Export run to attempt any of them. If more are pending than this when the run starts, none are attempted; `0` refuses creates outright. Only valid when `-RunType` is `Export`. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
-| `MaxUpdates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
-| `MaxDeletes` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
-| `MaxDetectedDeletions` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most Connected System Objects a single Full Import run may newly mark as deleted. If more would be newly marked than this, none are marked; `0` refuses to mark anything as deleted. Only valid when `-RunType` is `FullImport`. See [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import). |
-| `MaxDetectedDeletionsPercent` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most Connected System Objects a single Full Import run may newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the run's scope when it starts. Same rules as `-MaxDetectedDeletions`. |
-| `PassThru` | `switch` | No | `$false` | Returns the created Run Profile object to the pipeline. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The Connected System to create the Run Profile on. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System to create the Run Profile on. Must be an exact match. |
+| `Name` | `string` | Yes |  | The name for the Run Profile. Can be given by position, as the first argument. |
+| `RunType` | `string` | Yes |  | The operation the Run Profile carries out: an import from the Connected System, a synchronisation with the Metaverse, or an export to the Connected System. One of `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `PageSize` | `int` | No | `100` | How many items to process in one batch. From 1 to 10,000. |
+| `PartitionId` | `int` | No |  | The partition the Run Profile targets, for a Connector with partitions. Omit it and the Run Profile follows every selected partition. |
+| `FilePath` | `string` | No |  | The file to read or write, for a file-based Connector. |
+| `VerifyImportContentHashes` | `switch` | No |  | Enables Verification Mode: the Full Import skips no object whose content looks unchanged, and raises an error for any object whose stored content hash disagrees with what was read. Only valid when `-RunType` is FullImport. Use it to check the skip, and leave it off for normal, faster Full Imports. |
+| `AllowObjectTypeChanges` | `switch` | No |  | Lets this Full Import carry out an Object Type change rather than refusing it: an object that arrives under a different Object Type is imported as a new Connected System Object, and the old one is retired. Only valid when `-RunType` is FullImport, and only has an effect for a Connector that can tell an Object Type change from a new object, as the LDAP Connector can. |
+| `MaxCreates` | `int` | No |  | A Safeguard: the most creates that may be pending for an Export run to attempt any of them. If more are pending when the run starts, it attempts none of them; 0 refuses creates outright. Only valid when `-RunType` is Export; omit it for no limit. |
+| `MaxUpdates` | `int` | No |  | A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
+| `MaxDeletes` | `int` | No |  | A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. Recommended for an Export to a production directory. |
+| `MaxDetectedDeletions` | `int` | No |  | A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. If more would be, it marks none of them; 0 refuses to mark any. Only valid when `-RunType` is FullImport; omit it for no limit. |
+| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope when it starts, under the same rules as `-MaxDetectedDeletions`. Either limit tripping withholds the whole detection. |
+| `PassThru` | `switch` | No |  | Returns the created Run Profile. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the created Run Profile object.
+With `-PassThru`, the created Run Profile; otherwise nothing.
+
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
+<!-- END GENERATED: New-JIMRunProfile -->
 
 ### Examples
 
@@ -116,12 +142,16 @@ New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (UK)" -RunType FullImp
 
 ```powershell title="Create a Run Profile for a file-based connector"
 Get-JIMConnectedSystem -Name "CSV*" | ForEach-Object {
-    New-JIMRunProfile -ConnectedSystemId $_.Id -Name "Full Import" -RunType FullImport -FilePath "C:\Data\import.csv"
+    New-JIMRunProfile -ConnectedSystemId $_.Id -Name "Full Import" -RunType FullImport -FilePath "/connector-files/import.csv"
 }
 ```
 
 ```powershell title="Create a Full Import Run Profile with Verification Mode enabled"
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (Verified)" -RunType FullImport -VerifyImportContentHashes
+```
+
+```powershell title="Create a hand-run Full Import Run Profile that carries out Object Type changes"
+New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (Object Type changes)" -RunType FullImport -AllowObjectTypeChanges
 ```
 
 ```powershell title="Preview with WhatIf"
@@ -140,44 +170,49 @@ New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" -RunType FullImport -
 
 ## Set-JIMRunProfile
 
-Modifies an existing Run Profile. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Modifies an existing Run Profile. Only the settings you give change.
 
+<!-- BEGIN GENERATED: Set-JIMRunProfile -->
 ### Syntax
 
 ```powershell
-# By Connected System ID (default)
-Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+# ById (default)
+Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By Connected System name
-Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+# ByName
+Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By input object
-Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+# ByInputObject
+Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System the Run Profile belongs to. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System the Run Profile belongs to. Must be an exact match. |
-| `RunProfileId` | `int` | Yes (ById, ByName sets) | | ID of the Run Profile to update. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Run Profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
-| `Name` | `string` | No | | New display name for the Run Profile. |
-| `PageSize` | `int` | No | | New page size for the Run Profile. Omit to leave unchanged. |
-| `PartitionId` | `int` | No | | New partition ID to scope the Run Profile to. |
-| `FilePath` | `string` | No | | New file path for file-based connectors. Omit to leave unchanged. |
-| `VerifyImportContentHashes` | `bool` | No | | Enables or disables Verification Mode. Pass `$true` to enable, `$false` to disable; omit to leave unchanged. Only valid on a Full Import Run Profile; the API rejects `$true` otherwise. |
-| `MaxCreates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most creates that may be pending for a single Export run to attempt any of them; if more are pending, the run attempts none of them. Pass a number to set it, `0` to refuse creates outright, or `$null` to clear the limit; omit the parameter to leave it unchanged. Only valid on an Export Run Profile. Setting any one of `-MaxCreates`, `-MaxUpdates`, `-MaxDeletes`, `-MaxDetectedDeletions` or `-MaxDetectedDeletionsPercent` preserves the other four exactly. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
-| `MaxUpdates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
-| `MaxDeletes` | `int` (nullable) | No | | Run Profile Safeguards: sets the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
-| `MaxDetectedDeletions` | `int` (nullable) | No | | Run Profile Safeguards: sets the most Connected System Objects a single Full Import run may newly mark as deleted; if more would be newly marked, none are marked. Pass a number to set it, `0` to refuse to mark anything as deleted, or `$null` to clear the limit; omit the parameter to leave it unchanged. Only valid on a Full Import Run Profile. See [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import). |
-| `MaxDetectedDeletionsPercent` | `int` (nullable) | No | | Run Profile Safeguards: sets the most Connected System Objects a single Full Import run may newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the run's scope when it starts. Same rules as `-MaxDetectedDeletions`. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Run Profile object to the pipeline. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The Connected System the Run Profile belongs to. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System the Run Profile belongs to. Must be an exact match. |
+| `RunProfileId` | `int` | Yes (ById, ByName) |  | The Run Profile to update. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The Run Profile to update, as `Get-JIMRunProfile` returns it. Accepts pipeline input. |
+| `Name` | `string` | No |  | The new name. |
+| `PageSize` | `int` | No |  | How many items to process in one batch. From 1 to 10,000. |
+| `PartitionId` | `int` | No |  | The partition the Run Profile targets, for a Connector with partitions. |
+| `FilePath` | `string` | No |  | The file to read or write, for a file-based Connector. |
+| `VerifyImportContentHashes` | `bool` | No |  | Whether Verification Mode is enabled: `$true` to enable it, `$false` to disable it. Only a Full Import Run Profile accepts `$true`. |
+| `AllowObjectTypeChanges` | `bool` | No |  | Whether this Full Import carries out an Object Type change rather than refusing it: `$true` to allow it, `$false` to go back to refusing it. Only a Full Import Run Profile accepts `$true`. |
+| `MaxCreates` | `int` | No |  | A Safeguard: the most creates that may be pending for an Export run to attempt any of them. 0 refuses creates outright, and `$null` clears the limit. Only valid on an Export Run Profile. The Safeguards you do not give keep their values. |
+| `MaxUpdates` | `int` | No |  | A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
+| `MaxDeletes` | `int` | No |  | A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
+| `MaxDetectedDeletions` | `int` | No |  | A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. 0 refuses to mark any, and `$null` clears the limit. Only valid on a Full Import Run Profile. The Safeguards you do not give keep their values. |
+| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope when it starts, under the same rules as `-MaxDetectedDeletions`. |
+| `PassThru` | `switch` | No |  | Returns the updated Run Profile. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the updated Run Profile object.
+With `-PassThru`, the updated Run Profile; otherwise nothing.
+
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
+<!-- END GENERATED: Set-JIMRunProfile -->
 
 ### Examples
 
@@ -198,7 +233,7 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -PartitionId 5
 ```
 
 ```powershell title="Update a file-based connector's Run Profile"
-Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -FilePath "C:\Data\import-v2.csv"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -FilePath "/connector-files/import-v2.csv"
 ```
 
 ```powershell title="Enable Verification Mode temporarily"
@@ -207,6 +242,10 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHash
 
 ```powershell title="Disable Verification Mode again"
 Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHashes $false
+```
+
+```powershell title="Stop a Run Profile carrying out Object Type changes"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 43 -AllowObjectTypeChanges $false
 ```
 
 ```powershell title="Preview changes with WhatIf"
@@ -233,35 +272,41 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -MaxDetectedDeletions $nu
 
 ## Remove-JIMRunProfile
 
-Deletes a Run Profile. This is a destructive operation with high impact; by default, PowerShell will prompt for confirmation. Use `-Force` to suppress the confirmation prompt. Supports `ShouldProcess`.
+Deletes a Run Profile.
 
+<!-- BEGIN GENERATED: Remove-JIMRunProfile -->
 ### Syntax
 
 ```powershell
-# By Connected System ID (default)
+# ById (default)
 Remove-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
-# By Connected System name
+# ByName
 Remove-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
-# By input object
+# ByInputObject
 Remove-JIMRunProfile -InputObject <PSCustomObject> [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System the Run Profile belongs to. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System the Run Profile belongs to. Must be an exact match. |
-| `RunProfileId` | `int` | Yes (ById, ByName sets) | | ID of the Run Profile to delete. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Run Profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt. |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted Run Profile object to the pipeline. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The Connected System the Run Profile belongs to. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System the Run Profile belongs to. Must be an exact match. |
+| `RunProfileId` | `int` | Yes (ById, ByName) |  | The Run Profile to delete. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The Run Profile to delete, as `Get-JIMRunProfile` returns it. Accepts pipeline input. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+| `PassThru` | `switch` | No |  | Returns the deleted Run Profile. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the Run Profile object that was deleted.
+With `-PassThru`, the deleted Run Profile, as it was before the deletion; otherwise nothing.
+
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
+<!-- END GENERATED: Remove-JIMRunProfile -->
 
 ### Examples
 
@@ -298,45 +343,47 @@ Queues a Run Profile for execution on the JIM worker service. The operation is a
 
 Every parameter set requires both a Connected System identifier (`-ConnectedSystemId` or `-ConnectedSystemName`) and a Run Profile identifier (`-RunProfileId` or `-RunProfileName`); a Run Profile identifier alone does not resolve to a parameter set.
 
+<!-- BEGIN GENERATED: Start-JIMRunProfile -->
 ### Syntax
 
 ```powershell
-# By Connected System ID and Run Profile ID (default)
+# ById (default)
 Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 
-# By Connected System name and Run Profile name
-Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
-
-# By Connected System ID and Run Profile name
+# ByIdAndName
 Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 
-# By Connected System name and Run Profile ID
+# ByNameAndId
 Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
+
+# ByName
+Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById, ByIdAndName sets) | | ID of the Connected System that owns the Run Profile. Accepts pipeline input by property name. |
-| `ConnectedSystemName` | `string` | Yes (ByName, ByNameAndId sets) | | Name of the Connected System that owns the Run Profile. Must be an exact match. |
-| `RunProfileId` | `int` | Yes (ById, ByNameAndId sets) | | ID of the Run Profile to execute. Alias: `Id`. Accepts pipeline input by property name (ById set). |
-| `RunProfileName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Run Profile to execute. Must be an exact match. |
-| `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying live progress: current phase, object counts, throughput and estimated time remaining. Polls the lightweight Activity progress endpoint every 2 seconds. |
-| `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the Activity ID for manual follow-up. |
-| `PreviewActivityId` | `guid` | No | | The Full Synchronisation preview read before starting this run, as returned by [`New-JIMConfigurationChangePreview -FullSynchronisation`](previews.md#new-jimconfigurationchangepreview). Recorded on the run's Activity, which then shows that the run was informed by it. Only a Full Synchronisation Run Profile can cite one, and it must be a completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is not queued. A preview that a later run or configuration change has overtaken is still recorded: the run queues, its Activity says the preview was out of date, and the cmdlet writes a warning naming what overtook it. |
-| `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
+| `ConnectedSystemId` | `int` | Yes (ById, ByIdAndName) |  | The Connected System the Run Profile belongs to. Accepts pipeline input by property name. |
+| `ConnectedSystemName` | `string` | Yes (ByNameAndId, ByName) |  | The name of the Connected System the Run Profile belongs to. Must be an exact match. |
+| `RunProfileId` | `int` | Yes (ById, ByNameAndId) |  | The Run Profile to execute. Accepts pipeline input by property name, `RunProfileId` or `Id`. |
+| `RunProfileName` | `string` | Yes (ByIdAndName, ByName) |  | The name of the Run Profile to execute. Must be an exact match. |
+| `Wait` | `switch` | No |  | Waits for the execution to finish, showing its progress: the step it is on, object counts, throughput and the estimated time remaining. |
+| `Timeout` | `int` | No |  | How many seconds `-Wait` waits before it throws an error naming the Activity, which may still be running. Omit it to wait until the execution finishes. At least 1. |
+| `PreviewActivityId` | `guid` | No |  | The Full Synchronisation preview this run was started after reading, recorded on the run's Activity so that it shows what informed the run. Only a Full Synchronisation Run Profile can cite one, and it must be a completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is not queued. A preview that a later run or configuration change has overtaken is still recorded, and the cmdlet warns what overtook it. |
+| `PassThru` | `switch` | No |  | Returns the response to queuing the run. |
 
 ### Output
 
-By default, writes status messages to the host. When `-PassThru` is specified, returns a `PSCustomObject` with the following properties:
+With `-PassThru`, the response to queuing the run; `Get-JIMActivity -Follow` follows its ActivityId. Otherwise nothing. Warnings in the response are also written as PowerShell warnings.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `ActivityId` | `Guid` | ID of the Activity created for tracking the execution |
-| `TaskId` | `Guid` | ID of the queued worker task |
-| `Message` | `string` | Message describing the result of queuing the execution |
-| `Warnings` | `string[]` | Any warning messages about the execution (e.g. partition validation warnings). Empty if none |
+| `ActivityId` | `guid` | The Activity that records the execution, and reports its progress and outcome. |
+| `TaskId` | `guid` | The worker task queued to carry out the execution. |
+| `Message` | `string` | Message describing the result. |
+| `Warnings` | `string[]` | Warnings about the execution, such as a partition validation warning, or that the preview it cites was out of date. Empty when there are none. |
+<!-- END GENERATED: Start-JIMRunProfile -->
 
 ### Examples
 

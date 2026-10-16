@@ -36,6 +36,19 @@ public class PasswordDeliveryPassResult
     public int WithdrawnCount { get; private set; }
 
     /// <summary>
+    /// Changes that waited for an export to the account to finish (#2173), because delivering them would have enabled
+    /// an account the export may be disabling. Tried again shortly; nothing counted against them.
+    /// </summary>
+    public int PostponedCount { get; private set; }
+
+    /// <summary>
+    /// Passwords delivered where the Connected System could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159). Included in <see cref="DeliveredCount"/>; each one's Activity is
+    /// completed with a warning naming what was applied instead.
+    /// </summary>
+    public int ExpiryBehaviourNotHonouredCount { get; private set; }
+
+    /// <summary>
     /// Systems the pass could not deliver to at all, one line each, named so an administrator reading the
     /// Activity knows where to look. Never contains a password or anything derived from one.
     /// </summary>
@@ -46,7 +59,7 @@ public class PasswordDeliveryPassResult
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || WithdrawnCount > 0
-        || Problems.Count > 0;
+        || PostponedCount > 0 || Problems.Count > 0;
 
     /// <summary>
     /// Rolls one Connected System's pass into the total, recording anything that stopped it delivering.
@@ -63,6 +76,8 @@ public class PasswordDeliveryPassResult
         ParkedCount += result.ParkedCount;
         ExpiredCount += result.ExpiredCount;
         WithdrawnCount += result.WithdrawnCount;
+        PostponedCount += result.PostponedCount;
+        ExpiryBehaviourNotHonouredCount += result.ExpiryBehaviourNotHonouredCount;
 
         if (result.CouldNotOpenPasswordConnection)
             Problems.Add($"{connectedSystemName}: the password channel could not be opened, so nothing was attempted.");
@@ -98,7 +113,10 @@ public class PasswordDeliveryPassResult
         var parts = new List<string>();
 
         if (DeliveredCount > 0)
-            parts.Add($"{DeliveredCount} password change(s) delivered");
+            parts.Add(ExpiryBehaviourNotHonouredCount > 0
+                ? $"{DeliveredCount} password change(s) delivered ({ExpiryBehaviourNotHonouredCount} not exactly as asked, because the system could not apply " +
+                  "everything requested; each one's Activity says what was applied)"
+                : $"{DeliveredCount} password change(s) delivered");
         if (RetryingCount > 0)
             parts.Add($"{RetryingCount} will be retried");
         if (ParkedCount > 0)
@@ -107,6 +125,8 @@ public class PasswordDeliveryPassResult
             parts.Add($"{ExpiredCount} expired before they could be delivered");
         if (WithdrawnCount > 0)
             parts.Add($"{WithdrawnCount} withdrawn because they were no longer needed");
+        if (PostponedCount > 0)
+            parts.Add($"{PostponedCount} waiting for an export to the account to finish");
 
         var summary = parts.Count > 0
             ? string.Join(", ", parts) + "."

@@ -126,11 +126,18 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
         => _inner.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-        => _inner.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
+        => _inner.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(MetaverseObject metaverseObject, ConnectedSystem connectedSystem, ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
-        => _inner.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+        => _inner.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
+
+    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+        => _inner.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
+
+    public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+        => _inner.StreamUnjoinedConnectedSystemObjectValues(connectedSystemId, connectedSystemObjectTypeId, attributeIds);
 
     public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName, AttributeDataType dataType, bool caseSensitive, IReadOnlyCollection<object> values)
         => _inner.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
@@ -165,8 +172,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<int> targetConnectedSystemIds)
         => _inner.GetConnectedSystemObjectRecallTargetsAsync(metaverseObjectIds, targetConnectedSystemIds);
 
-    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> connectedSystemAttributeIds, IReadOnlyCollection<Guid> deletedReferenceCsoIds, IReadOnlyCollection<string> loweredReferenceValues)
-        => _inner.GetCsoReferenceValueMatchesAsync(connectedSystemObjectIds, connectedSystemAttributeIds, deletedReferenceCsoIds, loweredReferenceValues);
+    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> connectedSystemAttributeIds, IReadOnlyCollection<Guid> deletedReferenceCsoIds, IReadOnlyCollection<string> referenceValues)
+        => _inner.GetCsoReferenceValueMatchesAsync(connectedSystemObjectIds, connectedSystemAttributeIds, deletedReferenceCsoIds, referenceValues);
 
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _inner.GetPendingExportsAsync(connectedSystemId);
@@ -241,7 +248,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
         => _inner.DetachRpeisFromChangeTracker(rpeis);
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _inner.GetActivityRpeiErrorCountsAsync(activityId);
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
@@ -259,8 +266,24 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
         => _inner.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
 
+    public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+        => _inner.GetObjectMatchingRuleModeAsync(connectedSystemId);
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
         => _inner.GetSyncRuleIdsWithInitialPasswordEnabledAsync(syncRuleIds);
+
+    public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+        => _inner.GetMetaverseObjectIdsOwedPasswordAsync(connectedSystemId, metaverseObjectIds);
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, connectedSystemObjectIds);
+
+    public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
+        => _inner.GetAccountEnablementFactsAsync(connectedSystemId, pendingPasswordChangeId, connectedSystemObjectId, exportsInFlightSince);
+
+    public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+        => _inner.GetInitialPasswordHoldSummariesAsync(connectedSystemId);
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _inner.GetObjectTypesAsync(connectedSystemId);
@@ -499,11 +522,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         => throw new PreviewWriteAttemptedException(nameof(CreatePendingExportsAsync));
 
 
-    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    public Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
 
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(StageProvisionedPasswordChangesAsync));
+
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(MarkOwedInitialPasswordsAsSetByAttributeFlowAsync));
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
         => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));
@@ -587,6 +613,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
         => throw new PreviewWriteAttemptedException(nameof(PersistRpeiCsoChangesAsync));
 
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+        => throw new PreviewWriteAttemptedException(nameof(PersistCsoChangesAsync));
+
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemAsync));
 
@@ -605,7 +634,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName, int? joinObjectMatchingRuleId, string? joinMatchValue)
         => throw new PreviewWriteAttemptedException(nameof(TryClaimConnectedSystemObjectForJoinAsync));
 
     public Task CreatePendingExportAsync(PendingExport pendingExport)
@@ -632,8 +661,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
+
+    public Task<ISyncRepositoryTransaction?> BeginTransactionAsync()
+        => throw new PreviewWriteAttemptedException(nameof(BeginTransactionAsync));
+
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
+        => throw new PreviewWriteAttemptedException(nameof(ReleaseExecutingPendingExportsAsync));
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => throw new PreviewWriteAttemptedException(nameof(RecoverStrandedExecutingPendingExportsAsync));

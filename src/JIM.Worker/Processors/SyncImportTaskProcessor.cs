@@ -95,12 +95,101 @@ public class SyncImportTaskProcessor
     /// </summary>
     private int _hashSkippedCount;
 
+    // The outcome of each object the run read, for the Activity's message (#2129). Each object read lands in one of
+    // created (the create list), updated, unchanged (these plus _hashSkippedCount), a reported deletion, or none of them
+    // because it was rejected with an error. Each is counted where its outcome is decided, at the end of that branch, so
+    // an object whose processing throws first is reported by its error alone. The update list cannot stand in for these:
+    // it holds every existing object compared, changed or not, for reference resolution and reconciliation.
+
+    /// <summary>
+    /// Existing objects this run changed: at least one attribute value, or an object JIM provisioned now confirmed as
+    /// present in the Connected System: the objects whose comparison gave their execution item an Update.
+    /// </summary>
+    private int _updatedObjectCount;
+
+    /// <summary>
+    /// Objects this run read and left as they were, other than those skipped by their content hash
+    /// (<see cref="_hashSkippedCount"/>): compared and found unchanged, or a delete the Connector reported for an object
+    /// JIM no longer held or already held as deleted.
+    /// </summary>
+    private int _unchangedObjectCount;
+
+    /// <summary>
+    /// Deletes the Connector reported, in any import type, for objects JIM held, which this run marked as deleted.
+    /// </summary>
+    private int _connectorReportedDeletionCount;
+
+    /// <summary>
+    /// Objects a Full Import's deletion detection newly marked as deleted because it no longer found them. These are not
+    /// among the objects the run read. An object retired by an allowed Object Type change is not one of them: the run
+    /// read it under its new type and counted it as created.
+    /// </summary>
+    private int _detectedDeletionCount;
+
+    /// <summary>
+    /// How many objects of each Object Type (by id) arrived this run with an External ID the Connector could not read
+    /// (#2066). Deletion detection holds those types back; see <see cref="HoldBackObjectTypesWithUnreadableExternalIds"/>.
+    /// </summary>
+    private readonly Dictionary<int, int> _unreadableExternalIdCounts = new();
+
     /// <summary>
     /// SPEC-1082 D10: Verification Mode counters. Populated only when
     /// <see cref="ConnectedSystemRunProfile.VerifyImportContentHashes"/> is true.
     /// </summary>
     private int _verificationDangerousDisagreementCount;
     private int _verificationBenignMismatchCount;
+
+    /// <summary>
+    /// #2153: what putting this run's imported values into the form JIM holds them did, for the end-of-import summary.
+    /// </summary>
+    private readonly ImportValueNormalisationSummary _normalisationSummary = new();
+
+    /// <summary>
+    /// #2153: each Object Type's date and true or false attributes by name, built once per run, so the import normaliser
+    /// acts only on attributes the schema says hold those types. Keyed by Object Type name, case-insensitive, as an import
+    /// object names its type; a name the schema does not know maps to null.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyDictionary<string, AttributeDataType>?> _dateAndBooleanAttributeCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// #2153: value-less rows swept from attributes an import carried, for the end-of-import summary.
+    /// </summary>
+    private int _valuelessRowsSweptCount;
+
+    /// <summary>
+    /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
+    /// directory object is still there, so deletion detection must not retire it just because the import did not
+    /// return it under the type JIM holds it as.
+    /// </summary>
+    private readonly HashSet<Guid> _csoIdsHeldUnderAnotherObjectType = new();
+
+    /// <summary>
+    /// #2049: per Object Type id, the other Object Types' External ID attributes an unmatched object is probed
+    /// against. Computed once per type per run; the schema does not change mid-import.
+    /// </summary>
+    private readonly Dictionary<int, List<(ConnectedSystemObjectType ObjectType, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)>> _crossTypeProbeTargets = new();
+
+    /// <summary>
+    /// #2049: Object Type changes this run refused, and those it carried out because the Run Profile allows them.
+    /// Logged in the end-of-import summary.
+    /// </summary>
+    private int _objectTypeChangesRefusedCount;
+    private int _objectTypeChangesAllowedCount;
+
+    /// <summary>
+    /// #2049: Object Type changes this run is carrying out because its Run Profile allows them. Each replacement is
+    /// kept only if deletion detection retires every object it replaces; see
+    /// <see cref="ReconcileCarriedOutObjectTypeChanges"/>.
+    /// </summary>
+    private readonly List<CarriedOutObjectTypeChange> _objectTypeChangesCarriedOut = new();
+    private bool _objectTypeChangesReconciled;
+
+    /// <summary>
+    /// #2074: what each object's copy on an earlier page of this Delta Import did, by duplicate detection key, so a later
+    /// page's copy of the same object can take its place (<see cref="SupersedeEarlierPageCopy"/>). Only copies that left
+    /// a change behind are held: one that was rejected, or a delete of nothing, has nothing to undo.
+    /// </summary>
+    private readonly Dictionary<string, EarlierPageCopy> _earlierPageCopies = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
@@ -227,8 +316,9 @@ public class SyncImportTaskProcessor
         // Cross-page duplicate detection: Track external IDs seen across ALL pages of an import run.
         // This is defence-in-depth for directory servers that may return duplicate objects across pages
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
-        // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
-        var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking), the value already in its comparable
+        // form (GetDuplicateDetectionKey), so the set compares ordinally.
+        var crossPageSeenExternalIds = new HashSet<string>(StringComparer.Ordinal);
 
         // A Connector is the only thing that can know how many objects a Connected System holds
         // before it has finished handing them over, so the fetching step has a total only where the
@@ -573,7 +663,7 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -590,6 +680,13 @@ public class SyncImportTaskProcessor
             retrySw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
         }
+
+        // An Object Type change is only carried out where deletion detection retired what it replaces (#2049). It
+        // always runs on a Full Import that read anything, which is the only kind of run that can carry one out, so
+        // this only matters if that ever stops being true: a replacement nothing retired its predecessor for is
+        // withdrawn rather than left beside it.
+        if (!_objectTypeChangesReconciled)
+            ReconcileCarriedOutObjectTypeChanges(new HashSet<Guid>(), connectedSystemObjectsToBeCreated);
 
         importPhaseSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Import + processing: {ImportPhaseSeconds:F1}s",
@@ -940,6 +1037,14 @@ public class SyncImportTaskProcessor
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id, pendingExportsTask);
         }
+
+        // A change held until its Initial Password is delivered is judged at every import, not only one that returns its
+        // account (#2039): reconciliation above covers only the objects this import updated, and an unchanged account
+        // is skipped by its hash on a Full Import and never returned by a Delta Import.
+        using (Diagnostics.Sync.StartSpan("JudgeUnreconciledInitialPasswordHolds"))
+        {
+            await JudgeUnreconciledInitialPasswordHoldsAsync(connectedSystemObjectsToBeUpdated);
+        }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
             reconcileSw.Elapsed.TotalSeconds, connectedSystemObjectsToBeUpdated.Count);
@@ -997,24 +1102,57 @@ public class SyncImportTaskProcessor
         // shape, average throughput included, so the three run types read alike on the Activity list.
         _activity.ObjectsToProcess = totalObjectsImported;
         _activity.ObjectsProcessed = totalObjectsImported;
-        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, connectedSystemObjectsToBeUpdated.Count,
-            _hashSkippedCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
+        var unchangedCount = _hashSkippedCount + _unchangedObjectCount;
+        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount,
+            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
         // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
         Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
             totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
+        Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}, Exact duplicates collapsed: {DuplicatesCollapsed}, Sub-microsecond collisions reported: {CollisionsReported}, True or false surpluses reported: {BooleanSurplusesReported}, Value-less rows swept: {ValuelessRowsSwept}",
+            _normalisationSummary.DatesCanonicalised, _normalisationSummary.DuplicatesCollapsed, _normalisationSummary.CollisionsReported,
+            _normalisationSummary.BooleanSurplusesReported, _valuelessRowsSweptCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
                 _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
         }
 
+        // #2129: what became of each object read. Every object read is created, updated, unchanged, a reported deletion,
+        // or rejected with an error, so the rejected figure is what is left; detected deletions were not read and stand
+        // apart. A negative remainder means an object was counted twice, which is a counting fault, not a data fault.
+        var rejectedCount = totalObjectsImported - createdCount - _updatedObjectCount - unchangedCount - _connectorReportedDeletionCount;
+        Log.Information("PerformImportAsync: Outcome summary: Objects read: {TotalObjects}, Created: {Created}, Updated: {Updated}, Unchanged: {Unchanged} ({SkippedByHash} by content hash, {OtherUnchanged} compared or already deleted), Deleted: {ReportedDeletions} reported by the Connector and {DetectedDeletions} detected, Rejected: {Rejected}, Errors: {Errors}",
+            totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount, _hashSkippedCount, _unchangedObjectCount,
+            _connectorReportedDeletionCount, _detectedDeletionCount, rejectedCount, _activity.TotalErrors);
+        if (rejectedCount < 0)
+        {
+            Log.Warning("PerformImportAsync: The outcome counts exceed the {TotalObjects} objects read by {Excess}, so at least one object was counted twice. The Activity's message over-reports by that many; the objects themselves were processed as their execution items record.",
+                totalObjectsImported, -rejectedCount);
+        }
+
+        if (_objectTypeChangesRefusedCount > 0)
+        {
+            Log.Warning("PerformImportAsync: Object Type change summary: Refused: {Refused}, Allowed: {Allowed}. Each refused object is reported on its own Run Profile Execution Item; the objects JIM holds were kept as they are.",
+                _objectTypeChangesRefusedCount, _objectTypeChangesAllowedCount);
+        }
+        else if (_objectTypeChangesAllowedCount > 0)
+        {
+            Log.Information("PerformImportAsync: Object Type change summary: Refused: 0, Allowed: {Allowed}.", _objectTypeChangesAllowedCount);
+        }
+
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
         importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
+        importSpan.SetTag("objectsChanged", _updatedObjectCount);
+        importSpan.SetTag("objectsUnchanged", unchangedCount);
+        importSpan.SetTag("objectsDeletedByConnector", _connectorReportedDeletionCount);
+        importSpan.SetTag("objectsDeletionDetected", _detectedDeletionCount);
+        importSpan.SetTag("objectTypeChangesRefused", _objectTypeChangesRefusedCount);
+        importSpan.SetTag("objectTypeChangesAllowed", _objectTypeChangesAllowedCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             importSpan.SetTag("verificationDangerousDisagreements", _verificationDangerousDisagreementCount);
@@ -1055,6 +1193,10 @@ public class SyncImportTaskProcessor
         // external ID was updated during import processing and the new value isn't in externalIdsImported)
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
 
+        // An object the import returned under another Object Type, and that this run refused to re-type, is still
+        // in the Connected System (#2049): its absence from its own type's External IDs is not a deletion.
+        processedCsoIds.UnionWith(_csoIdsHeldUnderAnotherObjectType);
+
         // have any objects been deleted in the Connected System since our last import? A deselected Object Type is
         // walked here too (see ResolveDeletionDetectionObjectTypesAsync): the import no longer returns its objects,
         // so every one of them is missing, which is exactly what taking the type out of management means.
@@ -1093,7 +1235,9 @@ public class SyncImportTaskProcessor
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
+                    // Whether a held value is among the imported ones follows the External ID's case-exact declaration (#2051).
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(
+                        connectedSystemStringExternalIdValues, IdentifierKey.Comparer(objectTypeExternalIdAttribute.CaseExact));
 
                     // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
@@ -1207,14 +1351,21 @@ public class SyncImportTaskProcessor
     /// How many Connected System Objects were in the run's scope at the start of the run: the base the
     /// percentage limit is measured against.
     /// </param>
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
 
+        var typeChangeRetirements = PrepareObjectTypeChangeRetirements();
+
         var objectTypesToCheck = await ResolveDeletionDetectionObjectTypesAsync();
+        objectTypesToCheck = HoldBackObjectTypesWithUnreadableExternalIds(objectTypesToCheck);
         var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId, objectTypesToCheck);
-        var newlyMarkedCount = candidates.NewlyMarked.Count;
+
+        // The limits guard against objects the import did not find, which may mean the import itself is wrong. An
+        // object retired by an Object Type change the Run Profile allows is not one of those: the import returned it,
+        // under its new type, and its replacement exists only on condition it is retired (#2049).
+        var newlyMarkedCount = candidates.NewlyMarked.Count(cso => !typeChangeRetirements.Contains(cso.Id));
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
@@ -1237,6 +1388,15 @@ public class SyncImportTaskProcessor
 
             Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection refused. {NewlyMarkedCount} of {ExistingCsoCount} Connected System Objects in scope would have been newly marked as deleted, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked; {AlreadyObsoleteCount} already-Obsolete candidate(s) also left untouched.",
                 newlyMarkedCount, existingCsoCount, maxCount, maxPercent, candidates.AlreadyObsolete.Count);
+
+            var retiredByTypeChange = new HashSet<Guid>();
+            foreach (var cso in candidates.AlreadyObsolete.Concat(candidates.NewlyMarked).Where(cso => typeChangeRetirements.Contains(cso.Id)))
+            {
+                await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+                retiredByTypeChange.Add(cso.Id);
+            }
+
+            ReconcileCarriedOutObjectTypeChanges(retiredByTypeChange, connectedSystemObjectsToBeCreated);
             return;
         }
 
@@ -1251,11 +1411,102 @@ public class SyncImportTaskProcessor
         foreach (var cso in candidates.NewlyMarked)
             await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
 
-        if (newlyMarkedCount > 0 || candidates.AlreadyObsolete.Count > 0)
+        // The Activity's message reports these as no longer found (#2129), so it counts what the limits count: an object
+        // retired by an Object Type change was found, under its new type, and is already counted once, as created.
+        _detectedDeletionCount = newlyMarkedCount;
+
+        if (candidates.NewlyMarked.Count > 0 || candidates.AlreadyObsolete.Count > 0)
         {
             Log.Information("ProcessConnectedSystemObjectDeletionsAsync: deletion detection applied. {NewlyMarkedCount} Connected System Object(s) newly marked as deleted, {AlreadyObsoleteCount} already-Obsolete candidate(s) re-checked for stale Pending Exports.",
-                newlyMarkedCount, candidates.AlreadyObsolete.Count);
+                candidates.NewlyMarked.Count, candidates.AlreadyObsolete.Count);
         }
+
+        ReconcileCarriedOutObjectTypeChanges(
+            candidates.NewlyMarked.Concat(candidates.AlreadyObsolete).Select(cso => cso.Id).ToHashSet(),
+            connectedSystemObjectsToBeCreated);
+    }
+
+    /// <summary>
+    /// #2049: the held objects deletion detection retires for the Object Type changes this run carried out. An object
+    /// returned more than once is rejected before it can carry out a change (#2063), so every change here has its
+    /// replacement still to be created.
+    /// </summary>
+    private HashSet<Guid> PrepareObjectTypeChangeRetirements() =>
+        _objectTypeChangesCarriedOut.SelectMany(change => change.Held.CsoIds).ToHashSet();
+
+    /// <summary>
+    /// #2049: keeps each carried-out Object Type change whose held objects were all retired, and withdraws the
+    /// replacement of any other before it is created, so one directory object never ends up as two Connected System
+    /// Objects. A held object outside deletion detection's reach (another partition, or a deselected Object Type an
+    /// enabled Synchronisation Rule still manages) is the case this exists for.
+    /// </summary>
+    private void ReconcileCarriedOutObjectTypeChanges(HashSet<Guid> retiredCsoIds, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
+    {
+        _objectTypeChangesReconciled = true;
+
+        _objectTypeChangesAllowedCount += _objectTypeChangesCarriedOut.Count(change => change.Held.CsoIds.All(retiredCsoIds.Contains));
+
+        foreach (var change in _objectTypeChangesCarriedOut.Where(change => !change.Held.CsoIds.All(retiredCsoIds.Contains)))
+            WithdrawObjectTypeChange(change, connectedSystemObjectsToBeCreated);
+    }
+
+    /// <summary>
+    /// #2049: takes back an Object Type change deletion detection could not complete: the replacement is not created,
+    /// the item reports why, and the held object stays as it is.
+    /// </summary>
+    private void WithdrawObjectTypeChange(CarriedOutObjectTypeChange change, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
+    {
+        connectedSystemObjectsToBeCreated.Remove(change.Replacement);
+        _csoIdsHeldUnderAnotherObjectType.UnionWith(change.Held.CsoIds);
+        _objectTypeChangesRefusedCount++;
+
+        var heldTypeName = change.Held.Primary.ObjectType.Name;
+        var arrivingTypeName = change.ArrivingObjectType.Name;
+        var item = change.ExecutionItem;
+        item.ConnectedSystemObject = null;
+        item.ConnectedSystemObjectId = null;
+        item.ObjectChangeType = ObjectChangeType.NotSet;
+        item.SyncOutcomes.Clear();
+        item.ObjectTypeSnapshot = arrivingTypeName;
+        item.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
+        item.ErrorMessage =
+            $"JIM holds this object as a '{heldTypeName}', and this Full Import allows Object Type changes, but it could not retire the '{heldTypeName}' object: " +
+            "it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). " +
+            $"The new '{arrivingTypeName}' object has not been created, and the '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
+            $"Bring the '{heldTypeName}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.";
+
+        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: Object Type change for External ID '{ExternalId}' withdrawn: held CSO {CsoId} of type '{HeldObjectType}' was not retired by deletion detection, so the replacement of type '{ObjectType}' is not created.",
+            LogSanitiser.Sanitise(item.ExternalIdSnapshot), change.Held.Primary.Entry.CsoId,
+            LogSanitiser.Sanitise(heldTypeName), LogSanitiser.Sanitise(arrivingTypeName));
+    }
+
+    /// <summary>
+    /// Takes out of deletion detection every Object Type with an object whose External ID the Connector could not read
+    /// this run (#2066), and says so on the Activity. JIM cannot tell which object that was, so every object of the type
+    /// it holds is a candidate for having been it; marking any of them deleted could remove one the source still holds.
+    /// Deletion detection resumes for the type on the next Full Import that reads every External ID.
+    /// </summary>
+    private List<ConnectedSystemObjectType> HoldBackObjectTypesWithUnreadableExternalIds(List<ConnectedSystemObjectType> objectTypes)
+    {
+        if (_unreadableExternalIdCounts.Count == 0)
+            return objectTypes;
+
+        var heldBack = objectTypes
+            .Where(ot => _unreadableExternalIdCounts.ContainsKey(ot.Id))
+            .Select(ot => (ObjectTypeName: ot.Name, Count: _unreadableExternalIdCounts[ot.Id]))
+            .ToList();
+        if (heldBack.Count == 0)
+            return objectTypes;
+
+        var warning = ImportOutcomeMessage.ForUnreadableExternalIds(heldBack);
+        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+            ? warning
+            : $"{_activity.WarningMessage}\n{warning}";
+
+        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for {ObjectTypeCount} Object Type(s) with unreadable External IDs: {ObjectTypes}",
+            heldBack.Count, string.Join(", ", heldBack.Select(item => $"{item.ObjectTypeName} ({item.Count})")));
+
+        return objectTypes.Where(ot => !_unreadableExternalIdCounts.ContainsKey(ot.Id)).ToList();
     }
 
     /// <summary>
@@ -1588,6 +1839,7 @@ public class SyncImportTaskProcessor
             return;
 
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+        processedCsoIds.UnionWith(_csoIdsHeldUnderAnotherObjectType);
         var retried = new List<PendingExport>();
 
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -1600,7 +1852,8 @@ public class SyncImportTaskProcessor
 
             var importedExternalIdsForType = ImportedExternalIdSet.Build(externalIdsImported
                 .Where(pair => pair.ConnectedSystemObjectTypeId == selectedObjectType.Id)
-                .Select(pair => pair.ConnectedSystemImportObjectAttribute));
+                .Select(pair => pair.ConnectedSystemImportObjectAttribute),
+                selectedObjectType.Attributes.FirstOrDefault(a => a.IsExternalId)?.CaseExact ?? false);
 
             // The runType/totalObjectsImported guard above already holds for every candidate; the only
             // thing left to decide per candidate is whether it was seen this run.
@@ -1670,15 +1923,22 @@ public class SyncImportTaskProcessor
     /// </summary>
     private sealed class ImportedExternalIdSet
     {
-        private readonly HashSet<string> _strings = [];
+        private readonly HashSet<string> _strings;
         private readonly HashSet<int> _ints = [];
         private readonly HashSet<long> _longs = [];
         private readonly HashSet<decimal> _decimals = [];
         private readonly HashSet<Guid> _guids = [];
 
-        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes)
+        private ImportedExternalIdSet(bool caseExact)
         {
-            var set = new ImportedExternalIdSet();
+            _strings = new HashSet<string>(IdentifierKey.Comparer(caseExact));
+        }
+
+        /// <param name="caseExact">The External ID attribute's case-exact declaration: a Text value in another case is the
+        /// same object unless it is set (#2051).</param>
+        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes, bool caseExact)
+        {
+            var set = new ImportedExternalIdSet(caseExact);
             foreach (var attribute in importedExternalIdAttributes)
             {
                 set._strings.UnionWith(attribute.StringValues);
@@ -1775,6 +2035,13 @@ public class SyncImportTaskProcessor
             {
                 Log.Debug("AddExternalIdsToCollection: Imported object of type '{ObjectType}' has no '{ExternalIdAttribute}' attribute. Excluding it from deletion detection",
                     LogSanitiser.Sanitise(importedObject.ObjectType), LogSanitiser.Sanitise(externalIdAttributeName));
+
+                // The source holds an External ID the Connector could not read (#2066), so the object exists but cannot
+                // be told apart from the others. Deletion detection holds its Object Type back rather than find the
+                // object JIM holds for it missing.
+                if (UnreadableAttributeNames(importedObject).Contains(externalIdAttributeName))
+                    _unreadableExternalIdCounts[connectedSystemObjectType.Id] = _unreadableExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
+
                 continue;
             }
 
@@ -1839,6 +2106,62 @@ public class SyncImportTaskProcessor
         /// already included in <see cref="HydratedCsos"/> above.
         /// </summary>
         public Dictionary<ConnectedSystemImportObject, Guid?> SecondaryMatches { get; } = new();
+
+        /// <summary>
+        /// #2049: import objects with no match under their own Object Type whose External ID JIM already holds
+        /// under another one (see <see cref="FindHeldUnderAnotherObjectType"/>). Only recorded where the Connector
+        /// vouches that an External ID names one object across every Object Type. For a delete, the held object
+        /// is included in <see cref="HydratedCsos"/> above, since the delete is applied to it.
+        /// </summary>
+        public Dictionary<ConnectedSystemImportObject, HeldUnderAnotherObjectType> CrossTypeMatches { get; } = new();
+    }
+
+    /// <summary>
+    /// #2049: the Connected System Objects JIM holds under other Object Types, matched by External ID to an import
+    /// object arriving under another. Usually one; more only where an earlier type change has not been synchronised
+    /// away yet, which is why every one of them is protected or retired, never just the first found.
+    /// </summary>
+    /// <param name="Matches">Each held object, with the Object Type JIM holds it under.</param>
+    private sealed record HeldUnderAnotherObjectType(IReadOnlyList<HeldObject> Matches)
+    {
+        /// <summary>
+        /// The held object that stands for the directory object: one still in use where there is one, since an
+        /// obsolete object is already on its way out.
+        /// </summary>
+        public HeldObject Primary => Matches.FirstOrDefault(match => match.Entry.Status != ConnectedSystemObjectStatus.Obsolete) ?? Matches[0];
+
+        public IEnumerable<Guid> CsoIds => Matches.Select(match => match.Entry.CsoId);
+    }
+
+    /// <param name="Entry">The held object's lookup entry.</param>
+    /// <param name="ObjectType">The Object Type JIM holds it under.</param>
+    private sealed record HeldObject(CsoImportStateLookupEntry Entry, ConnectedSystemObjectType ObjectType);
+
+    /// <summary>
+    /// #2049: an Object Type change a Full Import that allows them carried out: the replacement it created, the item
+    /// reporting it, and the held objects deletion detection must retire for the change to be complete.
+    /// </summary>
+    private sealed record CarriedOutObjectTypeChange(
+        ActivityRunProfileExecutionItem ExecutionItem,
+        ConnectedSystemObject Replacement,
+        ConnectedSystemObjectType ArrivingObjectType,
+        HeldUnderAnotherObjectType Held);
+
+    /// <summary>
+    /// #2153: an Object Type's date and true or false attributes, by name, built on first use per run.
+    /// </summary>
+    private IReadOnlyDictionary<string, AttributeDataType>? GetDateAndBooleanAttributes(string? objectTypeName)
+    {
+        if (objectTypeName == null)
+            return null;
+
+        if (_dateAndBooleanAttributeCache.TryGetValue(objectTypeName, out var lookup))
+            return lookup;
+
+        var objectType = _connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Name.Equals(objectTypeName, StringComparison.OrdinalIgnoreCase));
+        lookup = objectType == null ? null : ImportValueNormaliser.BuildDateAndBooleanLookup(objectType);
+        _dateAndBooleanAttributeCache[objectTypeName] = lookup;
+        return lookup;
     }
 
     /// <summary>
@@ -1938,6 +2261,16 @@ public class SyncImportTaskProcessor
 
             if (!entry.HasValue)
             {
+                if (FindHeldUnderAnotherObjectType(importObject, csObjectType!) is { } heldElsewhere)
+                {
+                    result.CrossTypeMatches[importObject] = heldElsewhere;
+
+                    // A delete is applied to the object JIM holds, so it needs that object's full graph; refusing
+                    // a change of Object Type needs only its identity.
+                    if (importObject.ChangeType == ObjectChangeType.Deleted)
+                        csoIdsToHydrate.Add(heldElsewhere.Primary.Entry.CsoId);
+                }
+
                 CollectSecondaryLookupCandidate(importObject, csObjectType!, secondaryLookupCandidates);
                 continue;
             }
@@ -1959,7 +2292,10 @@ public class SyncImportTaskProcessor
                 && matchedEntry.ImportStateFingerprint.HasValue && matchedEntry.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType!)
                 && matchedEntry.Status == ConnectedSystemObjectStatus.Normal
                 && importObject.ChangeType != ObjectChangeType.Deleted
-                && (matchedEntry.PartitionId != null || _connectedSystemRunProfile.Partition == null);
+                && (matchedEntry.PartitionId != null || _connectedSystemRunProfile.Partition == null)
+                // An object the Connector flagged is never skipped (#2066): a skipped object gets no execution item, so
+                // the error would go unreported, and an unreadable value can leave the readable content unchanged.
+                && importObject.ErrorType is null or ConnectedSystemImportObjectError.NotSet;
 
             if (skipEligible)
             {
@@ -2107,6 +2443,14 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
+        // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
+        // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
+        // sub-microsecond source value was "changed" on every honest diff and raised a false Verification Mode alarm.
+        // The normaliser also reports what JIM cannot hold: two dates less than a microsecond apart, or both true and
+        // false for a true or false attribute. A reported attribute is left as JIM held it.
+        foreach (var importObject in connectedSystemImportResult.ImportObjects)
+            ImportValueNormaliser.Normalise(importObject, GetDateAndBooleanAttributes(importObject.ObjectType), _normalisationSummary);
+
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
         // and skip-eligibility for this page's candidates.
@@ -2122,12 +2466,17 @@ public class SyncImportTaskProcessor
             ? await _syncRepo.GetReferenceExternalIdsForCsosAsync(hydratedCsoPage.Keys)
             : new Dictionary<Guid, Dictionary<Guid, string>>();
 
-        // Track external IDs seen in THIS batch to detect same-batch duplicates.
-        // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
-        // Value: Tuple of (index in ImportObjects, RPEI, CSO if created)
-        // When duplicate found, we error BOTH objects - no "random winner" based on file order.
-        var seenExternalIds = new Dictionary<string, (int index, ActivityRunProfileExecutionItem rpei, ConnectedSystemObject? cso)>(StringComparer.OrdinalIgnoreCase);
-        var knownDuplicateExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Find the External IDs this page returns more than once, and those an earlier page already returned, before
+        // any object is processed (#2063). Every copy of an object repeated on this page is then rejected before
+        // anything is created or updated from it: JIM has no reason to prefer one copy over another (#280), and
+        // taking the first copy back once the second turns up is too late for an object JIM already holds, whose
+        // update has been applied by then.
+        var (repeatedOnThisPage, returnedOnAnEarlierPage) = FindDuplicateExternalIds(connectedSystemImportResult.ImportObjects, crossPageSeenExternalIds);
+
+        // A Delta Import reads changes in order, so a later page's copy of an object is a later change to it, such as a
+        // re-insert after a delete, and takes the earlier copy's place (#2074). A Full Import reads every object once, so
+        // there a repeat across pages is a paging fault, and the later copy is rejected.
+        var laterPagesSupersede = crossPageSeenExternalIds != null && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport;
 
         // Set up progress tracking for this batch of imported objects.
         // At ~50ms per object (cache-miss), 100 objects = ~5 seconds between UI updates.
@@ -2154,6 +2503,11 @@ public class SyncImportTaskProcessor
             activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
+            // #2074: the object's duplicate detection key, and the object JIM holds whose earlier-page change this copy
+            // takes the place of.
+            string? duplicateKey = null;
+            ConnectedSystemObject? supersededHeldCso = null;
+
             try
             {
             try
@@ -2167,7 +2521,16 @@ public class SyncImportTaskProcessor
                 if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet)
                 {
                     activityRunProfileExecutionItem.ErrorType = MapConnectorImportError(importObject.ErrorType.Value);
-                    activityRunProfileExecutionItem.ErrorMessage = importObject.ErrorMessage;
+                    activityRunProfileExecutionItem.ErrorMessage = importObject.AttributeValueErrors is { Count: > 0 } unreadableValues
+                        ? ImportOutcomeMessage.ForUnreadableAttributeValues(unreadableValues)
+                        : importObject.ErrorMessage;
+
+                    // The values themselves, each with its attribute's type, and where the object was read from, so the
+                    // item can show what came in and the administrator can find it in the source (#2066).
+                    activityRunProfileExecutionItem.AttributeValueErrorsJson = ImportedAttributeValueErrors.Record(
+                        importObject.AttributeValueErrors,
+                        _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase)))?.ToJson();
+                    activityRunProfileExecutionItem.SourceLocation = importObject.SourceLocation;
 
                     if (importObject.ErrorType != ConnectedSystemImportObjectError.AttributeValueError)
                     {
@@ -2176,12 +2539,27 @@ public class SyncImportTaskProcessor
                         continue;
                     }
 
+                    // An unreadable External ID leaves nothing to match the object by. The item reports the value; deletion
+                    // detection holds the Object Type back (see AddExternalIdsToCollection), so the object JIM holds for it
+                    // is not marked deleted for want of being recognised.
+                    if (HasUnreadableExternalId(importObject))
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: Connector could not read the External ID of the imported object at index {Index}. Skipping it: {ErrorMessage}",
+                            importIndex, LogSanitiser.Sanitise(activityRunProfileExecutionItem.ErrorMessage));
+                        continue;
+                    }
+
                     // An attribute value that would not parse is not a reason to withhold the whole object:
                     // its identity and every other attribute are intact, the Connector deliberately returned
                     // it rather than stopping, and skipping it would freeze the identity (name, department,
                     // leaver status) over one malformed value. The error above records what did not flow.
                     Log.Warning("ProcessImportObjectsAsync: Connector reported an attribute value error for the imported object at index {Index}. Importing the values that did parse: {ErrorMessage}",
-                        importIndex, LogSanitiser.Sanitise(importObject.ErrorMessage));
+                        importIndex, LogSanitiser.Sanitise(activityRunProfileExecutionItem.ErrorMessage));
+
+                    // An attribute with an unreadable value is left as JIM already held it (#2066): what was read of it
+                    // is only part of what the source holds, so it is dropped here, and the update below skips the
+                    // attribute rather than reading its absence as "the source holds no value".
+                    RemoveUnreadableAttributes(importObject);
                 }
 
                 // validate the results.
@@ -2238,20 +2616,12 @@ public class SyncImportTaskProcessor
                 if (externalIdImportAttr != null)
                 {
                     // Extract the external ID value as a string for tracking (works for all data types)
-                    var externalIdValue = externalIdAttribute.Type switch
-                    {
-                        AttributeDataType.Text => externalIdImportAttr.StringValues.FirstOrDefault(),
-                        AttributeDataType.Number => externalIdImportAttr.IntValues.FirstOrDefault().ToString(),
-                        AttributeDataType.LongNumber => externalIdImportAttr.LongValues.FirstOrDefault().ToString(),
-                        AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(externalIdImportAttr.DecimalValues.FirstOrDefault()),
-                        AttributeDataType.Guid => externalIdImportAttr.GuidValues.FirstOrDefault().ToString(),
-                        _ => null
-                    };
+                    var externalIdValue = GetDuplicateDetectionExternalIdValue(externalIdImportAttr, externalIdAttribute.Type);
 
                     if (!string.IsNullOrEmpty(externalIdValue))
                     {
                         // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
-                        var duplicateKey = $"{csObjectType.Id}:{externalIdValue}";
+                        duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
@@ -2260,80 +2630,45 @@ public class SyncImportTaskProcessor
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
 
-                        // Cross-page duplicate detection (defence-in-depth)
-                        // This catches duplicates that span multiple pages, which can occur with
-                        // directory servers that don't properly support paging (e.g., Samba AD)
-                        if (crossPageSeenExternalIds != null && !crossPageSeenExternalIds.Add(duplicateKey))
+                        // An earlier page of a Delta Import returned this object: this copy is a later change to it and takes
+                        // the earlier copy's place (#2074), unless this page repeats it too, which rejects every copy below.
+                        if (laterPagesSupersede && returnedOnAnEarlierPage.Contains(duplicateKey) && !repeatedOnThisPage.Contains(duplicateKey))
                         {
-                            // This external ID was already seen on a previous page
+                            supersededHeldCso = SupersedeEarlierPageCopy(duplicateKey, externalIdValue, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                        }
+                        // An earlier page of a Full Import returned this object already, so this copy is rejected. Directory
+                        // servers that do not page properly (e.g. Samba AD) can repeat an object across pages.
+                        else if (returnedOnAnEarlierPage.Contains(duplicateKey))
+                        {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. This object was already processed on a previous page. This may indicate a directory server paging issue.";
-                            Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. Object was already imported on a previous page. Skipping.",
+                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
+                            Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. An earlier page already returned it. Rejecting this copy.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
-                        if (knownDuplicateExternalIds.Contains(duplicateKey))
+                        // This page returns the object more than once: every copy is rejected, so the data owner fixes
+                        // the source rather than JIM picking a winner by order.
+                        if (repeatedOnThisPage.Contains(duplicateKey))
                         {
-                            // This is the 3rd+ duplicate - just mark it as error (first already handled)
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' (3rd+ occurrence) at index {Index}. Marking as error.",
+                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' at index {Index}. This page returns it more than once, so every copy is rejected.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
-                            continue;
-                        }
 
-                        if (seenExternalIds.TryGetValue(duplicateKey, out var firstOccurrence))
-                        {
-                            // Duplicate found! Error BOTH objects.
-                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' found at index {CurrentIndex}. First occurrence was at index {FirstIndex}. Erroring BOTH objects.",
-                                LogSanitiser.Sanitise(externalIdValue), importIndex, firstOccurrence.index);
-
-                            // Mark THIS object as duplicate
-                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-
-                            // Go back and mark the FIRST object as duplicate too
-                            firstOccurrence.rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            firstOccurrence.rpei.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-                            // Reset change type since no object was actually created/updated
-                            firstOccurrence.rpei.ObjectChangeType = ObjectChangeType.NotSet;
-
-                            // If the first object had already created a CSO, remove it from the create list
-                            if (firstOccurrence.cso != null)
-                            {
-                                var removed = connectedSystemObjectsToBeCreated.Remove(firstOccurrence.cso);
-                                if (removed)
-                                {
-                                    Log.Debug("ProcessImportObjectsAsync: Removed CSO for first occurrence of duplicate external ID '{ExternalId}' from create list.",
-                                        LogSanitiser.Sanitise(externalIdValue));
-                                }
-                                // Clear the CSO reference from the RPEI since we're not persisting it
-                                firstOccurrence.rpei.ConnectedSystemObject = null;
-                                firstOccurrence.rpei.ConnectedSystemObjectId = null;
-                            }
-
-                            // Track this as a known duplicate for any subsequent occurrences (3rd, 4th, etc.)
-                            knownDuplicateExternalIds.Add(duplicateKey);
-
-                            // Remove from seenExternalIds since we've handled it
-                            seenExternalIds.Remove(duplicateKey);
+                            // Nothing replaces an object JIM holds under another Object Type, so it is kept (#2049).
+                            if (hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var repeatedHeldElsewhere))
+                                _csoIdsHeldUnderAnotherObjectType.UnionWith(repeatedHeldElsewhere.CsoIds);
 
                             continue;
                         }
-
-                        // First time seeing this external ID in this batch - track it
-                        // We'll update the CSO reference after it's created (if it gets created)
-                        seenExternalIds[duplicateKey] = (importIndex, activityRunProfileExecutionItem, null);
                     }
                 }
 
                 // SPEC-1082 D8: skip check, INSTEAD of TryAndFindMatchingConnectedSystemObjectAsync,
                 // for objects the pre-fetch already proved unchanged (hash+fingerprint match, Normal
                 // status, not a delete, no pending partition backfill). Mirrors the existing no-op
-                // path immediately below (RPEI removal, including its known same-batch-duplicate
-                // quirk of marking an already-removed RPEI - mirrored deliberately, not fixed here);
-                // skipped objects are NOT added to the update list. Their external ID was already
+                // path immediately below (RPEI removal); skipped objects are NOT added to the update list. Their external ID was already
                 // collected for deletion detection at page level before processing (AddExternalIdsToCollection),
                 // so a genuinely missing object still obsoletes; see ImportContentHashSkipTests.
                 if (hydrationResult.SkipEligible.Contains(importObject))
@@ -2349,13 +2684,29 @@ public class SyncImportTaskProcessor
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
                 {
-                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
+                    // The object an earlier page changed is used as that page left it, put back: a page's hydration reads
+                    // what was saved before the run, which knows nothing of the earlier page (#2074).
+                    connectedSystemObject = supersededHeldCso
+                        ?? await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
                 // When a connector specifies Delete, mark the existing CSO as Obsolete internally
                 if (importObject.ChangeType == ObjectChangeType.Deleted)
                 {
+                    // A Connector types a deleted object from what it last knew of it and from the current Object
+                    // Type selection, which can differ from the type JIM holds it under (#2049). Where External IDs
+                    // name one object across every type, the delete belongs to the object JIM holds; dropping it
+                    // left that object in place until a Full Import noticed it was gone.
+                    if (connectedSystemObject == null
+                        && hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var deletedHeldElsewhere)
+                        && hydratedCsoPage.TryGetValue(deletedHeldElsewhere.Primary.Entry.CsoId, out var deletedCso))
+                    {
+                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for an object of type '{ObjectType}', which JIM holds as CSO {CsoId} of type '{HeldObjectType}'. Applying the delete to it.",
+                            LogSanitiser.Sanitise(importObject.ObjectType), deletedCso.Id, LogSanitiser.Sanitise(deletedHeldElsewhere.Primary.ObjectType.Name));
+                        connectedSystemObject = deletedCso;
+                    }
+
                     if (connectedSystemObject is { Status: ConnectedSystemObjectStatus.Obsolete })
                     {
                         // The connector is replaying a delete for an object JIM already knows is gone: an
@@ -2366,6 +2717,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for CSO {CsoId}, which is already Obsolete and awaiting a synchronisation run. Nothing to report.",
                             connectedSystemObject.Id);
+                        _unchangedObjectCount++;
                     }
                     else if (connectedSystemObject != null)
                     {
@@ -2375,6 +2727,9 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         // Snapshot CSO display fields so they're preserved even after CSO is deleted
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
+                        if (laterPagesSupersede && duplicateKey != null)
+                            _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, connectedSystemObject, connectedSystemObject.Status,
+                                CreatedCso: null, CountedAs: EarlierPageCopyCount.Deletion);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
@@ -2388,6 +2743,7 @@ public class SyncImportTaskProcessor
 
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
+                        _connectorReportedDeletionCount++;
                     }
                     else
                     {
@@ -2395,6 +2751,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for object type '{ObjectType}' but no matching CSO found. Ignoring.",
                             importObject.ObjectType);
+                        _unchangedObjectCount++;
                     }
                     continue;
                 }
@@ -2403,6 +2760,24 @@ public class SyncImportTaskProcessor
                 // is existing - apply any changes to the cso from the import object
                 if (connectedSystemObject == null)
                 {
+                    // The object is not new: JIM holds it under another Object Type (#2049). Importing it as a new
+                    // object would leave the held one missing from its own type, so deletion detection would retire
+                    // it and its Metaverse Object could be deleted and deprovisioned everywhere. Refuse unless the
+                    // administrator has asked for the change, and keep the held object as it is.
+                    var heldElsewhere = hydrationResult.CrossTypeMatches.GetValueOrDefault(importObject);
+                    if (heldElsewhere != null)
+                    {
+                        if (!ObjectTypeChangesAllowed)
+                        {
+                            RefuseObjectTypeChange(activityRunProfileExecutionItem, heldElsewhere, csObjectType);
+                            continue;
+                        }
+
+                        Log.Information("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' and now arrives as type '{ObjectType}'. The Run Profile allows Object Type changes, so it is imported as a new object and the held one is left to deletion detection.",
+                            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), heldElsewhere.Primary.Entry.CsoId,
+                            LogSanitiser.Sanitise(heldElsewhere.Primary.ObjectType.Name), LogSanitiser.Sanitise(csObjectType.Name));
+                    }
+
                     // Connector said Update but no CSO exists — this is expected behaviour
                     // (e.g. delta import without a prior full import, or CSO was purged)
                     if (importObject.ChangeType == ObjectChangeType.Updated)
@@ -2422,19 +2797,32 @@ public class SyncImportTaskProcessor
 
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
+                    // An allowed Object Type change whose replacement could not be built must not retire the held
+                    // object, or the directory object would vanish from JIM altogether (#2049).
+                    if (connectedSystemObject == null && heldElsewhere != null)
+                        _csoIdsHeldUnderAnotherObjectType.UnionWith(heldElsewhere.CsoIds);
+
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                        if (laterPagesSupersede && duplicateKey != null)
+                            _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, HeldCso: null, HeldStatusBefore: default,
+                                connectedSystemObject, EarlierPageCopyCount.Creation);
+
+                        if (heldElsewhere != null)
+                            _objectTypeChangesCarriedOut.Add(new CarriedOutObjectTypeChange(activityRunProfileExecutionItem, connectedSystemObject, csObjectType, heldElsewhere));
 
                         // SPEC-1082 D7: Full Import created objects request a stamp with the incoming
                         // hash + current type fingerprint, written after this create batch commits
                         // (D6 stamp-ordering invariant). Delta Import creates are not stamped (D7):
                         // a delta payload is not trusted to be full-state, so the object is left
                         // unstamped for the next Full Import to honestly diff and stamp.
-                        if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                        // An object with an unreadable value is left unstamped (#2066): what JIM stored for it is not what
+                        // the Connector sent, so the next Full Import must diff it honestly rather than trust a hash.
+                        if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport && importObject.AttributeValueErrors is not { Count: > 0 })
                         {
                             connectedSystemObject.PendingImportStateHash = ImportContentHashCalculator.CalculateContentHash(importObject, csObjectType);
                             connectedSystemObject.PendingImportStateFingerprint = GetTypeFingerprint(csObjectType);
@@ -2447,31 +2835,6 @@ public class SyncImportTaskProcessor
                             SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
                                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded,
                                 detailCount: importObject.Attributes.Count);
-                        }
-
-                        // Update the seenExternalIds entry with the CSO reference so we can remove it if a duplicate is found later
-                        var extIdAttr = csObjectType.Attributes.First(a => a.IsExternalId);
-                        var extIdImportAttr = importObject.Attributes
-                            .FirstOrDefault(a => a.Name.Equals(extIdAttr.Name, StringComparison.OrdinalIgnoreCase));
-                        if (extIdImportAttr != null)
-                        {
-                            var extIdVal = extIdAttr.Type switch
-                            {
-                                AttributeDataType.Text => extIdImportAttr.StringValues.FirstOrDefault(),
-                                AttributeDataType.Number => extIdImportAttr.IntValues.FirstOrDefault().ToString(),
-                                AttributeDataType.LongNumber => extIdImportAttr.LongValues.FirstOrDefault().ToString(),
-                                AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(extIdImportAttr.DecimalValues.FirstOrDefault()),
-                                AttributeDataType.Guid => extIdImportAttr.GuidValues.FirstOrDefault().ToString(),
-                                _ => null
-                            };
-                            if (!string.IsNullOrEmpty(extIdVal))
-                            {
-                                var dupKey = $"{csObjectType.Id}:{extIdVal}";
-                                if (seenExternalIds.ContainsKey(dupKey))
-                                {
-                                    seenExternalIds[dupKey] = (seenExternalIds[dupKey].index, seenExternalIds[dupKey].rpei, connectedSystemObject);
-                                }
-                            }
                         }
                     }
                     else
@@ -2504,6 +2867,7 @@ public class SyncImportTaskProcessor
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
                     // in the Connected System. This is essential for proper reconciliation and subsequent lookups.
                     var statusTransitioned = false;
+                    var statusBeforeImport = connectedSystemObject.Status;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
                         Log.Debug("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in Connected System.",
@@ -2533,6 +2897,10 @@ public class SyncImportTaskProcessor
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
                                               connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
 
+                    // #2153: rows that held nothing, swept by the diff, for the end-of-import summary.
+                    if (connectedSystemObject.PendingAttributeValueRemovals.Count > 0)
+                        _valuelessRowsSweptCount += connectedSystemObject.PendingAttributeValueRemovals.Count(r => r.HeldDataType() == null);
+
                     // SPEC-1082 D7: request a stamp for this matched object, written by the save
                     // phase after this batch's attribute-value writes commit (D6 stamp-ordering
                     // invariant). Full Import stamps changed and unchanged objects alike with the
@@ -2541,7 +2909,17 @@ public class SyncImportTaskProcessor
                     // changed (conservative v1: a delta payload is not trusted to be full-state);
                     // Delta no-ops leave the stored hash untouched, since it still accurately
                     // describes the object's unchanged content.
-                    if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                    if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport && importObject.AttributeValueErrors is { Count: > 0 })
+                    {
+                        // An unreadable value was left as JIM held it (#2066), so the stored values no longer match what the
+                        // Connector sent and no hash of the payload describes them. Clear the stamp, as a Delta Import does,
+                        // so the next Full Import diffs the object honestly: a stamp of the readable content would make a
+                        // source that has since genuinely cleared the value look unchanged, and keep the old value for good.
+                        connectedSystemObject.PendingImportStateHash = null;
+                        connectedSystemObject.PendingImportStateFingerprint = null;
+                        connectedSystemObject.PendingImportStateStampRequested = true;
+                    }
+                    else if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
                     {
                         if (hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForStamp))
                         {
@@ -2566,6 +2944,7 @@ public class SyncImportTaskProcessor
                     // fingerprint against the freshly computed incoming hash and the diff's own findings.
                     if (_connectedSystemRunProfile.VerifyImportContentHashes
                         && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport
+                        && importObject.AttributeValueErrors is not { Count: > 0 }
                         && hydrationResult.MatchedImportState.TryGetValue(importObject, out var storedImportState)
                         && hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForVerification)
                         && storedImportState.ImportStateHash.HasValue
@@ -2603,6 +2982,10 @@ public class SyncImportTaskProcessor
                             connectedSystemObject.Id);
                     }
 
+                    if (laterPagesSupersede && duplicateKey != null)
+                        _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, connectedSystemObject, statusBeforeImport, CreatedCso: null,
+                            hasAttributeChanges || statusTransitioned ? EarlierPageCopyCount.Update : EarlierPageCopyCount.Unchanged);
+
                     // Only create RPEI if there are actual changes (attributes or status transition)
                     if (hasAttributeChanges || statusTransitioned)
                     {
@@ -2626,6 +3009,18 @@ public class SyncImportTaskProcessor
                                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated,
                                 detailCount: attrChangeCount > 0 ? attrChangeCount : null);
                         }
+
+                        _updatedObjectCount++;
+                    }
+                    else if (activityRunProfileExecutionItem.ErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet)
+                    {
+                        // Nothing changed, but the Connector flagged the object (#2066): an unreadable value is left as
+                        // JIM held it, so the object often looks unchanged. The item stays, carrying the error and the
+                        // object it concerns, or the error would go unreported. No change type, because none was made.
+                        activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
+                        _unchangedObjectCount++;
                     }
                     else
                     {
@@ -2633,6 +3028,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: No attribute changes for CSO {CsoId}. Skipping RPEI creation.",
                             connectedSystemObject.Id);
+                        _unchangedObjectCount++;
                     }
                 }
             }
@@ -2686,8 +3082,8 @@ public class SyncImportTaskProcessor
         var duplicateCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject);
         var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null || x.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet);
         var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null && x.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. Seen external IDs tracked: {SeenCount}",
-            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, seenExternalIds.Count);
+        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
+            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, repeatedOnThisPage.Count);
     }
 
     /// <summary>
@@ -2723,7 +3119,9 @@ public class SyncImportTaskProcessor
     /// <see cref="ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed"/> (D10:
     /// verification still stamps truthfully, since the honest diff ran and the object was persisted
     /// normally; only genuine processing failures - duplicate external IDs, unhandled exceptions -
-    /// leave an object unstamped).
+    /// leave an object unstamped). A requested clear (a null hash) is written whatever the item carries:
+    /// clearing a stamp only ever costs the next Full Import one honest diff, and an object with an
+    /// unreadable value (#2066) needs it, since what JIM stored for it matches no payload's hash.
     /// </summary>
     private async Task StampBatchImportStateAsync(IEnumerable<ConnectedSystemObject> csoBatch, List<ActivityRunProfileExecutionItem> batchRpeis)
     {
@@ -2736,12 +3134,50 @@ public class SyncImportTaskProcessor
             .ToHashSet();
 
         var stamps = csoBatch
-            .Where(cso => cso.PendingImportStateStampRequested && !erroredCsoIds.Contains(cso.Id))
+            .Where(cso => cso.PendingImportStateStampRequested && (cso.PendingImportStateHash == null || !erroredCsoIds.Contains(cso.Id)))
             .Select(cso => (CsoId: cso.Id, Hash: cso.PendingImportStateHash, Fingerprint: cso.PendingImportStateFingerprint))
             .ToList();
 
         if (stamps.Count > 0)
             await _syncRepo.StampImportStateAsync(stamps);
+    }
+
+    /// <summary>
+    /// The names of the attributes the Connector found a value on that it could not read (#2066), which are left as JIM
+    /// already held them. Empty for an object with none, which is nearly every object.
+    /// </summary>
+    private static HashSet<string> UnreadableAttributeNames(ConnectedSystemImportObject importObject) =>
+        importObject.AttributeValueErrors is { Count: > 0 } unreadableValues
+            ? unreadableValues.Select(v => v.AttributeName).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : [];
+
+    /// <summary>
+    /// Drops what the Connector read of each attribute it also found an unreadable value on (#2066). Part of a set read
+    /// as though it were the whole of it would present a partial object as a complete one: on a new object the
+    /// attribute is left out, and on an existing one <see cref="UpdateConnectedSystemObjectFromImportObject"/> leaves
+    /// it as it was.
+    /// </summary>
+    private static void RemoveUnreadableAttributes(ConnectedSystemImportObject importObject)
+    {
+        var unreadableAttributeNames = UnreadableAttributeNames(importObject);
+        if (unreadableAttributeNames.Count > 0)
+            importObject.Attributes.RemoveAll(a => unreadableAttributeNames.Contains(a.Name));
+    }
+
+    /// <summary>
+    /// Whether the Connector could not read the External ID of an object (#2066), which leaves nothing to match the
+    /// object by and so nothing to protect from deletion detection.
+    /// </summary>
+    private bool HasUnreadableExternalId(ConnectedSystemImportObject importObject)
+    {
+        if (importObject.AttributeValueErrors is not { Count: > 0 } || string.IsNullOrEmpty(importObject.ObjectType))
+            return false;
+
+        var externalIdAttribute = _connectedSystem.ObjectTypes?
+            .SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase))?
+            .Attributes.FirstOrDefault(a => a.IsExternalId);
+
+        return externalIdAttribute != null && UnreadableAttributeNames(importObject).Contains(externalIdAttribute.Name);
     }
 
     /// <summary>
@@ -2766,8 +3202,8 @@ public class SyncImportTaskProcessor
             var noLongs = attribute.LongValues.Count == 0;
             var noDecimals = attribute.DecimalValues.Count == 0;
             var noStrings = attribute.StringValues.Count == 0;
-            var noBool = !attribute.BoolValue.HasValue;
-            var noDateTime = !attribute.DateTimeValue.HasValue;
+            var noBool = !attribute.HasBoolValues;
+            var noDateTime = !attribute.HasDateTimeValues;
             var noBytes = attribute.ByteValues.Count == 0;
             var noReferences = attribute.ReferenceValues.Count == 0;
 
@@ -2799,6 +3235,158 @@ public class SyncImportTaskProcessor
             return null;
 
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
+        var externalIdValue = GetExternalIdLookupValue(connectedSystemImportObject, externalIdAttribute);
+        var cacheKey = CsoLookupKey.For(_connectedSystem.Id, externalIdAttribute.Id, externalIdValue);
+        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
+    }
+
+    /// <summary>
+    /// #2074: what an object's copy on an earlier page of a Delta Import did, kept until a later page's copy takes its
+    /// place. <paramref name="HeldCso"/> is the object JIM holds that it changed, with its status before the change;
+    /// <paramref name="CreatedCso"/> is the object it is to create, which a later page cannot otherwise find, because
+    /// objects created during an import are saved only after the last page.
+    /// </summary>
+    private sealed record EarlierPageCopy(
+        ActivityRunProfileExecutionItem ExecutionItem,
+        ConnectedSystemObject? HeldCso,
+        ConnectedSystemObjectStatus HeldStatusBefore,
+        ConnectedSystemObject? CreatedCso,
+        EarlierPageCopyCount CountedAs);
+
+    /// <summary>#2074: which of the run's figures an earlier page's copy was counted in.</summary>
+    private enum EarlierPageCopyCount { Creation, Update, Unchanged, Deletion }
+
+    /// <summary>
+    /// #2074: undoes what an object's copy on an earlier page of this Delta Import did, so the later copy now being
+    /// processed takes its place as though the earlier one had never been read. A change log returns an object's changes
+    /// in order, so the later copy is the object as it now stands: a re-insert after a delete, a further update, or a
+    /// delete after an insert. The earlier copy's item is withdrawn and it is counted as unchanged; the object JIM holds
+    /// is put back as it was, and returned so the later copy is applied to it; an object the earlier copy was to create
+    /// is not created.
+    /// </summary>
+    /// <returns>The object JIM holds that the later copy applies to, or null when the earlier copy changed nothing JIM
+    /// holds and the later copy is matched in the ordinary way.</returns>
+    private ConnectedSystemObject? SupersedeEarlierPageCopy(string duplicateKey, string externalId,
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        // Rejected, or a delete of something JIM does not hold: there is nothing to undo.
+        if (!_earlierPageCopies.Remove(duplicateKey, out var earlier))
+            return null;
+
+        _activityRunProfileExecutionItems.Remove(earlier.ExecutionItem);
+        switch (earlier.CountedAs)
+        {
+            case EarlierPageCopyCount.Update:
+                _updatedObjectCount--;
+                _unchangedObjectCount++;
+                break;
+            case EarlierPageCopyCount.Deletion:
+                _connectorReportedDeletionCount--;
+                _unchangedObjectCount++;
+                break;
+            case EarlierPageCopyCount.Creation:
+                // The created figure is the number of objects left to create, which the removal below lowers.
+                _unchangedObjectCount++;
+                break;
+        }
+
+        if (earlier.CreatedCso != null)
+        {
+            connectedSystemObjectsToBeCreated.Remove(earlier.CreatedCso);
+            _objectTypeChangesCarriedOut.RemoveAll(change => ReferenceEquals(change.Replacement, earlier.CreatedCso));
+            Log.Information("ProcessImportObjectsAsync: External ID '{ExternalId}' was returned by an earlier page of this Delta Import as a new object, and again by a later one. " +
+                "The later change takes its place; the object is not created from the earlier one.", LogSanitiser.Sanitise(externalId));
+            return null;
+        }
+
+        var held = earlier.HeldCso!;
+        held.Status = earlier.HeldStatusBefore;
+        held.PendingAttributeValueAdditions.Clear();
+        held.PendingAttributeValueRemovals.Clear();
+        connectedSystemObjectsToBeUpdated.Remove(held);
+        _csoIdsQueuedForUpdate.Remove(held.Id);
+        Log.Information("ProcessImportObjectsAsync: CSO {CsoId} was changed by an earlier page of this Delta Import ({EarlierChange}), and is changed again by a later one. " +
+            "The later change takes its place.", held.Id, earlier.CountedAs);
+        return held;
+    }
+
+    /// <summary>
+    /// #2063: the duplicate detection keys this page returns more than once, and those an earlier page already returned,
+    /// then adds this page's keys to <paramref name="earlierPageKeys"/> for the pages after it. File-based imports are a
+    /// single page and pass no set.
+    /// </summary>
+    private (HashSet<string> RepeatedOnThisPage, HashSet<string> ReturnedOnAnEarlierPage) FindDuplicateExternalIds(
+        IEnumerable<ConnectedSystemImportObject> importObjects, HashSet<string>? earlierPageKeys)
+    {
+        var pageKeys = importObjects.Select(GetDuplicateDetectionKey).OfType<string>().ToList();
+        var repeatedOnThisPage = pageKeys
+            .GroupBy(key => key, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (earlierPageKeys == null)
+            return (repeatedOnThisPage, new HashSet<string>(StringComparer.Ordinal));
+
+        var returnedOnAnEarlierPage = pageKeys.Where(earlierPageKeys.Contains).ToHashSet(StringComparer.Ordinal);
+        earlierPageKeys.UnionWith(pageKeys);
+        return (repeatedOnThisPage, returnedOnAnEarlierPage);
+    }
+
+    /// <summary>
+    /// #2063: the key duplicate detection files an import object under, worked out as the per-object loop works it out,
+    /// or null for an object that loop rejects before duplicate detection (one the Connector could not read, one with a
+    /// repeated attribute, one of an unknown Object Type) or that carries no External ID value.
+    /// </summary>
+    private string? GetDuplicateDetectionKey(ConnectedSystemImportObject importObject)
+    {
+        if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet and not ConnectedSystemImportObjectError.AttributeValueError)
+            return null;
+
+        if (importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            return null;
+
+        var csObjectType = _connectedSystem.ObjectTypes?.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        var externalIdAttribute = csObjectType?.Attributes.FirstOrDefault(a => a.IsExternalId);
+        if (csObjectType == null || externalIdAttribute == null)
+            return null;
+
+        RemoveNullImportObjectAttributes(importObject);
+        var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+        var externalIdValue = externalIdImportAttr == null ? null : GetDuplicateDetectionExternalIdValue(externalIdImportAttr, externalIdAttribute.Type);
+        return string.IsNullOrEmpty(externalIdValue) ? null : GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
+    }
+
+    /// <summary>
+    /// The composite key duplicate detection uses: the same External ID under two Object Types is two keys. Text folds
+    /// case unless the External ID attribute is case-exact (#2051), so the sets holding these keys compare ordinally.
+    /// </summary>
+    private static string GetDuplicateDetectionKey(ConnectedSystemObjectType objectType, ConnectedSystemObjectTypeAttribute externalIdAttribute, string externalIdValue) =>
+        $"{objectType.Id}:{(externalIdAttribute.Type == AttributeDataType.Text ? IdentifierKey.For(externalIdValue, externalIdAttribute.CaseExact) : externalIdValue)}";
+
+    /// <summary>
+    /// The External ID value duplicate detection compares and execution items record, as text for every data type.
+    /// </summary>
+    private static string? GetDuplicateDetectionExternalIdValue(ConnectedSystemImportObjectAttribute externalIdImportAttribute, AttributeDataType type) =>
+        type switch
+        {
+            AttributeDataType.Text => externalIdImportAttribute.StringValues.FirstOrDefault(),
+            AttributeDataType.Number => externalIdImportAttribute.IntValues.FirstOrDefault().ToString(),
+            AttributeDataType.LongNumber => externalIdImportAttribute.LongValues.FirstOrDefault().ToString(),
+            AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(externalIdImportAttribute.DecimalValues.FirstOrDefault()),
+            AttributeDataType.Guid => externalIdImportAttribute.GuidValues.FirstOrDefault().ToString(),
+            _ => null
+        };
+
+    /// <summary>
+    /// The import object's External ID value in the form the pre-fetched lookup keys carry it (the same form
+    /// <c>GetAllCsoExternalIdMappingsAsync</c> builds for stored values). Throws for an import object whose External
+    /// ID attribute is missing, multi-valued or empty, which the per-object loop reports against its own item.
+    /// </summary>
+    /// <param name="caseExact">Whose case-exact declaration folds a Text value: the External ID attribute's own unless the
+    /// caller probes under another Object Type's anchor, which may declare otherwise.</param>
+    private static string GetExternalIdLookupValue(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectTypeAttribute externalIdAttribute, bool? caseExact = null)
+    {
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
@@ -2809,12 +3397,11 @@ public class SyncImportTaskProcessor
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-        // Build the cache key in the same format as GetAllCsoExternalIdMappingsAsync
-        var externalIdValue = externalIdAttribute.Type switch
+        return externalIdAttribute.Type switch
         {
             AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.Text => importObjectAttribute.StringValues[0].ToLowerInvariant(),
+            AttributeDataType.Text => IdentifierKey.For(importObjectAttribute.StringValues[0], caseExact ?? externalIdAttribute.CaseExact),
             AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number => importObjectAttribute.IntValues[0].ToString(),
@@ -2830,9 +3417,100 @@ public class SyncImportTaskProcessor
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
             _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
         };
+    }
 
-        var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
-        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
+    /// <summary>
+    /// #2049: the Connected System Object JIM holds under another Object Type with this import object's External ID,
+    /// or null when there is none, or when the Connector does not vouch that an External ID names one object across
+    /// every Object Type.
+    /// </summary>
+    /// <remarks>
+    /// JIM recognises an object by its External ID within one Object Type, so an object whose type changed in the
+    /// Connected System arrives looking like a new object of its new type. Where External IDs are unique across the
+    /// whole Connected System (a directory's objectGUID or entryUUID) the same value under another type can only be
+    /// the same object. Where they are not (a SQL view sharing its table's keys) it is a different object, which is
+    /// why the Connector has to say so. Only called for an object with no match under its own type, which in
+    /// ordinary running is only a genuinely new object, so the probe costs nothing on the objects JIM already knows.
+    /// </remarks>
+    private HeldUnderAnotherObjectType? FindHeldUnderAnotherObjectType(ConnectedSystemImportObject importObject, ConnectedSystemObjectType objectType)
+    {
+        if (_csIsEmpty || _csoExternalIdLookup == null || !_connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
+            return null;
+
+        var lookup = _csoExternalIdLookup;
+        var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
+        // Folded by each target's own anchor, which is the declaration the held object's key was built under.
+        var matches = GetCrossTypeProbeTargets(objectType, externalIdAttribute)
+            .Select(target => lookup.TryGetValue(
+                CsoLookupKey.For(_connectedSystem.Id, target.ExternalIdAttribute.Id,
+                    GetExternalIdLookupValue(importObject, externalIdAttribute, target.ExternalIdAttribute.CaseExact)), out var entry)
+                ? new HeldObject(entry, target.ObjectType)
+                : null)
+            .OfType<HeldObject>()
+            .ToList();
+
+        return matches.Count > 0 ? new HeldUnderAnotherObjectType(matches) : null;
+    }
+
+    /// <summary>
+    /// #2049: whether this run carries out an Object Type change rather than refusing it. Only a Full Import can: it
+    /// is the run that returns every object, so it is the run whose deletion detection retires the held object.
+    /// </summary>
+    private bool ObjectTypeChangesAllowed =>
+        _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport && _connectedSystemRunProfile.AllowObjectTypeChanges;
+
+    /// <summary>
+    /// #2049: records an Object Type change this run will not carry out, and protects the held object from deletion
+    /// detection: the import did return it, just not under the type JIM holds it as.
+    /// </summary>
+    private void RefuseObjectTypeChange(ActivityRunProfileExecutionItem activityRunProfileExecutionItem, HeldUnderAnotherObjectType held, ConnectedSystemObjectType arrivingObjectType)
+    {
+        _csoIdsHeldUnderAnotherObjectType.UnionWith(held.CsoIds);
+        _objectTypeChangesRefusedCount++;
+
+        var primary = held.Primary;
+        var heldTypeName = primary.ObjectType.Name;
+        var arrivingTypeName = arrivingObjectType.Name;
+
+        // An object an earlier import already marked obsolete is disconnected by the next synchronisation whatever this
+        // run does, so saying nothing is deprovisioned would be untrue for it.
+        var keptClause = primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete
+            ? $"the existing '{heldTypeName}' object, which an earlier import marked obsolete, has been left as it is"
+            : $"the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned";
+
+        activityRunProfileExecutionItem.ObjectTypeSnapshot = arrivingTypeName;
+        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
+        activityRunProfileExecutionItem.ErrorMessage =
+            $"JIM holds this object as a '{heldTypeName}', but the Connector now returns it as a '{arrivingTypeName}' (External ID '{activityRunProfileExecutionItem.ExternalIdSnapshot}'). " +
+            $"It has not been imported, and {keptClause}. " +
+            $"If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{heldTypeName}' object and import a new '{arrivingTypeName}' one. " +
+            "If it has not, review the Object Types selected on the Connected System.";
+
+        Log.Warning("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' but arrived as type '{ObjectType}'. Refusing the Object Type change and keeping the held object.",
+            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), primary.Entry.CsoId,
+            LogSanitiser.Sanitise(heldTypeName), LogSanitiser.Sanitise(arrivingTypeName));
+    }
+
+    /// <summary>
+    /// #2049: every other Object Type's External ID attribute of the same data type, which is what an External ID
+    /// value unique across the Connected System is held under. Deselected types are included: their objects stay in
+    /// JIM until deletion detection retires them, and a type change is exactly what can bring one back.
+    /// </summary>
+    private List<(ConnectedSystemObjectType ObjectType, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)> GetCrossTypeProbeTargets(
+        ConnectedSystemObjectType objectType, ConnectedSystemObjectTypeAttribute externalIdAttribute)
+    {
+        if (_crossTypeProbeTargets.TryGetValue(objectType.Id, out var targets))
+            return targets;
+
+        targets = (_connectedSystem.ObjectTypes ?? [])
+            .Where(other => other.Id != objectType.Id)
+            .SelectMany(other => other.Attributes
+                .Where(attribute => attribute.IsExternalId && attribute.Type == externalIdAttribute.Type)
+                .Select(attribute => (ObjectType: other, ExternalIdAttribute: attribute)))
+            .ToList();
+
+        _crossTypeProbeTargets[objectType.Id] = targets;
+        return targets;
     }
 
     /// <summary>
@@ -3070,22 +3748,36 @@ public class SyncImportTaskProcessor
                     }
                     break;
                 case AttributeDataType.DateTime:
-                    connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                    // One row per value (#2153), never a row that holds nothing. The values are canonical and distinct:
+                    // the import normaliser saw to both before the page was hydrated.
+                    if (importObjectAttribute.HasDateTimeValues)
                     {
-                        Attribute = csAttribute,
-                        AttributeId = csAttribute.Id,
-                        DateTimeValue = importObjectAttribute.DateTimeValue,
-                        ConnectedSystemObject = connectedSystemObject
-                    });
+                        foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                AttributeId = csAttribute.Id,
+                                DateTimeValue = importObjectAttributeDateTimeValue,
+                                ConnectedSystemObject = connectedSystemObject
+                            });
+                        }
+                    }
                     break;
                 case AttributeDataType.Boolean:
-                    connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                    if (importObjectAttribute.HasBoolValues)
                     {
-                        Attribute = csAttribute,
-                        AttributeId = csAttribute.Id,
-                        BoolValue = importObjectAttribute.BoolValue,
-                        ConnectedSystemObject = connectedSystemObject
-                    });
+                        foreach (var importObjectAttributeBoolValue in importObjectAttribute.BoolValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                AttributeId = csAttribute.Id,
+                                BoolValue = importObjectAttributeBoolValue,
+                                ConnectedSystemObject = connectedSystemObject
+                            });
+                        }
+                    }
                     break;
                 case AttributeDataType.Reference:
                     foreach (var importObjectAttributeReferenceValue in importObjectAttribute.ReferenceValues)
@@ -3132,8 +3824,12 @@ public class SyncImportTaskProcessor
         DeduplicateImportObjectAttributes(connectedSystemImportObject, csoExternalId);
 
         // process known attributes (potential updates)
-        // need to work with the fact that we have individual objects for multivalued attribute values
-        foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name))
+        // need to work with the fact that we have individual objects for multivalued attribute values.
+        // An attribute the Connector found an unreadable value on is passed over (#2066): the source holds a value JIM
+        // could not read, which is not the same as holding none, so the stored values stay exactly as they were.
+        var unreadableAttributeNames = UnreadableAttributeNames(connectedSystemImportObject);
+        RemoveValuesHeldUnderAnotherDataType(connectedSystemImportObject, connectedSystemObject, connectedSystemObjectType, unreadableAttributeNames);
+        foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name).Where(name => !unreadableAttributeNames.Contains(name)))
         {
             // is there a matching attribute in the import object?
             var importedAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
@@ -3229,20 +3925,53 @@ public class SyncImportTaskProcessor
                     }
 
                     case AttributeDataType.DateTime:
-                        // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
-                        if (existingCsoDateTimeAttributeValue == null)
+                    {
+                        // A set diff keyed canonically (#2153), over the rows that hold a date. The stored value is the
+                        // database's microsecond, read as Kind Local, and the import is canonical, so a value and its
+                        // re-imported self are equal, and order is never a change.
+                        var importedDateTimes = importedObjectAttribute.DateTimeValues;
+                        if (importedDateTimes.Count == 1)
                         {
-                            // we don't have a CSO value for this attribute. set the initial value
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
+                            // The single-valued fast path allocates nothing beyond what it stages: one pass keeps the
+                            // row holding the imported date and removes every other.
+                            var importedKey = DateTimeAttributeValue.Key(importedDateTimes[0]);
+                            var held = connectedSystemObject.AttributeValues;
+                            var matched = false;
+                            for (var v = 0; v < held.Count; v++)
+                            {
+                                var heldValue = held[v];
+                                if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.DateTimeValue is not { } heldDate)
+                                    continue;
+
+                                if (!matched && DateTimeAttributeValue.Key(heldDate) == importedKey)
+                                    matched = true;
+                                else
+                                    connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
+                            }
+
+                            if (!matched)
+                                connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedDateTimes[0] });
+                            break;
                         }
-                        else if (existingCsoDateTimeAttributeValue.DateTimeValue != importedObjectAttribute.DateTimeValue)
-                        {
-                            // update existing value by removing and adding
-                            connectedSystemObject.PendingAttributeValueRemovals.Add(existingCsoDateTimeAttributeValue);
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
-                        }
+
+                        var csoDateTimeAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.DateTimeValue != null)
+                            .ToList();
+                        var importDateTimeKeys = new HashSet<long>(importedObjectAttribute.DateTimeValues.Count);
+                        foreach (var importedDateTime in importedObjectAttribute.DateTimeValues)
+                            importDateTimeKeys.Add(DateTimeAttributeValue.Key(importedDateTime));
+
+                        // find values on the cso of type date that aren't on the imported object and remove them first
+                        var missingDateTimeAttributeValues = csoDateTimeAttrValues.Where(av => !importDateTimeKeys.Contains(DateTimeAttributeValue.Key(av.DateTimeValue!.Value))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingDateTimeAttributeValues);
+
+                        // find imported dates that aren't on the cso and add them
+                        var csoDateTimeKeys = csoDateTimeAttrValues.Select(av => DateTimeAttributeValue.Key(av.DateTimeValue!.Value)).ToHashSet();
+                        var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(dv => csoDateTimeKeys.Add(DateTimeAttributeValue.Key(dv))).ToList();
+                        foreach (var newDateTimeValue in newDateTimeValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
                         break;
+                    }
 
                     case AttributeDataType.Binary:
                         // find values on the cso of type byte array that aren't on the imported object and remove them first
@@ -3414,23 +4143,38 @@ public class SyncImportTaskProcessor
                     }
 
                     case AttributeDataType.Boolean:
-                        // there will be only a single value for a bool. is it the same or different?
-                        // if different, remove the old value, add the new one
-                        // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
+                    {
+                        // The same set shape as the other types (#2153), over the rows that hold a true or false value,
+                        // and no SingleOrDefault: an object holding both from before the Boolean rule converges on what
+                        // the import carries, which the normaliser has seen is one value.
                         // todo (#872): consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
-                        if (csoBooleanAttributeValue == null)
+                        // One pass, allocating nothing beyond what it stages.
+                        var importHasTrue = importedObjectAttribute.BoolValues.Contains(true);
+                        var importHasFalse = importedObjectAttribute.BoolValues.Contains(false);
+                        var csoHasTrue = false;
+                        var csoHasFalse = false;
+                        var heldValues = connectedSystemObject.AttributeValues;
+                        for (var v = 0; v < heldValues.Count; v++)
                         {
-                            // set initial value
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                            var heldValue = heldValues[v];
+                            if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.BoolValue is not { } heldBool)
+                                continue;
+
+                            if (heldBool)
+                                csoHasTrue = true;
+                            else
+                                csoHasFalse = true;
+
+                            if (heldBool ? !importHasTrue : !importHasFalse)
+                                connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
                         }
-                        else if (csoBooleanAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
-                        {
-                            // update existing value by removing and adding
-                            connectedSystemObject.PendingAttributeValueRemovals.Add(csoBooleanAttributeValue);
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
-                        }
+
+                        if (importHasTrue && !csoHasTrue)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = true });
+                        if (importHasFalse && !csoHasFalse)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = false });
                         break;
+                    }
 
                     case AttributeDataType.NotSet:
                     default:
@@ -3445,6 +4189,38 @@ public class SyncImportTaskProcessor
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }
+    }
+
+    /// <summary>
+    /// Removes what an attribute holds under a data type it no longer has (#2128). A schema refresh can redefine an
+    /// attribute whose Connected System Objects already hold values (Active Directory's Enumeration attributes were
+    /// discovered as Boolean, and are Number), and it keeps the attribute, so those values stay in the column the old type
+    /// used. <see cref="UpdateConnectedSystemObjectFromImportObject"/> compares only the column of the attribute's current
+    /// type, so without this the value read under the new type is added beside the old one instead of replacing it, and a
+    /// single-valued attribute holds two values for good: every single-valued Attribute Flow from it then fails. An
+    /// import that carries the attribute says what it holds, so anything held in another type's column goes. One it could
+    /// not read says nothing (#2066), and one it does not carry has all its values removed already.
+    /// </summary>
+    private static void RemoveValuesHeldUnderAnotherDataType(
+        ConnectedSystemImportObject importObject,
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType objectType,
+        HashSet<string> unreadableAttributeNames)
+    {
+        var importedAttributeNames = importObject.Attributes.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var importedAttributeTypes = new Dictionary<int, AttributeDataType>();
+        foreach (var attribute in objectType.Attributes.Where(a => importedAttributeNames.Contains(a.Name) && !unreadableAttributeNames.Contains(a.Name)))
+            importedAttributeTypes.TryAdd(attribute.Id, attribute.Type);
+
+        if (importedAttributeTypes.Count == 0)
+            return;
+
+        // A row that holds nothing at all goes too (#2153): the import says what the attribute holds, and a row with no
+        // value is no part of it. Such a row is stored only by a fault, and left in place it would be staged onwards.
+        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av =>
+            (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) is { } attributeId &&
+            importedAttributeTypes.TryGetValue(attributeId, out var type) &&
+            (av.IsHeldUnderAnotherDataType(type) || av.HeldDataType() == null)));
     }
 
     /// <summary>
@@ -3641,6 +4417,21 @@ public class SyncImportTaskProcessor
         // reported like unresolved references, never a run failure.
         var ambiguousItems = new System.Collections.Concurrent.ConcurrentBag<(ConnectedSystemObject Cso, ConnectedSystemObjectAttributeValue AttrValue, List<string> CandidateTypeNames)>();
 
+        // Every value each object is left with, unresolved or ambiguous, gathered before anything is reported (#959),
+        // so the object's item records all of them rather than whichever one reached it first. Only the sequential
+        // phases below call it; the parallel Phase 1 never does.
+        var unresolvedByCso = new Dictionary<ConnectedSystemObject, List<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)>>();
+        void RecordUnresolved(ConnectedSystemObject cso, ConnectedSystemObjectAttributeValue attrValue, IReadOnlyList<string>? ambiguousWith)
+        {
+            if (!unresolvedByCso.TryGetValue(cso, out var references))
+            {
+                references = [];
+                unresolvedByCso[cso] = references;
+            }
+
+            references.Add((attrValue.Attribute?.Name ?? $"attribute {attrValue.AttributeId}", attrValue.UnresolvedReferenceValue!, ambiguousWith));
+        }
+
         // Phase 1: Resolve from in-memory dictionaries in parallel and collect still-unresolved references for batch DB query.
         // After Commits 1-4, the loop body is purely CPU-bound dictionary lookups with no DB calls,
         // so parallel execution is safe. All shared data structures are read-only after construction;
@@ -3702,8 +4493,11 @@ public class SyncImportTaskProcessor
             // anchor, so its value goes into every type's group and a value found under more than one is
             // ambiguous. This replaces a single-attribute batch that collapsed mixed-type runs onto
             // whichever attribute the first unresolved item happened to carry.
-            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Values are kept as the reference holds them (ordinal) or compared as their anchor compares its values
+            // (#2051); the repositories answer each by the value asked for.
+            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.Ordinal);
             var primaryValueGroups = new Dictionary<int, HashSet<string>>();
+            var anchorCaseExactById = new Dictionary<int, bool>();
 
             foreach (var (_, attrValue, externalIdAttribute) in unresolvedItems)
             {
@@ -3717,8 +4511,9 @@ public class SyncImportTaskProcessor
                     {
                         if (!primaryValueGroups.TryGetValue(candidate.AnchorAttribute.Id, out var values))
                         {
-                            values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            values = new HashSet<string>(IdentifierKey.Comparer(candidate.AnchorAttribute.CaseExact));
                             primaryValueGroups[candidate.AnchorAttribute.Id] = values;
+                            anchorCaseExactById[candidate.AnchorAttribute.Id] = candidate.AnchorAttribute.CaseExact;
                         }
 
                         values.Add(attrValue.UnresolvedReferenceValue!);
@@ -3728,11 +4523,11 @@ public class SyncImportTaskProcessor
 
             // Batch query the database in pages using the configurable sync page size
             var dbPrimaryResultsByAttribute = new Dictionary<int, Dictionary<string, ConnectedSystemObject>>();
-            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
 
             foreach (var (anchorAttributeId, values) in primaryValueGroups)
             {
-                var groupResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                var groupResults = new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(anchorCaseExactById[anchorAttributeId]));
                 dbPrimaryResultsByAttribute[anchorAttributeId] = groupResults;
                 var valuesList = values.ToList();
                 for (var i = 0; i < valuesList.Count; i += pageSize)
@@ -3804,39 +4599,17 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // how this is reported (error, warning or silently logged) is a per-Connected System setting.
+                    // Recorded against the object here and reported once per object below; how it is reported
+                    // (error, warning or silently logged) is a per-Connected System setting.
                     unresolvedReferenceCount++;
+                    RecordUnresolved(cso, attrValue, null);
 
-                    switch (unresolvedReferenceHandling)
-                    {
-                        case UnresolvedReferenceHandling.Error:
-                            rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                            {
-                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it.";
-                                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                            }
-                            else
-                            {
-                                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
-                            }
-
-                            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
-                            break;
-
-                        case UnresolvedReferenceHandling.Warn:
-                            // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
-                            // summary warning after the loop instead (see below).
-                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
-                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
-                            break;
-
-                        case UnresolvedReferenceHandling.Ignore:
-                        default:
-                            Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. Ignored per Connected System setting.",
-                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
-                            break;
-                    }
+                    if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+                        Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
+                            LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                    else
+                        Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId} (handling: {UnresolvedReferenceHandling}).",
+                            LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, unresolvedReferenceHandling);
                 }
             }
         }
@@ -3848,36 +4621,36 @@ public class SyncImportTaskProcessor
         foreach (var (cso, attrValue, candidateTypeNames) in ambiguousItems)
         {
             ambiguousReferenceCount++;
-            var candidateNames = string.Join(", ", candidateTypeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+            var distinctCandidateNames = candidateTypeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+            RecordUnresolved(cso, attrValue, distinctCandidateNames);
 
-            switch (unresolvedReferenceHandling)
-            {
-                case UnresolvedReferenceHandling.Error:
-                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                    {
-                        activityRunProfileExecutionItem.ErrorMessage = $"A reference value ({attrValue.UnresolvedReferenceValue}) matches objects of more than one Object Type ({candidateNames}), and attribute '{attrValue.Attribute?.Name}' does not declare which Object Type it references, so the reference cannot be resolved. Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                    }
-                    else
-                    {
-                        Log.Warning("ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {CsoId}, ambiguous reference: {AmbiguousRef}",
-                            cso.Id, LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue));
-                    }
-                    break;
-
-                case UnresolvedReferenceHandling.Warn:
-                    Log.Warning("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) and cannot be resolved.",
-                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
-                    break;
-
-                case UnresolvedReferenceHandling.Ignore:
-                default:
-                    Log.Debug("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}). Ignored per Connected System setting.",
-                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
-                    break;
-            }
+            var candidateNames = string.Join(", ", distinctCandidateNames);
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+                Log.Warning("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) and cannot be resolved.",
+                    LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
+            else
+                Log.Debug("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) (handling: {UnresolvedReferenceHandling}).",
+                    LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames, unresolvedReferenceHandling);
         }
+
+        // One report per object, whatever the handling (#959). The count always goes on the object's item, so no
+        // unresolved reference is ever lost from the Activity; Warn and Ignore leave the item un-errored as #873
+        // intends. Under Error the item takes the unresolved reference error only when nothing else already holds
+        // the slot: that error came first and keeps it, and the count still says what else the object was left with.
+        var objectsMissingAnItem = 0;
+        foreach (var (cso, references) in unresolvedByCso)
+        {
+            if (rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem))
+                RecordUnresolvedReferencesOnItem(activityRunProfileExecutionItem, references, unresolvedReferenceHandling);
+            else
+                objectsMissingAnItem++;
+        }
+
+        // An object this run created, or updated with new reference values, has an item, so a miss is not expected:
+        // say so rather than lose those counts silently.
+        if (objectsMissingAnItem > 0)
+            Log.Warning("ResolveReferencesAsync: {Count} Connected System Object(s) with unresolved references had no Run Profile Execution Item; their unresolved values are recorded on the objects only.",
+                objectsMissingAnItem);
 
         if (ambiguousReferenceCount > 0)
         {
@@ -3913,6 +4686,26 @@ public class SyncImportTaskProcessor
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _syncRepo.UpdateActivityAsync(_activity);
+    }
+
+    /// <summary>
+    /// Records what reference resolution left unresolved on one object's Run Profile Execution Item (#959): the count
+    /// under every handling mode, and under Error the unresolved reference error itself, provided no other error
+    /// already holds the item's single error slot.
+    /// </summary>
+    private static void RecordUnresolvedReferencesOnItem(
+        ActivityRunProfileExecutionItem item,
+        IReadOnlyList<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)> references,
+        UnresolvedReferenceHandling handling)
+    {
+        item.UnresolvedReferenceCount = references.Count;
+
+        if (handling != UnresolvedReferenceHandling.Error ||
+            item.ErrorType is not (null or ActivityRunProfileExecutionItemErrorType.NotSet))
+            return;
+
+        item.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+        item.ErrorMessage = ImportOutcomeMessage.ForUnresolvedReferences(references);
     }
 
     /// <summary>
@@ -4212,7 +5005,8 @@ public class SyncImportTaskProcessor
                         switch (attrType)
                         {
                             case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
-                                partition.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+                                // Same thing? Ignoring case unless the anchor is case-exact (#2051), as the database fallback.
+                                partition.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(primaryIdAttrValue.Attribute.CaseExact));
                                 if (!partition.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
                                     throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.StringValue, secondary: false);
                                 break;
@@ -4254,11 +5048,11 @@ public class SyncImportTaskProcessor
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
-                                    // OrdinalIgnoreCase: LDAP Distinguished Names are case-insensitive per RFC 4514.
-                                    // The SQL fixup (FixupCrossBatchReferenceIdsAsync) uses LOWER() for this reason.
-                                    // Matching that behaviour here means in-memory resolution succeeds for LDAP references,
-                                    // avoiding the expensive post-import SQL fixup entirely.
-                                    partition.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                                    // Same thing? Ignoring case unless the anchor is case-exact (#2051): LDAP Distinguished
+                                    // Names are case-insensitive per RFC 4514. The SQL fixup (FixupCrossBatchReferenceIdsAsync)
+                                    // follows the same declaration, so in-memory resolution succeeds wherever it would, avoiding
+                                    // the expensive post-import SQL fixup.
+                                    partition.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(IdentifierKey.Comparer(secondaryIdAttrValue.Attribute.CaseExact));
                                     if (!partition.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
                                         throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.StringValue, secondary: true);
                                     break;
@@ -4322,9 +5116,8 @@ public class SyncImportTaskProcessor
         }
 
         /// <summary>
-        /// One Object Type's external ID dictionaries. Primary dictionaries use case-sensitive comparers per
-        /// the case sensitivity policy (external ID matching is always case-sensitive); the secondary text
-        /// dictionary is case-insensitive because LDAP Distinguished Names are (RFC 4514). Decimal
+        /// One Object Type's external ID dictionaries. The text dictionaries ignore case unless their anchor
+        /// attribute is case-exact, per the case sensitivity policy (#2051). Decimal
         /// dictionaries key on the decimal itself, not its canonical string: equal decimals hash equally
         /// regardless of scale, so 4200.00m and 4200m are the same key without normalising (#1283).
         /// Only the dictionaries needed for the data types present in the import are initialised.
@@ -4449,6 +5242,8 @@ public class SyncImportTaskProcessor
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
+        var totalHeld = 0;
+        var totalReleased = 0;
         var exportsDeleted = 0;
 
         // Use sync page size for batching database persistence operations
@@ -4474,6 +5269,11 @@ public class SyncImportTaskProcessor
             // clears navigation collections). AsNoTracking avoids polluting the tracker.
             var pageCsos = await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(
                 _connectedSystem.Id, pageCsoIds);
+
+            // Which of this page's accounts are still owed a password, read only when the page holds a change written
+            // with an interim value until an Initial Password is delivered (#2039): the engine holds such a change while
+            // one is owed and releases it once none is. Null otherwise, and then never read.
+            var metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -4507,7 +5307,7 @@ public class SyncImportTaskProcessor
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
-                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword);
 
                         if (isFirstPage)
                         {
@@ -4515,11 +5315,17 @@ public class SyncImportTaskProcessor
                             perCsoSw.Restart();
                         }
 
+                        // A held change changes nothing and raises no item (#2039); it is counted for the summary only.
+                        Interlocked.Add(ref totalHeld, result.HeldChanges.Count);
+
                         if (result.HasChanges)
                         {
                             Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
                             Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
                             Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
+                            // A release is persisted with the Pending Export below, but raises no item: the interim
+                            // value was written on purpose, so it is not an unconfirmed export (#2039).
+                            Interlocked.Add(ref totalReleased, result.ReleasedChanges.Count);
 
                             // Collect Pending Exports for batch operations
                             if (result.PendingExportToDelete != null)
@@ -4797,10 +5603,119 @@ public class SyncImportTaskProcessor
         // Store the confirmed count on the activity for stats reporting
         _activity.PendingExportsConfirmed = exportsDeleted;
 
-        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)
+        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0 || totalHeld > 0 || totalReleased > 0)
         {
-            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",
-                totalConfirmed, totalRetry, totalFailed, exportsDeleted);
+            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, " +
+                "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, Exports deleted: {Deleted}",
+                totalConfirmed, totalRetry, totalFailed, totalHeld, totalReleased, exportsDeleted);
         }
+    }
+
+    /// <summary>
+    /// Judges every change on this Connected System held until an Initial Password is delivered whose Connected System
+    /// Object this import did not reconcile (#2039), after ordinary reconciliation has judged the ones it did. Without
+    /// this a hold is judged only by an import that returns its account, and an unchanged account is returned by
+    /// neither import type: a Full Import skips it by its content hash (the confirming import stamped the disabled
+    /// state it holds through the hold), and a Delta Import never returns it. A password that then expires or is
+    /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
+    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection skipping the
+    /// object permanently.
+    /// <para>
+    /// Each such change is held while a password is still owed to the object's Metaverse Object and released otherwise,
+    /// silently and exactly as reconciliation releases it (<see cref="ISyncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled"/>),
+    /// and nothing else on those objects is confirmed or retried: their values may predate the export. One set-based
+    /// query per run, answered from the partial index on the flag, so a Connected System with nothing held pays only
+    /// that; then one owed-password lookup for all of them, and a Pending Export load only for the objects to release.
+    /// </para>
+    /// </summary>
+    /// <param name="reconciledConnectedSystemObjects">The objects this import updated, which reconciliation has judged.</param>
+    private async Task JudgeUnreconciledInitialPasswordHoldsAsync(IReadOnlyCollection<ConnectedSystemObject> reconciledConnectedSystemObjects)
+    {
+        var holds = await _syncRepo.GetInitialPasswordHoldSummariesAsync(_connectedSystem.Id);
+        if (holds.Count == 0)
+            return;
+
+        var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
+        var unreconciled = holds.Where(hold => !reconciledIds.Contains(hold.ConnectedSystemObjectId)).ToList();
+        if (unreconciled.Count == 0)
+            return;
+
+        // An object joined to no Metaverse Object is owed nothing, and is released without a lookup.
+        var metaverseObjectIds = unreconciled
+            .Where(hold => hold.MetaverseObjectId.HasValue)
+            .Select(hold => hold.MetaverseObjectId!.Value)
+            .Distinct()
+            .ToList();
+        var owed = metaverseObjectIds.Count == 0
+            ? new HashSet<Guid>()
+            : await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
+
+        // Only the objects with nothing owed are loaded and judged; a change still owed a password stays exactly as it is,
+        // which is what judging it would do, so the ordinary case loads nothing more.
+        var metaverseObjectIdByConnectedSystemObjectId = unreconciled
+            .GroupBy(hold => hold.ConnectedSystemObjectId)
+            .ToDictionary(group => group.Key, group => group.First().MetaverseObjectId);
+        var toRelease = metaverseObjectIdByConnectedSystemObjectId
+            .Where(entry => entry.Value is not { } metaverseObjectId || !owed.Contains(metaverseObjectId))
+            .Select(entry => entry.Key)
+            .ToHashSet();
+        var stillOwedCount = unreconciled.Count(hold => !toRelease.Contains(hold.ConnectedSystemObjectId));
+
+        var releasedCount = 0;
+        if (toRelease.Count > 0)
+        {
+            var pendingExportsByConnectedSystemObjectId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(toRelease);
+            var pendingExportsToUpdate = new List<PendingExport>();
+            foreach (var (connectedSystemObjectId, pendingExport) in pendingExportsByConnectedSystemObjectId)
+            {
+                var result = new PendingExportReconciliationResult();
+                _syncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled(connectedSystemObjectId,
+                    metaverseObjectIdByConnectedSystemObjectId.GetValueOrDefault(connectedSystemObjectId), pendingExport, result, owed);
+
+                releasedCount += result.ReleasedChanges.Count;
+                if (result.PendingExportToUpdate != null)
+                    pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+            }
+
+            // Persisted exactly as reconciliation persists a release. No item is raised: the interim value was written on
+            // purpose, so this is not an unconfirmed export.
+            await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
+        }
+
+        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked, Executing
+        // or Failed), and is left alone here too.
+        Log.Information("JudgeUnreconciledInitialPasswordHoldsAsync: Judged {Count} change(s) held until an Initial Password is delivered on " +
+            "Connected System Object(s) this import did not return. Still held (Initial Password owed): {Held}, " +
+            "Released (no Initial Password owed): {Released}, Left on a Parked, Executing or Failed export: {Left}",
+            unreconciled.Count, stillOwedCount, releasedCount, unreconciled.Count - stillOwedCount - releasedCount);
+    }
+
+    /// <summary>
+    /// The Metaverse Objects among this page's accounts still owed a password on this Connected System (#2039), for the
+    /// engine to hold or release a change written with an interim value until an Initial Password is delivered. Queries
+    /// only when the page holds such a change, so a page (and a deployment) with none never pays for the lookup; returns
+    /// null then, which the engine never reads because nothing is flagged.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>?> GetMetaverseObjectIdsOwedPasswordForPageAsync(
+        IReadOnlyCollection<ConnectedSystemObject> pageCsos,
+        IReadOnlyDictionary<Guid, PendingExport> pendingExportsByCsoId)
+    {
+        var csosWithAFlaggedChange = pageCsos
+            .Where(cso => pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport) &&
+                pendingExport.AttributeValueChanges.Any(SyncEngine.IsAwaitingInitialPassword))
+            .ToList();
+        if (csosWithAFlaggedChange.Count == 0)
+            return null;
+
+        // A flagged change on an object with no Metaverse Object is owed nothing and is released without a lookup.
+        var metaverseObjectIds = csosWithAFlaggedChange
+            .Where(cso => cso.MetaverseObjectId.HasValue)
+            .Select(cso => cso.MetaverseObjectId!.Value)
+            .Distinct()
+            .ToList();
+        if (metaverseObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
     }
 }

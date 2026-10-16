@@ -33,18 +33,44 @@ internal sealed class ScimConnectorExport
     private readonly ILogger _logger;
     private readonly ScimBulkExporter? _bulkExporter;
 
+    /// <summary>
+    /// How long a request already under way may run on once the export run is cancelled, before JIM stops waiting for it
+    /// (#2083). Long enough for an ordinary request, and a bound on one held up by a provider's retries and throttling
+    /// waits, which could otherwise hold a cancellation up for many minutes.
+    /// </summary>
+    internal static readonly TimeSpan DefaultInFlightGracePeriod = TimeSpan.FromSeconds(30);
+
+    private readonly TimeSpan _inFlightGracePeriod;
+
     /// <param name="bulkEndpointState">
     /// What this run has learned about the provider's bulk endpoint, or null where the administrator has
     /// not opted into bulk operations.
     /// </param>
-    public ScimConnectorExport(ScimHttpClient client, ScimDiscoveryResult discovery, ILogger logger, ScimBulkEndpointState? bulkEndpointState = null)
+    /// <param name="inFlightGracePeriod">
+    /// How long a request already under way may run on once the run is cancelled; <see cref="DefaultInFlightGracePeriod"/>
+    /// when null.
+    /// </param>
+    public ScimConnectorExport(ScimHttpClient client, ScimDiscoveryResult discovery, ILogger logger, ScimBulkEndpointState? bulkEndpointState = null,
+        TimeSpan? inFlightGracePeriod = null)
     {
         _client = client;
         _discovery = discovery;
         _logger = logger;
+        _inFlightGracePeriod = inFlightGracePeriod ?? DefaultInFlightGracePeriod;
         _bulkExporter = bulkEndpointState == null ? null : new ScimBulkExporter(client, discovery.Capabilities, bulkEndpointState, logger);
     }
 
+    /// <summary>
+    /// Applies a batch of Pending Exports, returning one result per Pending Export in the same order.
+    /// <para>
+    /// A cancelled run stops between requests, never inside one (#2083). Preparation only reads, so a cancellation
+    /// during it throws before anything is written. Once requests are being sent, the one under way finishes, so a
+    /// resource the provider has created comes back with its id, and every change not yet sent is reported
+    /// <see cref="ConnectedSystemExportResult.NotAttempted"/>. Throwing instead would lose the id of every resource
+    /// already created, and JIM would post them again. A request still under way once the grace period after the
+    /// cancellation has run out is abandoned and reported as a failed attempt whose outcome is unknown.
+    /// </para>
+    /// </summary>
     public async Task<List<ConnectedSystemExportResult>> ExecuteAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         var prepared = new List<ScimPreparedExport>(pendingExports.Count);
@@ -54,7 +80,8 @@ internal sealed class ScimConnectorExport
             prepared.Add(await PrepareAsync(pendingExport, cancellationToken));
         }
 
-        var results = await DispatchAsync(prepared, cancellationToken);
+        using var inFlight = new InFlightCancellation(cancellationToken, _inFlightGracePeriod);
+        var results = await DispatchAsync(prepared, cancellationToken, inFlight);
         LogSummary(pendingExports, results);
 
         return results;
@@ -64,7 +91,7 @@ internal sealed class ScimConnectorExport
     /// <summary>
     /// Sends whatever preparation did not already settle, either a batch at a time or one request each.
     /// </summary>
-    private async Task<List<ConnectedSystemExportResult>> DispatchAsync(List<ScimPreparedExport> prepared, CancellationToken cancellationToken)
+    private async Task<List<ConnectedSystemExportResult>> DispatchAsync(List<ScimPreparedExport> prepared, CancellationToken cancellationToken, InFlightCancellation inFlight)
     {
         var outstanding = prepared
             .Select((item, index) => (item, index))
@@ -73,8 +100,8 @@ internal sealed class ScimConnectorExport
             .ToList();
 
         var sent = _bulkExporter is { IsUsable: true }
-            ? await _bulkExporter.ExecuteAsync(outstanding, SendAsync, cancellationToken)
-            : await SendEachAsync(outstanding, cancellationToken);
+            ? await _bulkExporter.ExecuteAsync(outstanding, SendAsync, cancellationToken, inFlight)
+            : await SendEachAsync(outstanding, cancellationToken, inFlight);
 
         var results = new List<ConnectedSystemExportResult>(prepared.Count);
         for (var index = 0; index < prepared.Count; index++)
@@ -90,18 +117,52 @@ internal sealed class ScimConnectorExport
         return results;
     }
 
-    private async Task<Dictionary<int, ConnectedSystemExportResult>> SendEachAsync(List<ScimBulkExportOperation> operations, CancellationToken cancellationToken)
+    private async Task<Dictionary<int, ConnectedSystemExportResult>> SendEachAsync(List<ScimBulkExportOperation> operations, CancellationToken cancellationToken,
+        InFlightCancellation inFlight)
     {
         var results = new Dictionary<int, ConnectedSystemExportResult>(operations.Count);
 
         foreach (var operation in operations)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            results[operation.Index] = await SendAsync(operation.Operation, cancellationToken);
+            // A request started is not handed the run's token, so it finishes and its outcome is recorded (#2083).
+            results[operation.Index] = cancellationToken.IsCancellationRequested
+                ? ConnectedSystemExportResult.NotAttempted()
+                : await SendWithinGracePeriodAsync(operation.Operation, SendAsync, inFlight, _logger);
         }
 
         return results;
     }
+
+    /// <summary>
+    /// Sends one operation with the in-flight cancellation (#2083), reporting it abandoned if the grace period after the run
+    /// was cancelled runs out while it is under way.
+    /// </summary>
+    internal static async Task<ConnectedSystemExportResult> SendWithinGracePeriodAsync(
+        ScimExportOperation operation,
+        Func<ScimExportOperation, CancellationToken, Task<ConnectedSystemExportResult>> send,
+        InFlightCancellation inFlight,
+        ILogger logger)
+    {
+        try
+        {
+            return await send(operation, inFlight.Token);
+        }
+        catch (OperationCanceledException) when (inFlight.IsCancellationRequested)
+        {
+            logger.Warning("SCIM export: a {Method} of {Path} was still under way {GracePeriod} after the run was cancelled, so JIM stopped waiting for it",
+                operation.Method.Method, LogSanitiser.Sanitise(operation.Path), inFlight.GracePeriod);
+            return Abandoned(inFlight);
+        }
+    }
+
+    /// <summary>
+    /// The result for a change whose request was still under way when the grace period after the run's cancellation ran out
+    /// (#2083). Whether the provider applied it is unknown, so it is a failed attempt, never a success.
+    /// </summary>
+    internal static ConnectedSystemExportResult Abandoned(InFlightCancellation inFlight) =>
+        ConnectedSystemExportResult.Failed(
+            $"The export run was cancelled, and the request for this change was still under way {inFlight.GracePeriod.TotalSeconds:0} seconds later, " +
+            "so JIM stopped waiting for it. Whether the service provider applied it is not known; the next import will show what it holds.");
 
     /// <summary>
     /// Sends one operation as its own request.
@@ -129,6 +190,17 @@ internal sealed class ScimConnectorExport
                 operation.Method.Method, LogSanitiser.Sanitise(operation.Path));
 
             return ScimExportErrorClassifier.Failure(ex.Message, (int?)ex.StatusCode, ex.Error);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Anything else (the transport, or an authentication refresh, failing in a way the provider did not answer)
+            // fails this change alone (#2197). Escaping the batch would lose the result of every request already made, so a
+            // resource already created would be posted again. Cancellation still propagates, to be handled as the run's.
+            _logger.Error(ex, "SCIM export: a {Method} of {Path} failed before the service provider answered it.",
+                operation.Method.Method, LogSanitiser.Sanitise(operation.Path));
+
+            return ConnectedSystemExportResult.Failed(
+                $"The request for this change failed before the service provider answered it: {ex.Message} Whether the service provider applied it is not known; the next import will show what it holds.");
         }
     }
 
@@ -321,8 +393,17 @@ internal sealed class ScimConnectorExport
     /// on a multi-valued attribute (append versus replace the lot) and are the same on a single-valued
     /// one, which is why the distinction is kept rather than collapsed.
     /// </summary>
+    /// <remarks>
+    /// A change carrying no value is a clear: an all-null Update, which is how export staging tells a
+    /// single-valued attribute it holds nothing (#2182), or a RemoveAll. RFC 7644 section 3.5.2.3 requires
+    /// a replace to carry a value, and a null one is left out of the request altogether, so a clear is sent
+    /// as a remove naming the attribute alone, which section 3.5.2.2 reads as removing every value it holds.
+    /// </remarks>
     private static string PatchOperation(PendingExportAttributeValueChange change)
     {
+        if (ValueOf(change) == null)
+            return ScimPatchOperations.Remove;
+
         return change.ChangeType switch
         {
             PendingExportAttributeChangeType.Add => ScimPatchOperations.Add,
@@ -423,10 +504,13 @@ internal sealed class ScimConnectorExport
         var updated = 0;
         var deleted = 0;
         var failed = 0;
+        var notAttempted = 0;
 
         for (var index = 0; index < pendingExports.Count; index++)
         {
-            if (!results[index].Success)
+            if (results[index].IsNotAttempted)
+                notAttempted++;
+            else if (!results[index].Success)
                 failed++;
             else if (pendingExports[index].ChangeType == PendingExportChangeType.Create)
                 created++;
@@ -436,8 +520,8 @@ internal sealed class ScimConnectorExport
                 updated++;
         }
 
-        _logger.Information("SCIM export: {Created} created, {Updated} updated, {Deleted} deleted, {Failed} failed, out of {Total} Pending Export(s).",
-            created, updated, deleted, failed, pendingExports.Count);
+        _logger.Information("SCIM export: {Created} created, {Updated} updated, {Deleted} deleted, {Failed} failed, {NotAttempted} not attempted because the run was cancelled, " +
+            "out of {Total} Pending Export(s).", created, updated, deleted, failed, notAttempted, pendingExports.Count);
     }
 
     /// <summary>

@@ -44,7 +44,9 @@ public enum ActivityRunProfileExecutionItemErrorType
     UnexpectedAttribute,
     /// <summary>
     /// An attribute contains a reference to another Connected System Object that could not be found.
-    /// This may occur when the referenced object is outside the configured container scope.
+    /// This may occur when the referenced object is outside the configured container scope. On import, one error
+    /// covers every reference the object was left with; the item's <c>UnresolvedReferenceCount</c> records how many,
+    /// and is set even when another error holds the item's error slot (#959).
     /// </summary>
     UnresolvedReference,
     /// <summary>
@@ -202,5 +204,52 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// classify such rejections (<c>SupportsUniquenessRejectionClassification</c>); a data conflict for an
     /// administrator to resolve, not a JIM defect, so it does not count as an unhandled error.
     /// </summary>
-    UniqueValueAlreadyInUse
+    UniqueValueAlreadyInUse,
+
+    /// <summary>
+    /// An Object Matching Rule could not be worked out for the object (#2052): its expression threw, its result could
+    /// not be converted to the Metaverse attribute's type, or the rule's shape cannot be compared. Before provisioning,
+    /// also when the rule's expression could not be worked out for some of the target's objects and nothing else
+    /// matched, since one of those may be the object's own account. The object was
+    /// neither joined nor projected (on export, not provisioned), so a broken rule cannot flood the Metaverse with
+    /// duplicate identities. The message names the rule and the fault; the object is retried on the next
+    /// synchronisation.
+    /// </summary>
+    ObjectMatchingRuleFailed,
+
+    /// <summary>
+    /// An imported object's External ID already belongs to a Connected System Object of another Object Type in the
+    /// same Connected System, so the object has changed Object Type (an overlapping Object Type was selected or
+    /// deselected, the schema changed, or the entry was converted in the directory). JIM creates nothing and leaves
+    /// the existing Connected System Object and its join untouched, rather than retire it and create a new one,
+    /// which could delete its Metaverse Object. Raised only for Connectors whose External IDs identify one object
+    /// across every Object Type (<c>ExternalIdsUniqueAcrossObjectTypes</c>), and only while the Run Profile does
+    /// not allow Object Type changes (#2049). A configuration conflict for an administrator to resolve, not a JIM
+    /// defect, so it does not count as an unhandled error.
+    /// </summary>
+    ObjectTypeChanged,
+
+    /// <summary>
+    /// Active Directory refused to create or enable a user account because the account has no password (#2039).
+    /// The message names the remedies: give the provisioning Synchronisation Rule an Initial Password, so JIM creates
+    /// the account disabled and enables it once the password is set, or create the account disabled. Configuration to
+    /// act on, not a JIM defect, so it does not count as an unhandled error.
+    /// </summary>
+    PasswordRequiredToEnableAccount,
+
+    /// <summary>
+    /// Before provisioning, an Object Matching Rule found more than one existing Connected System Object in the target
+    /// for the Metaverse Object (#2052). JIM cannot tell which account is the identity's, so it neither joined one nor
+    /// provisioned another; the item lists the accounts it found. Previously the lowest-id account was joined.
+    /// </summary>
+    AmbiguousProvisioningMatch,
+
+    /// <summary>
+    /// A Synchronisation Rule's scoping criterion could not be evaluated for the object (#2053): its pattern ran past
+    /// its time limit on one of the object's values. JIM cannot tell whether the object is in scope, so it takes no
+    /// action for it this run: it is neither brought into scope nor taken out, and keeps any join it already has. The
+    /// message names the attribute and the pattern; the object is retried on the next synchronisation. Configuration
+    /// to act on, not a JIM defect, so it does not count as an unhandled error.
+    /// </summary>
+    ScopingCriterionFailed
 }

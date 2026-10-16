@@ -1,24 +1,30 @@
 ---
 title: Synchronisation Rules
+description: What a Synchronisation Rule ties together, its direction, and where to configure its scope, matching, mappings and deprovisioning.
+type: object
+audience: administrator
+validated: v0.16.0
 ---
 
 # Synchronisation Rules
 
-A **Synchronisation Rule** defines the complete relationship between a [Connected System](connected-systems.md) and the metaverse. It controls which objects are in scope, how objects are matched, when new Metaverse Objects are created, and how attributes flow between systems.
+A **Synchronisation Rule** defines the complete relationship between a [Connected System](connected-systems.md) and the Metaverse. It controls which objects are in scope, how objects are matched, when new Metaverse Objects are created, and how attributes flow between systems.
 
 Synchronisation Rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
 
 ## What a Synchronisation Rule ties together
 
-1. **Direction**<br /> Whether data flows inbound (a source system into the metaverse) or outbound (the metaverse out to a target system).
+1. **Direction**<br /> Whether data flows inbound (a source system into the Metaverse) or outbound (the Metaverse out to a target system).
 2. **Scoping criteria**<br /> Which objects the rule applies to.
 3. **Object Matching Rules**<br /> How to match a Connected System Object to an existing Metaverse Object.
 4. **Projection or Provisioning**<br /> What to do when no match is found.
 5. **Attribute mappings**<br /> Which attributes to synchronise and how to transform them.
 
-Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [configuration change history](activities.md#configuration-change-history).
+Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [Configuration Change History](activities.md#configuration-change-history).
 
-A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-systems.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
+A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-system-schema.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
+
+A saved rule's Object Types cannot be changed: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of those types, and would read nothing on another. Neither the portal, the REST API nor PowerShell offers a way to change them once the rule is saved, and JIM refuses a save that would. To manage another Object Type, create a new Synchronisation Rule.
 
 A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
 
@@ -30,228 +36,49 @@ Each rule has a direction that determines the flow of data.
 
 ### Import (inbound)
 
-Import rules process data from a Connected System into the metaverse. They are used with **source systems**: systems that provide authoritative identity data (HR databases, badge systems, etc.).
+Import rules process data from a Connected System into the Metaverse. They are used with **source systems**: systems that provide authoritative identity data (HR databases, badge systems, etc.).
 
 An import rule:
 
-- Reads CSOs from the Connected System's connector space
-- Attempts to join each CSO to an existing MVO using the rule's object matching configuration
-- Projects a new MVO if no match is found and projection is enabled
-- Flows attribute values from the CSO to the MVO
+- Reads Connected System Objects from the Connected System's Connector Space
+- Attempts to join each Connected System Object to an existing Metaverse Object using the rule's object matching configuration
+- Projects a new Metaverse Object if no match is found and projection is enabled
+- Flows attribute values from the Connected System Object to the Metaverse Object
 
 ### Export (outbound)
 
-Export rules push data from the metaverse to a Connected System. They are used with **target systems**: systems that receive provisioned identity data (LDAP directories, email systems, etc.).
+Export rules push data from the Metaverse to a Connected System. They are used with **target systems**: systems that receive provisioned identity data (LDAP directories, email systems, etc.).
 
 An export rule:
 
-- Evaluates MVOs in the metaverse against the rule's scoping criteria
-- Provisions a new CSO in the target system's connector space if one does not exist (and provisioning is enabled)
-- Flows attribute values from the MVO to the CSO
+- Evaluates Metaverse Objects in the Metaverse against the rule's scoping criteria
+- Provisions a new Connected System Object in the target system's Connector Space if one does not exist (and provisioning is enabled)
+- Flows attribute values from the Metaverse Object to the Connected System Object
 - Creates Pending Exports for any changes
 
-When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the metaverse-derived value. For a [generated value](#generated-values) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
+When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
 
 A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
 
 ## Scoping criteria
 
-Scoping criteria determine which objects the rule applies to. Only objects that match are processed.
-
-For import rules, criteria evaluate CSO attributes:
-
-```text
-cs["objectClass"] = "user" AND cs["employeeType"] = "FTE"
-```
-
-For export rules, criteria evaluate MVO attributes:
-
-```text
-mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
-```
-
-Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning. Changing an export rule's criteria moves objects too, at the next synchronisation; see [When a change to an export rule takes effect](#when-a-change-to-an-export-rule-takes-effect).
-
-An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activities.md#execution-items).
-
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Criteria expressions use the JIM [expression language](../concepts/expressions.md).
-
-Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
-
-### How criteria are evaluated
-
-Three rules decide outcomes that are easy to misread from the editor:
-
-- **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
-- **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
-- **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
-
-To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
-
-### Multi-valued attributes in scope
-
-A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:
-
-- **Positive operators**<br /> *equals*, *starts with*, *ends with*, *contains*, and the ordering comparisons (*less than*, *before*, *greater than*, *after* and their *or equal to* forms) are met when **any** value matches.
-- **Negated operators**<br /> *does not equal*, *does not start with*, *does not end with* and *does not contain* are met when **no** value matches.
-- **No values at all**<br /> Handled exactly as for a single-valued attribute: only an *equals* criterion with an empty value matches.
-
-For example, an export rule scoped to `Groups` *contains* `Finance` includes a Metaverse Object whose groups are `All Staff` and `Finance Readers`, and `Groups` *does not contain* `Finance` excludes it. An import rule scoped to `objectClass` *equals* `user` includes a directory user whose classes are `top`, `person`, `organizationalPerson` and `user`.
-
-Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
-
-### Relative dates in scope filters
-
-A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
-
-A relative criterion is a **count**, a **unit** (Hours, Days, Weeks, Months or Years) and a **direction** (Ago for the past, From now for the future). Date/time operators read in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*.
-
-- **Whole-day rounding**<br /> Days and coarser units resolve to midnight UTC, so "30 days ago" is a clean day boundary. The Hours unit keeps exact-instant precision for finer windows.
-- **Calendar-correct**<br /> Month and year offsets respect the calendar (31 March minus one month is the last day of February).
-- **Evaluated on demand**<br /> The boundary is resolved fresh each run from the host's UTC clock; nothing is stored as a fixed date.
-
-For example, to scope an export rule to leavers terminated between 30 and 364 days ago, use an **All** group with two criteria on the termination-date attribute: *on or before* `30 days ago` and *after* `364 days ago`.
-
-Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or via the [PowerShell cmdlets](../powershell/synchronisation-rules.md) and the REST API.
-
-### Previewing a scope change
-
-Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
-
-The **Preview Scope Impact** button, which appears beside the editor's save button once you have edited the criteria, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
-
-- **Leaving an import rule's scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
-- **Leaving an export rule's scope**<br /> A Metaverse Object with an object in the target system, which the **Deprovisioning Action** then removes from the target or disconnects and leaves in place; a Metaverse Object with no target object that a provisioning rule would have created a Connected System Object for and now will not; and a Metaverse Object with no target object under a rule that does not provision, which leaves scope with nothing to remove.
-- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System. An export rule that does not provision, or whose target object already exists, reports the object as entering export scope and creates nothing.
-
-Two answers are deliberately negative rather than reassuring. Removing every criterion is called out as a warning, because it hands the rule every object of its type and is one click away from tidying up. And where another import Synchronisation Rule covers the same object type with **no** criteria of its own, that rule keeps every object in scope whatever this one says, so narrowing this rule disconnects nobody: the preview names that rule and counts no departures, rather than reporting a disconnection wave that would never happen.
-
-Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the criteria afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -ScopingCriteriaGroup`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/scoping-criteria/preview` endpoint.
+Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers how criteria are evaluated, multi-valued attributes, relative dates, and previewing a scope change.
 
 ## Object Matching Rules
 
-Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
-
-| CSO Attribute | MVO Attribute | Description |
-|---------------|---------------|-------------|
-| `employeeId` | `Employee ID` | Match on employee identifier |
-| `mail` | `Email Address` | Match on email address |
-
-JIM evaluates the matching rules in order and uses the first match found. You can configure multiple matching rules as a fallback strategy:
-
-1. First, try to match on `employeeId` (most reliable)
-2. If no match, try `mail` (secondary)
-3. If no match, try `firstName` + `lastName` (least reliable)
-
-Attribute comparisons in a matching rule are case-sensitive by default. Where systems disagree on casing, you can make an individual rule case-insensitive; see [Case Sensitivity](../concepts/case-sensitivity.md).
-
-### Matching outcomes
-
-| Outcome | Description |
-|---------|-------------|
-| **Joined** | Exactly one matching MVO found; the CSO is linked to it |
-| **No match** | No matching MVO found; projection may create one |
-| **Multiple matches** | More than one MVO matches; an error is raised (ambiguous join) |
-
-### Simple vs advanced matching mode
-
-Object matching can be configured at two levels:
-
-- **Simple mode**<br /> Configured at the Connected System level; the matching rules are shared across all Synchronisation Rules for that system. Easier to manage when matching is uniform.
-- **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System.
-
-A Simple mode rule also names the **Metaverse Object Type** it searches. It has to: with no Synchronisation Rule
-behind it, nothing else says where to look, and a rule that does not say is skipped during synchronisation. An
-Advanced mode rule does not name one, because the Synchronisation Rule that owns it already does.
-
-JIM refuses to save a rule that could never match, naming what is missing. If any rule already stored has that
-shape, the Matching tab says so and names it, so it can be removed and recreated.
-
-The active mode also decides which rules the synchronisation engine consults: type-scoped rules in simple mode,
-each Synchronisation Rule's own rules in advanced mode. A rule of the other scope would be silently inert, so JIM
-refuses to create one, naming the active mode and the remedy (create the rule in the scope the mode consults, or
-switch the mode first). Rules of the other scope that already exist, retained by a mode switch, stay editable and
-deletable so a later switch back can restore them.
-
-Switching the mode warns about anything it strands:
-
-- **To advanced mode**: the type-scoped rules are retained but no longer consulted (they resume effect on a switch
-  back), and export Synchronisation Rules receive no copied rules, so export matching stops for them until rules
-  are added; provisioning proceeds as though no match existed.
-- **To simple mode**: where an object type already has rules, those take precedence and the Synchronisation Rules'
-  own rules are discarded rather than migrated.
-
-The warnings appear in the portal after the switch, in the REST response's `warnings` list, and on the PowerShell
-warning stream from `Switch-JIMMatchingMode`.
-
-### Previewing a behaviour change
-
-The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
-population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
-**Provision To Connected System** on reads like granting a capability and is Connected System Object creation at scale. Turning
-**Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
-
-**Preview Behaviour Impact**, which appears beside the editor's save button once you have edited a toggle, answers
-what your edited toggles would do without saving them:
-
-| Transition | What it means |
-|---|---|
-| No longer creates a Metaverse Object | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
-| No longer creates a Connected System Object | Metaverse Objects that would have had a Connected System Object created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
-| Free to drift from JIM | Objects whose divergence from what JIM holds would no longer be corrected. |
-| Projected to the Metaverse / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
-
-**Direction cannot be previewed, and cannot be changed.** A saved rule's Attribute Flow mappings and Object
-Matching Rules are written for the direction it has: an import rule's mappings write Metaverse Attributes and its
-matching rules search the Metaverse, so flipped to Export every one of them would address the wrong side. The
-preview refuses with a blocking finding rather than answering about a configuration that cannot work. Create a rule
-in the direction you need instead.
-
-Toggles that do nothing in the rule's direction are called out rather than counted as zero, because "nothing is
-affected" and "this setting does not apply here" are different statements and only one of them explains an empty
-result. **Enforce State** and **Provision To Connected System** apply to Export rules; **Project To Metaverse**
-applies to Import rules.
-
-Automation gets the same evaluation: `New-JIMConfigurationChangePreview -SyncRuleId <id> -RuleState Disabled`, or
-`POST` to the rule's `behaviour/preview` endpoint. See
-[Configuration Change Preview](configuration-changes.md).
-
-### Previewing an Object Matching change
-
-Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong Metaverse Object, and everything it
-contributes goes with it; a rule matched too tightly projects a second Metaverse Object beside the right one. Both look like
-a successful synchronisation, and both are found later by a person.
-
-The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
-switch. It answers what the proposed matching would do, without saving it.
-
-The preview reports:
-
-| Transition | What it means |
-|---|---|
-| Joins a different Metaverse Object | The object joins one Metaverse Object under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
-| Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new Metaverse Object for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
-| Projects instead of joining | The inverse, and a duplicate Metaverse Object risk: the object matches today and would match nothing, so a second Metaverse Object would be created beside the one it should have joined. |
-| Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. |
-
-One thing decides how to read every one of those counts: **Object Matching Rules are evaluated only for objects that
-are not already joined**. An account with a Metaverse Object keeps it, whatever you change here, so the impact covers
-the unjoined population alone. The preview says so before it says anything else.
-
-Automation gets the same evaluation, over the whole matching configuration rather than one rule at a time:
-`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -MatchingRule <rules>`, or `POST` to the Connected
-System's `matching-rules/preview` endpoint. Add `-ObjectMatchingRuleMode` to preview the Simple/Advanced switch. See
-[Configuration Change Preview](configuration-changes.md).
+Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing a Connected System attribute, or an [expression](object-matching-rules.md#matching-on-an-expression) worked out from the Connected System Object, with a Metaverse attribute. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
 
 ## Projection and provisioning
 
 These determine what happens when no match is found.
 
-**Projection** applies to import rules. If projection is enabled, JIM creates a new MVO of the specified object type and links the CSO to it. This is how new identities enter the metaverse for the first time. If projection is not enabled, the CSO remains disconnected.
+**Projection** applies to import rules. If projection is enabled, JIM creates a new Metaverse Object of the specified object type and links the Connected System Object to it. This is how new identities enter the Metaverse for the first time. If projection is not enabled, the Connected System Object remains disconnected.
 
 Where the object type is deleted [When Authoritative Source Disconnected](metaverse.md#authoritative-source-trigger-modes), a projecting rule's Connected System should normally be one of the type's authoritative sources; otherwise the objects it creates are governed by no source. Saving a rule that newly projects from a system that is not one asks you to confirm first. A rule that only joins (projection off) never does: that is the normal way to add a system that contributes attributes without governing lifecycle.
 
-**Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new CSO in the target system's connector space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
+**Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new Connected System Object in the target system's Connector Space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
+
+Before provisioning, the rule's Object Matching Rules look for an unjoined account already in the target, so it is joined rather than duplicated; if several match, JIM provisions nothing for that rule and reports an **Ambiguous Provisioning Match**. See [Matching outcomes](object-matching-rules.md#matching-outcomes).
 
 If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
 
@@ -259,533 +86,30 @@ If a Full Import completes without reporting the object back at all, the Create 
 
 ## Deprovisioning Action
 
-Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
-
-- **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported: a change queued for the object while it was in scope, and not yet exported, is withdrawn by the next export run rather than written to an object JIM no longer manages.
-- **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
-
-The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, Delete wins.
-
-**Changing the action** reaches objects that have already left the rule's scope at the next synchronisation (see [below](#when-a-change-to-an-export-rule-takes-effect)), not only future leavers. Switching from Delete to Disconnect withdraws each delete the rule queued that has not been exported yet, including one waiting to be retried after a failure, and disconnects the object instead, so its account stays. A delete already exported, or being exported at that moment, goes ahead: the account is removed as queued and the next import confirms it. Switching from Disconnect to Delete queues deletes for joined objects already outside the rule's scope.
-
-One case sits outside the action altogether: provisioning that was **never exported**. If JIM has staged a new object for the Connected System (a Connected System Object in **Pending Provisioning** status, carrying a Create Pending Export) and the Metaverse Object leaves scope or is deleted before any export has run, there is nothing in the Connected System for either action to apply to. JIM cancels the provisioning instead: the unsent Create Pending Export and the Connected System Object are removed together, and nothing is exported. Once a Create has been sent, confirmed or not, the object may exist in the Connected System and the Deprovisioning Action applies as described above. The cancellation is reported on the Activity as a [**Provisioning cancelled**](activities.md#execution-items) outcome, so it is visible in the causality tree and Table view rather than only in logs.
-
-Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
-
-### When a change to an export rule takes effect
-
-JIM evaluates a Metaverse Object against the export rules whenever its own values change. A change to the rule is different: it can move objects whose values have not changed at all into or out of the rule's scope, or change what happens to objects already outside it. So when you save an export rule in a way that can do either, JIM marks every Metaverse Object of the rule's object type for review:
-
-- creating an enabled export rule
-- enabling a disabled export rule
-- switching **Provision to Connected System** on
-- changing the rule's Scoping Criteria, whether widening or narrowing them
-- changing the rule's [Deprovisioning Action](#deprovisioning-action)
-
-The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing export scope** step. It records an **Export Scope Review** execution item, named after and linking the Metaverse Object, for each object it provisioned, deprovisioned or queued an export for; an object it found already as the rule wants it gets none, so the few objects a change actually moved are not lost among the whole type. It reviews every object of the type once, so on a large population expect that run to take longer than usual.
-
-Some changes deliberately mark nothing:
-
-- **Disabling a rule, or switching provisioning off**<br /> The rule stops acting from then on; nothing it already created is deprovisioned.
-- **Renaming a rule, or editing its Attribute Flow**<br /> Neither can move an object into or out of scope. A changed export Attribute Flow reaches existing objects at the target system's next Full Synchronisation, which corrects every object to the new configuration while the rule [enforces state](#export-outbound) (the default). With Enforce State off, each object picks the change up the next time one of its values changes.
-
-A change saved while a synchronisation is already running is not lost: that run carries on with the rules as they were when it started, and leaves the review for the next one.
-
-**Changes saved before this release.** Only changes saved from this release onwards are reviewed. If an export rule was created, re-enabled, switched to provisioning or re-scoped on an earlier release, objects it should have provisioned or deprovisioned may still be waiting for a change of their own. On a rule that provisions, switch **Provision to Connected System** off and save, then switch it on and save again: the next synchronisation reviews every object of the rule's type. On a rule that does not provision, the next change saved to its Scoping Criteria reviews them. A Deprovisioning Action switched from Delete to Disconnect on an earlier release leaves the deletes it queued before the switch in place; to have them withdrawn, switch it to Delete and back to Disconnect, saving each time, before the next export runs. That reaches accounts JIM still manages; a delete the earlier release left queued for an account it had already disconnected is still exported.
-
-### Seeing what a run has deprovisioned
-
-Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted Metaverse Object's execution item as a **Pending Export** outcome nested beneath the **Metaverse Object deleted** outcome that caused it, naming the Connected System the account is being removed from and the export rule whose Deprovisioning Action queued it, and is counted in the Activity's Pending Exports total. Where several export rules cover the account, that is the rule whose Delete won. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, Metaverse Object deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
-
-This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the Metaverse Object is deleted inline), and in the background [Scheduled Metaverse Object Deletion](activities.md#scheduled-metaverse-object-deletion) batch that deletes Metaverse Objects once their grace period expires.
-
-A delete queued because an object left an export rule's scope, whether its own values changed or a [change to the rule](#when-a-change-to-an-export-rule-takes-effect) moved it, is reported the same way: as a **Deprovision queued** outcome on that object's execution item, naming the Connected System the account is being removed from, and counted in the Activity's Pending Exports total.
-
-Where the rule's Deprovisioning Action is **Disconnect**, the account stays in the Connected System and nothing is queued, so the run reports a **Disconnected from target system** outcome instead, in the same place: on the execution item of the object that left scope, or beneath the **Metaverse Object deleted** outcome when the Metaverse Object was deleted. It names the Connected System and the export rule whose action left the account in place, and links the account that JIM no longer manages. It is not counted as a Pending Export. [Sync Preview](sync-preview.md) predicts both outcomes in the same place.
-
-### Previewing a destructive toggle change
-
-Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
-
-The **Preview Deprovisioning Impact** button, which appears beside the editor's save button once you have edited either action, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the toggles as they stand on the form, evaluated against the rule's saved configuration, changing nothing. It answers two different questions and keeps them apart:
-
-- **What the next synchronisation would do differently.** Objects the rule already has something to act on: a joined object whose Metaverse Object is already outside an export rule's scope would be deleted from the target system rather than disconnected (or the reverse; an object whose delete has already been exported is left out, because the delete goes ahead either way), and a joined object outside import scope, or already marked obsolete, would be disconnected rather than keep its join (or the reverse). Where those disconnections would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
-- **What changes for every object the rule manages.** Flipping an export rule's action to Delete deletes nothing today, but it changes what every future scope exit means for every managed object. The preview states that exposure as its own count ("scope-exit action changes"), so "3,400 objects in this system move from Disconnect to Delete" reads at a glance without overstating what the save itself does.
-
-Where several import rules cover the same object type, the Out-of-Scope Action that applies is taken from the first applicable rule. If that is not the rule you are editing, the preview says so by name and counts nothing, because your change would do nothing while that rule exists.
-
-Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit either toggle afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -SyncRuleId`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/destructive-toggles/preview` endpoint.
+Each export rule's **Deprovisioning Action** decides what happens to its object in the Connected System when the Metaverse Object leaves the rule's scope or is deleted. [Deprovisioning](deprovisioning.md) covers the actions, when a change to an export rule takes effect, seeing what a run deprovisioned, and previewing a destructive change.
 
 ## Initial password
 
-A Connected System Object a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every Connected System Object that rule creates.
-
-For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
-
-It is off until you turn it on, on every rule: JIM setting passwords on Connected System Objects nobody asked it to is not a sensible default.
-
-It also depends on the rule provisioning. Only a newly created Connected System Object has never had a password, so the tab appears only on an export rule with **Provision ... to the Connected System?** switched on, which is a setting on the Details tab. Switching that off removes the tab and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any Connected System Objects parked waiting on those settings stop waiting. Switching provisioning back on brings the tab back with its settings intact, switched off.
-
-The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
-
-### What you configure
-
-- **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every Connected System Object](#one-password-for-every-connected-system-object). The first two generate a different password per object: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
-- **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
-- **Enable the Connected System Object once the password is set**<br /> On by default. A provisioned Connected System Object nobody can sign in to is rarely what was wanted, and directories that refuse to enable an object without a policy-compliant password need the enable to follow the password rather than accompany the create.
-
-**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
-
-**Nobody receives a generated password, including you.** Its job is to get the Connected System Object into a working state, since most directories will not enable an object or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-connected-system-object) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
-
-### One password for every Connected System Object
-
-The third Password Settings option sets one password you choose on every Connected System Object the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every Connected System Object the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
-
-Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each object's share of the password; any other choice leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
-
-This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
-
-What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
-
-```powershell
-$password = Read-Host -AsSecureString "New shared initial password"
-Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
-```
-
-A password the Connected System would refuse is rejected when you set it, rather than parking every Connected System Object the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
-
-### What happens after provisioning
-
-Setting the password is a separate concern from creating the Connected System Object, and deliberately cannot fail the export that created it. The Connected System Object exists; reporting its export as failed would have JIM retry the create.
-
-Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused Connected System Object is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
-
-Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued:
-
-| State | Meaning | What clears it |
-|-------|---------|----------------|
-| Delivered | The password was set. | Nothing; the Connected System Object no longer owes one and JIM keeps no record beyond the Activity. |
-| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the Connected System Object was not visible yet (after a create, usually replication catching up, which a directory with several domain controllers can need an extra attempt for). | The next attempt on the Connected System's own schedule. |
-| Parked | The target refused the password itself, or the settings cannot produce one at all, for not satisfying the rules in force for that Connected System Object. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
-| Withdrawn | The Connected System Object or the Synchronisation Rule that provisioned it has since been removed, so there is nothing left to deliver a password to. | Nothing; this is not a failure. |
-| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the Connected System Object. | Nothing automatic; the Connected System Object needs a password set by other means. |
-
-The target's own words are kept verbatim on a parked Connected System Object, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
-
-### Clearing parked Connected System Objects
-
-Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and the Password Delivery Service attempts them again within seconds, with no export run needed. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
-
-Saving an unrelated part of the same rule releases nothing. Those Connected System Objects were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
-
-The typical loop is therefore: read what the target said on the parked Connected System Object, correct the generator settings (most often length or the character classes), and save; delivery follows within seconds.
-
-### Where JIM tells you
-
-You do not have to go looking. Parked and expired Connected System Objects are reported in two places:
-
-- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the Connected System Objects grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many Connected System Objects saving will release; it stays quiet for an edit that would not change what is delivered.
-- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons.
-
-An initial password also shows up wherever JIM shows any other password change: on **Operations > Passwords**, labelled with origin **Initial**, and on the identity's own Password panel, as an **Initial** entry with a child Activity naming the system it was set on.
+An export rule's **Initial Password** tab sets a password on every Connected System Object the rule creates. [Initial Password](initial-password.md) covers what you configure, and what happens after provisioning.
 
 ## Attribute mappings
 
-Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
-
-**A target attribute can be flowed to by at most one mapping per Synchronisation Rule.** JIM refuses a second mapping targeting an attribute the rule already flows to, and a disabled mapping counts too, since re-enabling it later would recreate the clash. The refusal exists because the synchronisation engine evaluates one mapping per target attribute, so a same-rule duplicate would be accepted in configuration but silently never contribute. Express the intent like this instead:
-
-- **Fall back between source attributes within one rule**<br /> Use a single [expression mapping](#expression-mappings): `Coalesce(cs["jimBadgeColour"], cs["roomNumber"])`, or the equivalent null-coalescing operator `cs["jimBadgeColour"] ?? cs["roomNumber"]`.
-- **Arbitrate between sources by priority or authority**<br /> Define the second flow on a separate, differently-scoped Synchronisation Rule and order the contributors with [Attribute Priority](../concepts/attribute-priority.md).
-
-### Direct mappings
-
-A direct mapping copies the attribute value as-is, with no transformation:
-
-| Source | Target |
-|--------|--------|
-| `givenName` | `First Name` |
-| `sn` | `Last Name` |
-
-### Expression mappings
-
-An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md). The Expression field in the Add/Edit Attribute Flow dialog highlights the expression as you type, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references coloured differently; it grows with the expression (press Enter for a new line) and scrolls once it is long.
-
-| Source | Target |
-|--------|--------|
-| `Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@company.com"` | `Email Address` |
-| `mv["First Name"] + " " + mv["Last Name"]` | `displayName` |
-| `IIF(Eq(mv["Employee Status"], "Active"), 512, 514)` | `userAccountControl` |
-
-#### Missing Input Behaviour
-
-An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
-
-| Behaviour | Effect |
-|-----------|--------|
-| **Evaluate anyway** (default) | Runs the expression regardless; correct where the expression guards the absence itself with `IIF()` or `Coalesce()`. |
-| **Contribute no value** | Skips the mapping without reporting anything; the outcome is resolved by [Attribute Priority](../concepts/attribute-priority.md). |
-| **Fail this mapping** | Skips the mapping and records an **Expression Missing Input** error; the object's other attributes still flow. |
-| **Fail the object** | Nothing flows for the object at all, and it is recorded as an **Expression Missing Input** error. For identity-critical values such as a Distinguished Name. |
-
-JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
-
-#### Changing a mapping after it is created
-
-A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, a [generated value](#generated-values)'s settings, and whether the mapping is enabled at all. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
-
-#### Disabling a single mapping
-
-Every Attribute Flow mapping can be **disabled** individually, without touching the rest of its Synchronisation Rule. A disabled mapping is skipped by synchronisation in both directions: it contributes nothing inbound (and drops out of the attribute's [Attribute Priority](../concepts/attribute-priority.md) contention), flows nothing on export, at provisioning as much as on updates, and Drift Correction leaves its target attribute alone. Each run whose rules carry disabled mappings notes how many it skipped in the service log.
-
-Disabling one mapping is the smallest safe response to a single source attribute that has been removed or redefined at the Connected System; disabling the whole rule stops every flow it carries. Either also covers changes already queued: a Pending Export change that a now-disabled (or removed, or deleted) export mapping or rule queued, and that has not been exported yet, is withdrawn from the queue as soon as the change is saved, from the portal, the REST API or PowerShell alike, so the Pending Exports page shows only what will actually be sent. Every export run checks the queue the same way before it starts, and its Activity carries a warning saying how many changes it withdrew. A change already sent and awaiting confirmation by import is left to complete. Where JIM disables a mapping, or a whole Synchronisation Rule, on your behalf (the [schema refresh decision](connected-systems.md#refreshing-the-schema)), it records why: the reason is shown on the Attribute Flow tab for a mapping, and beside the Enabled switch for a rule, and saving the item enabled clears it. Re-enabling is always a manual choice.
-
-Disabling or removing the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](#deriving-metaverse-attributes) reads goes ahead, and JIM names the derived flows it leaves with a missing input.
-
-What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
-
-### Multi-source mappings
-
-A multi-source mapping combines several source attributes into one target. This is the concept-level pattern; in practice, you typically express multi-source flows through expression mappings that reference each contributing attribute.
-
-### Multi-valued attributes
-
-Mappings support both single-valued and multi-valued attributes. A **Multi-Valued** attribute holds a list of values (group memberships, email aliases, and so on); a **Single-Valued** attribute holds at most one. How a mapping behaves depends on the plurality of the source and the target:
-
-| Source | Target | Behaviour |
-|--------|--------|-----------|
-| Single-Valued | Single-Valued | ✅ The value flows normally. |
-| Multi-Valued | Multi-Valued | ✅ Every value flows. |
-| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. |
-| Multi-Valued | Single-Valued | ⚠️ See below. |
-
-**Multi-Valued to Single-Valued.** A Single-Valued target can hold only one value, so this mapping is only meaningful when the object actually has one value:
-
-- If the object has **one** value, it flows (import) or is exported normally.
-- If the object has **more than one** value, JIM does **not** pick one arbitrarily. An arbitrary choice would be non-deterministic (a Connected System does not guarantee value order) and, on export, could never be reconciled on the next import. Instead, JIM flows nothing for that attribute and records an error against the object; the object's other attributes still synchronise. The error appears as a `Multi-Valued to Single-Valued` item in the run's [Activity](activities.md).
-
-The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
-
-To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
-
-### Standard Mapping hints
-
-Choosing which Metaverse Attribute a Connected System attribute belongs to is guesswork when the schema is unfamiliar, and the answer is usually already recorded: every built-in Metaverse Attribute documents its counterparts in the SCIM 2.0 and LDAP/Active Directory vocabularies as [Standard Mappings](metaverse.md#standard-mappings). The Attribute Flow editor shows them while you work:
-
-- **The counterpart name sits beside each attribute in the picker**, so `First Name` reads as `givenName` on an LDAP system, and `name.givenName` on a SCIM one. Where a mapping carries a note (`userAccountControl` needs a transform, SCIM `emails` is multi-valued), hovering the counterpart shows it.
-- **The correspondence for the attribute you picked is stated in full.** Choose `givenName` as an import source and the editor says so: "In LDAP/AD, `givenName` corresponds to the Metaverse Attribute First Name", marks that attribute **Suggested** in the picker, and offers a one-click **Use First Name** button. Export works the same way in reverse, naming the Connected System attribute the standard says should receive the value.
-- **More than one attribute can correspond to a name.** LDAP `mail` fits both the single-valued `Email` and the multi-valued `Emails`; both are offered, and JIM does not choose for you.
-- **A correspondence you cannot act on is explained rather than hidden.** Where the standard names an attribute this mapping cannot target, the editor says which and why: the types differ (`accountExpires` arrives as text where `Account Expires` is a date, so an Expression source is needed to convert it), another Attribute Flow already targets it, or the Connected System reports it read-only. The mapping's note is shown alongside, which is usually where the conversion is described.
-
-Which vocabulary applies comes from the Connector: the LDAP Connector declares LDAP/AD, so an LDAP system's editor shows LDAP counterparts and nothing else. Where a Connector declares no vocabulary (the File Connector, for example, since a delimited file's column names are whatever the file carries), the editor matches attribute names against every standard instead and labels whichever one answered.
-
-**The hints are advisory, always.** Nothing is filtered, disabled, or chosen for you: every attribute stays selectable, and an attribute with no counterpart simply shows nothing, which is not an error. Standard Mappings are never consulted during synchronisation; what flows is exactly what your Attribute Flows say. Custom attributes behave identically once you record Standard Mappings against them, and JIM does not distinguish a mapping it seeded from one you authored.
-
-### Value processing (inbound)
-
-Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping in the Attribute Flow editor. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
-
-Four controls are available:
-
-- **Treat whitespace as no value**<br /> A whitespace-only or empty value is treated as no value: it does not flow, and clears any existing Metaverse value. This is **on by default**, so a stray space no longer masquerades as a real value. Switch it off where whitespace is genuinely meaningful.
-- **Trim leading and trailing whitespace**<br /> Removes surrounding whitespace, so `··John··` becomes `John` (each `·` represents a space).
-- **Collapse internal whitespace**<br /> Reduces runs of consecutive whitespace inside the value to a single space, so multiple spaces or tabs between words collapse to one. For example, `John···Smith` becomes `John Smith` (each `·` represents a space).
-- **Case normalisation**<br /> Converts the value to `Upper`, `Lower`, or `Title` case, or leaves it unchanged (`None`). Useful for folding usernames or email addresses to a consistent case.
-
-The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [Attribute Priority](#attribute-priority) resolves which rule's value wins.
-
-When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
-
-### Initial Export Only (outbound)
-
-Some attributes should be set once when JIM creates an object, then left alone: an initial password or API token, a one-time setup value, or any attribute the target system should own after provisioning. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
-
-- The attribute flows only when JIM **provisions** the object into the Connected System (the create export), and JIM retries until the initial export is confirmed.
-- Once the object is provisioned, the attribute becomes **unmanaged** on that Connected System Object: later Metaverse changes are not exported for it, and Drift Correction ([enforce state](#export-outbound)) leaves it alone, so the value can be changed freely in the Connected System.
-- Objects that **join** to pre-existing objects in the Connected System never receive the value; the external system already owns it.
-- Import mappings for the same attribute are unaffected, so the externally-owned value can still flow back into the metaverse if you map it inbound.
-
-Configure it per mapping in the Attribute Flow editor (the option appears for export Synchronisation Rules only), via `New-JIMSyncRuleMapping -InitialExportOnly` in PowerShell, or via the REST API. The Connector Space object page marks affected attributes with an **Unmanaged** indicator once the object is past provisioning.
-
-Two behaviours to be aware of:
-
-- The setting is honoured live: enabling it on an existing rule stops future exports of that attribute to already-provisioned objects, and disabling it resumes normal management (the next synchronisation and Drift Correction re-assert the Metaverse value).
-- If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
-
-Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
-
-### Generated values
-
-Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **Generated Value** as the mapping's Source Type. JIM generates the value, checks that no one else holds it, and assigns it once; the value then persists and is never regenerated.
-
-A generated mapping is an ordinary Attribute Flow in every other respect: it is just another way to produce a value for the target attribute, like a direct or expression mapping, and it follows the same [Attribute Priority](#attribute-priority) rules. The only difference is that it generates its value once.
-
-A generated value is a **base expression** plus a **uniqueness token**:
-
-| Uniqueness token | What JIM adds | Example |
-|---|---|---|
-| **Add a number only if the value is already taken** | Nothing, unless the base value is taken; then a number (or letter) suffix | `joe.bloggs`, then `joe.bloggs1`, `joe.bloggs2` |
-| **Always add a sequence number** | The next number from a counter JIM keeps for the target attribute, optionally zero-padded to a fixed width | `00000100456`, or `G-100456` with the base `"G-"` |
-| **Always add a random token** | A GUID, or a short hexadecimal or digit string from a cryptographic source; a clash draws again | `a3f9c2e1` |
-
-The base expression is an ordinary [expression](#expression-mappings), for example `Lower(cs["firstName"]) + "." + Lower(cs["lastName"])`. It is required for "only if taken" and optional for the other two; with no base expression, the value is the number or token on its own. When the base value looks like an email address, the token goes before the `@`. A **Separator** (dot, hyphen, underscore, or up to three characters of your own) can sit between the base value and the token.
-
-**When JIM generates a value.** The editor states the three conditions for the mapping:
-
-1. The Metaverse Object has no value from a higher-priority source (see [Attribute Priority](#attribute-priority)). This is the only precedence rule generation follows: it is a contribution like any other, and it contributes only when every higher-priority contribution is silent.
-2. Every attribute the base expression reads has a value. Generated mappings default to "Wait until every input has a value" (see [Missing Input Behaviour](#missing-input-behaviour)), because a value built from a missing input would be kept for ever.
-3. Then once only. The value is kept even if its inputs later change: a surname change does not rename the account.
-
-**Existing accounts (brownfield).** Generation only fills a gap, so keeping an existing target account's value is a priority decision, not a generation setting. Add an import Attribute Flow from that target for the same Metaverse attribute, at a higher priority than the generated flow; the target's own value then wins for every object it already holds, and generation supplies a value only for objects the target has nothing for (typically new starters). Once you do this, that import flow becomes the higher-priority contributor for every account the target holds, not only the ones that pre-existed it: from then on the target owns the value, so a rename made there flows into the Metaverse, and the generated value assignment JIM was keeping for an object is removed the moment the import flow takes over for it. This is the ordinary shape for a directory that owns account names once they exist; if you want JIM to keep owning the value instead, do not add that import flow, and make sure the target holds no conflicting values before the first export. On an export mapping there is no import flow to give priority to, because a generated export value belongs to that Connected System Object alone; to set a value only on accounts JIM itself creates, without touching accounts that already exist, use [Initial Export Only](#initial-export-only-outbound) instead. Bringing a higher-priority import flow online safely, so it reaches the target's synchronisation before that target's export runs, is covered in [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim).
-
-**When a higher-priority flow stops contributing.** If a higher-priority Attribute Flow for the attribute is disabled or removed, the generated flow becomes the winning contributor again and writes its own value, exactly as a direct or expression mapping would: the value it generated earlier if JIM still holds it for that object, otherwise a newly generated one. Whatever the higher-priority flow left on the Metaverse Object is replaced; JIM never takes that value over as a generated value.
-
-!!! warning "Handing the attribute back can rename accounts"
-    Generation never renames an account by itself. But when a higher-priority contributor is disabled or removed, the generated flow takes the attribute over like any Attribute Flow, and the ordinary export then renames the account in every target the attribute is exported to. For example, HR generated `percival.ashworth`; a higher-priority import flow from the directory then wrote `pashworth99`; when that directory flow is disabled, HR's next synchronisation writes `percival.ashworth` back and the export renames the directory account.
-
-    To keep existing accounts as they are, use one of the standard protections:
-
-    - Make the target's export of the attribute [Initial Export Only](#initial-export-only-outbound), so JIM sets the value when it creates the account and never changes it afterwards.
-    - Keep the target's higher-priority import flow enabled, so the target's own value keeps winning.
-
-**Uniqueness.** Before assigning a value, JIM checks it, ignoring case ([why](../concepts/case-sensitivity.md#identifier-uniqueness-ignores-case)), against the values already issued in the same run, every Metaverse Object's value for the attribute, and the connector space of every Connected System the attribute is exported to unchanged; where that system's Connector can, it also asks the target system itself (see [Checking availability in target systems](#checking-availability-in-target-systems)). A value an object already holds is always free for that object, and so is a value held by the object's own joined account in a target: if Jane Smith's existing directory account is already `jsmith`, that is her, not a clash, so she gets `jsmith` (exactly what a direct or expression mapping would write), while another person's `jsmith` still forces `jsmith1`.
-
-**Sequences.** The counter belongs to the target attribute, not to the mapping, so removing and re-creating the mapping continues where it left off, and it only moves forward. On first use it starts above the highest numeric value already present for the attribute. The next number is the higher of the counter and **Start at**; raising Start at is how you reserve a range or continue a sequence issued elsewhere, and the editor asks you to confirm the numbers it skips. Lowering it has no effect. With **Pad to a fixed width** on, choose whether a number that outgrows the width stops with an error or is allowed to grow longer. A sequence number is never reused. Numbers are issued in order across synchronisations, so joiners arriving a few at a time get consecutive numbers. A gap can still appear, and is never filled: when two runs draw from the same counter at the same time, when a run stops part-way, or when a number is skipped because it is already held. When the counter reaches numbers that are already held, by an object's value, a target account, another object's generated value or the retired values, JIM looks up where that run of held numbers ends and issues the first free number above it, in one step however long the run is; the skipped numbers cost no attempts, so the attempt limit only counts genuine collisions. A number held only by the object's own account is not skipped: the object gets it, as it would any value its own account already holds.
-
-**Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It also forgets the attribute's [retired values](#retired-values), so those numbers can be issued again; the confirmation says how many, and links to the list, before you commit. It changes no existing value and exports nothing; numbers still held when the counter reaches them are skipped, however many there are (see **Sequences** above). The action is recorded as an Activity, whose message includes how many retired values were forgotten.
-
-#### Checking availability in target systems
-
-JIM's own records of a Connected System hold only the accounts JIM imports. An account outside the import scope (in an OU JIM does not manage, say, or created by hand) is invisible to them, so a value that looks free can already be in use. To catch these, JIM **probes** the target as well: before it chooses a value, it asks the target system directly whether the value is already in use, and if it is, moves on to the next candidate exactly as it would for a value it holds itself.
-
-!!! note "A synchronisation that generates a value now contacts its targets"
-    A synchronisation used to work from JIM's database alone. Now a synchronisation that generates a value opens a connection to every Connected System the value is exported to whose Connector can probe (an HR import's synchronisation reaching Active Directory, for example), using that Connected System's own settings, credentials and certificates, exactly as its imports and exports do. The connection is opened the first time the run needs it, reused for the rest of the run, and closed when the run ends. The account JIM connects as needs to be able to read the probed attribute across the whole target: see the LDAP Connector's [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions), the SCIM 2.0 Client Connector's [Security Considerations](../connectors/jim-scim-connector.md#security-considerations) and the SQL Connector's [Database account permissions](../connectors/jim-sql-connector.md#database-account-permissions).
-
-    A target JIM cannot probe never fails the synchronisation. If the connection cannot be made, or the search is refused, times out or cannot be trusted, JIM stops probing that Connected System for the rest of the run, checks it against its own records only, and records one warning per Connected System on the synchronisation's Activity, naming the reason and how many values it chose without the probe. A probe that answers but cannot search everywhere the value must be unique (an Active Directory forest whose Global Catalog cannot be searched, say; see the LDAP Connector's [Forest-wide attributes and the Global Catalog](../connectors/jim-ldap-connector.md#forest-wide-attributes-and-the-global-catalog)) keeps its answers, and the run records one warning saying what it could not reach.
-
-**What is probed.** A value exported **unchanged** (by an export Attribute Flow whose only source is the generated Metaverse attribute) to a text attribute, in a Connected System whose Connector can probe. Today that is the [LDAP Connector](../connectors/jim-ldap-connector.md#probing-for-values-already-in-use), the [SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md#probing-for-values-already-in-use) and the [SQL Connector](../connectors/jim-sql-connector.md#probing-for-values-already-in-use); see the Probe column on [Connectors](../connectors/index.md#available-connectors). A probe ignores case, as every uniqueness check does, so `JBloggs` in the target stops JIM choosing `jbloggs`; [Identifier uniqueness](../concepts/case-sensitivity.md#identifier-uniqueness-ignores-case) explains why, and the one kind of attribute a target cannot be asked to compare that way. A generated value on an export Synchronisation Rule is probed in its own Connected System on the same terms.
-
-**What is not probed, and why.**
-
-- **A Connector that cannot probe**<br /> JIM checks its own records of that Connected System only.
-- **An attribute that only needs to be unique within its container**<br /> The Distinguished Name and the attributes that name entries (such as `cn`). Two entries in different OUs may share them, so a directory-wide search would report clashes that are not clashes.
-- **A value that is not text**<br /> JIM checks its own records only.
-- **A value exported through an expression, or combined with other sources**<br /> For example `mv["Account Name"] + "@corp.example"`. What is written there is not the generated value, so JIM checks it neither against its own records nor by probe. If it is already in use, the target rejects the export and JIM reports an ordinary export error.
-
-**The control value.** Each probe also asks for one value JIM already holds for the attribute in that system. A target that hides the attribute from JIM's account answers "not found" for everything, which would look like a free value; the control value coming back is how JIM knows the answer can be trusted, and its absence is reported as a warning rather than believed. On a first load, before JIM holds any value for the attribute, there is no control value to ask for: the probe still runs, a value it finds is trusted (the value is in use), and a value it does not find is accepted without a warning, because an empty target is normal at that point.
-
-**Where you see it.** The generated Attribute Flow form's **Checked for availability in** panel lists every Connected System the value is exported to, with its Connector, the attribute the value is exported as, and how it is checked: **JIM's records + probe**, **JIM's records only** or **Not checked**, each with the reason where it is less than both. The list follows the export Synchronisation Rules as they are saved, so adding or changing an export Attribute Flow changes it. The REST API's mapping endpoints carry the same rows as the `generation` object's `participants`, and `Get-JIMSyncRuleMapping` as `Generation.Participants`.
-
-**Excluding a Connected System.** Switch **Include** off for a Connected System to leave it out of the value's availability checks: JIM neither checks its own records of it nor probes it, so a value already in use there no longer stops JIM choosing it. Use this for a system known to keep its values unique some other way, or one whose values never clash with the others'. The exclusion saves with the Attribute Flow, and is recorded in the Synchronisation Rule's change history. Only a Connected System the value is exported to unchanged can be excluded; a value on an export Synchronisation Rule is checked only in its own Connected System, so it has nothing to exclude. Excluding removes nothing from any system and changes no value already assigned; if a value JIM then chooses is already in use in the excluded system, that system rejects the export and JIM reports an ordinary export error. The same setting is the `generation` object's `exclusions` on the REST API, and `-ExcludeConnectedSystemId` on `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` (`@()` clears it).
-
-**Sync Preview.** A preview is a dry run and never contacts a Connected System, so it checks JIM's own records only. Where the synchronisation would also probe for a value the preview generated, the preview says so, naming the Connected Systems it would probe and the value: if one of them already has an account using it, the synchronisation generates a different value instead. The REST API's Sync Preview response carries the same information as `generatedValueProbes`.
-
-#### When a target rejects a value
-
-Checking JIM's records and probing make a clash rare, not impossible: an account can be created in the target between the check and the export, or sit somewhere a probe cannot see. When that happens the target refuses the export because another object there already holds the value, and JIM corrects the value for you. This is **Collision Remediation**.
-
-JIM corrects the value when all of these hold:
-
-- The target's Connector recognises "already in use" refusals and says which value was refused. The LDAP, SCIM and SQL Connectors do; see each Connector's page.
-- The refusal is about one generated value. The target named an attribute that carries the generated value, or one built from exactly one generated value (a User Principal Name made from the Account Name, say, with [Deriving Metaverse attributes](#deriving-metaverse-attributes)), or it named nothing and the export carries exactly one generated value. JIM never guesses: a refusal it cannot tie to one generated value is an ordinary export error.
-- No other target has already accepted the value for that person (see below).
-
-**What JIM does.** It draws the next value exactly as it would have at the start (`joe.bloggs` was refused, so `joe.bloggs1`, checked against everything JIM knows), saves it on the Metaverse Object, and leaves the refused export queued. The next synchronisation of any Connected System carries the corrected value to every target's queued export, the refusing one included, and each system's synchronisation recalculates values built from it, such as an email address or User Principal Name. The export run after that sends the corrected value. JIM does not retry inside the export run that saw the refusal, because the export would still carry the values built from the old one. A value generated on an export Synchronisation Rule is corrected on the queued export itself, since it belongs to that one Connected System Object.
-
-The refused value is [retired](#retired-values) when the flow never reuses values, so it is not issued to anyone else. The export run's Activity shows the export as **Value corrected**, naming the refused and the new value, and counts the corrections; the Metaverse Object's history records the change. Nothing about the export counts as a failure: its retry count is untouched.
-
-**When JIM does not correct it.** Renaming an account that is already in use somewhere is not a decision JIM makes on its own. The value **needs a decision** when:
-
-- another target has already accepted it for this person (its account in that system holds the value), so correcting it would rename that account too;
-- JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
-- JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
-
-The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, releases the parked export for the next export run to try again under the new settings.
-
-**Acting on a held value.** Three answers are open to you:
-
-- **Allow the rename.** JIM records that you allowed it and releases the export. At the next export that meets the refusal, JIM checks every system again, chooses the next free value and applies it everywhere the value is used, renaming the account that already holds the current one. The new value is decided then, not when you allow it. The allowance covers one rename; the history of the object and the export run's Activity both record that you allowed it. If that export succeeds instead, because the clash was resolved some other way, the allowance lapses: a later refusal asks you again rather than renaming the account.
-- **Try again.** For when the clash has been resolved in the target (the other account renamed or removed there). The export is released and the next export run tries the same value; if the target refuses it again, it is held again.
-- **Leave it.** Nothing needs doing to keep it held: the export stays parked until you act or change the Attribute Flow.
-
-Every allowed rename and every try again is recorded as an Activity naming who took it.
-
-In the portal, **Operations > Generated Values** lists every value waiting for a decision and every allowed rename still waiting for its export, with counts of each and of the values corrected in the last seven days. Filter it by Connected System, Synchronisation Rule or status; each row says why the value is held and offers **Allow the rename…** and **Try again**, and **Try again for all** acts on everything the filters match. **Allow the rename…** opens a confirmation naming every Connected System that will change and how (the account renamed, created or updated), the value JIM is likely to choose where it can say, and that the value is decided at the next export. The tab is badged with the number waiting. A warning chip on the **Synchronisation Rules** and **Connected Systems** lists counts the values held for each and opens the tab filtered to it, and a Metaverse Object with a held value shows it above its tabs, with both actions.
-
-In PowerShell, `Get-JIMGeneratedValueDecision` lists what is held (with why, since when, and which systems are involved), `Approve-JIMGeneratedValueRename` allows the rename (it asks first, because it renames a live account), and `Reset-JIMGeneratedValueDecision` tries again, for one value, a pipeline of them, or everything matching a Connected System or Synchronisation Rule; see [Generated value decisions](../powershell/synchronisation-rules.md#generated-value-decisions). On the REST API:
-
-| Request | What it does |
-|---|---|
-| `GET /generated-values/decisions` | The held values, newest first, paged; narrowed by `connectedSystemId` (the system that refused the value, the one anchoring it, or any system the value is exported to and checked in), `syncRuleId`, `status` (`NeedsDecision` or `RenameAllowed`) and `metaverseObjectId` |
-| `GET /generated-values/decisions/summary` | How many need a decision, how many renames are allowed and waiting, and how many values were corrected in the last seven days |
-| `GET /generated-values/decisions/{id}` | One value, whatever its state |
-| `POST /generated-values/{id}/allow-rename` | Allows the rename; answers with the value as it now stands |
-| `POST /generated-values/{id}/try-again` | Tries again; answers with the value as it now stands |
-| `POST /generated-values/decisions/try-again` | Tries again every held value matching `connectedSystemId`, `syncRuleId`, `metaverseObjectId` or `ids` in the body; a body naming none of these must set `applyToAllDecisions` |
-
-Both actions take effect at once (they release the export for the next export run), so they answer `200` rather than queueing work; a value that is not waiting on a decision answers `409`.
-
-**Which systems can report a collision.** A generated mapping's participants (the "Checked for availability in" list, `participants[].reportsCollisions` on the REST API, `Generation.Participants` in PowerShell) say for each Connected System whether its Connector reports a value as already in use. Collision Remediation acts only on refusals from those that do. Switch it off per Attribute Flow with the **Collision Remediation** switch below the panel, `collisionRemediation` on the mapping's `generation` object or `-CollisionRemediation $false` in PowerShell, and a refusal is reported as an ordinary export error instead. When none of the systems the value is exported to can report a collision, the portal's switch is unavailable and says so.
-
-**When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, or an Attribute Flow with Collision Remediation switched off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
-
-#### Retired values
-
-A generated value is often an identifier: an account name, an email address, an employee number. Issuing one to a second person is a security problem as much as a data one, because mail, group memberships and permissions keyed on that identifier quietly follow it to the new holder. So when JIM stops holding a generated value, it **retires** it: the value goes into the attribute's **retired values** list, and JIM never issues it again, whichever Attribute Flow generates the attribute.
-
-A value is retired when:
-
-| Why (as the portal shows it) | Stored reason | What happened |
-|---|---|---|
-| **Object deleted** | `ObjectDeleted` | The object that held the value was deleted: a leaver's Metaverse Object, or for an export flow the Connected System Object. |
-| **No longer generated** | `Superseded` | Another Attribute Flow now supplies the attribute for that object (see [Existing accounts](#generated-values) above), so JIM stopped managing the generated value. |
-| **Flow removed** | `Recalled` | The Attribute Flow that generated the value was removed. |
-| **Regenerated** | `Regenerated` | A target refused the value as already in use and JIM [corrected it](#when-a-target-rejects-a-value). |
-
-The REST API and PowerShell report the stored reason.
-
-**Never reuse a value.** Retiring is controlled by the mapping's **Never reuse a value** switch, which is on by default for "only if taken" and random tokens. With it on, a retired value is skipped when JIM generates: if `marisol.fenwick` left and was retired, the next Marisol Fenwick gets `marisol.fenwick1`. Turn it off only where a value may safely pass to a different person; with it off, nothing is retired, and a leaver's value is free for the next person who needs it. A sequence always behaves as though the switch is on, because its counter only moves forward, so the editor shows a locked line rather than a switch.
-
-**Is anything lost?** No. Retiring removes nothing from any Connected System and changes no value an object still holds; it only stops JIM issuing the value again. Retired values are kept permanently, and nothing but **Start again** on a sequence clears them: there is deliberately no way to release one value, because that is how an identifier passes to a new person by accident.
-
-**Where you see them.**
-
-- On the Synchronisation Rule's **Attribute Flow** tab, a generated row shows an **N retired** chip once its attribute has any, and every generated row has a **View retired values** action. The list is per attribute, not per flow: two flows generating Account Name share one list, because neither may reissue the other's values. It is read-only and searchable by value or by the name of the object that held it; **Held by** links to the Metaverse Object while it still exists, and shows its last name, greyed, once it has been deleted.
-- On a Metaverse Object's **Changes** tab, a retirement is an event in the timeline: the attribute, the retired value struck through, why, and the synchronisation that caused it. A deleted object's retirements are only in the list, since the object and its timeline are gone.
-- A synchronisation that retires values records it on the object's summary in the Activity, under the change that caused it.
-- In PowerShell, `Get-JIMRetiredGeneratedValue` (see [Metaverse cmdlets](../powershell/metaverse.md#get-jimretiredgeneratedvalue)); on the REST API, `GET /metaverse/attributes/{id}/retired-generated-values` for an import flow's attribute and `GET /synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}/retired-generated-values` for an export flow's, both with search and paging. A generated mapping's `generation` object on the mapping endpoints carries `retiredValueCount`.
-
-**Number attributes.** A generated value can target a Text or a Number attribute. A Number attribute accepts only a sequence or a Digits random token, with no base expression, no separator and no padding, because a prefix or leading zeros would make the value text. The editor disables the incompatible choices and says why; the REST API and PowerShell refuse the same configurations with the same reasons.
-
-**Where you see it.**
-
-- The editor's preview shows the first value and the candidates that follow when it is taken, using the sample values entered under "Test this Expression". For a saved rule it also counts the existing Metaverse Objects that would receive a value on the next full synchronisation, and for a sequence it shows the counter's state.
-- A synchronisation's Activity counts **Values Generated**, and each object's summary names the value it was given. A failure (no free value within the attempt limit, or a sequence that outgrew its width) is an ordinary Activity error naming the reason.
-- On the Metaverse Object page's [Inspect view](metaverse.md#where-a-value-comes-from), a generated value's source reads **Connected System · Synchronisation Rule · Generated Value**, with its own share of the source bar, and its inspector gives the Source type as **Generated Value** (marked **Corrected** if a collision revised it).
-
-Generated values work on export mappings too: the value is generated for, and kept on, the Connected System Object alone, and never written to the Metaverse. That suits a reference number a target system needs but nothing else uses.
-
-An export-mode generated value is drift-checked like any export Attribute Flow. When the Synchronisation Rule [enforces state](#export-outbound) and the value is changed in the target system outside JIM, the target system's next synchronisation corrects it back to the value JIM generated for that object (not a freshly evaluated base expression), and a change of letter case alone counts as a change, exactly as it does for any other Attribute Flow. Mark the mapping [Initial Export Only](#initial-export-only-outbound) to have the value written once, when the object is provisioned, and then left alone. An object JIM has not yet generated a value for is not checked; the value is generated and exported instead.
-
-Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
-
-A value a target system rejects as already in use is corrected or held for a decision, as described in [When a target rejects a value](#when-a-target-rejects-a-value). A generated value cannot yet be changed by hand.
-
-### Deriving Metaverse attributes
-
-An import Attribute Flow's expression can read the Metaverse Object it flows to with `mv["..."]`, alongside the Connected System Object with `cs["..."]`. The result is held in the Metaverse like any other contributed value, so you define an Email or a User Principal Name once, and every target sees the same value:
-
-| Source (import expression) | Target |
-|---|---|
-| `Lower(mv["Account Name"]) + "@corp.local"` | `Email` |
-| `mv["Email"]` | `User Principal Name` |
-
-JIM recognises such a flow from its expression; there is nothing to declare. It is a **Derived Attribute Flow**. The REST API marks one with `derived` on the mapping, and `Get-JIMSyncRuleMapping` with a `Derived` property, each giving the Metaverse attributes it reads and its step.
-
-**Evaluation order: steps.** Email reads Account Name and User Principal Name reads Email, so they must be evaluated in that order. JIM works the order out across every import Synchronisation Rule of the Metaverse Object Type, and evaluates in **steps**: step 1 is the object's ordinary Attribute Flow, and each later step evaluates the derived flows whose inputs are all settled by the step before. Above, Account Name is settled at step 1, Email at step 2 and User Principal Name at step 3, so the type has three steps. Every derived contributor of an attribute is evaluated at that attribute's step, in [Attribute Priority](#attribute-priority) order. The order of mappings inside a Synchronisation Rule does not matter, and two runs over the same data produce the same values. Disabled flows count when steps are numbered, so enabling one never renumbers the others.
-
-**A derived value is an ordinary contribution.** It wins or loses under Attribute Priority, "Null is a value" applies to it, [Missing Input Behaviour](#missing-input-behaviour) applies to an absent `mv["..."]` input exactly as to an absent `cs["..."]` one, and it is recalled with its rule. It reaches export evaluation, drift detection and change history in the same synchronisation as the inputs it was built from. A [generated value](#generated-values) can be an input, and a generated value's base expression can read `mv["..."]`: the generated value is resolved at its step before the next step reads it.
-
-**Loops are refused.** If Display Name reads Mail Nickname and Mail Nickname reads Display Name, neither can be evaluated first. JIM refuses the save, from the portal, the REST API (`400`) and PowerShell alike, naming every attribute and Synchronisation Rule in the loop, whichever of the rules you are saving:
-
-```text
-Saving would create a dependency cycle: Mail Nickname (Synchronisation Rule 'AD Import') reads Display Name, which (Synchronisation Rule 'HR Import') reads Mail Nickname.
-```
-
-An expression that reads its own target (`mv["Email"]` in the flow to Email) is a loop of one. Disabled flows count, so enabling one later can never complete a loop; disabling one of a loop's flows is how you break a loop that already exists. JIM also refuses an `mv["..."]` name that is not an attribute of the Metaverse Object Type and, in this release, a Reference attribute as an input or as the target, because references are resolved later in synchronisation than derived flows are evaluated.
-
-**Non-repeatable functions warn.** A derived expression that calls `Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` or `Guid.NewGuid()` produces a different value on every synchronisation, which changes the Metaverse value and can export it every time. JIM saves it and warns: a `warnings` entry on the REST response, and a warning from `New-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping` and `Set-JIMSyncRule`.
-
-**Which synchronisation evaluates a derived flow.** Like every Attribute Flow on a rule, a derived flow is evaluated only in the synchronisation of its own Connected System (the hosting system), for objects joined to that system and in scope for the rule. When it reads an attribute another Connected System contributes, that system's synchronisation changes the input but not the derived value. So:
-
-- **Synchronise sources before the systems that derive from them**<br /> If Email is derived on the HR rule from a Region the directory contributes, synchronise the directory before HR, and Email is right in the same cycle. [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) and [Schedules](schedules.md#common-workflows) say the same.
-- **The wrong order costs one cycle, never more**<br /> When a synchronisation of any system, or a change made outside synchronisation (a Synchronisation Rule deletion's recall, Synchronised Deprovisioning, the stranded value sweep, a direct change to a Metaverse Object), changes an attribute that a derived flow on another system reads, JIM marks that object's Connected System Object in the hosting system. The hosting system's next synchronisation, delta included, processes the object even though nothing about it changed there, and re-derives the value. Nothing is lost either way: until then the object keeps its previous derived value.
-
-**Removing or disabling an input's last contributor.** Deleting or disabling an Attribute Flow, or a whole Synchronisation Rule, can leave a derived flow with nothing to read: Email reads Account Name, and you delete the only flow that contributes Account Name. JIM lets the change go ahead and names each derived flow it leaves with a missing input, directly or through other derived attributes (User Principal Name reads Email, which reads Account Name). That flow's Missing Input Behaviour then decides what it contributes, so set one that suits it. Only an attribute losing its **last** enabled contributor counts; while another contributor remains, nothing is reported.
-
-- **REST API**<br /> `dependentDerivedFlows` on the responses to deleting a mapping, updating a mapping, updating a Synchronisation Rule and deleting a Synchronisation Rule, in a schema refresh preview's `dependents`, and on the import-schema response when it disables or removes dependents. Each entry names the derived flow's mapping, target attribute, Synchronisation Rule and Connected System, and each input it lost (`missingInputs`), with the derived attributes in between (`via`) when it reaches that input indirectly.
-- **PowerShell**<br /> `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write a warning: a summary line, then one line per derived flow. They never prompt and never stop.
-- **Previews**<br /> An [Attribute Flow change preview](#previewing-an-attribute-flow-change) lists the same derived flows as warnings before you save, and names derived flows on other Connected Systems' rules that read what the change alters. [Sync Preview](sync-preview.md) shows derived values as ordinary Attribute Flow changes.
-- **Portal**<br /> Before it removes an Attribute Flow, applies an edit that disables or retargets one or changes its expression, or saves a Synchronisation Rule switched off or deletes one, the portal asks first, listing each derived flow that would be left without an input, its Synchronisation Rule and what it reads (`Email (via Account Name)` for one reached through another derived attribute). With nothing affected, you see the usual confirmation.
-
-**In the portal.** The Attribute Flow tab marks each derived flow with a **Derived · step N** chip beside its target; hover over it to see what it reads and when it runs. In the Attribute Flow dialog:
-
-- **Insert attribute**<br /> Under the Expression (and a generated value's base expression), this menu puts `mv["..."]` or `cs["..."]` at the cursor. Type in its filter to narrow the list. Metaverse attributes that cannot be read are listed but greyed out, saying why: a Reference attribute (not supported yet) and the flow's own target. On an export Synchronisation Rule the menu offers every Metaverse attribute, whether or not Metaverse-Derived Attribute Flows are enabled, and no Connected System attributes, because an export expression reads the Metaverse Object alone.
-- **The Derived Attribute Flow panel**<br /> While the expression reads the Metaverse, a panel states what it reads, its step and the chain of steps leading to it, updating as you type.
-- **Checked as you type**<br /> A loop is shown as soon as you type it, listing each attribute and the attribute it is worked out from, and **Update Attribute Flow** stays disabled until you break it; the same check refuses the save. A non-repeatable function shows its warning, and you can still save.
-
-### Previewing an Attribute Flow change
-
-Changing a mapping rewrites an attribute on every object the rule manages at the next Full Synchronisation (for an export mapping, the target system's, while the rule [enforces state](#export-outbound)), and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
-
-The **Preview Attribute Flow Impact** button, which appears beside the editor's save button once you have edited a mapping, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
-
-- **The value the object would end up with**<br /> Stated as an old-to-new pair, so a domain cutover reads as `ada@old.example` becoming `ada@new.example` rather than as a count. JIM groups identical pairs together and recognises the shape of the change (a changed domain, a changed container, a casing change, an added or removed prefix or suffix), so a thousand identical rewrites read as one line with a count beside it.
-- **Values that would be withdrawn**<br /> Where a mapping would stop producing a value for an object, the attribute is left blank rather than rewritten, and that is counted separately.
-- **Objects the mapping could not be evaluated for**<br /> An Expression that throws, or one whose [Missing Input Behaviour](#expression-mappings) fails the mapping because a required attribute has no value on that object. These are the handful of objects a cutover would otherwise leave without an address, and they are reported as their own outcome rather than as no change.
-
-The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
-
-Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
-
-Three answers are deliberately negative rather than reassuring:
-
-- A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
-- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next Full Synchronisation of its Connected System, or kept if you [choose to keep them](#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
-- The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
-
-Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.
-
-## Attribute Priority
-
-When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the metaverse, and does not change how the metaverse is exported back out.
-
-Priority is held **per attribute, per contributing rule**, not as a single level on the whole Synchronisation Rule. The same Connected System can therefore rank first for one attribute and second for another, and a single system can even contribute through several differently-scoped rules at different priorities.
-
-### How a winner is chosen
-
-For a given Metaverse attribute, JIM evaluates every contributing import rule in priority order (1 is highest):
-
-- **The first contributor with a value wins.**<br /> Lower-priority contributors are not consulted.
-- **A rule with no opinion is skipped.**<br /> If a rule does not apply to the object (it is disabled, no object from its Connected System is joined, or the joined object is out of the rule's scope), it is passed over and the next priority is considered.
-- **If nobody contributes, the attribute is left unset.**
-
-For example, a Metaverse Object drawing data from two source systems:
-
-- HR system provides `First Name` and `Last Name` (priority 1: authoritative)
-- Badge system also provides `First Name` (priority 2: secondary)
-
-The HR system's `First Name` wins because its contribution ranks higher; the badge system only fills in where HR has no opinion.
-
-### Null is a value
-
-By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. That is usually right, but not always: when the authoritative source deliberately *clears* a value, you want the clear to propagate, not to be back-filled from a stale secondary copy that still holds the old value.
-
-Enabling **Null is a value** on a contributor changes that. If the contributor is connected and in scope but supplies no value, JIM stops there and asserts "no value": the attribute is cleared downstream, and lower-priority sources are not consulted. This is distinct from a rule simply having no opinion; a rule that does not apply to the object is still skipped regardless of this setting.
-
-Typical uses are a manager or department cleared at the authoritative source that must propagate as a clear, and a primary-system migration where the new system is authoritative for the people it knows about (including their blanks). It is deliberately powerful: a misbehaving priority-1 import (an empty file, a truncated delta) becomes a mass-clearing event rather than a harmless no-op, so treat Null is a value as an authoritative, considered choice.
-
-### Configuring priority
-
-Attribute Priority is configured per (Metaverse Object Type, attribute), not on the Synchronisation Rule editor. Open the Metaverse Object Type (**Administration → Schema → Object Types**), select the **Attributes** tab, and expand the **contributors** list for any attribute that has more than one contributor. From there you drag contributors to reorder them and toggle **Null is a value** per contributor. A newly added import mapping joins at the **lowest** priority, so a new source never silently takes over an attribute until you promote it explicitly. The same configuration is available via the [PowerShell cmdlets](../powershell/metaverse.md) and the REST API.
-
-> **Full detail:** [Attribute Priority](../concepts/attribute-priority.md) covers re-election when a winning source disconnects or withdraws, multi-valued attribute semantics, per-value provenance, and how to see resolution decisions in [Synchronisation Activities](activities.md).
+Attribute mappings define which attributes to synchronise and how to transform them: each maps a source attribute or an expression to a target attribute. [Attribute Mappings](attribute-mappings.md) covers each kind of mapping, value processing, Initial Export Only, previewing a change, and Attribute Priority; [Generated Values](generated-values.md) and [Deriving Metaverse Attributes](derived-attributes.md) cover the two kinds that build a value rather than copy one.
 
 ## Common workflows
 
 **Setting up an import rule:**
 
 1. Create a Synchronisation Rule with direction `Import`, choosing the source object type in the Connected System and the target Metaverse Object Type
-2. Add attribute mappings to flow values from CSO attributes onto the corresponding MVO attributes
-3. Configure Object Matching Rules so incoming objects join to the right MVOs
-4. Decide whether to project new MVOs when no match exists, and enable that on the rule
+2. Add attribute mappings to flow values from Connected System Object attributes onto the corresponding Metaverse Object attributes
+3. Configure Object Matching Rules so incoming objects join to the right Metaverse Objects
+4. Decide whether to project new Metaverse Objects when no match exists, and enable that on the rule
 
 **Setting up an export rule with scoping:**
 
 1. Create a Synchronisation Rule with direction `Export`, with provisioning enabled if you want JIM to create objects in the target system
-2. Add attribute mappings to flow values from MVO attributes onto CSO attributes
-3. Add scoping criteria so only the relevant MVOs are exported (for example, only `person` objects whose `department` is `IT`)
+2. Add attribute mappings to flow values from Metaverse Object attributes onto Connected System Object attributes
+3. Add scoping criteria so only the relevant Metaverse Objects are exported (for example, only `person` objects whose `department` is `IT`)
 4. Configure Object Matching Rules for the export direction
 5. Decide whether to enforce state, i.e. detect and correct drift in the target system
 
@@ -798,16 +122,16 @@ A complete import rule for an HR system might look like:
 | **Name** | HR Import - Employees |
 | **Direction** | Import |
 | **Connected System** | HR Database |
-| **Scoping** | `Eq(cs["employeeType"], "FTE")` |
+| **Scoping** | `cs["employeeType"] = "FTE"` |
 | **Object Matching Rule 1** | Match `cs["employeeId"]` to `mv["Employee ID"]` |
-| **Projection** | Create MVO of type `Person` |
+| **Projection** | Create Metaverse Object of type `Person` |
 | **Attribute mappings** | `cs["givenName"]` to `mv["First Name"]` (direct) |
 | | `cs["sn"]` to `mv["Last Name"]` (direct) |
 | | `cs["department"]` to `mv["Department"]` (direct) |
 | | `cs["employeeId"]` to `mv["Employee ID"]` (direct) |
 | | `Capitalise(cs["givenName"]) + " " + Capitalise(cs["sn"])` to `mv["Display Name"]` (expression) |
 
-This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the metaverse.
+This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the Metaverse.
 
 ## Finding a Synchronisation Rule
 
@@ -842,14 +166,14 @@ Deleting a rule removes all of its configuration: Attribute Flow mappings, scopi
 
 A rule contributing nothing deletes immediately after a plain confirmation. A rule that did contribute values shows the impact first (how many values, across how many Metaverse Objects, per attribute) and asks what should happen to them:
 
-- **Recall the attribute values** (the default): the rule is disabled immediately and the recall runs as a background operation. Where another Attribute Flow also contributes an attribute, its value takes over; where none does, the attribute is cleared, and resulting changes are staged as [Pending Exports](../concepts/synchronisation-pipeline.md) for mapped target systems. Where the recall takes an object out of an export Synchronisation Rule's scope, its account in that target system is deprovisioned according to the rule's [Deprovisioning Action](#deprovisioning-action), exactly as a synchronisation would deprovision it. The confirmation links the recall's Activity so you can monitor progress from the Operations page; deleting the rule is the operation's final step.
+- **Recall the attribute values** (the default): the rule is disabled immediately and the recall runs as a background operation. Where another Attribute Flow also contributes an attribute, its value takes over; where none does, the attribute is cleared, and resulting changes are staged as [Pending Exports](../concepts/synchronisation-pipeline.md) for mapped target systems. Where the recall takes an object out of an export Synchronisation Rule's scope, its account in that target system is deprovisioned according to the rule's [Deprovisioning Action](deprovisioning.md), exactly as a synchronisation would deprovision it. The confirmation links the recall's Activity so you can monitor progress from the Operations page; deleting the rule is the operation's final step.
 - **Keep the attribute values**: the rule is deleted at once and the values remain in place with no record of where they came from. Nothing will ever recall them; a new inbound Attribute Flow, or manual removal, is the only way to change them later. The choice is recorded on the deletion's Activity.
 
 Removing a single **Attribute Flow mapping** from the editor offers the same choice when the mapping contributed values, with one difference in timing: a recalled mapping's values are withdrawn at the next Full Synchronisation of the contributing Connected System rather than by a background operation (the rule survives, so the ordinary recall machinery covers it). The choice is made when you remove the mapping and takes effect when you save the rule.
 
-The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](#deriving-metaverse-attributes) the deletion leaves with a missing input. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
+The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](derived-attributes.md) the deletion leaves with a missing input. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
 
-For the full recall semantics (re-election, No Contributor outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
+For the full recall semantics (re-election, Value cleared outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
 
 ## Manage Synchronisation Rules
 
@@ -859,10 +183,10 @@ For the full recall semantics (re-election, No Contributor outcomes, and how dis
 
 ## See also
 
-- [Configuration changes](configuration-changes.md) -- how JIM classifies and confirms configuration changes
-- [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
-- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
-- [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
-- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
-- [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
-- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, how to make them case-insensitive, and why generated values are unique without regard to case
+- [Configuration changes](configuration-changes.md): how JIM classifies and confirms configuration changes
+- [Connected Systems](connected-systems.md): the systems a Synchronisation Rule connects to
+- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): where Synchronisation Rules fit in the import/sync/export flow
+- [Concepts: Attribute Priority](../concepts/attribute-priority.md): how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
+- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md): how scoping and provisioning drive joiner/mover/leaver behaviour
+- [Concepts: Expressions](../concepts/expressions.md): the expression language used in scoping criteria and attribute mappings
+- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md): the four questions JIM asks when comparing text, and which features ask which

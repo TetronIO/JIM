@@ -134,7 +134,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -176,7 +176,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -202,7 +202,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -244,7 +244,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -303,7 +303,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -345,7 +345,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -371,7 +371,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -413,7 +413,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -471,7 +471,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -513,7 +513,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -539,7 +539,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -581,7 +581,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -641,7 +641,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -683,7 +683,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -709,7 +709,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -751,7 +751,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -809,7 +809,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -851,7 +851,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -877,7 +877,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -919,13 +919,13 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_2,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_2 },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -984,7 +984,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1026,7 +1026,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1052,7 +1052,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1094,13 +1094,13 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_1 },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = true,
+                    BoolValues = { true },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1159,7 +1159,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1201,7 +1201,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1229,7 +1229,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1271,13 +1271,13 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_1 },
                     Type = AttributeDataType.DateTime
                 },
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1306,7 +1306,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_3_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_3_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1348,7 +1348,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1417,7 +1417,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1453,7 +1453,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1510,7 +1510,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1639,7 +1639,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1696,7 +1696,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1732,7 +1732,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1789,7 +1789,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1825,7 +1825,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1884,7 +1884,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1920,13 +1920,13 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_1 },
                     Type = AttributeDataType.DateTime
                 },
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -1983,7 +1983,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2019,7 +2019,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -2076,7 +2076,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2118,7 +2118,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new ()
@@ -2183,7 +2183,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2225,13 +2225,13 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.COURSE_END_DATE.ToString(),
-                    DateTimeValue = courseEndDate,
+                    DateTimeValues = { courseEndDate },
                     Type = AttributeDataType.DateTime
                 }
             }
@@ -2256,7 +2256,8 @@ public class ImportUpdateObjectSvaTests
         var courseEndDateAttribute = cso1.GetAttributeValue(MockSourceSystemAttributeNames.COURSE_END_DATE.ToString());
         Assert.That(courseEndDateAttribute, Is.Not.Null);
         Assert.That(courseEndDateAttribute.DateTimeValue.HasValue);
-        Assert.That(courseEndDateAttribute.DateTimeValue.Value, Is.EqualTo(courseEndDate));
+        // JIM holds a date to the microsecond (#2153); DateTime.UtcNow carries 100ns ticks.
+        Assert.That(courseEndDateAttribute.DateTimeValue.Value, Is.EqualTo(JIM.Utilities.DateTimeAttributeValue.ToCanonical(courseEndDate)));
         
         Assert.Pass();
     }
@@ -2291,7 +2292,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2333,7 +2334,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new ()
@@ -2398,7 +2399,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2440,7 +2441,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new ()
@@ -2505,7 +2506,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -2547,13 +2548,13 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new ()
                 {
                     Name = MockSourceSystemAttributeNames.CURRENT_COURSE_ACTIVE.ToString(),
-                    BoolValue = true,
+                    BoolValues = { true },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -2612,7 +2613,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -2654,7 +2655,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -2682,7 +2683,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -2724,13 +2725,13 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_1 },
                     Type = AttributeDataType.DateTime
                 },
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new()
@@ -2809,7 +2810,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_1_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -2851,7 +2852,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 }
             }
@@ -2879,7 +2880,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_START_DATE },
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -2921,13 +2922,13 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    DateTimeValues = { TestConstants.CS_OBJECT_2_END_DATE_1 },
                     Type = AttributeDataType.DateTime
                 },
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
-                    BoolValue = false,
+                    BoolValues = { false },
                     Type = AttributeDataType.Boolean
                 },
                 new()

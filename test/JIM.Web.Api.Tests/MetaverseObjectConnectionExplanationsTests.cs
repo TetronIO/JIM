@@ -233,6 +233,44 @@ public class MetaverseObjectConnectionExplanationsTests
     }
 
     [Test]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_ExpressionCriteria_AreEvaluatedAgainstTheWholeObjectsAsync()
+    {
+        // An expression criterion (#2054) reads its inputs by name, which the criteria-only value loads cannot supply:
+        // the explanation must read the whole object on each side, or every expression would see no value.
+        var cso = Joined(PayrollId, "Payroll", EmployeeTypeId, "employee");
+        // Neither the objects nor the lean rule load carry their type's attributes, which an expression's inputs are
+        // checked against: the explanation loads the scoped types' schemas itself.
+        var fullCso = new ConnectedSystemObject
+        {
+            Id = cso.Id, ConnectedSystemId = PayrollId, TypeId = EmployeeTypeId,
+            Type = new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee" }
+        };
+        _connectedSystems.Setup(r => r.GetObjectTypeAsync(EmployeeTypeId))
+            .ReturnsAsync(new ConnectedSystemObjectType { Id = EmployeeTypeId, Name = "employee", Attributes = [PayrollDepartment] });
+        _metaverse.Setup(r => r.GetMetaverseObjectTypeAsync(PersonTypeId, true))
+            .ReturnsAsync(new MetaverseObjectType { Id = PersonTypeId, Name = "Person", Attributes = [Department] });
+        fullCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = PayrollDepartment, AttributeId = PayrollDepartment.Id, StringValue = " FINANCE ", ConnectedSystemObject = fullCso });
+        _connectedSystems.Setup(r => r.GetConnectedSystemObjectAsync(PayrollId, cso.Id)).ReturnsAsync(fullCso);
+        var fullMvo = new MetaverseObject { Id = _mvoId, Type = new MetaverseObjectType { Id = PersonTypeId, Name = "Person" } };
+        fullMvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = Department, AttributeId = Department.Id, StringValue = "Finance", MetaverseObject = fullMvo });
+        _metaverse.Setup(r => r.GetMetaverseObjectAsync(_mvoId)).ReturnsAsync(fullMvo);
+        Rule("Payroll Import", SyncRuleDirection.Import, PayrollId, "Payroll", EmployeeTypeId, "employee", null, ConnectedSystemStatus.Active,
+            [All(Expression("Lower(Trim(cs[\"dept\"]))", "finance"))]);
+        ExportRule("Payroll Export", PayrollId, "Payroll", EmployeeTypeId, "employee", groups: All(Expression("Upper(mv[\"Department\"])", "FINANCE")));
+
+        var result = (await ExplainAsync())!;
+
+        Assert.That(result.Connections.Single().Scoping.Select(s => (s.SyncRuleName, s.Outcome)), Is.EqualTo(new[]
+        {
+            ("Payroll Export", ScopingRuleOutcome.InScope),
+            ("Payroll Import", ScopingRuleOutcome.InScope)
+        }));
+    }
+
+    private SyncRuleScopingCriteria Expression(string expression, string value) =>
+        new() { Id = _nextId++, Expression = expression, CompareAs = AttributeDataType.Text, ComparisonType = SearchComparisonType.Equals, StringValue = value };
+
+    [Test]
     public async Task GetMetaverseObjectConnectionExplanationsAsync_ExportRuleForAnotherTypeOnTheSameSystem_ReportsAnObjectTypeConflictAsync()
     {
         Joined(FinanceAppId, "Finance App", AccountTypeId, "account");
@@ -322,6 +360,36 @@ public class MetaverseObjectConnectionExplanationsTests
         }
     }
 
+    /// <summary>
+    /// A matching join says what it matched on and what the rule compared (#2052), reading the rule once for every
+    /// connection.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinedByMatching_NamesTheValueAndTheRuleAsync()
+    {
+        var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Joined);
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.InboundMatching;
+        cso.JoinObjectMatchingRuleId = 31;
+        cso.JoinMatchValue = "48213";
+        _connectedSystems.Setup(r => r.GetObjectMatchingRulesAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 31)))
+            .ReturnsAsync([new ObjectMatchingRule
+            {
+                Id = 31,
+                TargetMetaverseAttribute = new MetaverseAttribute { Name = "Employee ID" },
+                Sources = [new ObjectMatchingRuleSource { Expression = "Replace(cs[\"employeeNumber\"], \"EMP-\", \"\")" }]
+            }]);
+
+        var join = (await ExplainAsync())!.Connections.Single().Join;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(join.ObjectMatchingRuleId, Is.EqualTo(31));
+            Assert.That(join.MatchValue, Is.EqualTo("48213"));
+            Assert.That(join.Description, Is.EqualTo(
+                "Joined by matching on the Connected System's Object Matching Rules: matched \"48213\" on Employee ID (equals Replace(cs[\"employeeNumber\"], \"EMP-\", \"\"))"));
+        }
+    }
+
     [Test]
     public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinedBeforeRecordingWithHistory_DerivesTheRuleAsync()
     {
@@ -399,11 +467,13 @@ public class MetaverseObjectConnectionExplanationsTests
         var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Provisioned,
             ConnectedSystemObjectStatus.PendingProvisioning);
         var queuedBy = Guid.NewGuid();
-        _pendingExports[cso.Id] = new PendingExport
+        var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(), ConnectedSystemObjectId = cso.Id, ChangeType = PendingExportChangeType.Create,
-            ProvisioningSyncRuleId = rule.Id, QueuedByRunProfileExecutionItemId = queuedBy
+            ProvisioningSyncRuleId = rule.Id
         };
+        pendingExport.RecordStager(queuedBy);
+        _pendingExports[cso.Id] = pendingExport;
 
         var result = (await ExplainAsync())!;
 

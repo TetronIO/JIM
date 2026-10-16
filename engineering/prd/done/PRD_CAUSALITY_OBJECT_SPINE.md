@@ -206,5 +206,5 @@ the chain records (typically nothing yet), and the layout is the same shape as e
 - The Flow-view lane misreading and the empty-Identity complaint were raised against item
   `2932861b-35b8-4158-a1d7-48885ec16203` (Baseline User create export) on a Scenario 4 run, 2026-08-21.
 - Prior art: `engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md` (the three-view redesign the
-  spine builds on) and `engineering/prd/doing/PRD_CAUSAL_PROVENANCE.md` (#1223, the chain the spine
+  spine builds on) and `engineering/prd/done/PRD_CAUSAL_PROVENANCE.md` (#1223, the chain the spine
   renders).

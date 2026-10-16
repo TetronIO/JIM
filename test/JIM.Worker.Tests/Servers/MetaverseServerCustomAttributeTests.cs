@@ -33,6 +33,13 @@ public class MetaverseServerCustomAttributeTests
     public void SetUp()
     {
         _repo = new Mock<IRepository>();
+        // Nothing reads any attribute unless a test says otherwise (#2265).
+        var attributeReaderConnectedSystems = new Mock<IConnectedSystemRepository>();
+        attributeReaderConnectedSystems.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ConnectedSystems).Returns(attributeReaderConnectedSystems.Object);
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _metaverseRepo = new Mock<IMetaverseRepository>();
         _activityRepo = new Mock<IActivityRepository>();
         _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
@@ -367,6 +374,47 @@ public class MetaverseServerCustomAttributeTests
 
     #endregion
 
+    #region create
+
+    [Test]
+    public void CreateMetaverseAttributeAsync_MultiValuedBoolean_ThrowsAndCreatesNothingAsync()
+    {
+        var attribute = new MetaverseAttribute { Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued };
+
+        var ex = Assert.ThrowsAsync<UnsupportedAttributePluralityException>(
+            () => _jim.Metaverse.CreateMetaverseAttributeAsync(attribute, TestUtilities.GetInitiatedBy()));
+
+        Assert.That(ex!.DataType, Is.EqualTo(AttributeDataType.Boolean));
+        _metaverseRepo.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+        Assert.That(_createdActivities, Is.Empty);
+    }
+
+    [Test]
+    public void CreateMetaverseAttributeAsync_MultiValuedBooleanByApiKey_ThrowsAndCreatesNothingAsync()
+    {
+        var attribute = new MetaverseAttribute { Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued };
+        var apiKey = new JIM.Models.Security.ApiKey { Id = Guid.NewGuid(), Name = "k", KeyHash = "h", KeyPrefix = "p", IsEnabled = true, Created = DateTime.UtcNow };
+
+        Assert.ThrowsAsync<UnsupportedAttributePluralityException>(
+            () => _jim.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey));
+
+        _metaverseRepo.Verify(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+        Assert.That(_createdActivities, Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateMetaverseAttributeAsync_SingleValuedBoolean_CreatesAsync()
+    {
+        var attribute = new MetaverseAttribute { Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.CreateMetaverseAttributeAsync(attribute)).Returns(Task.CompletedTask);
+
+        await _jim.Metaverse.CreateMetaverseAttributeAsync(attribute, TestUtilities.GetInitiatedBy());
+
+        _metaverseRepo.Verify(r => r.CreateMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    #endregion
+
     #region type / plurality change
 
     [Test]
@@ -399,6 +447,170 @@ public class MetaverseServerCustomAttributeTests
         Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Number));
         Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
         _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    /// <summary>
+    /// The one schema change stored values do not block (#2153, D3): same type, single-valued to multi-valued. Every
+    /// value held is still a valid member of the wider set, so the change goes through the same audited path as any
+    /// other schema change.
+    /// </summary>
+    [Test]
+    public async Task ChangeMetaverseAttributeSchemaAsync_WideningWithStoredValues_AppliesThroughAuditedPathAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "dSCorePropagationData", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(77);
+        _metaverseRepo.Setup(r => r.UpdateMetaverseAttributeAsync(attribute)).Returns(Task.CompletedTask);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+            42, AttributeDataType.DateTime, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy(), "Widen after upgrade");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.True);
+            Assert.That(impact.BlockedByValues, Is.False);
+            Assert.That(impact.TotalObjectsWithValues, Is.EqualTo(77));
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.DateTime));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(_createdActivities.Where(a =>
+                    a.TargetType == ActivityTargetType.MetaverseAttribute &&
+                    a.TargetOperationType == ActivityTargetOperationType.Update &&
+                    a.TargetName == "dSCorePropagationData"),
+                Has.Exactly(1).Items, "the widening is audited like any other schema change");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    /// <summary>
+    /// Every change other than the lossless widening stays blocked by stored values, and nothing is written or audited.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Number, AttributePlurality.SingleValued, TestName = "Refuses a type change")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.SingleValued, AttributeDataType.Number, AttributePlurality.MultiValued, TestName = "Refuses a type change while widening")]
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, AttributeDataType.Text, AttributePlurality.SingleValued, TestName = "Refuses multi-valued to single-valued")]
+    [TestCase(AttributeDataType.DateTime, AttributePlurality.MultiValued, AttributeDataType.Text, AttributePlurality.MultiValued, TestName = "Refuses a type change on a multi-valued attribute")]
+    public async Task ChangeMetaverseAttributeSchemaAsync_AnyOtherChangeWithStoredValues_RefusesAndWritesNothingAsync(
+        AttributeDataType currentType, AttributePlurality currentPlurality, AttributeDataType newType, AttributePlurality newPlurality)
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = currentType, AttributePlurality = currentPlurality };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(3);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(42, newType, newPlurality, TestUtilities.GetInitiatedBy());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.False);
+            Assert.That(impact.BlockedByValues, Is.True);
+            Assert.That(impact.IsLosslessWidening, Is.False);
+            Assert.That(attribute.Type, Is.EqualTo(currentType), "a refused change must leave the attribute as it was");
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(currentPlurality));
+            Assert.That(_createdActivities, Is.Empty);
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Submitting the attribute's current type and plurality is a no-op, whether or not Metaverse Objects hold values:
+    /// it succeeds, writes nothing, and records no Activity, because no change happened.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributePlurality.MultiValued, 77, TestName = "No-op on a multi-valued attribute holding values")]
+    [TestCase(AttributeDataType.DateTime, AttributePlurality.SingleValued, 3, TestName = "No-op on a single-valued attribute holding values")]
+    [TestCase(AttributeDataType.Number, AttributePlurality.SingleValued, 0, TestName = "No-op on an attribute holding no values")]
+    public async Task ChangeMetaverseAttributeSchemaAsync_UnchangedTypeAndPlurality_SucceedsAndRecordsNoChangeAsync(
+        AttributeDataType type, AttributePlurality plurality, int objectsWithValues)
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = type, AttributePlurality = plurality };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(objectsWithValues);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(42, type, plurality, TestUtilities.GetInitiatedBy(), "Resubmitted");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.Applied, Is.True, "the requested schema is in effect");
+            Assert.That(impact.IsUnchanged, Is.True);
+            Assert.That(impact.BlockedByValues, Is.False);
+            Assert.That(attribute.Type, Is.EqualTo(type));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(plurality));
+            Assert.That(_createdActivities, Is.Empty, "a change that did not happen must not be audited");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The Boolean rule runs before the no-op check, so resubmitting a multi-valued Boolean (one saved before the rule
+    /// existed) is still refused rather than waved through as no change.
+    /// </summary>
+    [Test]
+    public void ChangeMetaverseAttributeSchemaAsync_UnchangedMultiValuedBoolean_StillThrowsAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "isContractor", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.MultiValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(5);
+
+        Assert.ThrowsAsync<UnsupportedAttributePluralityException>(
+            () => _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+                42, AttributeDataType.Boolean, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy()));
+
+        Assert.That(_createdActivities, Is.Empty);
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task EvaluateAttributeSchemaChangeAsync_ReportsTheCurrentAndProposedSchemaAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(5);
+
+        var impact = await _jim.Metaverse.EvaluateAttributeSchemaChangeAsync(attribute, AttributeDataType.Text, AttributePlurality.MultiValued);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impact.CurrentType, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(impact.CurrentPlurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(impact.ProposedType, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(impact.ProposedPlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(impact.TotalObjectsWithValues, Is.EqualTo(5));
+            Assert.That(impact.IsLosslessWidening, Is.True);
+            Assert.That(impact.Applied, Is.False, "evaluating changes nothing");
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public void ChangeMetaverseAttributeSchemaAsync_ToMultiValuedBoolean_ThrowsAndChangesNothingAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "isContractor", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(0);
+
+        var ex = Assert.ThrowsAsync<UnsupportedAttributePluralityException>(
+            () => _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+                42, AttributeDataType.Boolean, AttributePlurality.MultiValued, TestUtilities.GetInitiatedBy()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.DataType, Is.EqualTo(AttributeDataType.Boolean));
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
+        }
+        _metaverseRepo.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ChangeMetaverseAttributeSchemaAsync_ToSingleValuedBoolean_AppliesAsync()
+    {
+        var attribute = new MetaverseAttribute { Id = 42, Name = "isContractor", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued };
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(42, true)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(42)).ReturnsAsync(0);
+        _metaverseRepo.Setup(r => r.UpdateMetaverseAttributeAsync(attribute)).Returns(Task.CompletedTask);
+
+        var impact = await _jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(
+            42, AttributeDataType.Boolean, AttributePlurality.SingleValued, TestUtilities.GetInitiatedBy());
+
+        Assert.That(impact.Applied, Is.True);
+        Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Boolean));
     }
 
     [Test]

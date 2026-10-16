@@ -440,6 +440,157 @@ public class UniquenessProbeSessionTests
         }
     }
 
+    // ---- Several attributes of one system at once (#2023) ----
+
+    [Test]
+    public async Task ProbeAttributesAsync_SeveralAttributesOfOneSystem_SendsThemToTheConnectorTogetherAsync()
+    {
+        var connector = new FakeProbingConnector("asmith", "asmith@corp.local", "joe.bloggs@corp.local");
+        var host = CorporateAdHost(connector).WithControlValues(700, "asmith").WithControlValues(701, "asmith@corp.local");
+        await using var session = new UniquenessProbeSession(host, CancellationToken.None);
+
+        var results = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs", "joe.bloggs1"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connector.BatchSizes, Is.EqualTo(new[] { 2 }), "one call for the system");
+            Assert.That(connector.Requests.Select(r => (r.AttributeName, r.ControlValue)), Is.EqualTo(new[]
+            {
+                ("sAMAccountName", "asmith"),
+                ("mail", "asmith@corp.local")
+            }), "each attribute vouched for by its own control value");
+            Assert.That(results.Select(r => r.Outcomes), Is.EqualTo(new[]
+            {
+                new[] { UniquenessProbeOutcome.NotFound, UniquenessProbeOutcome.NotFound },
+                new[] { UniquenessProbeOutcome.Found }
+            }));
+            Assert.That(results.Select(r => r.ConnectedSystemName), Is.All.EqualTo("Corporate AD"));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAttributesAsync_AttributeASystemWideSearchCannotAnswerFor_IsNotProbedAndTheRestAreAsync()
+    {
+        var connector = new FakeProbingConnector("asmith");
+        connector.UnprobeableAttributes.Add("mail");
+        await using var session = new UniquenessProbeSession(CorporateAdHost(connector).WithControlValues(700, "asmith"), CancellationToken.None);
+
+        var results = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Select(r => r.IsProbed), Is.EqualTo(new[] { true, false }));
+            Assert.That(connector.Requests.Select(r => r.AttributeName), Is.EqualTo(new[] { "sAMAccountName" }));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAttributesAsync_OneAttributeBlindToItsControl_LatchesThatAttributeOnlyAsync()
+    {
+        var connector = new FakeProbingConnector("asmith")
+        {
+            ProbeAnswer = r => r.AttributeName == "mail"
+                ? UniquenessProbeResult.FromValuesFound(r, [])
+                : UniquenessProbeResult.FromValuesFound(r, ["asmith"])
+        };
+        var host = CorporateAdHost(connector).WithControlValues(700, "asmith").WithControlValues(701, "asmith@corp.local");
+        await using var session = new UniquenessProbeSession(host, CancellationToken.None);
+
+        var first = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+        var second = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["ada.lovelace"]), new UniquenessProbeBatch(701, ["ada.lovelace@corp.local"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first[0].Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.NotFound }));
+            Assert.That(first[1].Outcomes, Is.All.EqualTo(UniquenessProbeOutcome.CouldNotDetermine));
+            Assert.That(second[0].Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.NotFound }), "the system's other attributes are still asked");
+            Assert.That(second[1].Outcomes, Is.All.EqualTo(UniquenessProbeOutcome.CouldNotDetermine));
+            Assert.That(connector.BatchSizes, Is.EqualTo(new[] { 2, 1 }), "mail is not asked again this run");
+        }
+    }
+
+    /// <summary>
+    /// A failure says the system is not to be relied on for the rest of the run, but answers it gave alongside it in the
+    /// same call were complete searches, and stand.
+    /// </summary>
+    [Test]
+    public async Task ProbeAttributesAsync_ConnectorFailsOneAttribute_KeepsTheOthersAnswersAndLatchesTheSystemAsync()
+    {
+        var connector = new FakeProbingConnector("asmith", "joe.bloggs")
+        {
+            ProbeAnswer = r => r.AttributeName == "mail"
+                ? UniquenessProbeResult.Failed(r.Candidates.Count, "The directory refused the probe")
+                : UniquenessProbeResult.FromValuesFound(r, ["asmith", "joe.bloggs"])
+        };
+        var host = CorporateAdHost(connector).WithControlValues(700, "asmith").WithControlValues(701, "asmith@corp.local");
+        await using var session = new UniquenessProbeSession(host, CancellationToken.None);
+
+        var first = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+        var second = await session.ProbeAttributesAsync(CorporateAdId, [new UniquenessProbeBatch(700, ["ada.lovelace"])]);
+        session.RecordValueChosenWithoutProbe(CorporateAdId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first[0].Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found }));
+            Assert.That(first[1].Outcomes, Is.All.EqualTo(UniquenessProbeOutcome.CouldNotDetermine));
+            Assert.That(second[0].Outcomes, Is.All.EqualTo(UniquenessProbeOutcome.CouldNotDetermine));
+            Assert.That(connector.BatchSizes, Is.EqualTo(new[] { 2 }), "the system is not asked again this run");
+            Assert.That(session.GetRunWarnings().Single(), Does.Contain("refused"));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAttributesAsync_ConnectorAnswersForADifferentNumberOfAttributes_LatchesTheSystemAsync()
+    {
+        var connector = new FakeProbingConnector("asmith") { AlterBatchAnswer = results => [results[0]] };
+        var host = CorporateAdHost(connector).WithControlValues(700, "asmith").WithControlValues(701, "asmith@corp.local");
+        await using var session = new UniquenessProbeSession(host, CancellationToken.None);
+
+        var results = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+        session.RecordValueChosenWithoutProbe(CorporateAdId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(2));
+            Assert.That(results.SelectMany(r => r.Outcomes), Is.All.EqualTo(UniquenessProbeOutcome.CouldNotDetermine),
+                "nothing it said can be matched to an attribute");
+            Assert.That(session.GetRunWarnings().Single(), Does.Contain("different number"));
+        }
+    }
+
+    /// <summary>
+    /// A Connector that searches one attribute at a time takes up to the timeout for each, so a call carrying several
+    /// is given that much longer before the system is treated as unreachable.
+    /// </summary>
+    [Test]
+    public async Task ProbeAttributesAsync_SeveralAttributes_AllowsTheTimeoutForEachAsync()
+    {
+        var connector = new FakeProbingConnector
+        {
+            ProbeAnswer = r =>
+            {
+                Thread.Sleep(700);
+                return UniquenessProbeResult.FromValuesFound(r, []);
+            }
+        };
+        await using var session = new UniquenessProbeSession(CorporateAdHost(connector), CancellationToken.None, TimeSpan.FromSeconds(1));
+
+        var results = await session.ProbeAttributesAsync(CorporateAdId,
+            [new UniquenessProbeBatch(700, ["joe.bloggs"]), new UniquenessProbeBatch(701, ["joe.bloggs@corp.local"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.SelectMany(r => r.Outcomes), Is.All.EqualTo(UniquenessProbeOutcome.NotFound));
+            Assert.That(session.GetRunWarnings(), Is.Empty);
+        }
+    }
+
     private static FakeUniquenessProbeHost CorporateAdHost(FakeProbingConnector connector) =>
         new FakeUniquenessProbeHost().WithSystem(
             FakeUniquenessProbeHost.ProbingSystem(CorporateAdId, "Corporate AD", true, Attribute(700, "sAMAccountName"), Attribute(701, "mail")),

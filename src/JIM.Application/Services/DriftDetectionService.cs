@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
 using JIM.Models.Expressions;
@@ -9,6 +10,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
@@ -54,7 +56,13 @@ public class DriftDetectionService
     /// <param name="generatedValueAssignments">The run's Unique Value Generation cache, prefetched for this page's Connected
     /// System Objects. A generated export Attribute Flow's expected value is read from here (#242); without it, generated
     /// flows are not checked.</param>
-    /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted).</returns>
+    /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted), and the
+    /// mapping-level errors found on the way (<see cref="DriftDetectionResult.AttributeFlowErrors"/>) for the caller to
+    /// record.</returns>
+    /// <exception cref="SyncExpressionEvaluationException">An export expression failed to evaluate. Raised exactly as
+    /// export staging raises it (#2180): the caller records it against the object, and nothing is staged for it.</exception>
+    /// <exception cref="SyncExpressionMissingInputException">An export expression's input is missing and its Missing
+    /// Input Behaviour is Fail the object; recorded and staged for as above.</exception>
     public DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
@@ -175,16 +183,33 @@ public class DriftDetectionService
                         continue;
                     }
 
-                    // Calculate expected value from MVO based on export rule
-                    // Build MVO attribute dictionary lazily (only when needed for expressions)
-                    mvAttributeDictionary ??= BuildAttributeDictionary(targetMvo);
-                    var expectedValue = GetExpectedValue(targetMvo, source, mvAttributeDictionary, mapping.TargetConnectedSystemAttribute);
+                    // An expression mapping's expected state is worked out by export staging's own code (#2180), so drift
+                    // never asserts a state export staging would not stage. The Metaverse Object's expression dictionary
+                    // is built once, by the same builder export staging uses, and only when an expression needs it.
+                    if (!string.IsNullOrWhiteSpace(source.Expression))
+                    {
+                        mvAttributeDictionary ??= SyncEngine.BuildAttributeDictionary(targetMvo);
+                        EvaluateExpressionMappingDrift(cso, targetMvo, exportRule, mapping, source, mvAttributeDictionary, result);
+                        continue;
+                    }
+
+                    // Several values of a multi-valued source cannot be written to a single-valued target, and export
+                    // staging refuses to pick one (#435); drift refuses on exactly the same terms, through the same
+                    // predicate, rather than correcting the target to whichever value happened to load first.
+                    var multiValuedToSingleValuedError = SyncEngine.FindMultiValuedToSingleValuedError(targetMvo, mapping, source);
+                    if (multiValuedToSingleValuedError != null)
+                    {
+                        result.AttributeFlowErrors.Add(multiValuedToSingleValuedError);
+                        continue;
+                    }
+
+                    var expectedValue = GetExpectedAttributeValue(targetMvo, source, mapping.TargetConnectedSystemAttribute);
 
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
 
                     // Compare values
-                    if (!ValuesEqual(expectedValue, actualValue))
+                    if (!ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(mapping.TargetConnectedSystemAttribute)))
                     {
                         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}. " +
                             "Expected: '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -204,18 +229,119 @@ public class DriftDetectionService
         }
 
         // If drift was detected, queue corrective Pending Exports
-        if (result.HasDrift)
+        if (result.DriftedAttributes.Count > 0)
         {
-            Log.Information("EvaluateDrift: Detected {DriftCount} drifted attributes on CSO {CsoId}. Staging corrective exports.",
-                result.DriftedAttributes.Count, cso.Id);
-
-            // Use the existing export evaluation infrastructure to create Pending Exports
-            // The existing logic already handles all the complexity of Pending Export creation
-            var pendingExports = CreateCorrectiveExports(cso, targetMvo, result.DriftedAttributes);
+            var (pendingExports, correctedAttributes) = CreateCorrectiveExports(cso, targetMvo, result.DriftedAttributes);
             result.CorrectiveExports.AddRange(pendingExports);
+
+            // Drift is reported only where a correction is staged (#2180). A difference no correction can be staged for
+            // would otherwise raise a Drift Correction item on every synchronisation while changing nothing.
+            var uncorrectedCount = result.DriftedAttributes.RemoveAll(drifted => !correctedAttributes.Contains(drifted));
+            if (uncorrectedCount > 0)
+            {
+                Log.Debug("EvaluateDrift: {Count} difference(s) on CSO {CsoId} staged no correction and are not reported as drift",
+                    uncorrectedCount, cso.Id);
+            }
+
+            if (result.HasDrift)
+            {
+                Log.Information("EvaluateDrift: Detected {DriftCount} drifted attributes on CSO {CsoId}; staged {ExportCount} corrective Pending Exports.",
+                    result.DriftedAttributes.Count, cso.Id, result.CorrectiveExports.Count);
+            }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Drift Detection for an expression mapping (#2180): what the Connected System Object should hold is worked out by
+    /// export staging's own code, and a correction is exactly what export staging would stage for the same Metaverse
+    /// Object and the same object, after its own no-net-change check. So the two can never disagree:
+    /// <list type="bullet">
+    /// <item>Missing Input Behaviour applies as it does to export staging: Fail this mapping records an error and
+    /// stages nothing, Contribute no value stages nothing, and Fail the object throws.</item>
+    /// <item>A null result, or one with no value, stages nothing, so the Connected System keeps what it holds.</item>
+    /// <item>The result is converted to the target's type, so "512" is the number 512; a value the type cannot hold,
+    /// or several values for a single-valued target, records an error and stages nothing.</item>
+    /// <item>A single value into a multi-valued target is the whole set (an Update), and a collection is the set of its
+    /// elements, each compared with what the object holds as a set.</item>
+    /// </list>
+    /// </summary>
+    /// <exception cref="SyncExpressionEvaluationException">The expression failed to evaluate.</exception>
+    /// <exception cref="SyncExpressionMissingInputException">An input is missing and Missing Input Behaviour is Fail
+    /// the object.</exception>
+    private void EvaluateExpressionMappingDrift(
+        ConnectedSystemObject cso,
+        MetaverseObject targetMvo,
+        SyncRule exportRule,
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        Dictionary<string, object?> mvAttributeDictionary,
+        DriftDetectionResult result)
+    {
+        var target = mapping.TargetConnectedSystemAttribute!;
+        var heldValues = cso.AttributeValues.Where(av => av.AttributeId == target.Id).ToList();
+
+        // Exactly what export staging stages for this mapping: the evaluation pipeline (#2055) and the same handling of
+        // its outcome. Nothing staged (no value, or a mapping-level error already recorded) leaves the target as it is.
+        var staged = SyncEngine.StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
+            _expressionEvaluator, heldValues, result.AttributeFlowErrors);
+        if (staged.Count == 0)
+        {
+            Log.Debug("EvaluateDrift: Expression for attribute {AttrName} stages nothing for MVO {MvoId}, so the Connected System keeps its value",
+                target.Name, targetMvo.Id);
+            return;
+        }
+
+        var corrections = staged.Where(change => !SyncEngine.IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+        if (corrections.Count == 0)
+            return;
+
+        var expectedValue = ExpectedValueOf(staged, target);
+        var actualValue = GetActualValue(cso, target);
+        Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}. Expected: '{ExpectedValue}', Actual: '{ActualValue}'",
+            cso.Id, target.Name, FormatValueForLog(expectedValue), FormatValueForLog(actualValue));
+
+        result.DriftedAttributes.Add(new DriftedAttribute
+        {
+            Attribute = target,
+            ExpectedValue = expectedValue,
+            ActualValue = actualValue,
+            ExportRule = exportRule,
+            CorrectiveChanges = corrections
+        });
+    }
+
+    /// <summary>
+    /// What an expression mapping's staged changes say the target should hold, shaped as <see cref="GetActualValue"/>
+    /// reads the target: the set of the values written for a multi-valued target, or the one value for a single-valued
+    /// one. Used to describe the drift, never to decide it.
+    /// </summary>
+    private static object? ExpectedValueOf(IEnumerable<PendingExportAttributeValueChange> staged, ConnectedSystemObjectTypeAttribute target)
+    {
+        var values = staged
+            .Where(change => change.ChangeType != PendingExportAttributeChangeType.Remove)
+            .Select(ChangeValue)
+            .OfType<object>()
+            .ToList();
+
+        return target.AttributePlurality == AttributePlurality.MultiValued
+            ? new HashSet<object>(values)
+            : values.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The one value a Pending Export change carries, from whichever typed field holds it.
+    /// </summary>
+    private static object? ChangeValue(PendingExportAttributeValueChange change)
+    {
+        // Each field is boxed on its own: chaining nullable value types with ?? would widen an int to a long.
+        object?[] fields =
+        [
+            change.StringValue, change.IntValue, change.LongValue, change.DecimalValue, SyncEngine.CanonicalDate(change.DateTimeValue),
+            change.BoolValue, change.GuidValue, change.ByteValue, change.UnresolvedReferenceValue
+        ];
+        return Array.Find(fields, field => field != null);
     }
 
     /// <summary>
@@ -349,9 +475,9 @@ public class DriftDetectionService
 
         var actualValue = GetActualValue(cso, targetAttribute);
 
-        // The same comparison every export flow uses (ordinal for text). Export evaluation's own Sticky reassertion of
-        // a generated value compares ordinally too, so the two paths agree on what counts as a difference.
-        if (ValuesEqual(expectedValue, actualValue))
+        // The same comparison every export flow uses (exact for text, unless the attribute is an identifier that ignores
+        // case; AttributeValueComparison), so drift and export staging agree on what counts as a difference.
+        if (ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(targetAttribute)))
             return;
 
         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} generated attribute {AttrName}. Expected (assigned): '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -557,7 +683,7 @@ public class DriftDetectionService
                     // Check if any of the mappings for this system target this attribute
                     foreach (var mapping in kvp.Value)
                     {
-                        if (mapping.TargetMetaverseAttribute?.Name == attributeName)
+                        if (string.Equals(mapping.TargetMetaverseAttribute?.Name, attributeName, StringComparison.OrdinalIgnoreCase))
                         {
                             Log.Debug("IsContributorForExpressionAttributes: System {SystemId} is a contributor " +
                                 "for attribute {AttrName} referenced in expression: {Expression}",
@@ -613,44 +739,11 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Gets the expected value(s) for a CSO attribute based on the MVO and export rule source.
-    /// Supports both direct attribute mappings and expression-based mappings.
-    /// For multi-valued attributes, returns a HashSet containing all values.
+    /// The expected value(s) of a direct attribute mapping: the Metaverse Object's value(s) for the source attribute,
+    /// shaped by the target attribute's plurality.
     /// </summary>
-    /// <param name="mvo">The Metaverse Object to get the expected value from.</param>
-    /// <param name="source">The Synchronisation Rule mapping source defining the attribute or expression.</param>
-    /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
-    /// <param name="targetCsoAttribute">The target CSO attribute - used to determine plurality for consistent comparison.</param>
-    private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
+    private static object? GetExpectedAttributeValue(MetaverseObject mvo, SyncRuleMappingSource source, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
     {
-        // Handle expression-based mappings
-        if (!string.IsNullOrWhiteSpace(source.Expression))
-        {
-            try
-            {
-                Log.Debug("GetExpectedValue: Evaluating expression for drift detection. " +
-                    "Expression: '{Expression}', Available attributes: [{Attributes}]",
-                    source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
-
-                var context = new ExpressionContext(mvAttributeDictionary, null);
-                var result = _expressionEvaluator.Evaluate(source.Expression, context);
-
-                if (result == null)
-                {
-                    Log.Debug("GetExpectedValue: Expression '{Expression}' for MVO {MvoId} returned null",
-                        source.Expression, mvo.Id);
-                }
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "GetExpectedValue: Failed to evaluate expression '{Expression}' for drift detection",
-                    source.Expression);
-                return null;
-            }
-        }
-
         // Handle direct attribute mapping
         if (source.MetaverseAttribute == null)
             return null;
@@ -726,7 +819,7 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
@@ -735,54 +828,6 @@ public class DriftDetectionService
             AttributeDataType.Reference => av.ReferenceValueId ?? av.ReferenceValue?.Id,
             _ => null
         };
-    }
-
-    /// <summary>
-    /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
-    /// The dictionary keys are attribute names, and values are the attribute values.
-    /// </summary>
-    internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
-    {
-        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        if (mvo.Type == null)
-        {
-            Log.Warning("BuildAttributeDictionary: MVO {MvoId} has null Type, cannot build attribute dictionary", mvo.Id);
-            return attributes;
-        }
-
-        // Exclude asserted-null markers (#91): drift expressions must evaluate against real values only.
-        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
-        {
-            if (attributeValue.Attribute == null)
-            {
-                Log.Warning("BuildAttributeDictionary: MVO {MvoId} has attribute value with AttributeId={AttrId} but Attribute navigation property is null",
-                    mvo.Id, attributeValue.AttributeId);
-                continue;
-            }
-
-            var attributeName = attributeValue.Attribute.Name;
-
-            // Use the appropriate typed value based on the attribute type
-            object? value = attributeValue.Attribute.Type switch
-            {
-                AttributeDataType.Text => attributeValue.StringValue,
-                AttributeDataType.Number => attributeValue.IntValue,
-                AttributeDataType.LongNumber => attributeValue.LongValue,
-                AttributeDataType.Decimal => attributeValue.DecimalValue,
-                AttributeDataType.DateTime => attributeValue.DateTimeValue,
-                AttributeDataType.Boolean => attributeValue.BoolValue,
-                AttributeDataType.Guid => attributeValue.GuidValue,
-                AttributeDataType.Binary => attributeValue.ByteValue,
-                // Use scalar FK with navigation fallback for test compatibility
-                AttributeDataType.Reference => (attributeValue.ReferenceValueId ?? attributeValue.ReferenceValue?.Id)?.ToString(),
-                _ => null
-            };
-
-            attributes[attributeName] = value;
-        }
-
-        return attributes;
     }
 
     /// <summary>
@@ -847,7 +892,7 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
@@ -863,7 +908,11 @@ public class DriftDetectionService
     /// Compares two attribute values for equality.
     /// Handles both single values and HashSets (for multi-valued attributes).
     /// </summary>
-    private static bool ValuesEqual(object? expected, object? actual)
+    /// <param name="expected">The value the Metaverse Object says the target should hold.</param>
+    /// <param name="actual">The value the target holds.</param>
+    /// <param name="textComparer">How text compares, from <see cref="AttributeValueComparison"/>: exact, except for an
+    /// identifier that ignores case, which the directory may report in the case it stored (#2195, #2051).</param>
+    private static bool ValuesEqual(object? expected, object? actual, StringComparer textComparer)
     {
         if (expected == null && actual == null)
             return true;
@@ -887,7 +936,8 @@ public class DriftDetectionService
             // the target has not drifted. The pairwise scan below is O(n^2); on a 20,000-member group
             // that is 400M comparisons (~36s of CPU per group measured at Scale500k25kGroups), where
             // this is O(n). Hash equality implies SingleValueEquals equality for every type produced
-            // by the value extractors (ordinal for strings, value equality for Guids and numerics,
+            // by the value extractors (ordinal equality for strings, which implies equality under either
+            // text comparison; value equality for Guids and numerics,
             // reference equality for byte arrays), so a true result here is always safe.
             if (expectedSet.SetEquals(actualSet))
                 return true;
@@ -897,7 +947,7 @@ public class DriftDetectionService
             // first, so only genuinely hash-missing values pay for a linear scan.
             foreach (var expectedValue in expectedSet.Where(v => !actualSet.Contains(v)))
             {
-                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue));
+                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue, textComparer));
                 if (!found)
                 {
                     Log.Debug("ValuesEqual: Expected value {ExpectedValue} not found in actual set",
@@ -910,13 +960,13 @@ public class DriftDetectionService
         }
 
         // Handle single value comparison
-        return SingleValueEquals(expected, actual);
+        return SingleValueEquals(expected, actual, textComparer);
     }
 
     /// <summary>
     /// Compares two single values for equality.
     /// </summary>
-    private static bool SingleValueEquals(object? expected, object? actual)
+    private static bool SingleValueEquals(object? expected, object? actual, StringComparer textComparer)
     {
         if (expected == null && actual == null)
             return true;
@@ -928,9 +978,9 @@ public class DriftDetectionService
         if (expected is byte[] expectedBytes && actual is byte[] actualBytes)
             return expectedBytes.SequenceEqual(actualBytes);
 
-        // Handle string comparison (case-sensitive)
+        // Handle string comparison (exact unless the attribute is an identifier that ignores case)
         if (expected is string expectedStr && actual is string actualStr)
-            return string.Equals(expectedStr, actualStr, StringComparison.Ordinal);
+            return textComparer.Equals(expectedStr, actualStr);
 
         // Handle Guid comparison (may be stored as string in CSO)
         if (expected is Guid expectedGuid)
@@ -948,14 +998,17 @@ public class DriftDetectionService
     /// <summary>
     /// Creates corrective Pending Exports for drifted attributes (in-memory only, not persisted).
     /// The caller is responsible for adding these to the batch list for persistence.
-    /// For multi-valued attributes, creates atomic ADD/REMOVE changes for the specific differences.
+    /// For multi-valued attributes, creates atomic ADD/REMOVE changes for the specific differences. An expression
+    /// mapping's drift carries the changes export staging's own code staged for it (#2180), and those are used as they are.
     /// </summary>
-    private List<PendingExport> CreateCorrectiveExports(
+    /// <returns>The corrective Pending Exports, and the drifted attributes a correction was staged for.</returns>
+    private (List<PendingExport> PendingExports, List<DriftedAttribute> Corrected) CreateCorrectiveExports(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
         List<DriftedAttribute> driftedAttributes)
     {
         var pendingExports = new List<PendingExport>();
+        var corrected = new List<DriftedAttribute>();
 
         // Group drifted attributes by export rule (one Pending Export per rule)
         var attributesByRule = driftedAttributes
@@ -965,86 +1018,23 @@ public class DriftDetectionService
         foreach (var ruleGroup in attributesByRule)
         {
             var exportRule = ruleGroup.Key;
-            var attributes = ruleGroup.ToList();
 
             // Create Pending Export attribute changes
             var attributeChanges = new List<PendingExportAttributeValueChange>();
+            var attributes = new List<DriftedAttribute>();
 
-            foreach (var drifted in attributes)
+            foreach (var (drifted, changes) in ruleGroup
+                .Select(drifted => (Drifted: drifted, Changes: drifted.CorrectiveChanges?.ToList() ?? BuildCorrectiveChanges(drifted, exportRule)))
+                .Where(correction => correction.Changes.Count > 0))
             {
-                // Check if this is a multi-valued attribute
-                var isMultiValued = drifted.Attribute.AttributePlurality == AttributePlurality.MultiValued;
-
-                if (isMultiValued)
-                {
-                    // For multi-valued attributes, compute the diff between expected and actual
-                    var expectedSet = drifted.ExpectedValue as HashSet<object> ?? [];
-                    var actualSet = drifted.ActualValue as HashSet<object> ?? [];
-
-                    // Find values to ADD (in expected but not in actual)
-                    foreach (var expectedValue in expectedSet)
-                    {
-                        var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av));
-                        if (!existsInActual)
-                        {
-                            var addChange = new PendingExportAttributeValueChange
-                            {
-                                Id = Guid.NewGuid(),
-                                AttributeId = drifted.Attribute.Id,
-                                ChangeType = PendingExportAttributeChangeType.Add,
-                                SyncRuleId = exportRule.Id,
-                                SyncRuleName = exportRule.Name
-                            };
-                            SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
-                            attributeChanges.Add(addChange);
-
-                            Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
-                                FormatValueForLog(expectedValue), drifted.Attribute.Name);
-                        }
-                    }
-
-                    // Find values to REMOVE (in actual but not in expected)
-                    foreach (var actualValue in actualSet)
-                    {
-                        var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue));
-                        if (!existsInExpected)
-                        {
-                            var removeChange = new PendingExportAttributeValueChange
-                            {
-                                Id = Guid.NewGuid(),
-                                AttributeId = drifted.Attribute.Id,
-                                ChangeType = PendingExportAttributeChangeType.Remove,
-                                SyncRuleId = exportRule.Id,
-                                SyncRuleName = exportRule.Name
-                            };
-                            SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
-                            attributeChanges.Add(removeChange);
-
-                            Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
-                                FormatValueForLog(actualValue), drifted.Attribute.Name);
-                        }
-                    }
-                }
-                else
-                {
-                    // For single-valued attributes, use Update
-                    var change = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = drifted.Attribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        SyncRuleId = exportRule.Id,
-                        SyncRuleName = exportRule.Name
-                    };
-
-                    // Set the expected value on the change
-                    SetAttributeChangeValue(change, drifted.ExpectedValue, drifted.Attribute.Type);
-                    attributeChanges.Add(change);
-                }
+                attributeChanges.AddRange(changes);
+                attributes.Add(drifted);
             }
 
             if (attributeChanges.Count == 0)
                 continue;
+
+            corrected.AddRange(attributes);
 
             // The class membership values this correction obliges (#492): a corrective export whose drifted
             // attribute is a merged auxiliary class's contribution must add the class in the same export,
@@ -1084,7 +1074,90 @@ public class DriftDetectionService
                 pendingExport.Id, cso.Id, attributeChanges.Count, exportRule.Name);
         }
 
-        return pendingExports;
+        return (pendingExports, corrected);
+    }
+
+    /// <summary>
+    /// The changes that correct one drifted attribute of an ordinary (direct) mapping: an Add for each expected value the
+    /// target lacks and a Remove for each value it holds that is not expected, for a multi-valued target; one Update
+    /// carrying the expected value for a single-valued one.
+    /// </summary>
+    private static List<PendingExportAttributeValueChange> BuildCorrectiveChanges(DriftedAttribute drifted, SyncRule exportRule)
+    {
+        var changes = new List<PendingExportAttributeValueChange>();
+
+        // Check if this is a multi-valued attribute
+        var isMultiValued = drifted.Attribute.AttributePlurality == AttributePlurality.MultiValued;
+        var textComparer = AttributeValueComparison.ComparerFor(drifted.Attribute);
+
+        if (isMultiValued)
+        {
+            // For multi-valued attributes, compute the diff between expected and actual
+            var expectedSet = drifted.ExpectedValue as HashSet<object> ?? [];
+            var actualSet = drifted.ActualValue as HashSet<object> ?? [];
+
+            // Find values to ADD (in expected but not in actual)
+            foreach (var expectedValue in expectedSet)
+            {
+                var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av, textComparer));
+                if (!existsInActual)
+                {
+                    var addChange = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = drifted.Attribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Add,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name
+                    };
+                    SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
+                    changes.Add(addChange);
+
+                    Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
+                        FormatValueForLog(expectedValue), drifted.Attribute.Name);
+                }
+            }
+
+            // Find values to REMOVE (in actual but not in expected)
+            foreach (var actualValue in actualSet)
+            {
+                var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue, textComparer));
+                if (!existsInExpected)
+                {
+                    var removeChange = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = drifted.Attribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Remove,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name
+                    };
+                    SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
+                    changes.Add(removeChange);
+
+                    Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
+                        FormatValueForLog(actualValue), drifted.Attribute.Name);
+                }
+            }
+        }
+        else
+        {
+            // For single-valued attributes, use Update
+            var change = new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = drifted.Attribute.Id,
+                ChangeType = PendingExportAttributeChangeType.Update,
+                SyncRuleId = exportRule.Id,
+                SyncRuleName = exportRule.Name
+            };
+
+            // Set the expected value on the change
+            SetAttributeChangeValue(change, drifted.ExpectedValue, drifted.Attribute.Type);
+            changes.Add(change);
+        }
+
+        return changes;
     }
 
     /// <summary>
@@ -1183,7 +1256,7 @@ public class DriftDetectionService
                 change.DecimalValue = value as decimal?;
                 break;
             case AttributeDataType.DateTime:
-                change.DateTimeValue = value as DateTime?;
+                change.DateTimeValue = SyncEngine.CanonicalDate(value as DateTime?);
                 break;
             case AttributeDataType.Boolean:
                 change.BoolValue = value as bool?;

@@ -17,7 +17,7 @@ using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
 
-public class ActivityRepository : IActivityRepository
+public partial class ActivityRepository : IActivityRepository
 {
     private PostgresDataRepository Repository { get; }
 
@@ -166,7 +166,7 @@ public class ActivityRepository : IActivityRepository
         return true;
     }
 
-    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
@@ -175,13 +175,14 @@ public class ActivityRepository : IActivityRepository
             {
                 TotalRpeis = g.Count(),
                 TotalWithErrors = g.Count(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
-                TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError)
+                TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+                TotalObjectTypeChangeRefusals = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged)
             })
             .FirstOrDefaultAsync();
 
         return counts != null
-            ? (counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors)
-            : (0, 0, 0);
+            ? new ActivityRpeiErrorCounts(counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors, counts.TotalObjectTypeChangeRefusals)
+            : new ActivityRpeiErrorCounts(0, 0, 0, 0);
     }
 
     public async Task DeleteActivityAsync(Activity activity)
@@ -386,15 +387,17 @@ public class ActivityRepository : IActivityRepository
         }
 
         // Apply the Connected System filter, which matches the Activity's Target Context (the system the
-        // operation was performed against).
-        var connectedSystems = connectedSystemFilter?.ToList();
+        // operation was performed against). Configuration names ignore case (#2051). The names are matched
+        // directly rather than resolved against today's configuration, because an Activity records the name the
+        // system had at the time.
+        var connectedSystems = connectedSystemFilter?.Select(name => name.ToLowerInvariant()).ToList();
         if (connectedSystems is { Count: > 0 })
-            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext.ToLower()));
 
-        // Apply the Run Profile filter, which matches the Activity's Target Name.
-        var runProfiles = runProfileFilter?.ToList();
+        // Apply the Run Profile filter, which matches the Activity's Target Name, ignoring case likewise.
+        var runProfiles = runProfileFilter?.Select(name => name.ToLowerInvariant()).ToList();
         if (runProfiles is { Count: > 0 })
-            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName.ToLower()));
 
         // Apply the initiator-name filter. Distinct from initiatedById above: this is a case-insensitive
         // partial match on the recorded name, for callers who know who they are looking for but not their id.
@@ -575,6 +578,7 @@ public class ActivityRepository : IActivityRepository
                 InitiatedByName = a.InitiatedByName,
                 InitiatedByType = a.InitiatedByType,
                 Message = a.Message,
+                Status = a.Status,
                 // The origin is the enum's name in TargetContext (#1635 for Explicit/Propagated, #1697 for
                 // Provisioned, written by ExportExecutionServer when an export stages a newly provisioned
                 // account's first password). Spelt out as string comparisons rather than Enum.Parse so it
@@ -919,6 +923,14 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> HasUnresolvedReferencesAsync(Guid activityId)
+    {
+        // Stops at the first item that left any, which for a run that did is usually among the first read.
+        return await Repository.Database.ActivityRunProfileExecutionItems
+            .AnyAsync(i => i.ActivityId == activityId && i.UnresolvedReferenceCount > 0);
+    }
+
     public async Task<bool> HasAnyRunProfileExecutionAsync()
     {
         // TargetOperationType must be Execute: creating, editing and deleting a Run Profile all record
@@ -999,6 +1011,7 @@ public class ActivityRepository : IActivityRepository
         InitiatedByName = a.InitiatedByName,
         When = a.Created,
         Reason = a.ChangeReason,
+        ConfigurationTestGateNote = a.ConfigurationTestGateNote,
         SnapshotJson = a.ConfigurationChangeSnapshot
     };
 
@@ -1315,7 +1328,7 @@ public class ActivityRepository : IActivityRepository
         // Falls back to snapshot fields when CSO navigation is null.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchPattern = $"%{searchQuery}%";
+            var searchPattern = LikePattern.Contains(searchQuery);
             query = query.Where(item =>
                 // Search the name candidates (live CSO attributes)
                 (item.ConnectedSystemObject != null &&
@@ -1784,6 +1797,7 @@ public class ActivityRepository : IActivityRepository
         int totalMvoDeleted;
         int totalGeneratedValues;
         int totalGeneratedValuesRemediated;
+        int totalGeneratedValuesWaiting;
 
         if (hasOutcomes)
         {
@@ -1818,6 +1832,7 @@ public class ActivityRepository : IActivityRepository
             // ObjectChangeType equivalent exists for the legacy fallback below.
             totalGeneratedValues = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
             totalGeneratedValuesRemediated = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
+            totalGeneratedValuesWaiting = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting);
         }
         else
         {
@@ -1851,6 +1866,7 @@ public class ActivityRepository : IActivityRepository
             // Unique Value Generation (#242): likewise an outcome-only concept, predating this graph's legacy path.
             totalGeneratedValues = 0;
             totalGeneratedValuesRemediated = 0;
+            totalGeneratedValuesWaiting = 0;
         }
 
         // --- Stats that always come from RPEIs ---
@@ -1914,6 +1930,7 @@ public class ActivityRepository : IActivityRepository
             TotalGeneratedValues = totalGeneratedValues,
             TotalGeneratedValueFailures = totalGeneratedValueFailures,
             TotalGeneratedValuesRemediated = totalGeneratedValuesRemediated,
+            TotalGeneratedValuesWaiting = totalGeneratedValuesWaiting,
             TotalGeneratedValuesNeedingDecision = totalGeneratedValuesNeedingDecision,
 
             // Direct creation stats
@@ -2040,8 +2057,17 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
+    /// The item types an import records, which are what the source-import hop looks for on a record's timeline. Shared
+    /// by the per-item reads and the batched one (<see cref="GetLatestImportEventsForItemsAsync"/>), which must agree.
+    /// </summary>
+    private static readonly ObjectChangeType[] SourceImportChangeTypes =
+        [ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted];
+
+    /// <summary>
     /// The latest import-side event among <paramref name="candidateRecords"/> at or before the given
     /// Activity time, excluding the asking item: the shared shape of the causal walk's two timeline keys.
+    /// Between two imports in one run, the higher id, so the answer is the same on every read and matches the
+    /// batched read's.
     /// </summary>
     private async Task<CausalSourceImportEvent?> GetLatestImportEventAsync(
         IQueryable<ActivityRunProfileExecutionItem> candidateRecords, DateTime atOrBeforeActivityExecuted,
@@ -2050,11 +2076,10 @@ public class ActivityRepository : IActivityRepository
         return await candidateRecords
             .AsNoTracking()
             .Where(r => r.Id != excludeRunProfileExecutionItemId
-                && (r.ObjectChangeType == ObjectChangeType.Added
-                    || r.ObjectChangeType == ObjectChangeType.Updated
-                    || r.ObjectChangeType == ObjectChangeType.Deleted)
+                && SourceImportChangeTypes.Contains(r.ObjectChangeType)
                 && r.Activity.Executed <= atOrBeforeActivityExecuted)
             .OrderByDescending(r => r.Activity.Executed)
+            .ThenByDescending(r => r.Id)
             .Select(r => new CausalSourceImportEvent
             {
                 RunProfileExecutionItemId = r.Id,
@@ -2080,6 +2105,27 @@ public class ActivityRepository : IActivityRepository
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .SingleOrDefaultAsync(i => i.Id == id);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemMatchCandidates
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .OrderBy(c => c.Ordinal)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking()
+            .Where(o => o.ActivityRunProfileExecutionItemId == runProfileExecutionItemId
+                        && o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            .OrderBy(o => o.Ordinal)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)

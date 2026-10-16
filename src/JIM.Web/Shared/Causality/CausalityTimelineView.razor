@@ -134,6 +134,10 @@
                 {
                     <div class="tl-detail-line">@causalityEvent.DetailMessage</div>
                 }
+                @if (!string.IsNullOrWhiteSpace(causalityEvent.JoinMatchDetail))
+                {
+                    <div class="tl-detail-line tl-match">@causalityEvent.JoinMatchDetail</div>
+                }
                 @if (chipLinks.Count > 0)
                 {
                     <div class="evt-entities">
@@ -236,8 +240,8 @@
         // The record's own Connected System, not the run's: a link built with the run's system id
         // 404s when they diverge (ConnectedSystemObjectDetail looks the record up by both).
         var context = Model.Context;
-        return context.CsoConnectedSystemId.HasValue && context.CsoId.HasValue
-            ? Utilities.GetConnectedSystemObjectHref(context.CsoConnectedSystemId.Value, context.CsoId.Value)
+        return context.CsoConnectedSystemId is { } recordSystemId && context.CsoId is { } recordId
+            ? context.Links.ConnectedSystemObjectHref(recordSystemId, recordId)
             : null;
     }
 

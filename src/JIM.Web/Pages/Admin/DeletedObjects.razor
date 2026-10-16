@@ -17,7 +17,7 @@
 
 <PageTitle>Deleted Objects</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Deleted Objects
-    <PageInfo Title="Deleted Objects">
+    <PageInfo Title="Deleted Objects" DocsPage="configuration/deleted-objects.md">
         When objects are deleted, their change history is preserved here for audit and compliance purposes. Click <strong>View</strong> to see the full history of changes made to an object before it was deleted.
     </PageInfo>
 </MudText>
@@ -263,32 +263,14 @@
                         <MudText Typo="Typo.button">Deleted By</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (!string.IsNullOrEmpty(context.Item.InitiatedByName))
-                        {
-                            <div class="d-flex align-center gap-1">
-                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.Item.InitiatedByType)" Class="mud-text-secondary" />
-                                @if (context.Item.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.Item.InitiatedById.HasValue)
-                                {
-                                    <span @onclick:stopPropagation="true">
-                                        <MudLink Href="@($"/admin/apikeys/{context.Item.InitiatedById}")">@context.Item.InitiatedByName</MudLink>
-                                    </span>
-                                }
-                                else if (context.Item.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.Item.InitiatedById.HasValue)
-                                {
-                                    <span @onclick:stopPropagation="true">
-                                        <MudLink Href="@($"/users/{context.Item.InitiatedById}")">@context.Item.InitiatedByName</MudLink>
-                                    </span>
-                                }
-                                else
-                                {
-                                    @context.Item.InitiatedByName
-                                }
-                            </div>
-                        }
-                        else
-                        {
-                            <span class="mud-text-secondary">Unknown</span>
-                        }
+                        @* Drawn as Initiated By is everywhere else (#2066); the row opens the deleted object, so a
+                           click on the principal's link stays with the link. *@
+                        <span @onclick:stopPropagation="true">
+                            <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                                               InitiatedById="@context.Item.InitiatedById"
+                                               InitiatedByName="@context.Item.InitiatedByName"
+                                               Dense="true" />
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -745,11 +727,13 @@
                         AttributeName = ac.AttributeName,
                         ChangeType = vc.ValueChangeType,
                         Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        // The repository loads every reference value's Type, which both the type chip and the
+                        // link to the referenced Metaverse Object are built from (#2146).
                         ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
                         {
-                            TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                            TypeName = vc.ReferenceValue.Type.Name,
                             DisplayName = vc.ReferenceValue.NameOrId ?? vc.ReferenceValue.Id.ToString(),
-                            Href = $"/users/{vc.ReferenceValue.Id}"
+                            Href = JIM.Utilities.Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
                         } : null,
                         IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
                         AttributeType = ac.AttributeType

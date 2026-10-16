@@ -11,85 +11,67 @@ function New-JIMRunProfile {
         Delta Import, Full Sync, Delta Sync, or Export) for a Connected System.
 
     .PARAMETER ConnectedSystemId
-        The ID of the Connected System to create the Run Profile for.
+        The Connected System to create the Run Profile on.
 
     .PARAMETER ConnectedSystemName
-        The name of the Connected System to create the Run Profile for. Must be an exact match.
+        The name of the Connected System to create the Run Profile on. Must be an exact match.
 
     .PARAMETER Name
         The name for the Run Profile.
 
     .PARAMETER RunType
-        The type of synchronisation operation:
-        - FullImport: Full import from the Connected System
-        - DeltaImport: Delta/incremental import from the Connected System
-        - FullSynchronisation: Full synchronisation with the Metaverse
-        - DeltaSynchronisation: Delta synchronisation with the Metaverse
-        - Export: Export changes to the Connected System
+        The operation the Run Profile carries out: an import from the Connected System, a synchronisation with the
+        Metaverse, or an export to the Connected System.
 
     .PARAMETER PageSize
-        How many items to process in one batch. Defaults to 100.
+        How many items to process in one batch.
 
     .PARAMETER PartitionId
-        Optional partition ID if the connector supports partitions.
+        The partition the Run Profile targets, for a Connector with partitions. Omit it and the Run Profile follows
+        every selected partition.
 
     .PARAMETER FilePath
-        Optional file path for file-based connectors.
+        The file to read or write, for a file-based Connector.
 
     .PARAMETER VerifyImportContentHashes
-        Enables Verification Mode. Only valid when -RunType is FullImport; the API rejects it
-        otherwise. When enabled, the Full Import performs no content-hash skips and instead
-        compares each object's stored import content hash against the freshly computed incoming
-        hash, raising a diagnostic error for any disagreement the skip optimisation would
-        otherwise have missed. Use temporarily to validate the skip optimisation; leave off for
-        normal, faster Full Imports.
+        Enables Verification Mode: the Full Import skips no object whose content looks unchanged, and raises an
+        error for any object whose stored content hash disagrees with what was read. Only valid when -RunType is
+        FullImport. Use it to check the skip, and leave it off for normal, faster Full Imports.
+
+    .PARAMETER AllowObjectTypeChanges
+        Lets this Full Import carry out an Object Type change rather than refusing it: an object that arrives under
+        a different Object Type is imported as a new Connected System Object, and the old one is retired. Only valid
+        when -RunType is FullImport, and only has an effect for a Connector that can tell an Object Type change from
+        a new object, as the LDAP Connector can.
 
     .PARAMETER MaxCreates
-        Run Profile Safeguards: the most creates that may be pending for a single Export run to
-        attempt any of them. If more are pending than this when the run starts, JIM attempts NONE
-        of them; there is no partial attempt. Only valid when -RunType is Export; the API rejects
-        it otherwise. Omit for no limit. 0 refuses creates outright. A run that withholds anything
-        stays pending and completes with a warning naming what to do next: raise or clear the
-        limit, or run an Export Run Profile without one.
+        A Safeguard: the most creates that may be pending for an Export run to attempt any of them. If more are
+        pending when the run starts, it attempts none of them; 0 refuses creates outright. Only valid when -RunType
+        is Export; omit it for no limit.
 
     .PARAMETER MaxUpdates
-        Run Profile Safeguards: the most updates that may be pending for a single Export run to
-        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
-        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses updates
-        outright.
+        A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same
+        rules as -MaxCreates.
 
     .PARAMETER MaxDeletes
-        Run Profile Safeguards: the most deletes that may be pending for a single Export run to
-        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
-        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses deletes
-        outright. Recommended for Export Run Profiles against production directories: a small
-        share of the target's population means a broken filter or rule change withholds the
-        whole deprovisioning attempt and warns you, rather than working through the directory.
+        A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same
+        rules as -MaxCreates. Recommended for an Export to a production directory.
 
     .PARAMETER MaxDetectedDeletions
-        Run Profile Safeguards: the most Connected System Objects a single Full Import run may
-        newly mark as deleted. If more would be newly marked than this when the run finishes
-        reading the Connected System, JIM marks NONE of them; there is no partial marking. Only
-        valid when -RunType is FullImport; the API rejects it otherwise. Omit for no limit. 0
-        refuses to mark anything as deleted. Objects the import did see are still created and
-        updated as normal. A run that withholds anything completes with a warning naming what to
-        do next, and does not count as a successful Full Import for the post-clear reconciliation
-        gate (#1605).
+        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. If more would
+        be, it marks none of them; 0 refuses to mark any. Only valid when -RunType is FullImport; omit it for no
+        limit.
 
     .PARAMETER MaxDetectedDeletionsPercent
-        Run Profile Safeguards: the most Connected System Objects a single Full Import run may
-        newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the run's
-        scope when it starts. Same all-or-nothing behaviour as -MaxDetectedDeletions, and either
-        limit tripping withholds the whole detection. Only valid when -RunType is FullImport; the
-        API rejects it otherwise. Omit for no limit. Recommended for a Full Import against a large
-        Connected System, where a broken filter or base DN dropping a plausible-looking fraction
-        of the population is easier to catch as a share than as a raw count.
+        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to
+        100) of those in the run's scope when it starts, under the same rules as -MaxDetectedDeletions. Either limit
+        tripping withholds the whole detection.
 
     .PARAMETER PassThru
-        If specified, returns the created Run Profile object.
+        Returns the created Run Profile.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Run Profile object.
+        With -PassThru, the created Run Profile; otherwise nothing.
 
     .EXAMPLE
         New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" -RunType FullImport
@@ -125,6 +107,13 @@ function New-JIMRunProfile {
         Creates a Full Import Run Profile that marks nothing as deleted on a run where deletion
         detection would newly mark more than 10% of the Connected System's objects as deleted.
 
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (apply Object Type changes)" -RunType FullImport -AllowObjectTypeChanges
+
+        Creates a second Full Import Run Profile, to be run by hand, that carries out Object Type
+        changes the Connected System's usual Full Import refuses: each object that has changed
+        Object Type is imported as a new Connected System Object, and the old one is retired.
+
     .LINK
         Get-JIMRunProfile
         Set-JIMRunProfile
@@ -132,7 +121,7 @@ function New-JIMRunProfile {
         Start-JIMRunProfile
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RunProfileDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]
@@ -161,6 +150,9 @@ function New-JIMRunProfile {
 
         [Parameter()]
         [switch]$VerifyImportContentHashes,
+
+        [Parameter()]
+        [switch]$AllowObjectTypeChanges,
 
         [Parameter()]
         [Nullable[int]]$MaxCreates,
@@ -234,6 +226,11 @@ function New-JIMRunProfile {
 
             if ($VerifyImportContentHashes) {
                 $body.verifyImportContentHashes = $true
+            }
+
+            # Sent only when the switch is present, so an omitted switch leaves the API's default (off).
+            if ($AllowObjectTypeChanges) {
+                $body.allowObjectTypeChanges = $true
             }
 
             # Run Profile Safeguards: send the whole safeguards object when any limit is bound;

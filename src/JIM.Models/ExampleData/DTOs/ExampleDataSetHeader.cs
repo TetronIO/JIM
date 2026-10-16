@@ -8,11 +8,22 @@ namespace JIM.Models.ExampleData.DTOs;
 /// </summary>
 public class ExampleDataSetHeader
 {
+    /// <summary>The unique identifier of the Example Data Set.</summary>
     public int Id { get; set; }
+
+    /// <summary>The name of the Example Data Set, for example "Firstnames Female".</summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>Whether the Example Data Set ships with JIM, rather than being created by an administrator.</summary>
     public bool BuiltIn { get; set; }
+
+    /// <summary>When the Example Data Set was created, in UTC.</summary>
     public DateTime Created { set; get; }
+
+    /// <summary>The .NET culture code the values are in, for example "en-GB".</summary>
     public string Culture { get; set; } = null!;
+
+    /// <summary>How many values the Example Data Set holds.</summary>
     public int ValueCount { get; set; }
 
     /// <summary>

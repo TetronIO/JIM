@@ -61,16 +61,16 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
     }
 
     /// <inheritdoc />
-    public async Task<UniquenessProbeSessionResult> ProbeAsync(UniquenessProbeTarget target, IReadOnlyList<string> candidates)
+    public async Task<IReadOnlyList<UniquenessProbeSessionResult>> ProbeAttributesAsync(int connectedSystemId, IReadOnlyList<UniquenessProbeBatch> batches)
     {
-        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(batches);
 
-        // One batch at a time: the session's state and each Connector's connection are not built for concurrent use,
+        // One call at a time: the session's state and each Connector's connection are not built for concurrent use,
         // and the worker resolves objects one after another in any case.
         await _gate.WaitAsync(_cancellationToken);
         try
         {
-            return await ProbeCoreAsync(target, candidates);
+            return await ProbeCoreAsync(connectedSystemId, batches);
         }
         finally
         {
@@ -137,77 +137,115 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
         await _host.DisposeAsync();
     }
 
-    private async Task<UniquenessProbeSessionResult> ProbeCoreAsync(UniquenessProbeTarget target, IReadOnlyList<string> candidates)
+    private async Task<IReadOnlyList<UniquenessProbeSessionResult>> ProbeCoreAsync(int connectedSystemId, IReadOnlyList<UniquenessProbeBatch> batches)
     {
-        var system = await GetOrOpenSystemAsync(target.ConnectedSystemId);
+        var system = await GetOrOpenSystemAsync(connectedSystemId);
 
         if (!system.Probes)
-            return UniquenessProbeSessionResult.NotProbed(system.Name, candidates.Count);
+            return [.. batches.Select(b => UniquenessProbeSessionResult.NotProbed(system.Name, b.Candidates.Count))];
 
         if (system.LatchedReason != null)
-            return Undetermined(system, candidates.Count, system.LatchedReason);
+            return [.. batches.Select(b => Undetermined(system, b.Candidates.Count, system.LatchedReason))];
 
-        var attribute = await GetOrPrepareAttributeAsync(system, target.ConnectedSystemObjectTypeAttributeId);
-
-        if (!attribute.Probes)
-            return UniquenessProbeSessionResult.NotProbed(system.Name, candidates.Count);
-
-        if (attribute.LatchedReason != null)
-            return Undetermined(system, candidates.Count, attribute.LatchedReason);
-
-        // With no usable control (JIM holds no value for the attribute yet, or every one it holds is among this
-        // batch's candidates), the probe still runs: a value it returns is in use whatever the bind can see, and a
-        // miss is accepted unconfirmed without a warning, since an empty target is normal on a first load (plan
-        // decision 14, revised 2026-10-06).
-        var controlValue = attribute.ControlValues.FirstOrDefault(v => !candidates.Contains(v, StringComparer.OrdinalIgnoreCase));
-
-        var request = new UniquenessProbeRequest
+        var results = new UniquenessProbeSessionResult[batches.Count];
+        var asked = new List<(int Index, AttributeState Attribute, UniquenessProbeRequest Request)>(batches.Count);
+        for (var index = 0; index < batches.Count; index++)
         {
-            ObjectTypeName = attribute.ObjectTypeName,
-            AttributeName = attribute.Name,
-            Candidates = candidates,
-            ControlValue = controlValue,
-            Timeout = _timeout
-        };
+            var candidates = batches[index].Candidates;
+            var attribute = await GetOrPrepareAttributeAsync(system, batches[index].ConnectedSystemObjectTypeAttributeId);
 
-        UniquenessProbeResult result;
+            if (!attribute.Probes)
+            {
+                results[index] = UniquenessProbeSessionResult.NotProbed(system.Name, candidates.Count);
+                continue;
+            }
+
+            if (attribute.LatchedReason != null)
+            {
+                results[index] = Undetermined(system, candidates.Count, attribute.LatchedReason);
+                continue;
+            }
+
+            // With no usable control (JIM holds no value for the attribute yet, or every one it holds is among this
+            // batch's candidates), the probe still runs: a value it returns is in use whatever the bind can see, and a
+            // miss is accepted unconfirmed without a warning, since an empty target is normal on a first load (plan
+            // decision 14, revised 2026-10-06).
+            var controlValue = attribute.ControlValues.FirstOrDefault(v => !candidates.Contains(v, StringComparer.OrdinalIgnoreCase));
+
+            asked.Add((index, attribute, new UniquenessProbeRequest
+            {
+                ObjectTypeName = attribute.ObjectTypeName,
+                AttributeName = attribute.Name,
+                Candidates = candidates,
+                ControlValue = controlValue,
+                Timeout = _timeout
+            }));
+        }
+
+        if (asked.Count == 0)
+            return results;
+
+        // A Connector that cannot search several attributes at once searches them one after another, each bounded by
+        // the timeout, so the call as a whole is allowed the timeout for each.
+        var timeout = _timeout * asked.Count;
+        IReadOnlyList<UniquenessProbeResult> answers;
         try
         {
             var probe = system.Probe!;
-            result = await Task.Run(() => probe.ProbeAsync(request, _logger, _cancellationToken), _cancellationToken).WaitAsync(_timeout, _cancellationToken);
+            var requests = asked.ConvertAll(a => a.Request);
+            answers = await Task.Run(() => probe.ProbeAttributesAsync(requests, _logger, _cancellationToken), _cancellationToken).WaitAsync(timeout, _cancellationToken);
         }
         catch (TimeoutException)
         {
-            return LatchSystem(system, candidates.Count, $"It did not answer within {_timeout.TotalSeconds:0} seconds");
+            return LatchSystem(system, results, asked, $"It did not answer within {timeout.TotalSeconds:0} seconds");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Deliberately broad, with the cancellation exclusion: whatever a Connector throws while searching, the
             // run carries on with JIM's own records, and the system is not asked again this run.
             _logger.Warning(ex, "UniquenessProbeSession: Searching Connected System {ConnectedSystemId} for values already in use failed.", system.Id);
-            return LatchSystem(system, candidates.Count, $"The probe failed: {ex.Message.TrimEnd('.')}");
+            return LatchSystem(system, results, asked, $"The probe failed: {ex.Message.TrimEnd('.')}");
         }
 
-        if (result.Outcomes.Count != candidates.Count)
-            return LatchSystem(system, candidates.Count, "Its Connector answered for a different number of values than it was asked about");
+        // Answers that cannot be matched to what was asked are not guessed at.
+        if (answers.Count != asked.Count)
+            return LatchSystem(system, results, asked, "Its Connector answered for a different number of attributes than it was asked about");
 
-        if (result.IsFailure)
-            return LatchSystem(system, candidates.Count, result.Reason ?? "The probe failed");
+        if (answers.Where((answer, n) => answer.Outcomes.Count != asked[n].Request.Candidates.Count).Any())
+            return LatchSystem(system, results, asked, "Its Connector answered for a different number of values than it was asked about");
 
-        if (result.Reason != null)
+        for (var n = 0; n < asked.Count; n++)
+            results[asked[n].Index] = Interpret(system, asked[n].Attribute, asked[n].Request, answers[n]);
+
+        return results;
+    }
+
+    /// <summary>
+    /// What one attribute's answer means for the batch, and for the rest of the run.
+    /// </summary>
+    private static UniquenessProbeSessionResult Interpret(SystemState system, AttributeState attribute, UniquenessProbeRequest request, UniquenessProbeResult answer)
+    {
+        var candidateCount = request.Candidates.Count;
+
+        // A failure says the system is not to be relied on for the rest of the run. Answers the same call gave for its
+        // other attributes were complete searches, and stand.
+        if (answer.IsFailure)
+            return LatchSystem(system, candidateCount, answer.Reason ?? "The probe failed");
+
+        if (answer.Reason != null)
         {
             // Completed, but without its control: blind to this attribute (an attribute-level permission, say), which
             // says nothing about the system's other attributes.
-            attribute.LatchedReason = result.Reason;
-            return Undetermined(system, candidates.Count, result.Reason);
+            attribute.LatchedReason = answer.Reason;
+            return Undetermined(system, candidateCount, answer.Reason);
         }
 
         // Answered, but over less than everywhere the value must be unique: the answers stand, and the run says once
         // what the probe could not reach. Nothing is latched, since the next object's search reaches as far.
-        if (result.Caveat != null && !system.Caveats.Contains(result.Caveat))
-            system.Caveats.Add(result.Caveat);
+        if (answer.Caveat != null && !system.Caveats.Contains(answer.Caveat))
+            system.Caveats.Add(answer.Caveat);
 
-        return new UniquenessProbeSessionResult(system.Name, result.Outcomes);
+        return new UniquenessProbeSessionResult(system.Name, answer.Outcomes);
     }
 
     private async Task<SystemState> GetOrOpenSystemAsync(int connectedSystemId)
@@ -339,6 +377,17 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
     {
         system.LatchedReason = reason;
         return Undetermined(system, candidateCount, reason);
+    }
+
+    /// <summary>
+    /// Latches the system for the rest of the run, and answers every attribute this call asked about as undetermined.
+    /// </summary>
+    private static UniquenessProbeSessionResult[] LatchSystem(SystemState system, UniquenessProbeSessionResult[] results, List<(int Index, AttributeState Attribute, UniquenessProbeRequest Request)> asked, string reason)
+    {
+        foreach (var (index, _, request) in asked)
+            results[index] = LatchSystem(system, request.Candidates.Count, reason);
+
+        return results;
     }
 
     private sealed class SystemState(int id, string name)

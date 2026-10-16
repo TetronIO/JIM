@@ -37,8 +37,8 @@ When an MVO changes and export rules target it:
 Location: `DriftDetectionService.EvaluateDrift()`.
 
 After an import sync on a joined CSO with `EnforceState = true`:
-1. Compare CSO actual attribute values vs expected values from export rule mappings
-2. Stage corrective PEs in memory (not immediately persisted)
+1. Compare CSO actual attribute values vs expected values from export rule mappings. An expression mapping's expected state and its correction come from export staging's own code (`SyncEngine.StageExportExpressionMapping`, which runs the `AttributeFlowPipeline` evaluation and stages its result, then `IsCsoAttributeAlreadyCurrent`), so drift never asserts a state export staging would not stage (#2180); a direct mapping refuses a multi-valued source holding several values for a single-valued target through the same `FindMultiValuedToSingleValuedError` predicate.
+2. Stage corrective PEs in memory (not immediately persisted). Drift is reported (and a `DriftCorrection` RPEI raised) only where a correction is staged; mapping-level errors come back on `DriftDetectionResult.AttributeFlowErrors`, and an expression failure or Fail the object throws, and the worker records each against the CSO and stages nothing for it.
 3. Merged with export evaluation PEs in `CreateOrUpdatePendingExportWithNoNetChangeAsync()`
 
 ## Attribute Change Creation (`CreateAttributeValueChanges`)
@@ -51,7 +51,8 @@ For each `AttributeFlowRule` in the export rule:
 - **Update operations**: only include the changed attribute values
 - **No-net-change detection**: if cache is available, skip changes where the CSO already has the target value, and withdraw any change still queued for the same attribute (or value) on the CSO's existing Pending Export, in the in-memory batch or persisted (`SyncEngine.WithdrawChangesAlreadyCurrent`, `ExportEvaluationServer.WithdrawQueuedChangesAlreadyCurrentAsync`): the queued change is stale once the Metaverse and the target agree. Changes awaiting confirmation and executing Pending Exports are left alone; an emptied Pending Export is deleted
 - **Reference attributes**: store target MVO reference ID in `UnresolvedReferenceValue`; PE marked for deferred resolution
-- **Removals**: multi-valued → `ChangeType = Remove`; single-valued → null-clearing change
+- **Change shape follows the target attribute's plurality** (#2182): per-value `Add` and `Remove` only when both the source Metaverse attribute and the target Connected System attribute are multi-valued. Everywhere else the mapping stages one `Update` carrying the value the attribute should now hold (the first changed value not removed this pass, else the one the MVO holds), or an all-null `Update` when none survives. An `Update` against a multi-valued target means "the set is exactly this value": no-net-change detection and export confirmation judge it done only when the target holds exactly that value (or nothing, for a clear), as optimistic apply does
+- **Removals**: a removed value becomes `ChangeType = Remove` only where source and target are both multi-valued; otherwise it is never the exported value, and an attribute left with no value gets an all-null `Update`. Reference recall (`DecideRecallRemovalChange`) follows the same rule
 
 ## Merge Logic
 
@@ -60,7 +61,21 @@ For each `AttributeFlowRule` in the export rule:
 - **Single-valued attributes**: key = `AttributeId` (newest value always replaces)
 - **Multi-valued attributes**: key = `AttributeId:ValueIdentifier` (preserves distinct values)
 
-Value identifier is resolved from: `UnresolvedReferenceValue ?? StringValue ?? GuidValue ?? IntValue ?? LongValue ?? DateTimeValue ?? BoolValue ?? ByteValue ?? ""`.
+Value identifier is resolved from: `UnresolvedReferenceValue ?? StringValue ?? GuidValue ?? IntValue ?? LongValue ?? DecimalValue ?? DateTimeValue ?? BoolValue ?? ByteValue ?? ""`.
+
+Decimals and dates use their canonical form, never a raw `ToString`. A decimal keys on `DecimalAttributeValue.ToCanonicalString`, so `5.0` and `5.00` are one key. A date keys on its canonical ticks, `DateTimeAttributeValue.Key` (#2153): UTC, floored to the microsecond. The round-trip `ToString("O")` used before depended on `Kind`, and a value read from the database is Kind Local while one made in memory is Kind Utc, so the same instant had two keys and a multi-valued merge kept both.
+
+### Dates are canonical throughout (#2153)
+
+JIM holds a date to the microsecond, in UTC (`DateTimeAttributeValue.ToCanonical`). Every Pending Export date is written canonical (direct mappings, export expressions, Drift Detection's corrective changes), and every comparison a Pending Export takes part in uses canonical keys: no-net-change detection (`ValuesMatch`), the removal tuple, the merge key above, export confirmation (`ValueExistsOnCso` and the reconciliation index), optimistic export apply, and Drift Detection. A date the target holds, read back from the database at the microsecond and Kind Local, therefore confirms the change that wrote it, and never reads as drift.
+
+### One change per single-valued attribute (`WithOneChangePerSingleValuedAttribute`)
+
+Before the key-based merge, incoming changes that name one single-valued attribute more than once are folded into one `Update` (#2182): the last change that is not a removal decides it, carrying its value (or its clear); an attribute with only removals among them gets a new all-null `Update`. Keyed by the attribute alone, the merge would otherwise keep whichever came last, and an `Add` of the new value followed by a `Remove` of the old one left only the `Remove`, clearing the target.
+
+### Pre-send guard (`SingleValuedAttributeChangeValidator`)
+
+An export still carrying more than one change for one single-valued attribute is refused against its own object before it reaches the Connector, on the call-based path (`ExportBatchAsync`) and the file-based path alike. It is a fault in JIM rather than configuration, so it is counted apart from class membership refusals (`ExportExecutionResult.SingleValuedContradictionRefusedCount`) and summarised at Error level at the end of the run.
 
 ### Scenario A: In-Memory Merge (same batch)
 

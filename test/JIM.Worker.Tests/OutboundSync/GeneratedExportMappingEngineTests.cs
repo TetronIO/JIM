@@ -127,6 +127,56 @@ public class GeneratedExportMappingEngineTests
     }
 
     [Test]
+    public void ComputeAttributeValueChanges_GeneratedMappingBaseReturnsAnyCollection_StagesNothingAndRecordsError()
+    {
+        // A generated value's base must be one text value; a collection of anything is refused (#2179), not only a
+        // list of text, or the base becomes the collection's type name.
+        BuildGeneratedMapping("new int[] { 1, 2 }");
+        var mvo = BuildMvoWithEmployeeId("E123");
+        var flowErrors = new List<AttributeFlowError>();
+
+        var changes = _engine.ComputeAttributeValueChanges(
+            mvo, _exportRule, changedAttributes: [], changeType: PendingExportChangeType.Update,
+            existingCso: null, csoAttributeCache: null, out _, flowErrors: flowErrors);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes, Is.Empty);
+            Assert.That(flowErrors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.GeneratedBaseNotSingleValue }));
+        }
+    }
+
+    [Test]
+    public void ComputeAttributeValueChanges_GeneratedMappingBaseIsABinaryValue_StagesNothingAndRecordsNotConvertible()
+    {
+        // A Binary value has no text form (#2153, N1), so it cannot be the text a generated value is built from; it
+        // is reported rather than becoming the text System.Byte[].
+        BuildGeneratedMapping("mv[\"Photo\"]", MissingInputBehaviour.EvaluateAnyway);
+        var photoAttribute = new MetaverseAttribute { Id = 2, Name = "Photo", Type = AttributeDataType.Binary };
+        var mvo = BuildMvoWithEmployeeId("E123");
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = photoAttribute,
+            AttributeId = photoAttribute.Id,
+            ByteValue = [1, 5, 0]
+        });
+        var flowErrors = new List<AttributeFlowError>();
+
+        var changes = _engine.ComputeAttributeValueChanges(
+            mvo, _exportRule, changedAttributes: [], changeType: PendingExportChangeType.Update,
+            existingCso: null, csoAttributeCache: null, out _, flowErrors: flowErrors);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes, Is.Empty);
+            Assert.That(flowErrors.Select(e => e.Kind), Is.EqualTo(new[] { AttributeFlowErrorKind.ExpressionResultNotConvertible }));
+            Assert.That(flowErrors.Single().TargetAttributeType, Is.EqualTo(AttributeDataType.Text));
+        }
+    }
+
+    [Test]
     public void ComputeAttributeValueChanges_GeneratedMappingMissingInput_StagesMarkedChangeWithBaseUnavailable()
     {
         BuildGeneratedMapping("Lower(mv[\"EmployeeId\"])"); // default Missing Input Behaviour: ContributeNoValue
@@ -192,6 +242,20 @@ public class GeneratedExportMappingEngineTests
                 mvo, _exportRule, changedAttributes: [], changeType: PendingExportChangeType.Update,
                 existingCso: null, csoAttributeCache: null, out _),
             Throws.TypeOf<SyncExpressionMissingInputException>());
+    }
+
+    [Test]
+    public void ComputeAttributeValueChanges_GeneratedMappingBaseExpressionThrows_ThrowsTheExpressionErrorNotAnInternalOne()
+    {
+        // The third failure the source step stops on (with FailMapping and FailObject above): it never reaches
+        // ResolveGeneratedBase, so GeneratedBaseError's guard for a failure outcome cannot fire mid-run.
+        BuildGeneratedMapping("Lower(mv[\"EmployeeId\"]).Substring(99)", MissingInputBehaviour.ContributeNoValue);
+        var mvo = BuildMvoWithEmployeeId("E123");
+
+        Assert.That(() => _engine.ComputeAttributeValueChanges(
+                mvo, _exportRule, changedAttributes: [], changeType: PendingExportChangeType.Update,
+                existingCso: null, csoAttributeCache: null, out _),
+            Throws.TypeOf<SyncExpressionEvaluationException>());
     }
 
     [Test]

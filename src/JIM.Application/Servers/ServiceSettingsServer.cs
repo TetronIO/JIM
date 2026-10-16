@@ -143,15 +143,6 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Gets the verbose no-change recording setting.
-        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
-        /// </summary>
-        public async Task<bool> GetVerboseNoChangeRecordingAsync()
-        {
-            return await GetSettingValueAsync(Constants.SettingKeys.VerboseNoChangeRecording, false);
-        }
-
-        /// <summary>
         /// Gets the sync page size setting.
         /// Controls the number of CSOs processed per database page during sync operations.
         /// </summary>
@@ -621,13 +612,29 @@ namespace JIM.Application.Servers
         {
             if (await SettingExistsAsync(setting.Key))
             {
-                // Only update read-only settings (from environment) during seeding
-                // Don't overwrite user-modified values
                 var existingSetting = await GetSettingAsync(setting.Key);
-                if (existingSetting != null && existingSetting.IsReadOnly)
+                if (existingSetting == null)
+                    return;
+
+                // What JIM says about a setting converges on every installation, so a corrected description or a
+                // renamed setting reaches existing deployments rather than only new ones (#2101).
+                var describedDifferently = existingSetting.DisplayName != setting.DisplayName ||
+                                           existingSetting.Description != setting.Description ||
+                                           existingSetting.Category != setting.Category;
+                existingSetting.DisplayName = setting.DisplayName;
+                existingSetting.Description = setting.Description;
+                existingSetting.Category = setting.Category;
+
+                // A read-only setting mirrors the environment, so its value converges too. An editable setting's value
+                // belongs to the administrator and is never touched.
+                if (existingSetting.IsReadOnly)
                 {
                     existingSetting.DefaultValue = setting.DefaultValue;
                     existingSetting.Value = setting.Value;
+                    await Application.Repository.ServiceSettings.UpdateSettingAsync(existingSetting);
+                }
+                else if (describedDifferently)
+                {
                     await Application.Repository.ServiceSettings.UpdateSettingAsync(existingSetting);
                 }
             }

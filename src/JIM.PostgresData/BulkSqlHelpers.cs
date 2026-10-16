@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Utilities;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -26,6 +27,15 @@ internal static class BulkSqlHelpers
     {
         return new NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
     }
+
+    /// <summary>
+    /// An attribute value's date as it is written (#2153): canonical, UTC and floored to the microsecond, or null for
+    /// none. Every raw writer of a <c>DateTimeValue</c> column writes through this or
+    /// <see cref="DateTimeAttributeValue.ToCanonical"/>, because Npgsql's own conversion truncates toward 2000-01-01,
+    /// which rounds a pre-2000 value with a sub-microsecond part up into the next microsecond.
+    /// </summary>
+    internal static DateTime? CanonicalDate(DateTime? value) =>
+        value.HasValue ? DateTimeAttributeValue.ToCanonical(value.Value) : null;
 
     /// <summary>
     /// Renders a column list as quoted, comma-separated SQL identifiers, e.g. "Id", "Created".

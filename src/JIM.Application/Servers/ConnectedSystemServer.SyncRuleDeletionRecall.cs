@@ -243,9 +243,9 @@ public partial class ConnectedSystemServer
                     survivorObjectTypes, expressionEvaluator);
 
                 // Capture pending changes BEFORE applying (which clears the pending lists), additions
-                // first: export evaluation stages a single-valued attribute's FIRST matching changed
-                // value, so a re-elected survivor's addition must precede the recalled removal or the
-                // target would be staged with the stale value.
+                // first, and every removal in removedAttributes: where the source or target is single-valued,
+                // export evaluation stages the first changed value that was not removed (#2182), so a
+                // re-elected survivor's addition is exported rather than the recalled, stale value.
                 var additions = mvo.PendingAttributeValueAdditions.ToList();
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
                 var changedAttributes = additions.Concat(removals).ToList();
@@ -463,8 +463,8 @@ public partial class ConnectedSystemServer
             var exportRules = exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules).ToList();
             string? SystemName(int connectedSystemId) =>
                 exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == connectedSystemId)?.ConnectedSystem?.Name;
-            string? ObjectTypeName(int connectedSystemId) =>
-                exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == connectedSystemId)?.ConnectedSystemObjectType?.Name;
+            // A system can export more than one type, so the object's type is named by the rule that acted on it.
+            var typeNames = ExportTargetTypeNames.From(exportRules);
 
             foreach (var pendingExport in deprovisioningExports)
             {
@@ -475,7 +475,8 @@ public partial class ConnectedSystemServer
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: SystemName(pendingExport.ConnectedSystemId),
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, ObjectTypeName(pendingExport.ConnectedSystemId)),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId,
+                        typeNames.ForPendingExport(pendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id)),
                     syncRuleId: deprovisioningRule?.Id,
                     syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: pendingExport.ChangeType);
@@ -486,7 +487,8 @@ public partial class ConnectedSystemServer
                 SyncOutcomeBuilder.AddRootOutcome(executionItem,
                     ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                     targetEntityDescription: SystemName(cancellation.ConnectedSystemId),
-                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, ObjectTypeName(cancellation.ConnectedSystemId)));
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId,
+                        typeNames.Resolve(cancellation.ConnectedSystemId, objectTypeId: cancellation.ConnectedSystemObjectTypeId)));
             }
 
             // A Disconnect leaves the object in the target system and queues nothing, so this outcome is the only
@@ -497,7 +499,8 @@ public partial class ConnectedSystemServer
                     ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                     targetEntityId: disconnection.ConnectedSystemObjectId,
                     targetEntityDescription: SystemName(disconnection.ConnectedSystemId),
-                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, ObjectTypeName(disconnection.ConnectedSystemId)),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId,
+                        typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId)),
                     syncRuleId: disconnection.SyncRuleId,
                     syncRuleName: disconnection.SyncRuleName);
             }

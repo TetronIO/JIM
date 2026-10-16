@@ -11,6 +11,7 @@ using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
 using JIM.Data;
+using JIM.Models.Core;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -980,6 +981,103 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithUnresolvedReferences_ReturnsTheCountAsync()
+    {
+        // #959: the count travels on every item it applies to, including one whose error slot holds another error,
+        // so a script reading the item learns about the references as the portal does.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Added,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            ErrorMessage = "Failed to parse 'startDate' as DateTime.",
+            UnresolvedReferenceCount = 2
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.UnresolvedReferenceCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithUnreadableValues_ReturnsEachValueAndWhereItWasReadAsync()
+    {
+        // #2066: what the portal lists under Attribute Values Not Imported, so a script can see it too.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            AttributeValueErrorsJson = new ImportedAttributeValueErrors
+            {
+                Total = 3,
+                Values =
+                [
+                    new ImportedAttributeValueError { AttributeName = "startDate", AttributeType = AttributeDataType.DateTime, Value = "31/02/2026", Reason = "Not a valid date and time." },
+                    new ImportedAttributeValueError { AttributeName = "contractedHours", AttributeType = AttributeDataType.Number, Value = "37.5h", Reason = "Not a valid whole number." }
+                ]
+            }.ToJson(),
+            SourceLocation = "hr-users.csv, row 4,182"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.AttributeValueErrors.Select(v => (v.AttributeName, v.AttributeType, v.Value, v.Reason)), Is.EqualTo(new[]
+            {
+                ("startDate", (AttributeDataType?)AttributeDataType.DateTime, (string?)"31/02/2026", "Not a valid date and time."),
+                ("contractedHours", (AttributeDataType?)AttributeDataType.Number, (string?)"37.5h", "Not a valid whole number.")
+            }));
+            Assert.That(dto!.AttributeValueErrorTotal, Is.EqualTo(3), "The total says when more values failed than the item keeps.");
+            Assert.That(dto!.SourceLocation, Is.EqualTo("hr-users.csv, row 4,182"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ValuesJimCouldNotHold_SayJimFoundThemAndOlderRecordsSayTheConnectorAsync()
+    {
+        // #2153: JIM reports values too (dates less than a microsecond apart, both true and false), and a script must be
+        // able to tell those from values the Connector could not read. A record kept before the source was recorded
+        // carries no source, and every one of those was the Connector's.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            AttributeValueErrorsJson = """{"total":2,"values":[{"attributeName":"isActive","value":"true","reason":"r","source":"Jim"},{"attributeName":"startDate","value":"x","reason":"r"}]}"""
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto!.AttributeValueErrors.Select(v => v.Source), Is.EqualTo(new[] { ImportAttributeValueErrorSource.Jim, ImportAttributeValueErrorSource.Connector }));
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithNoUnreadableValues_ReturnsAnEmptyListAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Added };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.AttributeValueErrors, Is.Empty);
+            Assert.That(dto!.AttributeValueErrorTotal, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task GetActivityExecutionItemAsync_WithNonExistentId_ReturnsNotFoundAsync()
     {
         var itemId = Guid.NewGuid();
@@ -1004,6 +1102,135 @@ public class ActivitiesControllerTests
 
         _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
     }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_AmbiguousMatch_ListsEachCandidateWithWhetherItExistsAndWhatIsJoinedToItAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch
+        };
+        var live = Candidate(Guid.NewGuid(), "Ann Bloggs", ordinal: 0);
+        var deleted = Candidate(Guid.NewGuid(), "Zoe Bloggs", ordinal: 1);
+        var joinedCsoId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetMatchCandidatesAsync(item.Id)).ReturnsAsync([live, deleted]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        metaverse.Setup(r => r.GetExistingMetaverseObjectTypePluralNamesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [live.CandidateId] = "People" });
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetExistingConnectedSystemObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
+        connectedSystems.Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync([new ConnectedSystemObject
+            {
+                Id = joinedCsoId,
+                ConnectedSystemId = 7,
+                ConnectedSystem = new ConnectedSystem { Id = 7, Name = "Corporate Directory" },
+                Type = new ConnectedSystemObjectType { Name = "user" },
+                MetaverseObjectId = live.CandidateId
+            }]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        var candidates = dto!.MatchCandidates;
+        Assert.That(candidates.Select(c => c.CandidateId), Is.EqualTo(new[] { live.CandidateId, deleted.CandidateId }));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates[0].Exists, Is.True);
+            Assert.That(candidates[0].DisplayNameSnapshot, Is.EqualTo("Ann Bloggs"));
+            Assert.That(candidates[0].CandidateKind, Is.EqualTo(MatchCandidateKind.MetaverseObject));
+            Assert.That(candidates[0].MatchedValue, Is.EqualTo("48213"));
+            Assert.That(candidates[0].ObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(candidates[0].ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(candidates[0].CandidateTotal, Is.EqualTo(2));
+            Assert.That(candidates[0].JoinedObjects.Select(j => j.ConnectedSystemObjectId), Is.EqualTo(new[] { joinedCsoId }));
+            Assert.That(candidates[0].JoinedObjects[0].ConnectedSystemName, Is.EqualTo("Corporate Directory"));
+            Assert.That(candidates[1].Exists, Is.False);
+            Assert.That(candidates[1].JoinedObjects, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithAnErrorThatRecordsNoCandidates_DoesNotAskForThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+
+        Assert.That((result?.Value as ActivityRunProfileExecutionItemDetailDto)?.MatchCandidates, Is.Empty);
+        _mockActivityRepo.Verify(r => r.GetMatchCandidatesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_JoinedByMatching_ReturnsTheRuleAndValueItMatchedOnAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Joined
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetJoinedOutcomeAsync(item.Id)).ReturnsAsync(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 3,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeNumber",
+            MatchedValue = "48213"
+        });
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.JoinObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(dto.JoinObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(dto.JoinMatchedValue, Is.EqualTo("48213"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemThatDidNotJoin_DoesNotAskForTheJoinAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Projected
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.JoinMatchedValue, Is.Null);
+        _mockActivityRepo.Verify(r => r.GetJoinedOutcomeAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    private static ActivityRunProfileExecutionItemMatchCandidate Candidate(Guid id, string name, int ordinal) => new()
+    {
+        CandidateKind = MatchCandidateKind.MetaverseObject,
+        CandidateId = id,
+        DisplayNameSnapshot = name,
+        TypeNameSnapshot = "Person",
+        MatchedValue = "48213",
+        ObjectMatchingRuleId = 3,
+        ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeNumber",
+        Ordinal = ordinal,
+        CandidateTotal = 2
+    };
 
     #endregion
 

@@ -415,30 +415,45 @@ public interface ISyncRepository
     #region Object Matching — Data Access
 
     /// <summary>
-    /// Finds an MVO that matches a CSO using the specified matching rule.
-    /// Used by object matching during import (CSO→MVO join).
+    /// Finds the distinct Metaverse Objects of a type that hold any of <paramref name="values"/> for an attribute: the
+    /// lookup behind an Object Matching Rule's import join (#2052). One query covers every value, so several values
+    /// that all belong to one Metaverse Object are one match, and values belonging to different ones are several.
     /// </summary>
-    Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject,
-        MetaverseObjectType metaverseObjectType,
-        ObjectMatchingRule objectMatchingRule);
+    /// <param name="valueType">The attribute's data type. The values are typed accordingly: <see cref="string"/>,
+    /// <see cref="int"/>, <see cref="long"/>, <see cref="decimal"/> or <see cref="Guid"/>.</param>
+    /// <param name="caseSensitive">For Text, whether a value must match case exactly.</param>
+    /// <param name="take">The most ids to return, in id order. A caller deciding between one match and several asks
+    /// for two.</param>
+    Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int take);
 
     /// <summary>
-    /// Finds a CSO that matches an MVO using the specified matching rule.
-    /// Used by object matching during export (MVO→CSO lookup).
+    /// How many distinct Metaverse Objects <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> would find with no
+    /// limit (#2052). Asked only when an ambiguous match finds more candidates than an Activity item lists.
     /// </summary>
-    Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule objectMatchingRule);
+    Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive);
 
     /// <summary>
-    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
-    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
-    /// type whose named attribute equals one of the given values, in one query per rule per page
-    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
-    /// parameter and eligibility documentation.
+    /// Loads a Metaverse Object found by <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/>, with everything
+    /// joining it needs.
+    /// </summary>
+    Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// Export matching's lookup (MVO→CSO, #2052): for a single Object Matching Rule, finds every unjoined,
+    /// Normal-status Connected System Object of the given type whose named attribute equals one of the
+    /// given values, for one Metaverse Object or a whole page of them. See <c>IConnectedSystemRepository</c>
+    /// for full parameter and eligibility documentation.
     /// </summary>
     Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -447,6 +462,14 @@ public interface ISyncRepository
         AttributeDataType dataType,
         bool caseSensitive,
         IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Streams every unjoined, Normal-status Connected System Object of the given type with its values for the given
+    /// attributes, ordered by object: what an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052). See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
@@ -561,9 +584,9 @@ public interface ISyncRepository
     /// The reference recall existence query (#1003): returns the Connected System Object attribute
     /// value rows among <paramref name="connectedSystemObjectIds"/> x <paramref name="connectedSystemAttributeIds"/>
     /// that reference a deleted object, matched by resolved reference
-    /// (<paramref name="deletedReferenceCsoIds"/>) or by case-insensitive raw reference string
-    /// (<paramref name="loweredReferenceValues"/>, pre-lowered with ToLowerInvariant to mirror the
-    /// OrdinalIgnoreCase DN comparison export evaluation uses). Call per target Connected System so
+    /// (<paramref name="deletedReferenceCsoIds"/>) or by raw reference string ignoring case
+    /// (<paramref name="referenceValues"/>, as given: the database folds both sides, #2051). A caller holding a
+    /// case-exact value decides the exact match itself from the rows returned. Call per target Connected System so
     /// values cannot cross-match between systems. Rows not returned are values the target does not
     /// hold; staging nothing for them replaces no-net-change detection.
     /// </summary>
@@ -571,7 +594,7 @@ public interface ISyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues);
+        IReadOnlyCollection<string> referenceValues);
 
     /// <summary>
     /// Bulk creates MVOs with their attribute values.
@@ -684,29 +707,44 @@ public interface ISyncRepository
     /// sequence of historical ones. A person who changes their password twice must not have the older one
     /// delivered to a system that was briefly unavailable.
     /// </para>
+    /// <para>
+    /// Passwords replace each other; promises about the account carry forward (#2160). Where the existing row still
+    /// owes an account its first password and the newer change brings none, the obligation stays on the row (see
+    /// <see cref="PendingPasswordChange.Supersede"/>). One exception: a propagated change does not replace a first
+    /// password still owed on a Connected System whose Password Synchronisation is switched off, because it would be
+    /// the person's password reaching a paused system; the Initial Password wins, as at staging.
+    /// </para>
     /// </summary>
-    Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
+    /// <returns>The changes not queued because of that exception, so the caller can say so; empty otherwise.</returns>
+    Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
 
     /// <summary>
     /// Offers <see cref="PendingPasswordChangeOrigin.Provisioned"/> changes to the queue, one per newly
     /// provisioned account, coalescing on the same (Metaverse Object, Connected System) key as
-    /// <see cref="QueuePasswordChangesAsync"/> but under a narrower conflict clause (#1697): a provisioned row's
-    /// first password must never overwrite the person's real one.
+    /// <see cref="QueuePasswordChangesAsync"/> but under a narrower conflict clause (#1697, #2160): a provisioned row's
+    /// first password never overwrites a password change that can still reach the account.
     /// <para>
-    /// An existing row is replaced only when it carries nothing worth keeping: it is itself
-    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted and re-provisioned), or it
-    /// is <see cref="PendingPasswordChangeStatus.Expired"/> or <see cref="PendingPasswordChangeStatus.Cancelled"/>
-    /// (a dead password that must not block the account's first one). Anything else, a Pending, Delivering or
-    /// Parked row of Explicit or Propagated origin, is the person's real password already on its way, or waiting
-    /// on a person to fix it, and wins: the offered change is discarded.
-    /// </para>
-    /// <para>
-    /// A discard releases any propagated row found waiting on this exact account: its
-    /// <see cref="PendingPasswordChange.NextRetryAt"/> is cleared so a change that was held for the account to
-    /// exist is attempted on the very next delivery pass, now that it does.
+    /// Decided per account in one statement against the row already there, if any
+    /// (<see cref="ProvisionedPasswordStagingDisposition"/>): the Initial Password replaces a row that can deliver
+    /// nothing to this account (expired, cancelled, parked for a reason no attempt cures, held by a paused system, an
+    /// administrator's set whose account is gone or disjoined, a propagated change for another Object Type, or an earlier
+    /// Initial Password); and a live change that will reach the account (a propagated change for the targeted Object
+    /// Type, or an administrator's set naming it) is given the obligation instead and released to be delivered at once.
     /// </para>
     /// </summary>
     Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// Records that an export has written the enabled state of these accounts (#2064), on each row owing one of them its
+    /// first password (its <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, or a change carrying the first
+    /// password in its place, #2160), whatever its status (a Cancelled row comes back on a Retry): sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
+    /// leaves the enabled state to the Attribute Flow rather than applying the provisioning Synchronisation Rule's
+    /// Enable Account. Asked after an Update, or a Delete performed as a disable, whose Connector reported writing
+    /// the enabled state: a leaver disabled, or an account disabled on deprovisioning, while its first password is
+    /// still owed is then never re-enabled by a late delivery. A narrow status mark on one column, so exempt from the
+    /// bulk column list rule. Returns how many rows it marked.
+    /// </summary>
+    Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Creates Activities in one batch, for callers recording several at once (#1697: one parent Activity per
@@ -1130,10 +1168,10 @@ public interface ISyncRepository
 
     /// <summary>
     /// Queries the database for RPEI error counts without loading RPEIs into memory.
-    /// Returns total RPEIs with errors, total RPEIs, and total UnhandledError RPEIs.
+    /// Returns total RPEIs with errors, total RPEIs, total UnhandledError RPEIs and total refused Object Type changes.
     /// UnhandledError RPEIs indicate code/logic bugs and escalate activity status.
     /// </summary>
-    Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records attached to RPEIs.
@@ -1141,6 +1179,12 @@ public interface ISyncRepository
     /// (which only inserts RPEI scalar columns, not related change records).
     /// </summary>
     Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Persists ConnectedSystemObjectChange records that belong to no execution item: the deletion records of
+    /// Connected System Objects deleted quietly, whose disconnection was recorded when it happened.
+    /// </summary>
+    Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes);
 
     #endregion
 
@@ -1185,6 +1229,13 @@ public interface ISyncRepository
     Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
 
     /// <summary>
+    /// A Connected System's <see cref="ConnectedSystem.ObjectMatchingRuleMode"/>, read on its own, or null when the system
+    /// does not exist. Sync Preview (#2176) takes the join decision the run takes from it: in simple mode the Connected
+    /// System Object Type's own Object Matching Rules apply, in advanced mode only each import Synchronisation Rule's.
+    /// </summary>
+    Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId);
+
+    /// <summary>
     /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
     /// they provision.
     /// <para>
@@ -1199,6 +1250,70 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Narrows a set of Metaverse Object ids to those still owed a password on a Connected System (#2039): a queued
+    /// password change for the (Metaverse Object, Connected System) pair that is Pending, Delivering or Parked, of
+    /// any origin. Keyed on the pair rather than on an account, so a live user-set or propagated change that won
+    /// coalescing over a provisioned one counts too.
+    /// <para>
+    /// Asked by the confirming import, once per page and only when the page holds a change written with an interim
+    /// value until an Initial Password is delivered, and once more per import for the held changes on objects it did
+    /// not return (<see cref="GetInitialPasswordHoldSummariesAsync"/>): a change whose account is still owed one is
+    /// held, one whose account is not is released. Expired and Cancelled changes are never delivered, so they owe
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// Asked too by the export run, once per batch holding an Update to an account joined to a Metaverse Object, sent
+    /// through a Connector that can set passwords (#2158): an Update to an account still owed one is flagged
+    /// (<c>PendingExport.InitialPasswordFollows</c>), so an enable the target refuses for want of a password is held
+    /// for the delivery to complete. The same test as the hold, so the flag and the hold never disagree.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
+    /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
+    /// those objects entirely, because a correction staged for any of their attributes
+    /// would replace the Pending Export holding the change, and the synchronisation preview skips them too so it
+    /// proposes no correction the run will not make. Answered from a partial index, so it costs nothing where no change
+    /// carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// What a password delivery's enabled-state decision needs to know at the attempt (#2064, #2173), in one round
+    /// trip: whether the account holds an enable withheld until a password exists (as
+    /// <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> answers it), whether the queued change is
+    /// marked as having its account's enabled state written by an export, and whether an export to the account is in
+    /// flight. Read afresh rather than taken from the claimed row, because an export can mark the row, or withdraw the
+    /// hold, while the lane works through the accounts ahead of it.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the account belongs to.</param>
+    /// <param name="pendingPasswordChangeId">The queued change being delivered.</param>
+    /// <param name="connectedSystemObjectId">The account.</param>
+    /// <param name="exportsInFlightSince">
+    /// The earliest time an export still Executing counts as in flight. One marked Executing before it has been there
+    /// longer than any batch takes, so it is reported as stranded rather than in flight.
+    /// </param>
+    Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince);
+
+    /// <summary>
+    /// Every change on a Connected System held until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039), one row per change with its
+    /// Pending Export, Connected System Object and that object's Metaverse Object (null when it is joined to none).
+    /// <para>
+    /// Asked once per import, after reconciliation, so a held change is judged even when the import did not return its
+    /// account: a Full Import skips an unchanged account by its content hash, and a Delta Import never returns one, so
+    /// without this a password that expired or was cancelled would leave the change held for ever. Answered from the
+    /// partial index on the flag, so it costs nothing where no change is held.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets the object types (schema) for a Connected System.
@@ -1318,10 +1433,12 @@ public interface ISyncRepository
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
     /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
-    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
-    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
+    /// record (the export Synchronisation Rule whose matching found it, #348, and the Object Matching Rule and values
+    /// it matched on, #2052) are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue);
 
     #endregion
 
@@ -1523,7 +1640,24 @@ public interface ISyncRepository
     /// Marks Pending Exports as Executing with the current UTC timestamp.
     /// Uses raw SQL in production for efficiency.
     /// </summary>
-    Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+    /// <returns>The time written to each one's <see cref="PendingExport.LastAttemptedAt"/>, to the microsecond the
+    /// database holds, so <see cref="ReleaseExecutingPendingExportsAsync"/> can tell this mark from a later one.</returns>
+    Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Writes each retry state onto its Pending Export, but only while that row is still Executing under the mark made at
+    /// <paramref name="markedAt"/>, and returns the ids it wrote (#2083, #2197). The inverse of <see cref="MarkPendingExportsAsExecutingAsync"/>, used when a batch is cancelled
+    /// or fails: an export the run never got to goes back as it was before the batch was sent, and one that failed gets
+    /// one failed attempt. A row whose result was already recorded has left Executing, so it is never overwritten, and a
+    /// Create whose success was recorded is never put back to be sent again. Only the Pending Export's own retry columns
+    /// are written; its attribute changes are left as they are. A row a later run has marked Executing again (possible once
+    /// a cancelled run has let the next start before it has finished putting its batch back) carries that run's mark, and
+    /// is left to it.
+    /// </summary>
+    /// <param name="states">The state to write onto each Pending Export.</param>
+    /// <param name="markedAt">The time <see cref="MarkPendingExportsAsExecutingAsync"/> returned when the batch was marked.</param>
+    /// <returns>The ids of the Pending Exports written.</returns>
+    Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt);
 
     /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
@@ -1559,6 +1693,14 @@ public interface ISyncRepository
     /// still apply there.
     /// </summary>
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
+
+    /// <summary>
+    /// Begins a database transaction that the writes made through this repository join until it is committed or
+    /// disposed, so a set of them lands together or not at all (#2197): an export's recorded result and the External ID
+    /// it assigned, say. Returns null when a transaction is already open, whose writes these then join and whose owner
+    /// commits them, or when the provider is not relational (the in-memory test repository).
+    /// </summary>
+    Task<ISyncRepositoryTransaction?> BeginTransactionAsync();
 
     #endregion
 

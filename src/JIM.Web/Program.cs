@@ -7,6 +7,7 @@ using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data;
 using JIM.Web.Authentication;
@@ -439,15 +440,10 @@ try
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
-    // Increase MaxDepth for the HTTP JSON options used by the OpenAPI schema generator.
-    // The default of 64 is insufficient for JIM's deep DTO graph; the schema exporter and
-    // its internal ResolveReferences expansion need headroom for recursive types.
-    // This only affects schema generation and minimal API endpoints; MVC controllers use
-    // separate JsonOptions. See: https://github.com/dotnet/aspnetcore/issues/63857
-    builder.Services.ConfigureHttpJsonOptions(options =>
-    {
-        options.SerializerOptions.MaxDepth = 256;
-    });
+    // The HTTP JSON options are the ones the OpenAPI schema generator reads (MVC controllers use the
+    // separate options configured above), so they carry the same policy, or the document would describe
+    // types differently from how the API serialises them. ApiJsonConfiguration.ConfigureHttp explains more.
+    builder.Services.ConfigureHttpJsonOptions(JIM.Web.ApiJsonConfiguration.ConfigureHttp);
 
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
@@ -923,7 +919,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
     }
 
     // Validate the key format
-    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix))
+    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix, StringComparison.Ordinal))
     {
         Log.Warning("InitialiseInfrastructureApiKeyAsync: {EnvVar} must start with '{Prefix}'. Key not created.",
             Constants.Config.InfrastructureApiKey, ApiKeyAuthenticationHandler.ApiKeyPrefix);
@@ -937,50 +933,29 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         return;
     }
 
-    // Check if this key already exists (by hash)
     var keyHash = ApiKeyAuthenticationHandler.HashApiKey(infrastructureApiKey);
-    var existingKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
-
-    if (existingKey != null)
+    var keyPrefix = infrastructureApiKey[..12];
+    var outcome = await jim.Security.EnsureInfrastructureApiKeyAsync(keyHash, keyPrefix);
+    switch (outcome)
     {
-        Log.Information("InitialiseInfrastructureApiKeyAsync: Infrastructure API key already exists (prefix: {Prefix}).", existingKey.KeyPrefix);
-        return;
+        case InfrastructureApiKeyOutcome.Created:
+            Log.Information("InitialiseInfrastructureApiKeyAsync: Created infrastructure API key (prefix: {Prefix}), valid for {Hours} hours.",
+                keyPrefix, SecurityServer.InfrastructureApiKeyLifetime.TotalHours);
+            break;
+        case InfrastructureApiKeyOutcome.Renewed:
+            Log.Information("InitialiseInfrastructureApiKeyAsync: Infrastructure API key (prefix: {Prefix}) had expired; renewed for {Hours} hours.",
+                keyPrefix, SecurityServer.InfrastructureApiKeyLifetime.TotalHours);
+            break;
+        case InfrastructureApiKeyOutcome.Unchanged:
+            Log.Information("InitialiseInfrastructureApiKeyAsync: Infrastructure API key already exists (prefix: {Prefix}).", keyPrefix);
+            break;
+        case InfrastructureApiKeyOutcome.Disabled:
+            Log.Warning("InitialiseInfrastructureApiKeyAsync: Infrastructure API key (prefix: {Prefix}) is disabled; it is left disabled and not renewed.", keyPrefix);
+            break;
+        case InfrastructureApiKeyOutcome.AdministratorRoleMissing:
+            Log.Error("InitialiseInfrastructureApiKeyAsync: Administrator role not found. Cannot create infrastructure key.");
+            break;
     }
-
-    // Get the Administrator role
-    var roles = await jim.Security.GetRolesAsync();
-    var adminRole = roles.FirstOrDefault(r => r.Name == "Administrator");
-
-    if (adminRole == null)
-    {
-        Log.Error("InitialiseInfrastructureApiKeyAsync: Administrator role not found. Cannot create infrastructure key.");
-        return;
-    }
-
-    // Create the infrastructure API key with 24-hour expiry
-    var keyPrefix = infrastructureApiKey.Length >= 12
-        ? infrastructureApiKey[..12]
-        : infrastructureApiKey;
-
-    var apiKey = new JIM.Models.Security.ApiKey
-    {
-        Id = Guid.NewGuid(),
-        Name = "Infrastructure Key",
-        Description = "Auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable. This key expires 24 hours after creation.",
-        KeyHash = keyHash,
-        KeyPrefix = keyPrefix,
-        Created = DateTime.UtcNow,
-        CreatedByType = JIM.Models.Activities.ActivityInitiatorType.System,
-        CreatedByName = "System",
-        ExpiresAt = DateTime.UtcNow.AddHours(24),
-        IsEnabled = true,
-        IsInfrastructureKey = true,
-        Roles = [adminRole]
-    };
-
-    await jim.Security.CreateApiKeyAsync(apiKey);
-    Log.Information("InitialiseInfrastructureApiKeyAsync: Created infrastructure API key (prefix: {Prefix}, expires: {Expiry}).",
-        keyPrefix, apiKey.ExpiresAt);
 }
 
 /// <summary>
@@ -1185,7 +1160,7 @@ static string? ExtractApiAudience(string? apiScope, string? clientId)
 
     // For scopes like "api://client-id/access_as_user", extract "api://client-id"
     var lastSlashIndex = apiScope.LastIndexOf('/');
-    if (lastSlashIndex > 0 && apiScope.StartsWith("api://"))
+    if (lastSlashIndex > 0 && apiScope.StartsWith("api://", StringComparison.Ordinal))
         return apiScope[..lastSlashIndex];
 
     return clientId;

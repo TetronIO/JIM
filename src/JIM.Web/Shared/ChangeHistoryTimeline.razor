@@ -96,7 +96,7 @@ else
                                     <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
                                              Color="@GetChangeTypeColor(changeGroup.ChangeType)" />
                                     <MudText Typo="Typo.body1" Style="margin-right: 14px;">
-                                        <strong>@changeGroup.ChangeType</strong>
+                                        <strong>@changeGroup.ChangeType.ToString().SplitOnCapitalLetters()</strong>
                                     </MudText>
                                     @if ((changeGroup.ChangeType == ObjectChangeType.Joined ||
                                                                  changeGroup.ChangeType == ObjectChangeType.Projected) &&
@@ -224,7 +224,7 @@ else
                                          Style="margin-top: 4px;" />
                                 <div>
                                     <MudText Typo="Typo.h6">
-                                        @_selectedChange?.ChangeType
+                                        @_selectedChange?.ChangeType.ToString().SplitOnCapitalLetters()
                                         @if (_selectedChange?.ChangeType == ObjectChangeType.Joined &&
                                             !string.IsNullOrEmpty(_selectedChange?.CsoExternalId))
                                         {
@@ -567,7 +567,7 @@ else
                                             }
                                         </DialogContent>
                                         <DialogActions>
-                                            <MudButton OnClick="CloseDetailsDialog" Color="Color.Primary">Close</MudButton>
+                                            <MudButton OnClick="CloseDetailsDialog">Close</MudButton>
                                         </DialogActions>
                                     </MudDialog>
 

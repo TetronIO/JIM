@@ -137,4 +137,15 @@ public interface IConnectorCapabilities
     /// matches attribute names against every standard instead, and labels whichever one answered.
     /// </summary>
     public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
+
+    /// <summary>
+    /// Does an External ID identify one object across every Object Type of a Connected System using this Connector?
+    /// True only where the Connected System guarantees it (an LDAP directory's objectGUID or entryUUID is unique in
+    /// the directory, whatever class an entry has). When true, an import that finds an object's External ID already
+    /// held under another Object Type knows the object has changed type, and refuses to retire the existing
+    /// Connected System Object and create a new one unless the Run Profile allows Object Type changes (#2049).
+    /// Leave it false wherever Object Types can legitimately share values: a SQL view shares its table's keys, and
+    /// two delimited files' identifier columns can overlap by coincidence.
+    /// </summary>
+    public bool ExternalIdsUniqueAcrossObjectTypes => false;
 }

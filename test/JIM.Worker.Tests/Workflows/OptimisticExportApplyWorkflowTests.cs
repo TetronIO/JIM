@@ -474,6 +474,88 @@ public class OptimisticExportApplyWorkflowTests
         // Pending Export.
         Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null,
             "the confirmed Pending Export must have been deleted by reconciliation");
+
+        // Assert 4 (guard, #2129): the import changed nothing on the object, so the Activity's message counts it as
+        // unchanged, although reconciliation gave it an execution item for the confirmation.
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+    }
+
+    /// <summary>
+    /// An export Attribute Flow expression returning text for a Number attribute is staged as text, which the Connector
+    /// writes (#2183). Optimistic apply cannot record it as a number, so it records nothing in its place and the
+    /// confirming import records what the target holds: storing a value holding nothing instead left the object holding
+    /// it beside the imported number, and its later removal errored the object.
+    /// </summary>
+    [Test]
+    public async Task Workflow_UpdateExportOfTextIntoNumberAttribute_ConfirmingImportLeavesOnlyTheImportedValueAsync()
+    {
+        var userAccountControlAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.UserAccountControl.ToString());
+        var objectGuid = Guid.NewGuid();
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            Type = TargetUserType,
+            TypeId = TargetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = ObjectGuidAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = ObjectGuidAttr.Id, Attribute = ObjectGuidAttr, GuidValue = objectGuid
+        });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = EmployeeIdAttr.Id, Attribute = EmployeeIdAttr, StringValue = "EMP003"
+        });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = userAccountControlAttr.Id, Attribute = userAccountControlAttr, IntValue = 514
+        });
+        ConnectedSystemObjectsData.Add(cso);
+
+        PendingExportsData.Add(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = userAccountControlAttr.Id, Attribute = userAccountControlAttr, StringValue = "512",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        });
+
+        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.Export, 5);
+        InitialiseApplication();
+
+        await Jim.ExportExecution.ExecuteExportsAsync(TargetSystem, CreateSucceedingExportConnector().Object, SyncRunMode.PreviewAndSync);
+
+        var importObject = new ConnectedSystemImportObject { ObjectType = "TARGET_USER", ChangeType = ObjectChangeType.Updated };
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = ObjectGuidAttr.Name, GuidValues = [objectGuid] });
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = EmployeeIdAttr.Name, StringValues = ["EMP003"] });
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = userAccountControlAttr.Name, IntValues = [512] });
+        var activity = await RunConfirmingImportAsync(importObject);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError).Select(r => r.ErrorMessage),
+                Is.Empty);
+            Assert.That(cso.AttributeValues.Where(av => av.AttributeId == userAccountControlAttr.Id).Select(av => (av.IntValue, av.HeldDataType())),
+                Is.EqualTo(new (int?, AttributeDataType?)[] { (512, AttributeDataType.Number) }),
+                "The object holds the imported number alone, and no value holding nothing.");
+        }
     }
 
     /// <summary>

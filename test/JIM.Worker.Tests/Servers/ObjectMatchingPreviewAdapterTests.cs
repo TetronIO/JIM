@@ -40,6 +40,7 @@ public class ObjectMatchingPreviewAdapterTests
     private const int CreatedAttributeId = 103;
     private const int EmployeeIdMetaverseAttributeId = 201;
     private const int MailMetaverseAttributeId = 202;
+    private const int StaffNumberMetaverseAttributeId = 203;
     private const int ImportRuleId = 42;
 
     private Mock<IRepository> _repo = null!;
@@ -90,7 +91,8 @@ public class ObjectMatchingPreviewAdapterTests
             Attributes =
             [
                 new MetaverseAttribute { Id = EmployeeIdMetaverseAttributeId, Name = "Employee ID", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued },
-                new MetaverseAttribute { Id = MailMetaverseAttributeId, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued }
+                new MetaverseAttribute { Id = MailMetaverseAttributeId, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued },
+                new MetaverseAttribute { Id = StaffNumberMetaverseAttributeId, Name = "Staff Number", Type = AttributeDataType.Number, AttributePlurality = AttributePlurality.SingleValued }
             ]
         };
 
@@ -190,22 +192,38 @@ public class ObjectMatchingPreviewAdapterTests
         var findings = await _adapter.ValidateAsync(Context(proposal));
 
         Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message),
-            Has.Some.Contains("more than one source"));
+            Has.Some.Contains("exactly one source"));
     }
 
     [Test]
-    public async Task ValidateAsync_ExpressionSource_IsBlocking()
+    public async Task ValidateAsync_WorkableExpressionSource_IsNotBlocking()
     {
+        // Expression sources are authorable (#2052), so the preview judges them as the save does rather than
+        // refusing them outright.
         _csoType.ObjectMatchingRules = [StoredRule()];
-        var proposal = ProposalWith(RuleProposal() with
+        var proposal = ProposalWith(MailRuleProposal() with
         {
             Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"])")]
         });
 
         var findings = await _adapter.ValidateAsync(Context(proposal));
 
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
+    [Test]
+    public async Task ValidateAsync_ExpressionTheSaveWouldRefuse_IsBlockingWithTheSameReason()
+    {
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        var proposal = ProposalWith(MailRuleProposal() with
+        {
+            Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"]) + Lower(mv[\"Email\"])")]
+        });
+
+        var findings = await _adapter.ValidateAsync(Context(proposal));
+
         Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message),
-            Has.Some.Contains("expression"));
+            Has.Some.Contains("Object Matching Rule 1 on 'User'").And.Some.Contains("mv[\"Email\"]"));
     }
 
     [Test]
@@ -303,8 +321,52 @@ public class ObjectMatchingPreviewAdapterTests
             Assert.That(deltas[0].TransitionType,
                 Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject));
             Assert.That(deltas[0].MetaverseObjectId, Is.EqualTo(_bob.Id), "the delta names the identity the object would end up on");
-            Assert.That(deltas[0].OldValue, Is.EqualTo("Alice Smith"));
-            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones"));
+            // Each side names the value it matched on (#2052), so the row says why the identity changed.
+            Assert.That(deltas[0].OldValue, Is.EqualTo("Alice Smith (on E1)"));
+            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones (on alice@example.com)"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposedExpressionRule_JoinsOnTheComputedValue()
+    {
+        // The directory holds the address in capitals; Bob's Email is lower case. The expression computes the value
+        // the Metaverse holds, so the proposal joins the object to Bob, and the row names the computed value.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "ALICE@EXAMPLE.COM")];
+
+        var proposal = ProposalWith(MailRuleProposal() with
+        {
+            CaseSensitive = true,
+            Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"])")]
+        });
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(1));
+            Assert.That(deltas[0].TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject));
+            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones (on alice@example.com)"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposedRuleCannotBeEvaluated_ReportsThatTheObjectWouldFail()
+    {
+        // A Text source compared with a Number attribute cannot be worked out. The run would stop the object rather
+        // than let it project a duplicate (#2052), and the preview has to say so rather than throw.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "alice@example.com")];
+
+        var proposal = ProposalWith(RuleProposal() with { TargetMetaverseAttributeId = StaffNumberMetaverseAttributeId });
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(1));
+            Assert.That(deltas[0].TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(deltas[0].NewValue, Does.Contain("Staff Number"));
         }
     }
 
@@ -351,6 +413,40 @@ public class ObjectMatchingPreviewAdapterTests
 
         Assert.That(deltas.Select(d => d.TransitionType),
             Is.EqualTo(new[] { ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously }));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposalMatchesMoreThanOneMetaverseObject_ListsEveryCandidate()
+    {
+        // The administrator's next question is "which ones?", so the row carries every identity the value found
+        // (#2052), in the shape an Activity item records them, rather than only saying there were several.
+        var bobby = MetaverseObjectWith("Bobby Jones", employeeId: "E8", email: "alice@example.com");
+        _syncRepo.SeedMetaverseObject(bobby);
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E7", "alice@example.com")];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        var candidates = deltas.Single().MatchCandidates;
+        Assert.That(candidates, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates!.Select(c => c.CandidateId), Is.EquivalentTo(new[] { _bob.Id, bobby.Id }));
+            Assert.That(candidates!.Select(c => c.DisplayNameSnapshot), Is.EqualTo(new[] { "Bob Jones", "Bobby Jones" }));
+            Assert.That(candidates!.All(c => c.CandidateKind == MatchCandidateKind.MetaverseObject), Is.True);
+            Assert.That(candidates!.All(c => c.MatchedValue == "alice@example.com"), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposalMatchingOneMetaverseObject_CarriesNoCandidates()
+    {
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "alice@example.com")];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        Assert.That(deltas.Single().MatchCandidates, Is.Null.Or.Empty);
     }
 
     [Test]
@@ -413,6 +509,45 @@ public class ObjectMatchingPreviewAdapterTests
         var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
 
         Assert.That(deltas, Is.Empty);
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRest()
+    {
+        // #2264: "E1" cannot be compared as a number, so the run stops that object before the join step, under the
+        // stored matching and the proposal alike. The preview says so, with the reason, and previews the rest.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _importRule.ObjectScopingCriteriaGroups =
+        [
+            new SyncRuleScopingCriteriaGroup
+            {
+                Type = JIM.Models.Search.SearchGroupType.All,
+                Criteria =
+                [
+                    new SyncRuleScopingCriteria
+                    {
+                        Expression = "cs[\"employeeID\"]",
+                        CompareAs = AttributeDataType.Number,
+                        ComparisonType = JIM.Models.Search.SearchComparisonType.GreaterThan,
+                        IntValue = 5
+                    }
+                ]
+            }
+        ];
+        var undecidable = UnjoinedCso("E1", "alice.smith@example.com");
+        var decidable = UnjoinedCso("9", "alice@example.com");
+        _csos = [undecidable, decidable];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided").And.Contain("E1"));
+            Assert.That(deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == decidable.Id)?.TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject));
+        }
     }
 
     [Test]

@@ -148,9 +148,9 @@ function Test-ScenarioIsDirectoryAgnostic {
         [Nullable[int]]$ScenarioNumber
     )
 
-    # Scenarios 011 (Scoping Criteria Matrix), 015 (SCIM Connector) and 016 (JIM SQL Connector
-    # matrix) accept -DirectoryConfig for runner compatibility but never read it (015 and 016
-    # explicitly discard it with `$null = $DirectoryConfig`); their results are identical on every
-    # directory type.
-    return $ScenarioNumber -in 11, 15, 16
+    # Scenarios 011 (Scoping Criteria Matrix), 015 (SCIM Connector), 016 (JIM SQL Connector matrix)
+    # and 027 (the tested tutorial, which uses the File Connector only) accept -DirectoryConfig for
+    # runner compatibility but never read it (015, 016 and 027 explicitly discard it with
+    # `$null = $DirectoryConfig`); their results are identical on every directory type.
+    return $ScenarioNumber -in 11, 15, 16, 27
 }

@@ -141,11 +141,12 @@ public class SystemControllerTests
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    // Include a "sub" claim so the initiator triad has a principal id (required for
-                    // activity attribution); without it the reset activity would fail validation.
+                    // Include the Metaverse Object id claim the authentication pipeline attaches, so the initiator
+                    // triad has a principal id (required for activity attribution); without it the reset activity
+                    // would fail validation.
                     User = new ClaimsPrincipal(new ClaimsIdentity(new[]
                     {
-                        new Claim("sub", Guid.NewGuid().ToString()),
+                        new Claim(Constants.BuiltInClaims.MetaverseObjectId, Guid.NewGuid().ToString()),
                         new Claim(ClaimTypes.Name, "test-admin")
                     }, "test"))
                 }

@@ -197,11 +197,31 @@ Describe 'ConvertTo-JIMOutputObject' {
             }
         }
 
+        It 'Preserves Object Type names keying a schema refresh preview''s classification changes' {
+            InModuleScope JIM {
+                # SchemaRefreshResultDto.ChangedObjectTypeClassifications (#2049): keyed by Object Type name, which
+                # the cmdlet's warnings quote back to the administrator, so 'inetOrgPerson' must not become
+                # 'InetOrgPerson'.
+                $input = [PSCustomObject]@{
+                    changedObjectTypeClassifications = [PSCustomObject]@{
+                        inetOrgPerson = @([PSCustomObject]@{ aspect = 'ClassKind'; oldValues = @('auxiliary'); newValues = @('structural') })
+                    }
+                }
+                $result = ConvertTo-JIMOutputObject -InputObject $input
+
+                ($result.PSObject.Properties.Name) -ccontains 'ChangedObjectTypeClassifications' | Should -BeTrue
+                $typeNames = $result.ChangedObjectTypeClassifications.PSObject.Properties.Name
+                $typeNames -ccontains 'inetOrgPerson' | Should -BeTrue
+                $typeNames -ccontains 'InetOrgPerson' | Should -BeFalse
+                @($result.ChangedObjectTypeClassifications.inetOrgPerson)[0].aspect | Should -Be 'ClassKind'
+            }
+        }
+
         It 'Pins the set of opaque (dynamic-key) property names' {
             InModuleScope JIM {
                 # Guards the maintenance contract: adding a data-keyed dictionary endpoint
                 # without adding it here would silently PascalCase (corrupt) its keys.
-                $expected = @('attributes', 'mvAttributes', 'csAttributes', 'properties', 'validationErrors')
+                $expected = @('attributes', 'mvAttributes', 'csAttributes', 'properties', 'validationErrors', 'changedObjectTypeClassifications')
                 ($script:JIMOpaqueValueProperties | Sort-Object) | Should -Be ($expected | Sort-Object)
             }
         }

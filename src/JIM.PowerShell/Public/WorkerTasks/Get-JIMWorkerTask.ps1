@@ -16,13 +16,19 @@ function Get-JIMWorkerTask {
         The unique identifier (GUID) of a specific Worker Task to retrieve.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Not applicable when -Id is specified.
+        The page of results to return.
 
     .PARAMETER PageSize
-        Number of items per page (1-100). Defaults to 50. Not applicable when -Id is specified.
+        The number of Worker Tasks on each page.
 
     .OUTPUTS
-        PSCustomObject representing Worker Task header(s).
+        Each Worker Task's header, with one property the module adds.
+
+        JIM.WorkerTaskHeader
+        StepDisplay (string): The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It
+            is the sentence the portal shows in Admin > Operations > Queue, and the one Start-JIMRunProfile -Wait
+            shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run
+            Profile execution, since those record no steps.
 
     .EXAMPLE
         Get-JIMWorkerTask
@@ -38,7 +44,7 @@ function Get-JIMWorkerTask {
         Stop-JIMWorkerTask
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.WorkerTaskHeader')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [guid]$Id,

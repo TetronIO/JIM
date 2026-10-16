@@ -200,4 +200,58 @@ public class RunProfileSafeguardsPersistenceDatabaseTests
             Assert.That(persisted.MaxDetectedDeletionsPercent, Is.Null, "Clearing the limit through the update must persist as null, not keep the old value");
         }
     }
+
+    [Test]
+    public async Task SeededFullImportRunProfile_AllowObjectTypeChangesNotSet_ReadsFalseAsync()
+    {
+        // Object Type changes are refused unless a Run Profile says otherwise (#2049), including every Run Profile
+        // that existed before the setting did.
+        var runProfileId = await SeedFullImportRunProfileAsync();
+
+        var persisted = await ReadBackAsync(runProfileId);
+
+        Assert.That(persisted.AllowObjectTypeChanges, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_AllowObjectTypeChangesSetOnADetachedCopy_PersistsItAsync()
+    {
+        var runProfileId = await SeedFullImportRunProfileAsync();
+
+        // The portal and the API both hand the repository a Run Profile loaded on another context, so the update has
+        // to copy Allow Object Type Changes (#2049) across rather than rely on change tracking.
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var detached = await ctx.ConnectedSystemRunProfiles.AsNoTracking().SingleAsync(rp => rp.Id == runProfileId);
+            detached.AllowObjectTypeChanges = true;
+            await repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(detached);
+        }
+
+        var persisted = await ReadBackAsync(runProfileId);
+        Assert.That(persisted.AllowObjectTypeChanges, Is.True, "Allow Object Type Changes must survive the update's property copy");
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_AllowObjectTypeChangesClearedOnADetachedCopy_PersistsTheClearAsync()
+    {
+        var runProfileId = await SeedFullImportRunProfileAsync();
+        await using (var ctx = NewContext())
+        {
+            var tracked = await ctx.ConnectedSystemRunProfiles.SingleAsync(rp => rp.Id == runProfileId);
+            tracked.AllowObjectTypeChanges = true;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var detached = await ctx.ConnectedSystemRunProfiles.AsNoTracking().SingleAsync(rp => rp.Id == runProfileId);
+            detached.AllowObjectTypeChanges = false;
+            await repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(detached);
+        }
+
+        var persisted = await ReadBackAsync(runProfileId);
+        Assert.That(persisted.AllowObjectTypeChanges, Is.False, "Switching the setting off through the update must persist, not keep the old value");
+    }
 }

@@ -85,6 +85,23 @@ public sealed class CausalityEvent
     public string? DetailMessage { get; init; }
 
     /// <summary>
+    /// On a Joined event made by matching, what the Object Matching Rule compared, as recorded with the join
+    /// (#2052); null on every other event, and on a join recorded before this was captured.
+    /// </summary>
+    public string? ObjectMatchingRuleDescription { get; init; }
+
+    /// <summary>
+    /// On a Joined event made by matching, the value the join matched on (#2052); null on every other event.
+    /// </summary>
+    public string? MatchedValue { get; init; }
+
+    /// <summary>
+    /// The line every view shows for a Joined event made by matching: the value it matched on and what the Object
+    /// Matching Rule compared, in the model's mood. Null when <see cref="MatchedValue"/> is.
+    /// </summary>
+    public string? JoinMatchDetail { get; init; }
+
+    /// <summary>
     /// Id of the Synchronisation Rule attributed to this event, when recorded (#1085).
     /// </summary>
     public int? SyncRuleId { get; init; }

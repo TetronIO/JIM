@@ -10,7 +10,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
-- `docs/CLAUDE.md` - MkDocs site, diagram embedding, doc style
+- `docs/CLAUDE.md` - MkDocs site mechanics and diagram embedding; the rules for every page (audience, page types, voice, maintenance, rule IDs) are `engineering/DOCUMENTATION_STANDARD.md`
 
 ## Context7 MCP
 
@@ -26,7 +26,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 
 **Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
 - Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
-- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
+- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling; `changelog-lint` builds the site strictly and checks every link on the pull request, and the site deploys on merge to `main`.
 - **Partial:** UI-only Blazor/Razor changes need `dotnet build`. UI tests exist in `test/JIM.Web.Tests/` (NUnit + bUnit) for the causality visualisation; run `dotnet test test/JIM.Web.Tests/` when changing causality components or display logic, and skip `dotnet test` for UI areas with no test coverage.
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
@@ -137,6 +137,8 @@ The integration harness then runs as designed, Samba AD included: `Build-SambaIm
 Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scripts; it is cross-platform. Never create bash/shell scripts for project automation. Exceptions: `.devcontainer/setup.sh` (runs during container creation) and `.claude/hooks/session-start.sh` (runs during sandbox bootstrap, before PowerShell exists).
 
 ## Design Principles
+
+**JIM is pre-release: remove, don't deprecate.** Nobody runs JIM in production yet, so there are no API clients, scripts or stored configurations to protect. When something is wrong, unused or does nothing, remove it outright on every surface (model, database column, REST field, cmdlet parameter, docs) in one change. Never propose a deprecation period, a warning-first phase or a compatibility shim, and never ask whether removing something will break callers. The changelog still records the removal. The one constraint that stays is the database: released migrations are append-only (see `src/CLAUDE.md`), so a removal adds a new migration rather than editing an old one. (Rule added after a session offered to "deprecate first" a REST field that generated nothing.)
 
 **Surface parity (portal, REST API, PowerShell):** Every new admin-facing capability ships across all three surfaces in the same PR: read features need read parity, write features need write parity (portal dialog + REST endpoint/DTO + PowerShell parameter or cmdlet, each with tests and docs). Treat a feature as incomplete while any surface is missing; administrators script JIM as much as they click it. If parity is genuinely inapplicable (a portal-only display affordance) or is being deliberately deferred, call that out explicitly and get the user's agreement first; do not defer silently. (Rule added after #1104 shipped Standard Mappings editing portal-first, leaving REST/PowerShell writes as a gap nobody had decided on.)
 
@@ -305,17 +307,26 @@ Read the list from the ruleset rather than from here if it matters; this line ha
 
 ### Closing the loop after `--auto`
 
-Use the **Bash tool with `run_in_background: true`** and an until-loop so the harness notifies you when the PR transitions to `MERGED`:
+**Enabling auto-merge is not the end of the job; the PR is yours until it merges.** Plenty holds a queued merge without anyone being told: a failed CodeQL analysis or `changelog-lint`, a review thread nobody resolved (the documentation review, `docs-review.yml`, posts one thread per finding on any PR that changes customer pages, about two minutes after it opens), a conflict, a branch behind `main`, or an unsigned commit. A waiter that only watches for `MERGED` waits on all of these forever while you believe you are done. (Rule sharpened after PRs merged with docs findings unread, and others sat blocked on red CodeQL with their agent gone.)
+
+Run `scripts/Watch-PullRequest.ps1` with the **Bash tool and `run_in_background: true`**; it exits, saying why, on the first thing that needs you:
 
 ```bash
-until [ "$(gh pr view <n> --json state -q .state)" = "MERGED" ]; do sleep 30; done
+pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>
 ```
 
-This is the right primitive per the Monitor tool's own guidance: a single completion event ("tell me when X is true") is a Bash background command that exits when the condition is satisfied. The Monitor tool is for per-occurrence streams (a notification per matching log line) and is the wrong fit here.
+| It reports | Do |
+|---|---|
+| `Merged` | Clean up (below). |
+| `Closed` | Stop, and tell the user; do not clean up. |
+| `ChecksFailed` | Read the failed check's log, fix the cause, push. |
+| `UnresolvedThreads` | For each thread: fix it, or reply with why it stays; then **resolve** it (a reply alone does not clear the merge). See `/pr-merge`, "Resolve review threads", for the commands. |
+| `Conflict` / `Behind` | Merge `origin/main` in and push (never rebase; see below). |
+| `Blocked` | Every check passed and no thread is open: check the head commit is signed and every required check ran (see "`failures: none` is not `mergeable`"). |
 
-Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check. Wait for the notification.
+After acting, run it again; repeat until `Merged`. A thread you leave open on purpose (a security finding waiting on the user's call) goes in `-AcknowledgedThreadIds` so it stops ending the wait. A Bash background command is the right primitive per the Monitor tool's own guidance: a single completion event is a command that exits when its condition holds. Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check; wait for the notification. It works in Claude Code on the web too: GraphQL is refused there, and the script falls back to REST and the relay's review-thread route on its own. In a web session, still `subscribe_pr_activity` (it wakes the session without a running command); the watcher is for a one-off read (`-Once`) or a session that cannot subscribe.
 
-When it fires, run cleanup:
+When it reports `Merged`, run cleanup:
 
 ```bash
 git checkout main

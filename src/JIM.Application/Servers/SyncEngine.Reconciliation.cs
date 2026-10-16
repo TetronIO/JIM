@@ -31,10 +31,14 @@ public partial class SyncEngine
     /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
     /// <param name="pendingExport">The pre-loaded Pending Export for this CSO (or null if none).</param>
     /// <param name="result">The result object to populate with reconciliation outcomes.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System,
+    /// or null when the caller did not look; read only for a change written with an interim value until an Initial
+    /// Password is delivered (see <see cref="HoldOrReleaseChangeAwaitingInitialPassword"/>).</param>
     public void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
-        PendingExportReconciliationResult result)
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null)
     {
         if (pendingExport == null)
         {
@@ -158,6 +162,11 @@ public partial class SyncEngine
                 Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) confirmed",
                     attrChange.Id, attrChange.Attribute?.Name ?? "unknown");
             }
+            else if (IsAwaitingInitialPassword(attrChange))
+            {
+                HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObject.Id, connectedSystemObject.MetaverseObjectId, attrChange,
+                    metaverseObjectIdsOwedPassword, result);
+            }
             else
             {
                 attrChange.Status = ShouldMarkAsFailed(attrChange)
@@ -222,6 +231,121 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// A change sent with an interim value because an Initial Password follows the Create (#2039), still awaiting the
+    /// confirming import that judges it: the only kind of change <see cref="HoldOrReleaseChangeAwaitingInitialPassword"/>
+    /// applies to. Every other change, including one that carries the flag but has since left
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, is reconciled as it always was.
+    /// </summary>
+    public static bool IsAwaitingInitialPassword(PendingExportAttributeValueChange change) =>
+        change.AwaitsInitialPassword && change.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+    /// <summary>
+    /// Decides an unconfirmed change the Connector wrote with an interim value until an Initial Password is delivered
+    /// (#2039): Active Directory was given the account disabled, and the password's delivery is what enables it, so the
+    /// import seeing the interim value is expected rather than a failed write.
+    /// <list type="bullet">
+    /// <item><b>Held</b> while a password is still owed to the account (Pending, Delivering or Parked): left exactly as
+    /// it is, neither retried (Active Directory refuses to enable an account with no password) nor reported as
+    /// unconfirmed. The Pending Export keeps its status, so nothing is sent; the next import judges it again.</item>
+    /// <item><b>Released</b> once none is (the password expired, was withdrawn or never staged, or the object has no
+    /// Metaverse Object to owe one to): back to <see cref="PendingExportAttributeChangeStatus.Pending"/> with the flag
+    /// cleared, so the next export writes the asserted value as an ordinary Update. Silent: the interim value was
+    /// written on purpose. Should the target still refuse it, that export fails with its own actionable error.</item>
+    /// </list>
+    /// A caller that did not look up owed passwords (<paramref name="metaverseObjectIdsOwedPassword"/> null) gets a
+    /// hold: the account stays disabled, which harms nothing, where a release would re-send a value the target refuses.
+    /// <para>
+    /// Judged at every import of the Connected System, whether or not the import returned the account: through
+    /// <see cref="ReconcileCsoAgainstPendingExport"/> when it did, and through
+    /// <see cref="JudgeChangesAwaitingInitialPasswordNotReconciled"/> when it did not.
+    /// </para>
+    /// </summary>
+    private static void HoldOrReleaseChangeAwaitingInitialPassword(
+        Guid connectedSystemObjectId,
+        Guid? connectedSystemObjectMetaverseObjectId,
+        PendingExportAttributeValueChange attrChange,
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword,
+        PendingExportReconciliationResult result)
+    {
+        var passwordOwed = connectedSystemObjectMetaverseObjectId is { } metaverseObjectId &&
+            (metaverseObjectIdsOwedPassword == null || metaverseObjectIdsOwedPassword.Contains(metaverseObjectId));
+
+        if (passwordOwed)
+        {
+            result.HeldChanges.Add(attrChange);
+            Log.Debug("HoldOrReleaseChangeAwaitingInitialPassword: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} holds an interim value " +
+                "until its Initial Password is delivered; held, not retried",
+                attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObjectId);
+            return;
+        }
+
+        attrChange.Status = PendingExportAttributeChangeStatus.Pending;
+        attrChange.AwaitsInitialPassword = false;
+        result.ReleasedChanges.Add(attrChange);
+        Log.Debug("HoldOrReleaseChangeAwaitingInitialPassword: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} held an interim value, " +
+            "and no Initial Password is owed any more; released to be written as an ordinary Update",
+            attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObjectId);
+    }
+
+    /// <summary>
+    /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run
+    /// did not return its Connected System Object, and so did not reconcile it (#2039). A Full Import skips an unchanged
+    /// account by its content hash, and a Delta Import never returns one, so a hold whose password then expires or is
+    /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
+    /// otherwise never be judged again: the account would stay disabled, nothing would be reported, and Drift Detection
+    /// would skip the object for ever.
+    /// <para>
+    /// Each held change is held or released exactly as <see cref="ReconcileCsoAgainstPendingExport"/> would
+    /// (<see cref="HoldOrReleaseChangeAwaitingInitialPassword"/>). Nothing else is touched: the import did not read the
+    /// account, so the values JIM holds for it may predate the export, and confirming or retrying any other change
+    /// against them would be a guess. The same Pending Exports are excluded as there: Parked and Executing are never
+    /// touched, and a Failed one awaits an administrator.
+    /// </para>
+    /// <para>
+    /// After a release the Pending Export's status follows its changes as it does there, so the released change goes
+    /// out on the next export, except for a Create no import has confirmed yet: confirming a Create is what turns it
+    /// into an Update, and without that proof a Pending Create would be sent again to an object that may already exist.
+    /// It keeps its status, and the released change goes out once an import confirms the Create.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object the Pending Export writes to.</param>
+    /// <param name="metaverseObjectId">The Metaverse Object it is joined to, or null when it is joined to none (and then
+    /// nothing is owed).</param>
+    /// <param name="pendingExport">The object's Pending Export, holding at least one such change.</param>
+    /// <param name="result">Receives the held and released changes, and the Pending Export to persist when anything was
+    /// released.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System.</param>
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled(
+        Guid connectedSystemObjectId,
+        Guid? metaverseObjectId,
+        PendingExport pendingExport,
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid> metaverseObjectIdsOwedPassword)
+    {
+        ArgumentNullException.ThrowIfNull(pendingExport);
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(metaverseObjectIdsOwedPassword);
+
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing or PendingExportStatus.Failed)
+        {
+            Log.Debug("JudgeChangesAwaitingInitialPasswordNotReconciled: Pending Export {ExportId} status is {Status}; its held change(s) are left as they are",
+                pendingExport.Id, pendingExport.Status);
+            return;
+        }
+
+        foreach (var heldChange in pendingExport.AttributeValueChanges.Where(IsAwaitingInitialPassword).ToList())
+            HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObjectId, metaverseObjectId, heldChange, metaverseObjectIdsOwedPassword, result);
+
+        if (result.ReleasedChanges.Count == 0)
+            return;
+
+        if (pendingExport.ChangeType != PendingExportChangeType.Create)
+            UpdatePendingExportStatus(pendingExport);
+
+        result.PendingExportToUpdate = pendingExport;
+    }
+
+    /// <summary>
     /// Determines if an attribute change has been confirmed. Convenience overload that builds
     /// a per-attribute lookup from the CSO's attribute values. For batch reconciliation of
     /// multiple attributes on the same CSO, use the dictionary-based overload to avoid
@@ -257,6 +381,11 @@ public partial class SyncEngine
                 if (IsPendingChangeEmpty(attrChange))
                     return csoAttrValues.Count == 0;
 
+                // An Update against a multi-valued attribute sets its whole value set (#2182): it is confirmed only
+                // when the attribute holds exactly that value, never when the value is merely among others.
+                if (IsWholeSetUpdate(attrChange) && csoAttrValues.Count != 1)
+                    return false;
+
                 // For Add/Update with a real value, the value should exist on the CSO
                 return ValueExistsOnCso(csoAttrValues, attrChange);
 
@@ -277,6 +406,13 @@ public partial class SyncEngine
     /// Checks if the Pending Export attribute change value exists in the CSO's attribute values.
     /// Uses type-aware comparison based on the attribute's data type.
     /// </summary>
+    /// <remarks>
+    /// Text compares through <see cref="AttributeValueComparison"/> (#2051): an identifier (an External ID, a
+    /// Secondary External ID) ignores case unless declared case-exact, because a directory reports a name in the case
+    /// it stored, which need not be the case JIM wrote (#2195); every other text attribute compares exactly, so a change
+    /// of case is confirmed only when the new case arrives. A resolved reference is the object it names, so it is
+    /// confirmed by the referenced Connected System Object's id; its DN, like an unresolved one, ignores case.
+    /// </remarks>
     public static bool ValueExistsOnCso(List<ConnectedSystemObjectAttributeValue> csoValues, PendingExportAttributeValueChange attrChange)
     {
         if (csoValues.Count == 0)
@@ -288,7 +424,7 @@ public partial class SyncEngine
         {
             AttributeDataType.Text =>
                 !string.IsNullOrEmpty(attrChange.StringValue) &&
-                csoValues.Any(v => string.Equals(v.StringValue, attrChange.StringValue, StringComparison.Ordinal)),
+                csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.StringValue, attrChange.StringValue)),
 
             AttributeDataType.Number =>
                 attrChange.IntValue.HasValue &&
@@ -304,7 +440,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                csoValues.Any(v => v.DateTimeValue == attrChange.DateTimeValue),
+                csoValues.Any(v => DateTimeAttributeValue.AreEqual(v.DateTimeValue, attrChange.DateTimeValue)),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -322,11 +458,14 @@ public partial class SyncEngine
                 // Reference attributes can be stored in two ways:
                 // 1. UnresolvedReferenceValue — the raw DN string (before or after resolution)
                 // 2. StringValue — set during export resolution (when UnresolvedReferenceValue is cleared)
-                // We need to check both the Pending Export value AND the CSO values to handle both cases
+                // We need to check both the Pending Export value AND the CSO values to handle both cases.
+                // A resolved reference also matches by the referenced object's id, whatever either DN says.
+                (attrChange.ResolvedReferenceCsoId.HasValue &&
+                 csoValues.Any(v => v.ReferenceValueId == attrChange.ResolvedReferenceCsoId)) ||
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal))) ||
+                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue))) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, StringComparison.Ordinal))),
+                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.StringValue))),
 
             _ => false
         };
@@ -340,9 +479,9 @@ public partial class SyncEngine
     /// </summary>
     /// <remarks>
     /// Number/LongNumber/Guid/Boolean/DateTime use typed sets (not stringified keys) so that set
-    /// membership is exactly the same comparison the original code performed (e.g. DateTime equality
-    /// via <c>Ticks</c>, which - like the <c>==</c> operator this replaces - ignores <see cref="DateTimeKind"/>;
-    /// stringifying with a round-trip format would incorrectly make Kind significant). Binary values are
+    /// membership is exactly the same comparison <see cref="ValueExistsOnCso"/> performs (DateTime by its
+    /// canonical key, <see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind nor a sub-microsecond
+    /// part is significant; stringifying with a round-trip format would make Kind significant). Binary values are
     /// not indexed: byte arrays do not hash usefully, and Binary attributes are never large multi-valued
     /// sets in practice (they are typically a single profile picture, certificate, etc.), so the original
     /// linear <c>SequenceEqual</c> scan is kept for them.
@@ -361,6 +500,19 @@ public partial class SyncEngine
 
         public HashSet<string>? TextValues { get; init; }
         public HashSet<string>? ReferenceValues { get; init; }
+
+        /// <summary>
+        /// The ids of the Connected System Objects the values reference, so a resolved reference is matched by the
+        /// object it names (see <see cref="ValueExistsOnCso"/>).
+        /// </summary>
+        public HashSet<Guid>? ReferenceIds { get; init; }
+
+        /// <summary>
+        /// How <see cref="TextValues"/> or <see cref="ReferenceValues"/> compares: taken from the attribute on the
+        /// Connected System Object's values. A probe whose own attribute compares differently falls back to the linear
+        /// comparison, so the two paths can never disagree.
+        /// </summary>
+        public StringComparer StringComparer { get; init; } = StringComparer.Ordinal;
         public HashSet<int>? NumberValues { get; init; }
         public HashSet<long>? LongNumberValues { get; init; }
         public HashSet<decimal>? DecimalValues { get; init; }
@@ -376,13 +528,17 @@ public partial class SyncEngine
     /// </summary>
     private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
     {
+        var attribute = values.Count > 0 ? values[0].Attribute : null;
+        var stringComparer = AttributeValueComparison.ComparerFor(attribute);
+
         return attrType switch
         {
             AttributeDataType.Text => new AttributeValueIndex
             {
                 Count = values.Count,
                 RawValues = values,
-                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(StringComparer.Ordinal)
+                StringComparer = stringComparer,
+                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(stringComparer)
             },
 
             AttributeDataType.Reference => new AttributeValueIndex
@@ -392,7 +548,9 @@ public partial class SyncEngine
                 // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
                 // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
                 // so a single index built from that one CSO-side field covers both probes.
-                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(StringComparer.Ordinal)
+                StringComparer = stringComparer,
+                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
+                ReferenceIds = values.Where(v => v.ReferenceValueId.HasValue).Select(v => v.ReferenceValueId!.Value).ToHashSet()
             },
 
             AttributeDataType.Number => new AttributeValueIndex
@@ -436,7 +594,7 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => v.DateTimeValue!.Value.Ticks).ToHashSet()
+                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value)).ToHashSet()
             },
 
             // Binary: keep the existing linear SequenceEqual scan - byte arrays do not hash usefully,
@@ -490,7 +648,11 @@ public partial class SyncEngine
             // for uniformity.
             _ => false
         };
-        if (!typedSetAvailableForProbe)
+        // The same guard for the comparison itself: a set built to ignore case cannot answer an exact probe, nor the
+        // reverse, so a probe whose attribute compares differently from the values' attribute takes the linear path.
+        if (!typedSetAvailableForProbe ||
+            (attrType is AttributeDataType.Text or AttributeDataType.Reference &&
+             !ReferenceEquals(index.StringComparer, AttributeValueComparison.ComparerFor(attrChange.Attribute))))
             return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch
@@ -513,7 +675,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                (index.DateTimeTicksValues?.Contains(attrChange.DateTimeValue.Value.Ticks) ?? false),
+                (index.DateTimeTicksValues?.Contains(DateTimeAttributeValue.Key(attrChange.DateTimeValue.Value)) ?? false),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -528,6 +690,8 @@ public partial class SyncEngine
                 (index.GuidValues?.Contains(attrChange.GuidValue.Value) ?? false),
 
             AttributeDataType.Reference =>
+                (attrChange.ResolvedReferenceCsoId.HasValue &&
+                 (index.ReferenceIds?.Contains(attrChange.ResolvedReferenceCsoId.Value) ?? false)) ||
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
                  (index.ReferenceValues?.Contains(attrChange.UnresolvedReferenceValue) ?? false)) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
@@ -586,6 +750,10 @@ public partial class SyncEngine
                 if (IsPendingChangeEmpty(attrChange))
                     return count == 0;
 
+                // An Update against a multi-valued attribute is confirmed only when it holds exactly that value (#2182).
+                if (IsWholeSetUpdate(attrChange) && count != 1)
+                    return false;
+
                 // For Add/Update with a real value, the value should exist on the CSO
                 return index != null && ValueExistsInIndex(index, attrChange);
 
@@ -618,6 +786,17 @@ public partial class SyncEngine
                change.ByteValue == null &&
                change.UnresolvedReferenceValue == null;
     }
+
+    /// <summary>
+    /// Whether a change is an Update against a multi-valued attribute, which sets the attribute's whole value set to
+    /// the one value it carries, or to nothing for an all-null Update (#2182). Export staging stages one where a
+    /// single-valued Metaverse Attribute flows to a multi-valued attribute. Every Connector applies it as a replacement
+    /// of the set, so no-net-change detection, export confirmation and optimistic apply all judge it done only when the
+    /// attribute holds exactly that value.
+    /// </summary>
+    internal static bool IsWholeSetUpdate(PendingExportAttributeValueChange change) =>
+        change.ChangeType == PendingExportAttributeChangeType.Update &&
+        change.Attribute?.AttributePlurality == AttributePlurality.MultiValued;
 
     /// <summary>
     /// Determines if an attribute change should be marked as Failed based on retry count.
@@ -717,7 +896,7 @@ public partial class SyncEngine
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
             AttributeDataType.LongNumber => csoAttrValues.Select(v => v.LongValue?.ToString()).Where(v => v != null),
             AttributeDataType.Decimal => csoAttrValues.Select(v => v.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(v.DecimalValue.Value) : null).Where(v => v != null),
-            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
+            AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(v.DateTimeValue.Value) : null).Where(v => v != null),
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
             AttributeDataType.Reference => csoAttrValues.Select(v => v.UnresolvedReferenceValue).Where(v => v != null),
@@ -743,7 +922,7 @@ public partial class SyncEngine
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
             AttributeDataType.LongNumber => attrChange.LongValue?.ToString() ?? "(null)",
             AttributeDataType.Decimal => attrChange.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value) : "(null)",
-            AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
+            AttributeDataType.DateTime => attrChange.DateTimeValue.HasValue ? DateTimeAttributeValue.ToRoundTripString(attrChange.DateTimeValue.Value) : "(null)",
             AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
             AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",
             AttributeDataType.Reference => attrChange.UnresolvedReferenceValue ?? "(null)",

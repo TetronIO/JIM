@@ -48,6 +48,25 @@ public class ConnectedSystemObjectTypeAttribute
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
+    /// Whether this attribute's values are case-exact: when JIM asks whether two values identify the same thing,
+    /// <c>JBloggs</c> and <c>jbloggs</c> are different values. False means they are the same value, which is
+    /// what most identifiers are (directory account names, email addresses, distinguished names).
+    /// </summary>
+    /// <remarks>
+    /// Discovered by the Connector where the Connected System's schema says so (an LDAP equality matching rule,
+    /// an Active Directory case-sensitive string syntax, SCIM <c>caseExact</c>, a SQL column collation), and
+    /// overridable by an administrator. A schema refresh restates it unless
+    /// <see cref="CaseExactSetByAdministrator"/> is set. It is only meaningful for text attributes.
+    /// </remarks>
+    public bool CaseExact { get; set; }
+
+    /// <summary>
+    /// Whether an administrator chose <see cref="CaseExact"/>, rather than schema discovery stating it. A schema
+    /// refresh leaves an administrator's choice alone, as it does an overridden <see cref="Type"/>.
+    /// </summary>
+    public bool CaseExactSetByAdministrator { get; set; }
+
+    /// <summary>
     /// Whether the Connected System requires a value for this attribute on an object of the class named by
     /// <see cref="ClassName"/>, i.e. an RFC 4512 MUST.
     /// </summary>
@@ -91,6 +110,18 @@ public class ConnectedSystemObjectTypeAttribute
     /// <see cref="AttributeWritability.WritableOnCreate"/> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
     public AttributeWritability Writability { get; set; }
+
+    /// <summary>
+    /// Whether the Connector reported this as an operational attribute: one the Connected System maintains for its own
+    /// operation rather than one that describes the object, i.e. an RFC 4512 attribute type whose usage is not
+    /// <c>userApplications</c> (<c>createTimestamp</c>, <c>memberOf</c>, OpenLDAP's <c>pwdFailureTime</c>).
+    /// </summary>
+    /// <remarks>
+    /// Connector-owned: a schema refresh restates it, like <see cref="Writability"/>; administrators cannot set it.
+    /// Such an attribute belongs to no class, is always read-only, and is discovered unselected; the schema screen
+    /// holds unselected ones back until asked for, because a directory publishes many.
+    /// </remarks>
+    public bool IsOperational { get; set; }
 
     /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,

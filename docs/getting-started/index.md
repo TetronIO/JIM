@@ -1,15 +1,13 @@
 ---
 title: Getting Started
 description: Get up and running with JIM, from prerequisites through to your first identity synchronisation.
+type: landing
+audience: evaluator
 ---
 
 # Getting Started
 
-Welcome to JIM. This section will guide you from initial setup through to running your first identity synchronisation.
-
-Whether you are deploying JIM for production use or setting up a development environment, the pages below will walk you through each step.
-
-## Where to Start
+These pages take you from an empty server to JIM synchronising its first identities: what to have ready, installing JIM, and a first synchronisation you can follow step by step. If you get stuck, ask in the [Q&A category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/q-a), or open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) for a bug.
 
 <div class="grid cards" markdown>
 
@@ -17,7 +15,7 @@ Whether you are deploying JIM for production use or setting up a development env
 
     ---
 
-    What you need before deploying JIM: container runtime, identity provider, and hardware considerations.
+    What you need before deploying JIM: a container runtime, an identity provider, a certificate, a database, and the hardware to run them.
 
     [:octicons-arrow-right-24: Prerequisites](prerequisites.md)
 
@@ -25,30 +23,16 @@ Whether you are deploying JIM for production use or setting up a development env
 
     ---
 
-    Deploy JIM on Docker or Podman using the installer, an air-gapped bundle, or a developer environment.
+    Install JIM on Docker or Podman with the installer, connected or air-gapped, and sign in.
 
     [:octicons-arrow-right-24: Quick Start](quickstart.md)
 
--   :material-sync:{ .lg .middle } **Your First Sync**
+-   :material-sync:{ .lg .middle } **Your First Synchronisation**
 
     ---
 
-    Set up a Connected System, configure a Synchronisation Rule, and run your first import, sync, and export cycle.
+    Take 25 people from an HR file, through the Metaverse, to a staff directory file, in the portal or with PowerShell.
 
     [:octicons-arrow-right-24: Your First Synchronisation](first-synchronisation.md)
 
 </div>
-
-## Overview
-
-Getting JIM running involves three main steps:
-
-1. **Prepare your environment:** Ensure Docker or Podman is installed and you have access to an OpenID Connect identity provider for authentication.
-2. **Deploy JIM:** Use the installer, connected or air-gapped from a release bundle, or install by hand following the Deployment Guide.
-3. **Configure your first synchronisation:** Connect a source system, define Synchronisation Rules, and verify data flows correctly through the metaverse.
-
-Once deployed, JIM's web portal answers over HTTPS at `https://<JIM's name>`, from any machine; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy) for its certificate. You can also interact with JIM through its REST API or the cross-platform PowerShell module.
-
-## Stuck?
-
-If something does not behave the way you expect, the [Q&A category in GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/q-a) is the place to ask. Search first; if your question is already there, add to that thread rather than starting a new one. For confirmed bugs, open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) instead.

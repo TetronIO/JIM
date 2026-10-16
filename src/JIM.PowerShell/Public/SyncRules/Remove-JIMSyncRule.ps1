@@ -4,7 +4,7 @@
 function Remove-JIMSyncRule {
     <#
     .SYNOPSIS
-        Removes a Synchronisation Rule from JIM.
+        Deletes a Synchronisation Rule.
 
     .DESCRIPTION
         Permanently deletes a Synchronisation Rule.
@@ -29,45 +29,41 @@ function Remove-JIMSyncRule {
         reordering the surviving contributors need not wait.
 
     .PARAMETER Id
-        The unique identifier of the Synchronisation Rule to delete.
+        The ID of the Synchronisation Rule to delete.
 
     .PARAMETER InputObject
-        Synchronisation Rule object to delete (from pipeline).
+        A Synchronisation Rule from Get-JIMSyncRule, through the pipeline.
 
     .PARAMETER ChangeReason
         An optional reason for the deletion, recorded against the change history.
 
     .PARAMETER KeepContributedValues
-        Keeps the Metaverse attribute values the rule contributed instead of recalling them. WARNING: the kept
-        values remain in place with no provenance, so nothing can ever recall them; surviving lower-priority
-        contributors are not re-elected. Omit this switch to recall the values (the default), which withdraws
-        them via a queued Worker task before the rule is deleted.
+        Keeps the Metaverse attribute values the rule contributed, instead of recalling them, and deletes the rule
+        at once. The kept values have no provenance, so nothing can ever recall them, and the other contributors to
+        those attributes are not re-elected.
 
     .PARAMETER Wait
-        Waits for a queued contributed-values recall to finish before returning, so the rule really has
-        gone when the cmdlet does. Without it the cmdlet returns as soon as the recall is queued, and a
-        caller that immediately reads the rule back still finds it (disabled) until the recall lands. Has
-        no effect when the deletion completes immediately.
+        Waits for a queued recall to finish, so the rule has gone when the command returns. Without it, the command
+        returns once the recall is queued, and the rule can still be read, disabled, until the recall finishes. Has
+        no effect when the rule is deleted at once.
 
     .PARAMETER Timeout
-        Maximum seconds to wait when -Wait is supplied. Omit to wait indefinitely. A recall that has not
-        finished by the timeout is reported as an error; it continues on the server regardless.
+        How many seconds -Wait waits before reporting an error; the recall carries on regardless. Without it, -Wait
+        waits until the recall finishes.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Suppresses the confirmation prompt, and the count of contributed values it states.
 
     .PARAMETER PassThru
-        If specified, returns the deleted Synchronisation Rule object.
+        Returns the rule as it stood before the deletion.
 
     .OUTPUTS
-        When the deletion queues a contributed-values recall, a PSCustomObject tracking the queued work:
-        - RecallActivityId: the recall Activity's id (a GUID); monitor it with Get-JIMActivity
-        - AffectedValueCount: how many Metaverse attribute values the rule contributed at decision time
-        - AffectedObjectCount: how many distinct Metaverse Objects held at least one of those values
+        When the deletion recalls the values the rule contributed, what is being recalled and the Activity doing it.
+        Nothing when the rule is deleted at once. With -PassThru, the rule as it stood before the deletion as well.
 
-        When the deletion completes immediately (keep chosen, or nothing contributed), nothing is returned.
-        If -PassThru is specified, the Synchronisation Rule object as it stood before deletion is also
-        returned.
+        JIM.SyncRuleDeletionQueuedResponse: When the deletion recalls the values the rule contributed
+
+        JIM.SyncRuleHeader: With -PassThru
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1
@@ -124,7 +120,8 @@ function Remove-JIMSyncRule {
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleDeletionQueuedResponse')]
+    [OutputType('JIM.SyncRuleHeader')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -188,7 +185,7 @@ function Remove-JIMSyncRule {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, $confirmAction)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action $confirmAction -Force:$Force) {
             Write-Verbose "Deleting Synchronisation Rule: $ruleId"
 
             # The reason and the keep choice are supplied as query parameters because HTTP DELETE bodies are

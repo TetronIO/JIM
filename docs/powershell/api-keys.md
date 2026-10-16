@@ -1,5 +1,8 @@
 ---
 title: API Keys
+description: "The cmdlets that create, read, change and delete API keys, including their roles and whether they are enabled."
+type: reference
+audience: automation-author
 ---
 
 # API Keys
@@ -15,6 +18,7 @@ The API key cmdlets manage the full lifecycle of API keys used for non-interacti
 
 Retrieves API key information. The full key value is never returned; only the key prefix is shown for identification.
 
+<!-- BEGIN GENERATED: Get-JIMApiKey -->
 ### Syntax
 
 ```powershell
@@ -29,12 +33,26 @@ Get-JIMApiKey -Id <guid>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `Guid` | Yes (ById) | | Unique identifier of the API key to retrieve. Accepts pipeline input by property name. |
-| `Name` | `string` | No (List) | | Filter API keys by name. Supports wildcards (e.g., `"CI*"`). |
+| `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of a specific API Key to retrieve. Accepts pipeline input by property name. |
+| `Name` | `string` | No (List) |  | Filters API Keys by name, such as "CI*". Supports wildcards. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing API keys. The full key value is never included; only the key prefix is returned for identification.
+Each API Key. The key itself is never returned; KeyPrefix identifies it.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | Unique identifier for the API key. |
+| `Name` | `string` | Human-readable name for the API key. |
+| `Description` | `string` | Optional description of the key's purpose. |
+| `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
+| `CreatedAt` | `datetime` | When the API key was created. |
+| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
+| `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
+| `LastUsedFromIp` | `string` | IP address from which the key was last used. |
+| `IsEnabled` | `bool` | Whether the API key is currently enabled. |
+| `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
+<!-- END GENERATED: Get-JIMApiKey -->
 
 ### Examples
 
@@ -54,29 +72,44 @@ Get-JIMApiKey -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ## New-JIMApiKey
 
-Creates a new API key for non-interactive authentication. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Creates a new API key for non-interactive authentication.
 
+<!-- BEGIN GENERATED: New-JIMApiKey -->
 ### Syntax
 
 ```powershell
-New-JIMApiKey [-Name] <string> [-Description <string>] [-RoleIds <int[]>]
-    [-ExpiresAt <datetime>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMApiKey -Name <string> [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes (Position 0) | | Display name for the API key |
-| `Description` | `string` | No | | Optional description of the key's purpose |
-| `RoleIds` | `int[]` | No | `@()` | Role IDs to assign to the key. If omitted, the key has no role assignments. |
-| `ExpiresAt` | `DateTime` | No | | Optional expiry date and time. If omitted, the key does not expire. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `PassThru` | `switch` | No | `$false` | Returns the created API key object, including the full key value |
+| `Name` | `string` | Yes |  | The name the API Key is shown by. |
+| `Description` | `string` | No |  | Optional description of what the API Key is for. |
+| `RoleIds` | `int[]` | No | `@()` | The IDs of the Roles the API Key has. |
+| `ExpiresAt` | `datetime` | No |  | When the API Key expires. Omit it for a key that does not expire. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the API Key's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the API Key created, including the key itself. |
 
 ### Output
 
-When `-PassThru` is specified, returns the newly created API key object. This is the **only** response that includes the full key value. Otherwise, no output.
+With `-PassThru`, the API Key created, with the key itself in Key; otherwise nothing. This is the only time JIM returns the key, so store it securely: without `-PassThru` it cannot be retrieved.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Key` | `string` | The full API key. This is only returned on creation and cannot be retrieved again. |
+| `Id` | `guid` | Unique identifier for the API key. |
+| `Name` | `string` | Human-readable name for the API key. |
+| `Description` | `string` | Optional description of the key's purpose. |
+| `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
+| `CreatedAt` | `datetime` | When the API key was created. |
+| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
+| `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
+| `LastUsedFromIp` | `string` | IP address from which the key was last used. |
+| `IsEnabled` | `bool` | Whether the API key is currently enabled. |
+| `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
+<!-- END GENERATED: New-JIMApiKey -->
 
 ### Examples
 
@@ -104,33 +137,35 @@ $key.Key  # Full key value; store this securely
 
 ## Set-JIMApiKey
 
-Updates an existing API key's name, description, roles, expiry, or enabled status. The key value itself cannot be changed. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Updates an existing API key's name, description, roles, expiry, or enabled status. The key value itself cannot be changed.
 
+<!-- BEGIN GENERATED: Set-JIMApiKey -->
 ### Syntax
 
 ```powershell
-Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>]
-    [-RoleIds <int[]>] [-ExpiresAt <datetime?>] [-Enable] [-Disable]
-    [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `Guid` | Yes | | Unique identifier of the API key to update. Accepts pipeline input by property name. |
-| `Name` | `string` | No | | New display name for the key |
-| `Description` | `string` | No | | New description |
-| `RoleIds` | `int[]` | No | | New set of role IDs. Replaces all existing role assignments. |
-| `ExpiresAt` | `DateTime?` | No | | New expiry date and time. Pass `$null` to remove the expiry entirely. |
-| `Enable` | `switch` | No | `$false` | Enables the API key |
-| `Disable` | `switch` | No | `$false` | Disables the API key. Disabled keys reject all authentication attempts. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `PassThru` | `switch` | No | `$false` | Returns the updated API key object |
+| `Id` | `guid` | Yes |  | The unique identifier (GUID) of the API Key to update. Accepts pipeline input by property name. |
+| `Name` | `string` | No |  | The new name. |
+| `Description` | `string` | No |  | The new description. |
+| `RoleIds` | `int[]` | No |  | The IDs of the Roles the API Key has, replacing those it had. Omit it to keep its Roles. |
+| `ExpiresAt` | `datetime` | No |  | When the API Key expires. `$null` removes the expiry. |
+| `Enable` | `switch` | No |  | Enables the API Key. |
+| `Disable` | `switch` | No |  | Disables the API Key without removing it. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the API Key's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the API Key as updated. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated API key object. Otherwise, no output.
+With `-PassThru`, the API Key as updated; otherwise nothing.
+
+Properties as under [Get-JIMApiKey](#get-jimapikey).
+<!-- END GENERATED: Set-JIMApiKey -->
 
 ### Examples
 
@@ -162,8 +197,9 @@ Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
 
 ## Remove-JIMApiKey
 
-Permanently deletes an API key. Any requests using this key will fail immediately after deletion. Supports `ShouldProcess` (High impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Permanently deletes an API key. Any requests using this key will fail immediately after deletion.
 
+<!-- BEGIN GENERATED: Remove-JIMApiKey -->
 ### Syntax
 
 ```powershell
@@ -174,19 +210,24 @@ Remove-JIMApiKey -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-What
 Remove-JIMApiKey -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
+
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `Guid` | Yes (ById) | | Unique identifier of the API key to delete. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | API key object from the pipeline, as returned by `Get-JIMApiKey`. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted API key object |
+| `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of the API Key to delete. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The API Key to remove, as `Get-JIMApiKey` returns it. Accepts pipeline input. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the API Key's Configuration Change History. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
+| `PassThru` | `switch` | No |  | Returns the API Key as it was before it was removed. |
 
 ### Output
 
-When `-PassThru` is specified, returns the deleted API key object. Otherwise, no output.
+With `-PassThru`, the API Key as it was before it was removed; otherwise nothing.
+
+Properties as under [Get-JIMApiKey](#get-jimapikey).
+<!-- END GENERATED: Remove-JIMApiKey -->
 
 ### Examples
 
@@ -205,7 +246,6 @@ Get-JIMApiKey | Where-Object { $_.Name -like "temp-*" } | Remove-JIMApiKey -Forc
 ### Notes
 
 - Deletion is permanent and cannot be undone. A new key must be created if access is needed again.
-- Without `-Force`, you are prompted for confirmation before each deletion (High impact `ShouldProcess`).
 - Any active sessions or automation using the deleted key will fail immediately.
 
 ---

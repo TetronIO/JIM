@@ -16,17 +16,17 @@ public class ExampleDataSetDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the Example Data Set, e.g. "Firstnames (Female)".
+    /// The name of the Example Data Set, for example "Firstnames Female".
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The .NET culture code the values are in, e.g. "en-GB".
+    /// The .NET culture code the values are in, for example "en-GB".
     /// </summary>
     public string Culture { get; set; } = null!;
 
     /// <summary>
-    /// Whether the Example Data Set ships with JIM (as opposed to being administrator-created).
+    /// Whether the Example Data Set ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 
@@ -93,9 +93,8 @@ public class ExampleDataSetValueDto
 
 /// <summary>
 /// API representation of a Data Generation Template, including its per-Object-Type attribute configuration.
-/// Replaces the raw entity response (#1447), whose graph reached live schema entities
-/// (ExampleDataTemplateAttribute carries a ConnectedSystemObjectTypeAttribute) and was one navigation away
-/// from killing OpenAPI document generation; the DTO carries referenced objects as ids and names.
+/// Replaces the raw entity response (#1447), whose graph reached live schema entities and was one navigation
+/// away from killing OpenAPI document generation; the DTO carries referenced objects as ids and names.
 /// </summary>
 public class ExampleDataTemplateDto
 {
@@ -105,12 +104,12 @@ public class ExampleDataTemplateDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of the template, e.g. "Demo Users".
+    /// The name of the template, for example "Demo Users".
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// Whether the template ships with JIM (as opposed to being administrator-created).
+    /// Whether the Data Generation Template ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 
@@ -138,6 +137,13 @@ public class ExampleDataTemplateDto
     /// The Object Types the template generates objects for.
     /// </summary>
     public List<ExampleDataTemplateObjectTypeDto> ObjectTypes { get; set; } = new();
+
+    /// <summary>
+    /// What the create or update that returned this template had to say about its expressions without refusing it: an
+    /// expression reading an attribute the template does not generate, or a problem with one the update left as it was.
+    /// Empty on every read.
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
 
     /// <summary>
     /// Creates a DTO from an entity. The entity's ObjectTypes graph should be populated.
@@ -206,8 +212,7 @@ public class ExampleDataTemplateObjectTypeDto
 
 /// <summary>
 /// API representation of how a Data Generation Template generates values for one attribute.
-/// The attribute being generated is identified by id and name: MetaverseAttribute for Metaverse-targeted
-/// generation, ConnectedSystemObjectTypeAttribute for Connected-System-targeted generation.
+/// The Metaverse Attribute being generated is identified by id and name.
 /// </summary>
 public class ExampleDataTemplateAttributeDto
 {
@@ -217,24 +222,14 @@ public class ExampleDataTemplateAttributeDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The id of the Metaverse Attribute values are generated for, when targeting the Metaverse.
+    /// The id of the Metaverse Attribute values are generated for.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Metaverse Attribute values are generated for, when targeting the Metaverse.
+    /// The name of the Metaverse Attribute values are generated for.
     /// </summary>
     public string? MetaverseAttributeName { get; set; }
-
-    /// <summary>
-    /// The id of the Connected System attribute values are generated for, when targeting a Connected System.
-    /// </summary>
-    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
-
-    /// <summary>
-    /// The name of the Connected System attribute values are generated for, when targeting a Connected System.
-    /// </summary>
-    public string? ConnectedSystemObjectTypeAttributeName { get; set; }
 
     /// <summary>
     /// What percentage of generated objects receive a value for this attribute.
@@ -336,8 +331,6 @@ public class ExampleDataTemplateAttributeDto
             Id = entity.Id,
             MetaverseAttributeId = entity.MetaverseAttribute?.Id,
             MetaverseAttributeName = entity.MetaverseAttribute?.Name,
-            ConnectedSystemObjectTypeAttributeId = entity.ConnectedSystemObjectTypeAttribute?.Id,
-            ConnectedSystemObjectTypeAttributeName = entity.ConnectedSystemObjectTypeAttribute?.Name,
             PopulatedValuesPercentage = entity.PopulatedValuesPercentage,
             BoolTrueDistribution = entity.BoolTrueDistribution,
             BoolShouldBeRandom = entity.BoolShouldBeRandom,
@@ -465,12 +458,12 @@ public class ExampleDataTemplateAttributeDependencyDto
     public string MetaverseAttributeName { get; set; } = null!;
 
     /// <summary>
-    /// The comparison operator, e.g. "Equals".
+    /// The comparison operator's name, such as "Equals" or "HasValue".
     /// </summary>
     public string ComparisonType { get; set; } = null!;
 
     /// <summary>
-    /// The value the evaluated attribute must hold.
+    /// The value the evaluated attribute is compared against, as text; empty for HasValue and HasNoValue.
     /// </summary>
     public string StringValue { get; set; } = null!;
 }

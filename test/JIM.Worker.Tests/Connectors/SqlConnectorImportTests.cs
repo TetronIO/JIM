@@ -289,7 +289,7 @@ public class SqlConnectorImportTests
             Assert.That(Attribute(imported, "HEADCOUNT").IntValues, Is.EqualTo(new[] { 42 }));
             Assert.That(Attribute(imported, "PAYROLL_NUMBER").LongValues, Is.EqualTo(new[] { 9_000_000_000L }));
             Assert.That(Attribute(imported, "SALARY").DecimalValues, Is.EqualTo(new[] { 1234.50m }));
-            Assert.That(Attribute(imported, "IS_ACTIVE").BoolValue, Is.True);
+            Assert.That(Attribute(imported, "IS_ACTIVE").BoolValues.Single(), Is.True);
             Assert.That(Attribute(imported, "OBJECT_GUID").GuidValues, Is.EqualTo(new[] { guid }));
             Assert.That(Attribute(imported, "PHOTO").ByteValues.Single(), Is.EqualTo(bytes));
         }
@@ -362,8 +362,8 @@ public class SqlConnectorImportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)));
-            Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every date and time in UTC, so the kind is never left unspecified.");
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)));
+            Assert.That(imported.DateTimeValues.Single().Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every date and time in UTC, so the kind is never left unspecified.");
         }
     }
 
@@ -387,7 +387,7 @@ public class SqlConnectorImportTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects.Single().ErrorType, Is.Null, "A skipped hour is not an error in the row.");
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2020, 10, 3, 16, 30, 0, DateTimeKind.Utc)));
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2020, 10, 3, 16, 30, 0, DateTimeKind.Utc)));
         }
     }
 
@@ -404,7 +404,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Australia/Sydney");
 
-        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValue, Is.EqualTo(new DateTime(2020, 4, 4, 16, 30, 0, DateTimeKind.Utc)));
+        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValues.Single(), Is.EqualTo(new DateTime(2020, 4, 4, 16, 30, 0, DateTimeKind.Utc)));
     }
 
     [Test]
@@ -417,7 +417,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10);
 
-        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValue,
+        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValues.Single(),
             Is.EqualTo(new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc)));
     }
 
@@ -434,9 +434,9 @@ public class SqlConnectorImportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 7, 0, 0, DateTimeKind.Utc)),
+            Assert.That(imported.DateTimeValues.Single(), Is.EqualTo(new DateTime(2026, 7, 15, 7, 0, 0, DateTimeKind.Utc)),
                 "A value that states its own offset needs no setting to interpret it.");
-            Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+            Assert.That(imported.DateTimeValues.Single().Kind, Is.EqualTo(DateTimeKind.Utc));
         }
     }
 
@@ -506,6 +506,67 @@ public class SqlConnectorImportTests
             Assert.That(Attribute(ObjectWithAnchor(run, 1), "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }));
             Assert.That(ObjectWithAnchor(run, 2).Attributes.Any(a => a.Name == "PhoneNumbers"), Is.False, "An object with no related rows has no attribute at all.");
             Assert.That(Attribute(ObjectWithAnchor(run, 3), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0300" }));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedTableOfDates_ImportsEveryRowAsync()
+    {
+        // #2153 S5: each related row is a value; assigning rather than appending kept one arbitrary row.
+        var provider = new FakeSqlProvider();
+        var first = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_ID", "PHONE_NUMBER"],
+            [1, first], [1, first.AddDays(1)], [1, first.AddDays(2)]);
+
+        var run = await RunImportAsync(provider, PhonesDocument, RelatedValuesSystem(AttributeDataType.DateTime), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").DateTimeValues,
+            Is.EquivalentTo(new[] { first, first.AddDays(1), first.AddDays(2) }));
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedTableOfBooleans_ImportsEveryRowForJimToReportAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_ID", "PHONE_NUMBER"], [1, true], [1, false]);
+
+        var run = await RunImportAsync(provider, PhonesDocument, RelatedValuesSystem(AttributeDataType.Boolean), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").BoolValues, Is.EquivalentTo(new[] { true, false }));
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedRowJoinedInAnotherCaseToAnAnchorThatIgnoresCase_GathersItsValuesOntoTheObjectAsync()
+    {
+        // Microsoft SQL Server's default collation joins 'abc' to 'ABC', so the database hands the row back; matching it
+        // to its parent exactly dropped the value, and JIM then removed the one it held (#2051).
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_CODE"], ["ABC"]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_CODE", "PHONE_NUMBER"], ["abc", "0100"]);
+
+        var run = await RunImportAsync(provider, PhonesByCodeDocument, PhonesByCodeSystem(caseExact: false), pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0100" }));
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedRowsOfTwoCaseExactAnchorsDifferingOnlyInCase_EachGathersOntoItsOwnObjectAsync()
+    {
+        var provider = new FakeSqlProvider { CaseSensitiveCollation = true };
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_CODE"], ["ABC"], ["abc"]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_CODE", "PHONE_NUMBER"], ["ABC", "0100"], ["abc", "0200"]);
+
+        var run = await RunImportAsync(provider, PhonesByCodeDocument, PhonesByCodeSystem(caseExact: true), pageSize: 10);
+
+        ConnectedSystemImportObject ObjectWithCode(string code) =>
+            run.ImportObjects.Single(importObject => Attribute(importObject, "EMPLOYEE_CODE").StringValues.Single() == code);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Attribute(ObjectWithCode("ABC"), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0100" }));
+            Assert.That(Attribute(ObjectWithCode("abc"), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0200" }));
         }
     }
 
@@ -610,7 +671,8 @@ public class SqlConnectorImportTests
 
             var errored = ObjectWithAnchor(run, 2);
             Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-            Assert.That(errored.ErrorMessage, Does.Contain("HEADCOUNT"), "The administrator needs to know which column to look at.");
+            Assert.That(errored.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)), Is.EqualTo(new[] { ("HEADCOUNT", "not a number") }),
+                "The administrator needs to know which column to look at, and what it held.");
             Assert.That(Attribute(errored, "EMPLOYEE_ID").IntValues, Is.EqualTo(new[] { 2 }),
                 "An errored object still carries its anchor, or the error cannot be attributed to an object.");
 
@@ -649,14 +711,89 @@ public class SqlConnectorImportTests
 
             var errored = ObjectWithAnchor(run, 2);
             Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-            Assert.That(errored.ErrorMessage, Does.Contain("FTE"), "The administrator needs to know which column to look at.");
-            Assert.That(errored.ErrorMessage, Does.Contain("fractional"), "And why it was refused, since the column itself is perfectly valid.");
+            Assert.That(errored.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "FTE" }), "The administrator needs to know which column to look at.");
+            Assert.That(errored.AttributeValueErrors?[0].Reason, Does.Contain("fractional"), "And why it was refused, since the column itself is perfectly valid.");
 
             // 1.0 and 2 are whole numbers that happen to be carried as decimals, which is ordinary for an
             // Oracle NUMBER. Refusing those too would make the guard useless.
             Assert.That(Attribute(ObjectWithAnchor(run, 1), "FTE").IntValues, Is.EqualTo(new[] { 1 }));
             Assert.That(Attribute(ObjectWithAnchor(run, 3), "FTE").IntValues, Is.EqualTo(new[] { 2 }));
         }
+    }
+
+    [Test]
+    public async Task ImportAsync_TwoColumnsThatCannotBeConverted_ReportsBothAndReadsTheColumnsAfterThem()
+    {
+        // Before #2066 the first unreadable column stopped the row: every column after it went unread, and JIM, finding
+        // them missing, removed the values it held for them.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "HEADCOUNT", "FTE", "DISPLAY_NAME"],
+            [2, "not a number", 0.6m, "Grace"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                    Attribute("HEADCOUNT", AttributeDataType.Number),
+                    Attribute("FTE", AttributeDataType.Number),
+                    Attribute("DISPLAY_NAME", AttributeDataType.Text))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, PersonDocument, connectedSystem, pageSize: 10);
+        var errored = ObjectWithAnchor(run, 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errored.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("HEADCOUNT", "not a number"), ("FTE", "0.6") }));
+            Assert.That(Attribute(errored, "DISPLAY_NAME").StringValues, Is.EqualTo(new[] { "Grace" }));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_RelatedTableValuesThatCannotBeConverted_ReportsEachAgainstTheAttribute()
+    {
+        // Reported against the attribute rather than the related table's value column, since the attribute is what JIM
+        // leaves as it was, and what the administrator sees on the object.
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "schema": "HR",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    { "attributeName": "Grades", "schema": "HR", "table": "EMPLOYEE_GRADES", "valueColumn": "GRADE", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID"], [1]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_GRADES", ["EMPLOYEE_ID", "GRADE"], [1, 3], [1, "x"], [1, 5], [1, "y"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                    Attribute("Grades", AttributeDataType.Number, plurality: AttributePlurality.MultiValued))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, document, connectedSystem, pageSize: 10);
+
+        Assert.That(ObjectWithAnchor(run, 1).AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+            Is.EqualTo(new[] { ("Grades", "x"), ("Grades", "y") }));
     }
 
     [Test]
@@ -885,7 +1022,7 @@ public class SqlConnectorImportTests
         var run = await RunImportAsync(provider, AssignmentDocument, AssignmentSystem(), pageSize: 10);
 
         var rolesByStart = run.ImportObjects.ToDictionary(
-            importObject => Attribute(importObject, "EFFECTIVE_FROM").DateTimeValue!.Value.Millisecond,
+            importObject => Attribute(importObject, "EFFECTIVE_FROM").DateTimeValues.Single().Millisecond,
             importObject => Attribute(importObject, "Roles").StringValues);
 
         using (Assert.EnterMultipleScope())
@@ -998,6 +1135,40 @@ public class SqlConnectorImportTests
         }
         """;
 
+    private const string PhonesByCodeDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_CODE" ],
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_CODE" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    private static ConnectedSystem PhonesByCodeSystem(bool caseExact)
+    {
+        var code = Attribute("EMPLOYEE_CODE", AttributeDataType.Text, isExternalId: true);
+        code.CaseExact = caseExact;
+
+        return new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes = [ObjectType("Person", code, Attribute("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued))]
+        };
+    }
+
     /// <summary>
     /// Everything one Full Import produced: each call's result in order, and what it narrated.
     /// </summary>
@@ -1084,6 +1255,17 @@ public class SqlConnectorImportTests
             ObjectType("Person",
                 Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
                 Attribute("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued))
+        ]
+    };
+
+    private static ConnectedSystem RelatedValuesSystem(AttributeDataType valueType) => new()
+    {
+        Name = "HR Database",
+        ObjectTypes =
+        [
+            ObjectType("Person",
+                Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                Attribute("PhoneNumbers", valueType, plurality: AttributePlurality.MultiValued))
         ]
     };
 

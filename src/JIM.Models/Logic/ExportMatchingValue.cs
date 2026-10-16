@@ -5,11 +5,10 @@ using JIM.Models.Core;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// The value extracted from a Metaverse Object for an Object Matching Rule's export-matching query
-/// (MVO -&gt; CSO lookup), or the reason no value could be extracted. <see cref="Resolve"/> reproduces
-/// exactly the value-extraction logic that the per-object export-matching query uses before it queries
-/// the connector space, so the per-object query and the page-scoped batch candidate query share one
-/// implementation of what counts as "the Metaverse Object's value" for a rule.
+/// The values extracted from a Metaverse Object for an Object Matching Rule's export-matching lookup
+/// (MVO -&gt; CSO), or the reason none could be extracted. One Metaverse Object's lookup and the page-scoped
+/// candidate prefetch both resolve through <see cref="Resolve"/>, so they agree on what counts as "the
+/// Metaverse Object's values" for a rule.
 /// </summary>
 public sealed class ExportMatchingValue
 {
@@ -27,9 +26,17 @@ public sealed class ExportMatchingValue
     /// <summary>
     /// The name of the Connected System attribute to compare against, taken from the rule's first
     /// source (<c>Sources[0].ConnectedSystemAttribute.Name</c>). Only meaningful when
-    /// <see cref="Outcome"/> is <see cref="ExportMatchingOutcome.Resolved"/>.
+    /// <see cref="Outcome"/> is <see cref="ExportMatchingOutcome.Resolved"/>; null when the rule computes its value
+    /// with an <see cref="Expression"/> instead.
     /// </summary>
     public string? ConnectedSystemAttributeName { get; }
+
+    /// <summary>
+    /// The expression the rule computes each Connected System Object's value with (#2052), when its source is one.
+    /// There is no attribute to look the values up in, so the caller matches them against an index of what the
+    /// expression computes for each candidate object.
+    /// </summary>
+    public string? Expression { get; }
 
     /// <summary>
     /// Whether the comparison should be case-sensitive, taken from the rule. Only meaningful when
@@ -38,33 +45,35 @@ public sealed class ExportMatchingValue
     public bool CaseSensitive { get; }
 
     /// <summary>
-    /// The typed, boxed value extracted from the Metaverse Object: a non-empty <see cref="string"/> for
-    /// <see cref="AttributeDataType.Text"/>, an <see cref="int"/> for <see cref="AttributeDataType.Number"/>,
-    /// a <see cref="long"/> for <see cref="AttributeDataType.LongNumber"/>, a <see cref="decimal"/> for
-    /// <see cref="AttributeDataType.Decimal"/>, or a <see cref="Guid"/> for <see cref="AttributeDataType.Guid"/>.
-    /// Only populated when <see cref="Outcome"/> is <see cref="ExportMatchingOutcome.Resolved"/>.
+    /// Every distinct, typed, boxed value the Metaverse Object holds for the Target Metaverse Attribute, in the order
+    /// held (#2052): a non-empty <see cref="string"/> for <see cref="AttributeDataType.Text"/>, an <see cref="int"/>
+    /// for <see cref="AttributeDataType.Number"/>, a <see cref="long"/> for <see cref="AttributeDataType.LongNumber"/>,
+    /// a <see cref="decimal"/> for <see cref="AttributeDataType.Decimal"/>, or a <see cref="Guid"/> for
+    /// <see cref="AttributeDataType.Guid"/>. Every value is looked up, so a multi-valued attribute cannot match on
+    /// whichever value happened to load first. Only populated when <see cref="Outcome"/> is
+    /// <see cref="ExportMatchingOutcome.Resolved"/>.
     /// </summary>
-    public object? Value { get; }
+    public IReadOnlyList<object> Values { get; } = [];
 
     private ExportMatchingValue(ExportMatchingOutcome outcome)
     {
         Outcome = outcome;
     }
 
-    private ExportMatchingValue(AttributeDataType dataType, string connectedSystemAttributeName, bool caseSensitive, object value)
+    private ExportMatchingValue(AttributeDataType dataType, string? connectedSystemAttributeName, string? expression, bool caseSensitive,
+        IReadOnlyList<object> values)
     {
         Outcome = ExportMatchingOutcome.Resolved;
         DataType = dataType;
         ConnectedSystemAttributeName = connectedSystemAttributeName;
+        Expression = expression;
         CaseSensitive = caseSensitive;
-        Value = value;
+        Values = values;
     }
 
     /// <summary>
-    /// Extracts the value an Object Matching Rule would compare a Connected System Object against for
-    /// the given Metaverse Object, or the reason it cannot. Mirrors
-    /// <c>ConnectedSystemRepository.FindConnectedSystemObjectUsingMatchingRuleAsync</c>'s value-extraction
-    /// steps exactly, up to (but not including) the database query itself.
+    /// Extracts the values an Object Matching Rule would compare Connected System Objects against for the
+    /// given Metaverse Object, or the reason it cannot.
     /// </summary>
     /// <param name="metaverseObject">The Metaverse Object to resolve a value from.</param>
     /// <param name="rule">The Object Matching Rule defining the source and target attributes.</param>
@@ -78,9 +87,13 @@ public sealed class ExportMatchingValue
 
         var source = rule.Sources[0];
 
-        // The connector-space side of the comparison always comes from the source's Connected System
-        // attribute; without one there is nothing to compare CSOs on.
-        if (source.ConnectedSystemAttribute == null)
+        // An expression is worked out per candidate object, so there is no single Connected System attribute to look
+        // a value up in; the caller matches the Metaverse values through an index of what it computes instead.
+        var expression = string.IsNullOrWhiteSpace(source.Expression) ? null : source.Expression;
+
+        // Otherwise the connector-space side of the comparison comes from the source's Connected System attribute;
+        // without one there is nothing to compare CSOs on.
+        if (expression == null && source.ConnectedSystemAttribute == null)
             return new ExportMatchingValue(ExportMatchingOutcome.NoConnectedSystemAttribute);
 
         // The MVO side of the comparison: the standard rule shape (source = Connected System attribute,
@@ -90,37 +103,35 @@ public sealed class ExportMatchingValue
         if (metaverseAttribute == null)
             return new ExportMatchingValue(ExportMatchingOutcome.NoTargetMetaverseAttribute);
 
-        var mvoAttributeValue = metaverseObject.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == metaverseAttribute.Id || av.Attribute?.Id == metaverseAttribute.Id);
-
-        if (mvoAttributeValue == null)
-            return new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue);
-
-        var connectedSystemAttributeName = source.ConnectedSystemAttribute.Name;
-
-        return metaverseAttribute.Type switch
+        if (metaverseAttribute.Type is not (AttributeDataType.Text or AttributeDataType.Number or AttributeDataType.LongNumber
+            or AttributeDataType.Decimal or AttributeDataType.Guid))
         {
-            AttributeDataType.Text => string.IsNullOrEmpty(mvoAttributeValue.StringValue)
-                ? new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue)
-                : new ExportMatchingValue(metaverseAttribute.Type, connectedSystemAttributeName, rule.CaseSensitive, mvoAttributeValue.StringValue),
+            return new ExportMatchingValue(ExportMatchingOutcome.UnsupportedAttributeType);
+        }
 
-            AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue
-                ? new ExportMatchingValue(metaverseAttribute.Type, connectedSystemAttributeName, rule.CaseSensitive, mvoAttributeValue.IntValue.Value)
-                : new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue),
+        // Values of different types are never equal, so a mismatch would match nothing whatever the data held. An
+        // expression's result is converted to the Metaverse attribute's type, so it cannot mismatch.
+        if (expression == null && source.ConnectedSystemAttribute!.Type != metaverseAttribute.Type)
+            return new ExportMatchingValue(ExportMatchingOutcome.SourceTypeMismatch);
 
-            AttributeDataType.LongNumber => mvoAttributeValue.LongValue.HasValue
-                ? new ExportMatchingValue(metaverseAttribute.Type, connectedSystemAttributeName, rule.CaseSensitive, mvoAttributeValue.LongValue.Value)
-                : new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue),
+        var values = metaverseObject.AttributeValues
+            .Where(av => av.AttributeId == metaverseAttribute.Id || av.Attribute?.Id == metaverseAttribute.Id)
+            .Select(av => metaverseAttribute.Type switch
+            {
+                AttributeDataType.Text => string.IsNullOrEmpty(av.StringValue) ? null : (object)av.StringValue,
+                AttributeDataType.Number => av.IntValue,
+                AttributeDataType.LongNumber => av.LongValue,
+                AttributeDataType.Decimal => av.DecimalValue,
+                _ => av.GuidValue
+            })
+            .Where(value => value != null)
+            .Select(value => value!)
+            .Distinct()
+            .ToList();
 
-            AttributeDataType.Decimal => mvoAttributeValue.DecimalValue.HasValue
-                ? new ExportMatchingValue(metaverseAttribute.Type, connectedSystemAttributeName, rule.CaseSensitive, mvoAttributeValue.DecimalValue.Value)
-                : new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue),
-
-            AttributeDataType.Guid => mvoAttributeValue.GuidValue.HasValue
-                ? new ExportMatchingValue(metaverseAttribute.Type, connectedSystemAttributeName, rule.CaseSensitive, mvoAttributeValue.GuidValue.Value)
-                : new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue),
-
-            _ => new ExportMatchingValue(ExportMatchingOutcome.UnsupportedAttributeType)
-        };
+        return values.Count == 0
+            ? new ExportMatchingValue(ExportMatchingOutcome.NoMetaverseValue)
+            : new ExportMatchingValue(metaverseAttribute.Type, expression == null ? source.ConnectedSystemAttribute!.Name : null, expression,
+                rule.CaseSensitive, values);
     }
 }

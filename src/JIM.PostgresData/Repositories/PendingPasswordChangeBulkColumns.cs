@@ -20,7 +20,24 @@ internal static class PendingPasswordChangeBulkColumns
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
         "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount", "SyncRuleId"
+        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount", "SyncRuleId",
+        "EnabledStateSetByAttributeFlow", "ProvisionedConnectedSystemObjectId"
+    ];
+
+    /// <summary>
+    /// The columns that say a row owes an account its first password (#2160): the account, the provisioning
+    /// Synchronisation Rule whose promises about the account apply, and whether an export wrote the account's flags.
+    /// <para>
+    /// Kept apart from <see cref="PendingPasswordChangesSupersedeUpdate"/> because they do not describe the password
+    /// the row carries, and so do not simply follow it: passwords replace each other, promises about the account carry
+    /// forward. Both UPSERTs therefore write these as CASE assignments rather than plain copies of the offered row. The
+    /// coalescing UPSERT keeps a live row's obligation when the newer change brings none of its own; the staging UPSERT
+    /// gives a waiting change the obligation in place of queueing an Initial Password over it.
+    /// </para>
+    /// </summary>
+    internal static readonly string[] PendingPasswordChangesInitialPasswordObligation =
+    [
+        "SyncRuleId", "EnabledStateSetByAttributeFlow", "ProvisionedConnectedSystemObjectId"
     ];
 
     /// <summary>
@@ -45,16 +62,16 @@ internal static class PendingPasswordChangeBulkColumns
     /// delivered as a reset; a later propagated change replaces the reset and carries no enable decision.
     /// </para>
     /// <para>
-    /// SyncRuleId goes with them for the same reason: it describes the password the row carries, like Origin, so
-    /// a newer row's value (a rule for a provisioned row, or null for anything else) must replace the older one's.
+    /// SyncRuleId and EnabledStateSetByAttributeFlow are not here (#2160): with ProvisionedConnectedSystemObjectId they
+    /// say which account the row owes its first password, which outlives the password being replaced, so they live in
+    /// <see cref="PendingPasswordChangesInitialPasswordObligation"/>.
     /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
         "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
-        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount",
-        "SyncRuleId"
+        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount"
     ];
 
     /// <summary>

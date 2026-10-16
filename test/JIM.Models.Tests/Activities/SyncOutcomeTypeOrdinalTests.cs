@@ -132,7 +132,12 @@ public class SyncOutcomeTypeOrdinalTests
         // error no more specific transition names.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = 56,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = 57,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = 58
+        [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = 58,
+
+        // Generated Value Forms (#2023): a generated value held back until the values built from it can be worked out,
+        // and the candidates passed over because a value built from them was already held.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] = 59,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = 60
     };
 
     [Test]

@@ -10,50 +10,59 @@ function Set-JIMMetaverseAttribute {
         Updates a custom Metaverse Attribute. Changes are routed to the correct endpoint:
 
         - Name, RenderingHint and StandardMappings are updated together via the attribute endpoint.
-        - Type and AttributePlurality are updated via the dedicated schema endpoint. Because the
-          schema change is refused while any Metaverse Object holds a stored value for the
-          attribute, supplying either -Type or -AttributePlurality sends both (the unspecified one
-          is read from the attribute's current schema).
+        - Type and AttributePlurality are updated via the dedicated schema endpoint, which needs
+          both, so supplying either sends both (the unspecified one is read from the attribute's
+          current schema, except that -Type Boolean alone sends SingleValued, since a Boolean holds
+          one value). While any Metaverse Object holds a value for the attribute, the only schema
+          change JIM allows is widening it from SingleValued to MultiValued with its type
+          unchanged; every value is kept. Any other schema change is refused until the values are
+          cleared. Giving the type and plurality the attribute already has is no change: it always
+          succeeds, and nothing is recorded in the attribute's change history.
+
+        A rename is refused while an Expression reads the attribute by its current name (a Scoping
+        Criterion, Attribute Flow, Object Matching Rule or Example Data Template Expression); the
+        error names each one. Change them first. A rename that only changes the case of the name is
+        allowed, because Expressions read attribute names ignoring case.
 
         Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
 
     .PARAMETER Id
-        The unique identifier of the Attribute to update.
+        The ID of the attribute to change.
 
     .PARAMETER InputObject
-        Attribute object to update (from pipeline).
+        An attribute from the pipeline, for example from Get-JIMMetaverseAttribute.
 
     .PARAMETER Name
-        The new name for the Attribute. Subject to a case-insensitive uniqueness check.
+        A new name for the attribute. It must be unique, ignoring case.
 
     .PARAMETER RenderingHint
-        The rendering hint for multi-valued attributes.
-        Valid values: Default, Table, ChipSet, List
+        How the portal shows a multi-valued attribute's values. Ignored for a single-valued attribute.
 
     .PARAMETER Type
-        The new data type for the attribute.
-        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
+        A new kind of value for the attribute; Integer is the type JIM names Number. JIM refuses a type change while
+        any Metaverse Object holds a value for the attribute. A Boolean holds one value, so Boolean without
+        -AttributePlurality also makes the attribute single-valued.
 
     .PARAMETER AttributePlurality
-        The new plurality setting.
-        Valid values: SingleValued, MultiValued
+        Whether the attribute holds one value or many. While any Metaverse Object holds a value for the attribute,
+        JIM allows only a change from SingleValued to MultiValued, which keeps every value; it refuses MultiValued to
+        SingleValued, and refuses MultiValued for a Boolean. Giving the plurality the attribute already has changes
+        nothing, so stored values never block it.
 
     .PARAMETER StandardMappings
-        The attribute's full set of Standard Mappings, replacing any existing ones; pass an empty
-        array (@()) to clear them. Each element is a hashtable with a Standard ('Scim', 'Ldap' or
-        'Jim'), a CounterpartName (the equivalent attribute name in that standard), and optional
-        Notes. Standard Mappings are guidance only and never affect synchronisation.
+        The attribute's Standard Mappings, replacing any it has; @() clears them. Each is a hashtable with a
+        Standard (Scim, Ldap or Jim), a CounterpartName (the attribute's name in that standard) and optional Notes.
+        Standard Mappings are guidance only and never affect synchronisation.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the attribute's Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Attribute object.
+        Returns the updated attribute.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Attribute object.
+        With -PassThru, the updated attribute in full; otherwise nothing.
 
     .EXAMPLE
         Set-JIMMetaverseAttribute -Id 1 -Name "UpdatedName"
@@ -75,6 +84,11 @@ function Set-JIMMetaverseAttribute {
 
         Changes an attribute's data type (refused if any object holds a stored value).
 
+    .EXAMPLE
+        Set-JIMMetaverseAttribute -Id 42 -AttributePlurality MultiValued -ChangeReason "The directory now holds several values"
+
+        Widens a single-valued attribute to multi-valued, keeping the values Metaverse Objects already hold.
+
     .LINK
         Get-JIMMetaverseAttribute
         New-JIMMetaverseAttribute
@@ -83,7 +97,7 @@ function Set-JIMMetaverseAttribute {
         Remove-JIMMetaverseObjectTypeAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseAttributeDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -182,7 +196,15 @@ function Set-JIMMetaverseAttribute {
                 } else {
                     $current.type
                 }
-                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $AttributePlurality } else { $current.attributePlurality }
+                # A Boolean holds one value, so a change to Boolean that names no plurality makes the attribute
+                # single-valued, as the portal does; an explicit multi-valued Boolean is sent and JIM refuses it.
+                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) {
+                    $AttributePlurality
+                } elseif ($typeValue -eq 'Boolean') {
+                    'SingleValued'
+                } else {
+                    $current.attributePlurality
+                }
 
                 $schemaBody = @{
                     type               = $typeValue

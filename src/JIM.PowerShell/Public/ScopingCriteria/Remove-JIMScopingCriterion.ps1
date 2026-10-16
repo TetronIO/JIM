@@ -4,22 +4,33 @@
 function Remove-JIMScopingCriterion {
     <#
     .SYNOPSIS
-        Removes a criterion from a scoping criteria group.
+        Deletes a criterion from a scoping criteria group.
 
     .DESCRIPTION
-        Deletes a specific criterion from within a scoping criteria group.
+        Deletes one criterion from a scoping criteria group.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group containing the criterion.
+        The ID of the group the criterion is in.
 
     .PARAMETER CriterionId
-        The unique identifier of the criterion to remove.
+        The ID of the criterion to delete.
+
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
 
     .OUTPUTS
-        None
+        None.
 
     .EXAMPLE
         Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15
@@ -31,6 +42,7 @@ function Remove-JIMScopingCriterion {
         New-JIMScopingCriterion
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
@@ -40,7 +52,11 @@ function Remove-JIMScopingCriterion {
 
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
-        [int]$CriterionId
+        [int]$CriterionId,
+
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult
     )
 
     process {
@@ -53,7 +69,12 @@ function Remove-JIMScopingCriterion {
             Write-Verbose "Removing criterion $CriterionId from group $GroupId in Synchronisation Rule $SyncRuleId"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria/$CriterionId" -Method 'DELETE'
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                $gate = @()
+                if ($SaveAnyway) { $gate += 'saveAnyway=true' }
+                if ($AcceptNewResult) { $gate += 'acceptNewResults=true' }
+                $query = if ($gate.Count -gt 0) { '?' + ($gate -join '&') } else { '' }
+                Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria/$CriterionId$query" -Method 'DELETE'
 
                 Write-Verbose "Removed criterion $CriterionId"
             }

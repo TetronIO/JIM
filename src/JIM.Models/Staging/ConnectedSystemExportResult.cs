@@ -36,6 +36,41 @@ public class ConnectedSystemExportResult
     public string? RejectedAttributeName { get; set; }
 
     /// <summary>
+    /// The attributes the Connector wrote with an interim value, on a successful Create, or an Update Active Directory
+    /// refused to apply enabled for want of a password, because JIM said a password will follow
+    /// (<see cref="Transactional.PendingExport.InitialPasswordFollows"/>, #2039, #2158). Active Directory refuses an
+    /// enabled account with no password, so the LDAP Connector writes the account disabled, adding ACCOUNTDISABLE to
+    /// <c>userAccountControl</c>, and names that attribute here; the account is enabled once the password is set. The Pending Export still carries the value the Synchronisation Rule asked for, which is the one the
+    /// confirming import is judged against. Null from every Connector that rewrote nothing, which is every Connector but
+    /// the LDAP Connector against Active Directory.
+    /// </summary>
+    public IReadOnlyList<string>? AttributesAwaitingInitialPassword { get; set; }
+
+    /// <summary>
+    /// Whether this export wrote the attribute through which the Connected System enables or disables the account
+    /// (#2064): <c>userAccountControl</c> on Active Directory and Samba AD. Reported on any successful export that wrote
+    /// it, whether a Create's add, an Update's modify, or a Delete performed as a disable.
+    /// <para>
+    /// JIM records it on the account's owed Initial Password, and a password delivered to an account whose enabled
+    /// state an export wrote leaves that state to the Attribute Flow, rather than applying the provisioning
+    /// Synchronisation Rule's Enable Account. Without it an account the flow creates disabled (a pre-hire, or a person
+    /// archived at creation) would be enabled with a password JIM knows. The Connector only observes: it decides
+    /// nothing about the account.
+    /// </para>
+    /// <para>
+    /// On Active Directory the same attribute carries "Password never expires", so the delivery leaves that flag to the
+    /// export too, rather than applying the Initial Password's expiry over it (#2159). A Connector whose targets keep
+    /// the enabled state and the expiry in separate attributes would need to report each separately.
+    /// </para>
+    /// <para>
+    /// A non-empty <see cref="AttributesAwaitingInitialPassword"/> implies this is true: an enable withheld until the
+    /// password exists is a flow-set enabled state, which is what lets the delivery complete it. False from every
+    /// Connector whose password channel has no notion of enabling an account.
+    /// </para>
+    /// </summary>
+    public bool SetsAccountEnabledState { get; set; }
+
+    /// <summary>
     /// The primary external ID assigned by the target system.
     /// For LDAP, this would be the objectGUID.
     /// For systems that don't generate IDs, this may be null.
@@ -48,6 +83,15 @@ public class ConnectedSystemExportResult
     /// For systems without secondary IDs, this may be null.
     /// </summary>
     public string? SecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// Whether the Connector never started this export because the run was cancelled before it reached it (#2083).
+    /// JIM records the results of the exports the Connector did write, and puts this one back exactly as it was before
+    /// the batch was sent: no attempt is counted and no execution item is recorded, because nothing was sent and
+    /// nothing failed. <see cref="Success"/> is false, so anything that does not know this flag fails safe rather than
+    /// reading the export as written.
+    /// </summary>
+    public bool IsNotAttempted { get; set; }
 
     /// <summary>
     /// Creates a successful result with no external ID feedback.
@@ -63,6 +107,19 @@ public class ConnectedSystemExportResult
             Success = true,
             ExternalId = externalId,
             SecondaryExternalId = secondaryExternalId
+        };
+
+    /// <summary>
+    /// Creates a successful result with external ID feedback, naming the attributes written with an interim value
+    /// until an Initial Password is delivered (see <see cref="AttributesAwaitingInitialPassword"/>).
+    /// </summary>
+    public static ConnectedSystemExportResult Succeeded(string? externalId, string? secondaryExternalId, IReadOnlyList<string>? attributesAwaitingInitialPassword) =>
+        new()
+        {
+            Success = true,
+            ExternalId = externalId,
+            SecondaryExternalId = secondaryExternalId,
+            AttributesAwaitingInitialPassword = attributesAwaitingInitialPassword
         };
 
     /// <summary>
@@ -89,6 +146,18 @@ public class ConnectedSystemExportResult
             ErrorMessage = errorMessage,
             ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse,
             RejectedAttributeName = rejectedAttributeName
+        };
+
+    /// <summary>
+    /// Creates the result for an export the Connector did not start because the run was cancelled (#2083). See
+    /// <see cref="IsNotAttempted"/>.
+    /// </summary>
+    public static ConnectedSystemExportResult NotAttempted() =>
+        new()
+        {
+            Success = false,
+            IsNotAttempted = true,
+            ErrorMessage = "Not attempted: the export run was cancelled before this change was started."
         };
 
     /// <summary>

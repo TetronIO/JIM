@@ -21,32 +21,52 @@ function Get-JIMMetaverseObjectConnection {
         be listed, filtered and sorted together. Values of credential attributes are withheld.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Metaverse Object. Accepts pipeline input from
-        Get-JIMMetaverseObject.
+        The ID of the Metaverse Object.
 
     .PARAMETER ConnectedSystemName
-        Returns only the entries for the Connected System with this name (an exact,
-        case-insensitive match). Errors when nothing matches.
+        Returns only the entries for the Connected System with this name, matched exactly but ignoring case. Nothing
+        matching is an error.
 
     .PARAMETER IncludeNotConnected
-        Also explains the enabled export Synchronisation Rules whose Connected System holds no
-        object joined to this Metaverse Object.
+        Also explains each enabled export Synchronisation Rule whose Connected System holds no object joined to this
+        one.
 
     .OUTPUTS
-        One PSCustomObject per entry, with:
-        MetaverseObjectId, MetaverseObjectName, ConnectedSystem (the Connected System's name),
-        ConnectedSystemId, Connected ($true for a joined connection, $false for a not-connected
-        entry), Object (the joined Connected System Object's external id; empty when not
-        connected), ConnectedSystemObjectId, ObjectType, Role (Source, Target, Source and Target or
-        None), State (the connection state, such as InSync or UpdatePending, or the not-connected
-        reason), SyncRule (the export Synchronisation Rule of a not-connected entry), Join (for a
-        connection: JoinType, Method, DateJoined, SyncRuleId, SyncRuleName, Source, Description,
-        ActivityId, RunProfileExecutionItemId), Hint, BulletsTitle, Bullets (plain-text lines),
-        Summary, Scoping (one explanation per Synchronisation Rule, each with SyncRuleName,
-        Direction, Outcome, Hint, Groups and Criteria, a flat list of every criterion with Path,
-        Met, Outcome, AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and
-        ActualDescription), Conflicts (export rules that cannot connect because this connection
-        holds the slot) and EvaluatedAt (UTC).
+        One object per entry: each joined Connected System Object and, with -IncludeNotConnected, each export
+        Synchronisation Rule that has not connected. Every entry has the same properties, so the two can be listed,
+        filtered and sorted together. Values of credential attributes are withheld.
+
+        JIM.MetaverseObjectConnectionEntry
+        MetaverseObjectId (guid): The unique identifier of the Metaverse Object.
+        MetaverseObjectName (string): The Metaverse Object's display name.
+        ConnectedSystem (string): The Connected System's name.
+        ConnectedSystemId (int): The unique identifier of the Connected System.
+        Connected (bool): $true for a joined Connected System Object, $false for an export Synchronisation Rule that
+            has not connected.
+        Object (string): The joined Connected System Object's name, or its external id where it has none; empty when
+            not connected.
+        ConnectedSystemObjectId (guid): The unique identifier of the joined Connected System Object; empty when not
+            connected.
+        ObjectType (string): The Connected System Object Type's name.
+        Role (string): Source, Target, Source and Target or None, from the enabled Synchronisation Rules for that
+            Connected System and Object Type; always Target when not connected.
+        State (string): For a connection, its state, such as InSync or UpdatePending; when not connected, why:
+            NotInScope, ProvisioningDisabled, RuleMisconfigured or NotYetProvisioned.
+        SyncRule (string): The export Synchronisation Rule that has not connected; empty for a connection.
+        Join (object): For a connection, how it was joined: JoinType, Method, DateJoined, SyncRuleId, SyncRuleName,
+            Source, Description, ActivityId and RunProfileExecutionItemId.
+        Hint (string): When not connected, a one-line hint at what would change it.
+        BulletsTitle (string): When not connected, the heading for Bullets.
+        Bullets (string[]): When not connected, what would change it, a line each.
+        Summary (string): When not connected, a plain-text summary to paste into a ticket.
+        Scoping (object[]): One explanation per relevant Synchronisation Rule, evaluated now against current values:
+            SyncRuleName, Direction, Outcome, Hint, Groups and Criteria, each criterion with Path, Met, Outcome,
+            AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and ActualDescription; an
+            expression criterion adds Expression, ExpressionInputs (each attribute it read, with Accessor, Values,
+            ValueCount and Masked) and, when it could not be evaluated, FailureReason.
+        Conflicts (object[]): For a connection, the export Synchronisation Rules that cannot connect because it
+            holds the slot.
+        EvaluatedAt (datetime): When JIM evaluated the explanations (UTC).
 
     .EXAMPLE
         Get-JIMMetaverseObjectConnection -Id "12345678-1234-1234-1234-123456789abc" -IncludeNotConnected |
@@ -86,7 +106,7 @@ function Get-JIMMetaverseObjectConnection {
         Get-JIMSyncRule
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectConnectionEntry')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

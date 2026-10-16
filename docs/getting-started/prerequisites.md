@@ -1,11 +1,14 @@
 ---
 title: Prerequisites
-description: What you need before deploying JIM: container runtime, identity provider, and hardware requirements.
+description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
+type: reference
+audience: implementer
+validated: v0.16.0
 ---
 
 # Prerequisites
 
-Before deploying JIM, ensure you have the following in place.
+JIM needs a container runtime, an OpenID Connect identity provider, a TLS certificate, a PostgreSQL database and a host to run them on. Have each in place before you deploy.
 
 ## Container Runtime
 
@@ -27,18 +30,53 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need 
 
 Before deploying, configure your identity provider with a client registration for JIM. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
 
-!!! tip "Developer environments"
-    If you are using the devcontainer for development, a bundled Keycloak instance is included with pre-configured test users. No external identity provider is needed; sign in with `admin` / `admin`.
-
 ## TLS Certificate
 
-JIM serves HTTPS, which browsers need in order to sign in. Use a certificate for JIM's host name from your organisation's certificate authority, or let the setup script create one; creating one needs OpenSSL on the JIM host. See [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
+JIM serves HTTPS, which browsers need in order to sign in. Use a certificate for JIM's host name from your organisation's certificate authority, or let the setup script create one; creating one needs OpenSSL on the JIM host. See [TLS and Reverse Proxy](../administration/tls-and-reverse-proxy.md).
 
 ## Hardware Requirements
 
-For detailed hardware sizing and production deployment guidance, see the [Deployment Guide](../administration/deployment.md).
+| Component | Minimum    | Recommended                                      |
+|-----------|------------|--------------------------------------------------|
+| CPU       | 2 cores    | 4+ cores                                         |
+| RAM       | 4 GB       | 8+ GB                                            |
+| Storage   | 20 GB      | 50+ GB (depends on identity data volume)         |
 
-As a general guideline, JIM's resource requirements are modest. A small deployment (a few Connected Systems with thousands of objects) runs comfortably on a single host with 2 CPU cores and 4 GB of RAM.
+Storage scales with the number of identity objects and the frequency of synchronisation runs (change history, logs, etc.).
+
+### Memory scaling by object count
+
+During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
+
+These figures are for the **host machine** (or VM) running JIM (on Docker or Podman); they must cover the operating system, all JIM containers, and the database.
+
+| Connected System Size       | Minimum Host RAM | Recommended Host RAM |
+|-----------------------------|------------------|----------------------|
+| Up to 10,000 objects        | 4 GB             | 8 GB                 |
+| 10,000 to 50,000 objects    | 8 GB             | 16 GB                |
+| 50,000 to 100,000 objects   | 20 GB            | 24 GB                |
+| 100,000 to 250,000 objects  | 24 GB            | 32 GB                |
+| 250,000 to 500,000 objects  | 48 GB            | 64 GB                |
+
+!!! info "Why large imports need significant memory"
+    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1 to 2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8 to 10 GB for 100K objects.
+
+!!! note
+    These requirements apply to the largest single Full Import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta Imports process only changed objects and require significantly less memory.
+
+!!! info "Large group memberships drive memory more than object count"
+    A group is loaded with its full member list during processing, so a single large group can dominate memory use: a group with 495,000 members loads 495,000 member references. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
+
+## Network Requirements
+
+JIM's services communicate internally over a private container network (`jim-network` on Docker, `jim` on Podman). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the installation publishes on host port `443`.
+
+| Direction | Port                                                  | Purpose                                        |
+|-----------|-------------------------------------------------------|------------------------------------------------|
+| Inbound   | 443 (HTTPS), or the port you chose instead            | Web UI and REST API                            |
+| Outbound  | Varies                                                | OIDC provider, LDAP targets, file shares, etc. |
+
+In air-gapped environments, no outbound connectivity is required after initial deployment.
 
 ## Database
 
@@ -47,13 +85,6 @@ JIM uses PostgreSQL as its database. You have two options:
 - **Bundled PostgreSQL:** A PostgreSQL container is included with JIM, on Docker or Podman, for simple deployments. No additional setup is required.
 - **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`). Create JIM's user and its database on the server first, as [Before You Install](../administration/deployment.md#before-you-install) shows.
 
-## For Developers
+## Building on JIM
 
-If you are contributing to JIM or building custom connectors, the development environment is fully self-contained:
-
-- **GitHub Codespaces:** One-click setup with everything pre-configured (.NET 10.0, PostgreSQL, shell aliases, VS Code extensions).
-- **Local devcontainer:** Clone the repository and open it in VS Code with the Dev Containers extension. The devcontainer will set up the full environment automatically.
-
-No additional prerequisites are needed when using the devcontainer; it includes all build tools, a PostgreSQL instance, and a bundled Keycloak identity provider for testing.
-
-See the [Developer Guide](../developer/index.md) for the full development setup.
+Contributing to JIM needs none of the above: the development environment brings its own database and identity provider. The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set it up.

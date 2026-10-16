@@ -63,6 +63,7 @@ public class JimApplication : IDisposable
     public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
     public ConfigurationChangePreflightService ConfigurationChangePreflight { get; }
     public ConfigurationChangePreviewServer ConfigurationChangePreviews { get; }
+    public ConfigurationTestServer ConfigurationTests { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
     public ConfigurationDriftService ConfigurationDrift { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
@@ -205,6 +206,7 @@ public class JimApplication : IDisposable
             activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),
             (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
+            activity => Activities.CompleteActivityWithWarningAsync(activity),
             // Resolves a Provisioned row's first password (#1697): the same generator instance and the
             // same credential protection fallback InitialPasswordServer above is built with.
             PasswordGenerator,
@@ -214,6 +216,7 @@ public class JimApplication : IDisposable
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
         ObjectMatching = new ObjectMatchingServer(this);
+        ConfigurationTests = new ConfigurationTestServer(this);
         Repository = dataRepository;
         Cache = cache;
         Scheduler = new SchedulerServer(this);

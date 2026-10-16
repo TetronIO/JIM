@@ -46,6 +46,7 @@ public class PasswordSynchronisationServer
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
+    private readonly Func<Activity, Task> _completeActivityWithWarning;
     private readonly IPasswordGeneratorService _passwordGenerator;
     private readonly Func<ICredentialProtectionService> _credentialProtection;
 
@@ -87,6 +88,12 @@ public class PasswordSynchronisationServer
     /// password is an operational outcome rather than a thrown exception: nothing here has an exception to pass,
     /// and the outcome still has to be recorded as a failure rather than described in prose on a completed one.
     /// </param>
+    /// <param name="completeActivityWithWarning">
+    /// Completes an Activity with a warning: for a delivery that set the password but where the Connected System
+    /// could not apply everything asked of it, such as an expiry behaviour the directory has no equivalent for
+    /// (#2159). The password is set, so it is not a failure; recorded as a plain completion, the difference would be
+    /// invisible to everything that counts, filters or alerts on outcomes.
+    /// </param>
     /// <param name="passwordGenerator">
     /// Generates a Provisioned row's first password from its Synchronisation Rule's settings at the moment of
     /// delivery (#1697): mirrors <see cref="InitialPasswordServer"/>, which resolves the same way
@@ -107,6 +114,7 @@ public class PasswordSynchronisationServer
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
         Func<Activity, string, Task> completeActivityWithError,
+        Func<Activity, Task> completeActivityWithWarning,
         IPasswordGeneratorService passwordGenerator,
         Func<ICredentialProtectionService> credentialProtection)
     {
@@ -119,6 +127,7 @@ public class PasswordSynchronisationServer
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
+        _completeActivityWithWarning = completeActivityWithWarning;
         _passwordGenerator = passwordGenerator;
         _credentialProtection = credentialProtection;
     }
@@ -142,14 +151,37 @@ public class PasswordSynchronisationServer
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// The password is empty, the target list is empty, or a target is not one of this person's accounts, is in a
-    /// system whose Connector cannot set passwords, or shares a Connected System with another target.
+    /// The password is empty, the request asks to disable the account (#2162), the request names no accounts and asks for
+    /// a password that never expires (#2159), the target list is empty, or a target is
+    /// not one of this person's accounts, is in a system whose Connector cannot set passwords, or shares a Connected
+    /// System with another target.
     /// </exception>
     public async Task<PasswordQueueResult> SetPasswordAsync(SetPasswordRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrEmpty(request.Password))
             throw new ArgumentException("A password is required.", nameof(request));
+
+        // Setting a password enables an account or leaves it as it is; it never disables one (#2162). A disable here
+        // would override the account's Attribute Flows as a side effect of a password reset, and nothing that sets a
+        // password asks for one: the portal and PowerShell offer enable or nothing. Refused rather than carried to the
+        // Connector. No parameter name, because the message goes to API callers as it is.
+        if (request.EnableAccount == false)
+        {
+            throw new ArgumentException(
+                "enableAccount accepts true, to enable the account as its password is set, or can be left out to leave the account's enabled state as it is. Setting a password never disables an account.");
+        }
+
+        // A password set on every Connected System leaves "Password never expires" as each account has it (#2159): it
+        // reaches accounts whose userAccountControl an Attribute Flow writes, or an administrator exempted from expiry on
+        // purpose, and the flag belongs to them. Never expires there would be accepted and then do nothing, so it is
+        // refused; naming the accounts is how to choose it. Refused here rather than in each surface, so every caller
+        // gets the same answer, and like the disable refusal, before anything is queued or recorded.
+        if (request.Targets == null && request.ExpiryBehaviour == PasswordExpiryBehaviour.NeverExpires)
+        {
+            throw new ArgumentException(
+                "expiryBehaviour NeverExpires needs the accounts to be named. A password set on every Connected System configured for Password Synchronisation leaves \"Password never expires\" as each account has it; name the Connected System Objects to choose Never expires for them.");
+        }
 
         var plan = request.Targets == null
             ? await PlanPropagatedChangeAsync(request.MetaverseObjectId)
@@ -209,11 +241,15 @@ public class PasswordSynchronisationServer
         }
 
         // One batched write for the whole fan-out, per the non-functional requirement that a change across ten
-        // systems is a single write rather than ten round trips.
-        if (changes.Count > 0)
-            await _syncRepo.QueuePasswordChangesAsync(changes);
+        // systems is a single write rather than ten round trips. A propagated change is not queued where a paused
+        // system's account is still owed its first password (#2160): the Initial Password wins there, as at staging,
+        // so that system is dropped from what the change reports and the Activity says why.
+        var notQueued = changes.Count > 0 ? await _syncRepo.QueuePasswordChangesAsync(changes) : [];
+        var notQueuedSystems = notQueued.Select(c => c.ConnectedSystemId).ToHashSet();
+        var owedFirstPassword = outcomes.Where(o => notQueuedSystems.Contains(o.ConnectedSystemId)).Select(o => o.ConnectedSystemName).ToList();
+        outcomes = outcomes.Where(o => !notQueuedSystems.Contains(o.ConnectedSystemId)).ToList();
 
-        activity.Message = DescribeQueueOutcome(outcomes, request.Origin);
+        activity.Message = DescribeQueueOutcome(outcomes, request.Origin, owedFirstPassword);
         await _completeActivity(activity);
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation. The systems are
@@ -339,7 +375,12 @@ public class PasswordSynchronisationServer
     /// never held, so its message names the accounts and stops.
     /// </para>
     /// </summary>
-    internal static string DescribeQueueOutcome(IReadOnlyList<PasswordQueueTargetOutcome> outcomes, PendingPasswordChangeOrigin origin)
+    /// <param name="owedFirstPassword">
+    /// The Connected Systems a propagated change was not queued for because Password Synchronisation is switched off
+    /// there and the account it would reach is still owed its first password, which wins (#2160).
+    /// </param>
+    internal static string DescribeQueueOutcome(IReadOnlyList<PasswordQueueTargetOutcome> outcomes, PendingPasswordChangeOrigin origin,
+        IReadOnlyList<string>? owedFirstPassword = null)
     {
         if (origin == PendingPasswordChangeOrigin.Explicit)
         {
@@ -347,9 +388,22 @@ public class PasswordSynchronisationServer
                    string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)) + ".";
         }
 
-        if (outcomes.Count == 0)
-            return "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.";
+        var notQueued = owedFirstPassword is { Count: > 0 }
+            ? $"Not queued for {string.Join(", ", owedFirstPassword)}: Password Synchronisation is switched off there, and the Connected System " +
+              "Object this change would reach is still owed its first password, which JIM delivers instead."
+            : null;
 
+        if (outcomes.Count == 0)
+            return notQueued ?? "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.";
+
+        return notQueued == null ? DescribeQueuedPropagation(outcomes) : $"{DescribeQueuedPropagation(outcomes)} {notQueued}";
+    }
+
+    /// <summary>
+    /// Where a propagated change was queued, and where it is held until Password Synchronisation is switched on.
+    /// </summary>
+    private static string DescribeQueuedPropagation(IReadOnlyList<PasswordQueueTargetOutcome> outcomes)
+    {
         var message = $"Password change queued for {outcomes.Count} Connected System{(outcomes.Count == 1 ? string.Empty : "s")}: " +
                       string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)) + ".";
 
@@ -384,6 +438,28 @@ public class PasswordSynchronisationServer
     /// surfaced here because this is the layer that passes it to every read that must agree on it.
     /// </summary>
     public static readonly TimeSpan ClaimLease = PendingPasswordChange.ClaimLease;
+
+    /// <summary>
+    /// How long a delivery waits for an export to that account to finish before it tries again (#2173, #2158). Short, because an export batch is seconds rather than minutes, and the wait costs nothing: the
+    /// change is not attempted, so no attempt is counted against it.
+    /// </summary>
+    public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// How long an account's Initial Password waits for the account's own Create (#2270). That Create stays in flight only
+    /// until the password is queued and its results are written, a moment later, so the wait is short: the full
+    /// <see cref="ExportInFlightWait"/> would delay every new account's first password for nothing.
+    /// </summary>
+    public static readonly TimeSpan CreateInFlightWait = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// How long an export may be Executing before a delivery stops waiting for it (#2173). A Worker that stops part-way
+    /// through a batch leaves it Executing until the Worker starts again (a cancelled or failed batch no longer does,
+    /// #2083), and a delivery waiting on that would wait until the change expired. An hour is far longer than an export
+    /// batch takes, so an export still Executing after it is treated as stranded: the delivery logs it as a warning,
+    /// naming the Pending Export, and goes ahead.
+    /// </summary>
+    public static readonly TimeSpan ExportInFlightCeiling = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Delivers the password changes due on a Connected System, expiring anything that has outlived its window
@@ -538,8 +614,15 @@ public class PasswordSynchronisationServer
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information(
-            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Released} released unattempted.",
-            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.ReleasedCount);
+            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered ({LeftToFlow} leaving the enabled state to an Attribute Flow, " +
+            "{NeverExpiresLeftToFlow} leaving \"Password never expires\" to an Attribute Flow, {WithheldEnables} completing an enable withheld until the password, " +
+            "{NotHonoured} where the system could not apply everything asked, {FirstPasswords} delivered as an account's first password in place of " +
+            "its Initial Password, {PromisesNotApplied} owing a first password whose Initial Password's settings could not be applied), {Retrying} retrying, " +
+            "{Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Postponed} waiting for an export to the account to finish, {Released} released unattempted.",
+            connectedSystem.Id, result.DeliveredCount, result.EnabledStateLeftToAttributeFlowCount, result.PasswordNeverExpiresLeftToAttributeFlowCount,
+            result.WithheldEnablesCompletedCount, result.ExpiryBehaviourNotHonouredCount, result.FirstPasswordsDeliveredInPlaceCount,
+            result.FirstPasswordPromisesNotAppliedCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount,
+            result.WithdrawnCount, result.PostponedCount, result.ReleasedCount);
 
         return result;
     }
@@ -562,25 +645,36 @@ public class PasswordSynchronisationServer
         var delivered = new List<Guid>();
         var unattempted = new List<PendingPasswordChange>();
 
-        // Read once per batch, and only when the batch actually holds a Provisioned row: every other origin's
-        // password already exists on the row, and a lane over a system nothing has provisioned into recently
-        // must not pay for a query it will never use. The rule's settings and the discovered policy are read
-        // fresh on every batch, never cached across a lane's own claims, so a configuration change takes effect
-        // on the very next attempt rather than waiting for the lane to restart (#1697).
+        // Read once per batch, and only when the batch actually holds a row owing an account its first password: an
+        // Initial Password, which generates its password from the rule, or a change carrying the first password in its
+        // place, which takes only the rule's promises about the account (#2160). A lane over a system nothing has
+        // provisioned into recently must not pay for a query it will never use. The rule's settings and the discovered
+        // policy are read fresh on every batch, never cached across a lane's own claims, so a configuration change takes
+        // effect on the very next attempt rather than waiting for the lane to restart (#1697). The policy and the
+        // resolver serve only an Initial Password, which is the one that generates.
         Dictionary<int, SyncRuleInitialPassword>? initialPasswordConfigurations = null;
         ConnectedSystemPasswordPolicy? discoveredPolicy = null;
         InitialPasswordResolver? initialPasswordResolver = null;
-        if (claimed.Any(c => c.IsProvisioned))
+        if (claimed.Any(c => c.OwesInitialPassword))
         {
             var syncRuleIds = claimed
-                .Where(c => c.IsProvisioned && c.SyncRuleId.HasValue)
+                .Where(c => c.OwesInitialPassword && c.SyncRuleId.HasValue)
                 .Select(c => c.SyncRuleId!.Value)
                 .Distinct()
                 .ToList();
             initialPasswordConfigurations = await _syncRepo.GetInitialPasswordConfigurationsAsync(syncRuleIds);
+        }
+
+        if (claimed.Any(c => c.IsProvisioned))
+        {
             discoveredPolicy = await _syncRepo.GetDiscoveredPasswordPolicyAsync(connectedSystem.Id);
             initialPasswordResolver = new InitialPasswordResolver(_passwordGenerator, _credentialProtection());
         }
+
+        // Read at most once per batch, and only once an administrator's reset has actually changed "Password never
+        // expires" on an account (#2159), which is rare: what is wanted is whether an export Synchronisation Rule will put
+        // the flow's value back, so the Activity can say so.
+        var exportRules = new Lazy<Task<List<SyncRule>>>(() => _syncRepo.GetSyncRulesAsync(connectedSystem.Id, includeDisabled: false));
 
         try
         {
@@ -603,14 +697,26 @@ public class PasswordSynchronisationServer
                     continue;
                 }
 
-                var disposition = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
-                    initialPasswordConfigurations, discoveredPolicy, initialPasswordResolver, asOf, cancellationToken);
+                var attempt = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
+                    initialPasswordConfigurations, discoveredPolicy, initialPasswordResolver, exportRules, asOf, cancellationToken);
 
-                switch (disposition)
+                switch (attempt.Disposition)
                 {
                     case PasswordDeliveryDisposition.Delivered:
                         delivered.Add(change.Id);
                         result.DeliveredCount++;
+                        if (attempt.Enablement == AccountFlagBasis.LeftToAttributeFlow)
+                            result.EnabledStateLeftToAttributeFlowCount++;
+                        else if (attempt.Enablement == AccountFlagBasis.CompletesWithheldEnable)
+                            result.WithheldEnablesCompletedCount++;
+                        if (attempt.PasswordNeverExpires == AccountFlagBasis.LeftToAttributeFlow)
+                            result.PasswordNeverExpiresLeftToAttributeFlowCount++;
+                        if (!attempt.ExpiryBehaviourHonoured)
+                            result.ExpiryBehaviourNotHonouredCount++;
+                        if (attempt.StandIn == InitialPasswordStandIn.Applies)
+                            result.FirstPasswordsDeliveredInPlaceCount++;
+                        else if (attempt.StandIn is InitialPasswordStandIn.NoLongerSet or InitialPasswordStandIn.OtherAccount)
+                            result.FirstPasswordPromisesNotAppliedCount++;
                         break;
 
                     case PasswordDeliveryDisposition.Withdrawn:
@@ -618,6 +724,13 @@ public class PasswordSynchronisationServer
                         // send either, and the child Activity already recorded why.
                         delivered.Add(change.Id);
                         result.WithdrawnCount++;
+                        break;
+
+                    case PasswordDeliveryDisposition.Postponed:
+                        // Written back through the attempt write, which is guarded on the claim, though nothing was
+                        // attempted: the row carries its new retry time and an unchanged attempt count (#2173).
+                        attempted.Add(change);
+                        result.PostponedCount++;
                         break;
 
                     default:
@@ -669,9 +782,9 @@ public class PasswordSynchronisationServer
     /// <summary>
     /// Delivers one queued change, recording its outcome on the change. Returns what happened to the row: whether
     /// it was delivered, kept for another attempt or for a person to look at, or withdrawn because there is
-    /// nothing left to deliver.
+    /// nothing left to deliver; and, for a delivery, which rung decided each of the account's flags (#2064, #2159).
     /// </summary>
-    private async Task<PasswordDeliveryDisposition> DeliverOneAsync(
+    private async Task<PasswordDeliveryAttempt> DeliverOneAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -679,6 +792,7 @@ public class PasswordSynchronisationServer
         Dictionary<int, SyncRuleInitialPassword>? initialPasswordConfigurations,
         ConnectedSystemPasswordPolicy? discoveredPolicy,
         InitialPasswordResolver? initialPasswordResolver,
+        Lazy<Task<List<SyncRule>>> exportRules,
         DateTime asOf,
         CancellationToken cancellationToken)
     {
@@ -716,7 +830,7 @@ public class PasswordSynchronisationServer
                 change.Status = PendingPasswordChangeStatus.Parked;
                 change.NextRetryAt = null;
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return PasswordDeliveryDisposition.Kept;
+                return PasswordDeliveryAttempt.Kept;
             }
         }
         else
@@ -731,7 +845,7 @@ public class PasswordSynchronisationServer
                 change.RecordAttempt(PasswordSetFailureReason.TargetObjectNotFound,
                     "The identity has no account in this Connected System yet.", configuration, asOf);
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return PasswordDeliveryDisposition.Kept;
+                return PasswordDeliveryAttempt.Kept;
             }
 
             change.ConnectedSystemObjectId = account.Id;
@@ -751,7 +865,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return PasswordDeliveryAttempt.Kept;
         }
 
         string password;
@@ -774,30 +888,140 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return PasswordDeliveryAttempt.Kept;
         }
+
+        // Only an administrator who named the account decides to enable or disable it, or whether its password never
+        // expires. A propagated password reaches accounts an administrator may have disabled, or exempted from expiry,
+        // on purpose, and changing either would undo that silently, as a side effect of somebody changing their
+        // password elsewhere. The enables any delivery completes are the one JIM withheld until a password existed
+        // (#2039), because the Attribute Flow asked for it (#2064), and the one the provisioning rule promised an account
+        // this change is the first password of, in place of its Initial Password (#2160).
+        var (standIn, firstPassword) = ResolveFirstPassword(connectedSystem, change, account, initialPasswordConfigurations);
+        var (flags, facts) = await DecideAccountFlagsAsync(connectedSystem, change, account, firstPassword, change.ExpiryBehaviour, asOf);
+        if (flags == null)
+            return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
+        // The account is being created right now (#2160). Its entry can exist part-way through the Create's batch, and
+        // the export stages the account's Initial Password only once the batch has come back: a change delivered and
+        // removed in between would let that Initial Password be queued over the person's password. A change owing no
+        // first password waits, counting nothing; staging then makes it the account's first password. One that owes it
+        // was queued as the Create finished, and the Create is written a moment later with any enable it held back for
+        // this password (#2039, #2270), so it waits too, briefly.
+        if (facts.CreateInFlight)
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf,
+                change.OwesInitialPassword ? CreateInFlightWait : ExportInFlightWait);
+        if (facts.ExportInFlight && AccountFlagsPolicy.WaitsForAnExportInFlight(flags))
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf);
+
+        // "Must change at next sign-in" belongs to the password being delivered; only where the decision writes
+        // "Password never expires" does the expiry sent follow it (#2159, #2160).
+        var expiryBehaviour = AccountFlagsPolicy.ExpiryToSend(change.ExpiryBehaviour, flags);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
-        var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, password, new PasswordSetOptions
-        {
-            ExpiryBehaviour = change.ExpiryBehaviour,
-            // Only an administrator who named the account may enable it. A propagated password reaches accounts
-            // an administrator may have disabled on purpose, and re-enabling one would undo that silently, as a
-            // side effect of somebody changing their password elsewhere; enabling on provisioning belongs to the
-            // initial password.
-            EnableAccount = change.IsExplicit ? change.EnableAccount : null
-        }, cancellationToken);
+        var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, password,
+            BuildPasswordSetOptions(expiryBehaviour, flags), cancellationToken);
 
         if (!setResult.Success)
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return PasswordDeliveryAttempt.Kept;
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
-        return PasswordDeliveryDisposition.Delivered;
+        var putBack = await DescribeFlagPutBackAsync(connectedSystem, account, flags, setResult, exportRules);
+        return await RecordDeliveredAsync(connectedSystem, change, flags, expiryBehaviour, setResult, password,
+            staticInitialPassword: false, putBack, standIn);
+    }
+
+    /// <summary>
+    /// Whether this delivery is an account's first password in place of its Initial Password (#2160), and if so the
+    /// provisioning Synchronisation Rule's promises about the account, read fresh for this batch. Only for the account
+    /// the change owes its first password: a propagated change re-resolves its account on every attempt, and promises
+    /// made for one account are never applied to another. A rule that no longer sets an Initial Password takes its
+    /// promises with it; the change is still the person's password, so it is delivered, never withdrawn.
+    /// </summary>
+    private static (InitialPasswordStandIn StandIn, InitialPasswordAccountFlags? FirstPassword) ResolveFirstPassword(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemObject account,
+        Dictionary<int, SyncRuleInitialPassword>? initialPasswordConfigurations)
+    {
+        if (!change.CarriesInitialPassword)
+            return (InitialPasswordStandIn.None, null);
+
+        if (change.ProvisionedConnectedSystemObjectId != account.Id)
+        {
+            Log.Warning("DeliverDuePasswordChangesAsync: Password change {PendingPasswordChangeId} on Connected System {ConnectedSystemId} owes account " +
+                "{OwedConnectedSystemObjectId} its first password but reached account {ConnectedSystemObjectId}, the person's account there now; the Initial " +
+                "Password's settings are not applied to it",
+                change.Id, connectedSystem.Id, change.ProvisionedConnectedSystemObjectId, account.Id);
+            return (InitialPasswordStandIn.OtherAccount, null);
+        }
+
+        var settings = change.SyncRuleId is { } syncRuleId && initialPasswordConfigurations != null
+                       && initialPasswordConfigurations.TryGetValue(syncRuleId, out var found)
+            ? found
+            : null;
+
+        return settings is { Enabled: true }
+            ? (InitialPasswordStandIn.Applies, new InitialPasswordAccountFlags(settings.EnableAccount, settings.ExpiryBehaviour))
+            : (InitialPasswordStandIn.NoLongerSet, null);
+    }
+
+    /// <summary>
+    /// What the Connector is asked to apply: the expiry behaviour as asked, the enabled state as decided, and whether to
+    /// leave "Password never expires" alone, which is wherever the decision does not write it (#2159).
+    /// </summary>
+    private static PasswordSetOptions BuildPasswordSetOptions(PasswordExpiryBehaviour expiryBehaviour, AccountFlagsDecision flags) => new()
+    {
+        ExpiryBehaviour = expiryBehaviour,
+        EnableAccount = flags.EnableAccount,
+        LeavePasswordNeverExpiresAsIs = flags.PasswordNeverExpires == null
+    };
+
+    /// <summary>
+    /// Why an administrator's reset that changed "Password never expires" will not last (#2159), or null where nothing
+    /// will put the flag back. Two things do: the export JIM held until the account had a password (#2039), which still
+    /// carries the Attribute Flow's userAccountControl and writes it once released; and an export Synchronisation Rule
+    /// that writes userAccountControl with Enforce State on, which puts its value back at the next synchronisation.
+    /// Either way a change at the next sign-in may stop being asked for, which matters for a helpdesk reset.
+    /// </summary>
+    private static async Task<string?> DescribeFlagPutBackAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObject account,
+        AccountFlagsDecision flags,
+        PasswordSetResult setResult,
+        Lazy<Task<List<SyncRule>>> exportRules)
+    {
+        if (flags.PasswordNeverExpiresBasis != AccountFlagBasis.AdministratorChoice || !setResult.PasswordNeverExpiresChanged)
+            return null;
+
+        if (flags.EnablementBasis == AccountFlagBasis.CompletesWithheldEnable)
+            return "\"Password never expires\" was changed on this account, but the export JIM held until the account had a password still carries " +
+                   "the Attribute Flow's userAccountControl, and writes it back, \"Password never expires\" and all, once it is released.";
+
+        List<SyncRule> rules;
+        try
+        {
+            rules = await exportRules.Value;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Advisory only: the password is set and the outcome is recorded either way. Logged rather than swallowed, so
+            // a warning the Activity could not carry is still visible.
+            Log.Warning(ex, "DeliverDuePasswordChangesAsync: Could not read the export Synchronisation Rules of Connected System {ConnectedSystemId} " +
+                "to tell whether one puts back the \"Password never expires\" just changed on account {ConnectedSystemObjectId}",
+                connectedSystem.Id, account.Id);
+            return null;
+        }
+
+        var enforcing = rules.FirstOrDefault(rule => AccountControlAttributeFlows.EnforcesAccountControl(rule, account.TypeId));
+        return enforcing == null
+            ? null
+            : $"\"Password never expires\" was changed on this account, but the Synchronisation Rule {enforcing.Name} writes its userAccountControl " +
+              "with Enforce State on, so the next synchronisation puts the Attribute Flow's value back, and with it whether the password never " +
+              "expires; while that value keeps \"Password never expires\" set, Active Directory does not ask for a change at the next sign-in.";
     }
 
     /// <summary>
@@ -806,7 +1030,7 @@ public class PasswordSynchronisationServer
     /// settings, and sends it. Withdraws the row rather than delivering or retrying wherever there is nothing
     /// left to deliver, so a stale row never sits parked or retrying against work nobody needs done any more.
     /// </summary>
-    private async Task<PasswordDeliveryDisposition> DeliverProvisionedAsync(
+    private async Task<PasswordDeliveryAttempt> DeliverProvisionedAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -829,7 +1053,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 $"Initial password no longer needed: the account it was for no longer exists in {connectedSystem.Name}, or is no longer joined to this person.");
-            return PasswordDeliveryDisposition.Withdrawn;
+            return PasswordDeliveryAttempt.Withdrawn;
         }
 
         // Read fresh rather than trusted from when the row was staged, so a Synchronisation Rule switched off or
@@ -843,7 +1067,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 "Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.");
-            return PasswordDeliveryDisposition.Withdrawn;
+            return PasswordDeliveryAttempt.Withdrawn;
         }
 
         var resolution = initialPasswordResolver.Resolve(initialPasswordConfiguration, discoveredPolicy);
@@ -856,29 +1080,127 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return PasswordDeliveryAttempt.Kept;
         }
+
+        // Where an export wrote the account's flags, the Attribute Flow decides both the enabled state and "Password never
+        // expires", and the rule's Enable Account and expiry do not apply to them (#2064, #2159); an enable JIM withheld
+        // until a password existed is completed (#2039). The rule's own settings, never the row's placeholder values: a
+        // Provisioned row carries no expiry behaviour or enable decision of its own, because both belong to the
+        // Synchronisation Rule that provisioned the account and can change independently of the queued row.
+        var expiryBehaviour = initialPasswordConfiguration.ExpiryBehaviour;
+        var (flags, facts) = await DecideAccountFlagsAsync(connectedSystem, change, account,
+            new InitialPasswordAccountFlags(initialPasswordConfiguration.EnableAccount, expiryBehaviour), expiryBehaviour, asOf);
+        if (flags == null)
+            return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
+        // Queued as the account's Create finished, which is written a moment later (#2270): wait for it, briefly.
+        if (facts.CreateInFlight)
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf, CreateInFlightWait);
+        if (facts.ExportInFlight && AccountFlagsPolicy.WaitsForAnExportInFlight(flags))
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
-        var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, resolution.Password!, new PasswordSetOptions
-        {
-            // The rule's own settings, never the row's placeholder values: a Provisioned row carries no expiry
-            // behaviour or enable decision of its own, because both belong to the Synchronisation Rule that
-            // provisioned the account and can change independently of the queued row.
-            ExpiryBehaviour = initialPasswordConfiguration.ExpiryBehaviour,
-            EnableAccount = initialPasswordConfiguration.EnableAccount
-        }, cancellationToken);
+        var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, resolution.Password!,
+            BuildPasswordSetOptions(expiryBehaviour, flags), cancellationToken);
 
         if (!setResult.Success)
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return PasswordDeliveryAttempt.Kept;
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
-        return PasswordDeliveryDisposition.Delivered;
+        return await RecordDeliveredAsync(connectedSystem, change, flags, expiryBehaviour, setResult, resolution.Password!,
+            staticInitialPassword: initialPasswordConfiguration.Source == InitialPasswordSource.Static, putBack: null);
+    }
+
+    /// <summary>
+    /// Decides what delivering this change may write to the account's flags, its enabled state (#2064) and "Password
+    /// never expires" (#2159), and says whether an export to the account is in flight (#2173). The facts the decision turns on are read afresh at the attempt, not taken from
+    /// the claimed row: whether the account holds an enable JIM withheld until a password existed (#2039), and whether
+    /// an export has written the account's flags. An export can mark a claimed row, a leaver disabled moments
+    /// ago, while the lane works through the accounts ahead of it; and one still being sent has recorded neither its mark
+    /// nor any hold it placed yet, which is why the caller waits for it. Returns a null decision when those facts cannot be read:
+    /// the caller keeps the change rather than guess, because guessing "not held" could leave an account disabled the
+    /// flow asks to be enabled, and guessing "not marked" could enable one the flow has disabled.
+    /// </summary>
+    private async Task<(AccountFlagsDecision? Decision, AccountEnablementFacts Facts)> DecideAccountFlagsAsync(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemObject account,
+        InitialPasswordAccountFlags? firstPassword,
+        PasswordExpiryBehaviour requestedExpiry,
+        DateTime asOf)
+    {
+        // Read for every attempt (#2160): besides the hold and the mark the decision turns on, whether the account's own
+        // Create is in flight decides whether a change owing no first password may go ahead, and that holds even for an
+        // administrator's decision. One small query, through indexes, per attempt.
+        AccountEnablementFacts facts;
+        try
+        {
+            facts = await _syncRepo.GetAccountEnablementFactsAsync(connectedSystem.Id, change.Id, account.Id, asOf - ExportInFlightCeiling);
+            if (facts.StrandedExportId is { } strandedExportId)
+                Log.Warning("DeliverDuePasswordChangesAsync: Pending Export {PendingExportId} to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
+                    "has been Executing for more than {Ceiling}, far longer than an export batch takes, so it was most likely left there by a run that failed or was cancelled. " +
+                    "Password change {PendingPasswordChangeId} no longer waits for it. The Worker recovers stranded exports when it restarts",
+                    strandedExportId, account.Id, connectedSystem.Id, ExportInFlightCeiling, change.Id);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "DeliverDuePasswordChangesAsync: Could not read whether account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
+                "holds an enable awaiting its password, or has had its enabled state written by an export; the change is kept and tried again",
+                account.Id, connectedSystem.Id);
+            return (null, new AccountEnablementFacts(false, false, false, null));
+        }
+
+        // An administrator's choice is not overridden by a withheld enable, so the hold is not read for one. The mark only
+        // ever moves from false to true, so the claimed row's own value is kept where it is already set.
+        var holdsWithheldEnable = AccountFlagsPolicy.DependsOnWithheldEnable(change.Origin, change.EnableAccount) && facts.HoldsWithheldEnable;
+        var accountFlagsWrittenByExport = change.EnabledStateSetByAttributeFlow || facts.EnabledStateSetByAttributeFlow;
+
+        var decision = AccountFlagsPolicy.Decide(change.Origin, change.EnableAccount, requestedExpiry, accountFlagsWrittenByExport,
+            firstPassword, holdsWithheldEnable);
+        return (decision, facts);
+    }
+
+    /// <summary>
+    /// Gives the change back unattempted because an export is being sent to the account right now
+    /// (<see cref="AccountFlagsPolicy.WaitsForAnExportInFlight"/>). That export may be disabling the account (a leaver,
+    /// say, #2173), writing the flags as the Attribute Flow that owns them (#2159), or holding back an enable this
+    /// delivery would complete (#2158), and records any of these only once its batch has come back, so the delivery waits
+    /// for it rather than decide without it. Nothing was sent and nothing failed, so no attempt is counted and no Activity
+    /// is recorded; the lane's summary counts the wait.
+    /// </summary>
+    private static PasswordDeliveryAttempt PostponeForExportInFlight(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemObject account,
+        DateTime asOf,
+        TimeSpan? wait = null)
+    {
+        change.Postpone(asOf + (wait ?? ExportInFlightWait));
+        Log.Debug("DeliverDuePasswordChangesAsync: An export to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} is in flight, " +
+            "and may change what delivering password change {PendingPasswordChangeId} does to the account's flags; it waits until {NextRetryAt}",
+            account.Id, connectedSystem.Id, change.Id, change.NextRetryAt);
+        return PasswordDeliveryAttempt.Postponed;
+    }
+
+    /// <summary>
+    /// Keeps a change whose effect on the account's enabled state could not be decided, as a transient failure:
+    /// nothing was sent, and the next attempt decides afresh.
+    /// </summary>
+    private async Task<PasswordDeliveryAttempt> KeepUndecidedAsync(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemPasswordSynchronisation configuration,
+        DateTime asOf)
+    {
+        change.RecordAttempt(PasswordSetFailureReason.Transient,
+            "JIM could not read whether this account's flags are set by an Attribute Flow, or its enable is waiting for its password, so nothing was sent.",
+            configuration, asOf);
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+        return PasswordDeliveryAttempt.Kept;
     }
 
     /// <summary>
@@ -889,7 +1211,10 @@ public class PasswordSynchronisationServer
     /// row is deleted on success, so this Activity is all that survives to say the password reached this system.
     /// </para>
     /// </summary>
-    private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success)
+    /// <param name="note">For a delivery, information about how the account's flags came out, added to the message.</param>
+    /// <param name="caveat">For a delivery, what did not go as asked, which completes the Activity with a warning.</param>
+    private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success,
+        string? delivered = null, string? note = null, string? caveat = null)
     {
         var failure = success ? null : DescribeFailure(connectedSystem, change);
 
@@ -906,7 +1231,7 @@ public class PasswordSynchronisationServer
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
             Message = success
-                ? change.IsProvisioned ? $"Initial password set on {connectedSystem.Name}." : $"Password set on {connectedSystem.Name}."
+                ? (delivered ?? $"Password set on {connectedSystem.Name}.") + (note == null ? string.Empty : $" {note}") + (caveat == null ? string.Empty : $" {caveat}")
                 : failure
         };
 
@@ -921,10 +1246,121 @@ public class PasswordSynchronisationServer
         // never completed sits in the Activities list looking like work still under way; and a refusal recorded
         // only as prose in the Message is invisible to everything that counts, filters or alerts on outcomes,
         // which is most of what an audit record is for (requirement 23).
-        if (success)
-            await _completeActivity(activity);
-        else
+        // A delivery carrying a caveat set the password, so it is no failure, but it did not do everything asked of it
+        // (#2159). Completed with a warning so the difference reaches everything that reads outcomes by status, which
+        // is how the portal, the REST API and PowerShell decide whether to say "Set" plainly.
+        if (!success)
             await _completeActivityWithError(activity, failure!);
+        else if (caveat != null)
+            await _completeActivityWithWarning(activity);
+        else
+            await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// Records a delivery that set the password, completed plainly where the Connected System applied everything asked
+    /// of it and with a warning where it did not, or where what it applied will not last (#2159), and says which it was.
+    /// </summary>
+    /// <param name="requestedExpiry">The expiry behaviour the delivery asked for, to compare with what the account now does.</param>
+    /// <param name="password">
+    /// The password just sent, in scope only so the Connector's warning can be checked for it before it is recorded.
+    /// Never recorded or logged itself.
+    /// </param>
+    /// <param name="staticInitialPassword">Whether the password is a Synchronisation Rule's one Static Initial Password.</param>
+    /// <param name="putBack">Why an administrator's change to "Password never expires" will not last; null where it will.</param>
+    /// <param name="standIn">Whether the password was delivered as an account's first password in place of its Initial Password (#2160).</param>
+    private async Task<PasswordDeliveryAttempt> RecordDeliveredAsync(ConnectedSystem connectedSystem, PendingPasswordChange change,
+        AccountFlagsDecision flags, PasswordExpiryBehaviour requestedExpiry, PasswordSetResult setResult, string password,
+        bool staticInitialPassword, string? putBack, InitialPasswordStandIn standIn = InitialPasswordStandIn.None)
+    {
+        var delivered = DescribeDelivery(connectedSystem, change, flags, setResult, standIn);
+        var note = DescribePasswordNeverExpires(connectedSystem, flags, requestedExpiry, setResult);
+        var caveat = JoinSentences(DescribeCaveat(connectedSystem, flags, setResult, password, staticInitialPassword), putBack);
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, delivered, note, caveat);
+        return PasswordDeliveryAttempt.Delivered(flags, expiryBehaviourHonoured: setResult.ExpiryBehaviourHonoured, standIn);
+    }
+
+    private static string? JoinSentences(string? first, string? second) =>
+        first == null ? second : second == null ? first : $"{first} {second}";
+
+    /// <summary>
+    /// What a Connector that set the password could not do of what was asked (#2159), for the delivery's Activity:
+    /// what was applied instead, then the Connector's own words, then, where "Password never expires" left to its owner
+    /// is why, who owns it and what that means. Null where it did everything asked.
+    /// <para>
+    /// The Connector's words go onto an Activity that the portal, the REST API and PowerShell all show, and a
+    /// Connector is under no obligation to keep the password out of them. Withheld whole rather than patched where
+    /// they contain it, for the reason the LDAP Connector withholds a directory's message: cutting the value out
+    /// depends on the echo matching exactly.
+    /// </para>
+    /// </summary>
+    private static string? DescribeCaveat(ConnectedSystem connectedSystem, AccountFlagsDecision flags, PasswordSetResult setResult,
+        string password, bool staticInitialPassword)
+    {
+        if (setResult.ExpiryBehaviourHonoured)
+            return null;
+
+        var applied = setResult.AppliedExpiryBehaviour switch
+        {
+            PasswordExpiryBehaviour.RequireChangeAtNextSignIn => ": a change is required at the next sign-in",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy => $": the password expires according to {connectedSystem.Name}'s own password policy",
+            PasswordExpiryBehaviour.NeverExpires => ": the password never expires",
+            _ => string.Empty
+        };
+
+        var warning = setResult.ExpiryBehaviourWarning?.Trim();
+        if (!string.IsNullOrEmpty(warning) && !string.IsNullOrEmpty(password) && warning.Contains(password, StringComparison.OrdinalIgnoreCase))
+            warning = "[the Connected System's warning is withheld because it contained the password]";
+
+        var caveat = string.IsNullOrEmpty(warning)
+            ? $"Not everything asked for could be applied{applied}."
+            : $"Not everything asked for could be applied{applied}. {warning}";
+
+        // A change at the next sign-in defeated by "Password never expires" left set: say who keeps the flag, and, for a
+        // Static Initial Password, the consequence that makes it matter most.
+        if (flags.PasswordNeverExpires != null || setResult.AppliedExpiryBehaviour != PasswordExpiryBehaviour.NeverExpires)
+            return caveat;
+
+        var owner = flags.PasswordNeverExpiresBasis == AccountFlagBasis.LeftToAttributeFlow
+            ? "\"Password never expires\" was left to the export that writes userAccountControl, which keeps it set; set it in that Attribute Flow " +
+              "only where passwords should never expire, or choose another expiry for the Initial Password."
+            : "A password set on every Connected System leaves \"Password never expires\" as each account has it.";
+        var shared = staticInitialPassword
+            ? " Every account given this Synchronisation Rule's Static Initial Password therefore keeps that one shared password, which never expires."
+            : string.Empty;
+        return $"{caveat} {owner}{shared}";
+    }
+
+    /// <summary>
+    /// Says how "Password never expires" came out where the delivery left it to its owner and that differs from the expiry
+    /// asked for (#2159), as information rather than a warning: nothing failed, the flag simply belongs to something else.
+    /// Null where the delivery wrote the flag itself, where nothing differs, and where the difference is already a warning.
+    /// The wording names the export that writes userAccountControl rather than an Attribute Flow, because the mark that
+    /// decided it is also set by a Delete performed as a disable.
+    /// </summary>
+    private static string? DescribePasswordNeverExpires(ConnectedSystem connectedSystem, AccountFlagsDecision flags,
+        PasswordExpiryBehaviour requestedExpiry, PasswordSetResult setResult)
+    {
+        if (flags.PasswordNeverExpires != null || !setResult.ExpiryBehaviourHonoured || setResult.AppliedExpiryBehaviour is not { } applied)
+            return null;
+
+        var askedNeverExpires = requestedExpiry == PasswordExpiryBehaviour.NeverExpires;
+        var neverExpires = applied == PasswordExpiryBehaviour.NeverExpires;
+        if (askedNeverExpires == neverExpires)
+            return null;
+
+        var leftToExport = flags.PasswordNeverExpiresBasis == AccountFlagBasis.LeftToAttributeFlow;
+        if (neverExpires)
+            return leftToExport
+                ? "\"Password never expires\" was left to the export that writes userAccountControl, which sets it, so the password never expires."
+                : "\"Password never expires\" was left as the account has it, which is set, so the password never expires.";
+
+        return leftToExport
+            ? "\"Password never expires\" was left to the export that writes userAccountControl, which leaves it off, so the password expires " +
+              $"according to {connectedSystem.Name}'s own password policy. To have these passwords never expire, set Password never expires " +
+              "(65536) in the Attribute Flow that writes userAccountControl."
+            : "A password set on every Connected System leaves \"Password never expires\" as each account has it, so the Never expires asked for " +
+              $"was not applied; the password expires according to {connectedSystem.Name}'s own password policy.";
     }
 
     /// <summary>
@@ -950,6 +1386,48 @@ public class PasswordSynchronisationServer
 
         await _createSystemActivity(activity);
         await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// What a delivery did, saying why the account's enabled state is what it is wherever the precedence (#2064) did
+    /// something other than what the setting alone would suggest: an administrator reading why a new starter's account
+    /// is still disabled, or was enabled despite Enable Account being off, finds the answer here. A password delivered as
+    /// an account's first password in place of its Initial Password (#2160) says so, and how the Initial Password's
+    /// promises about the account came out. An enable is claimed only where the Connected System applied everything
+    /// asked of it: a directory that cannot enable an account says so on the warning instead.
+    /// </summary>
+    private static string DescribeDelivery(ConnectedSystem connectedSystem, PendingPasswordChange change, AccountFlagsDecision flags,
+        PasswordSetResult setResult, InitialPasswordStandIn standIn)
+    {
+        var system = connectedSystem.Name;
+        var set = standIn switch
+        {
+            _ when change.IsProvisioned => $"Initial password set on {system}",
+            InitialPasswordStandIn.Applies => $"Password set on {system} as this Connected System Object's first password, in place of its Initial Password",
+            InitialPasswordStandIn.NoLongerSet => $"Password set on {system} as this Connected System Object's first password. The Synchronisation Rule " +
+                                                  "that provisioned it no longer sets an Initial Password, or has been deleted, so its settings for enabling " +
+                                                  "the Connected System Object and for whether its password never expires were not applied",
+            InitialPasswordStandIn.OtherAccount => $"Password set on {system}. It was also to be the first password of a Connected System Object there " +
+                                                   "that is no longer this person's, so that Initial Password's settings for enabling the Connected System " +
+                                                   "Object and for whether its password never expires were not applied to this one",
+            _ => $"Password set on {system}"
+        };
+
+        var enabled = flags.EnableAccount == true && setResult.ExpiryBehaviourHonoured;
+        return flags.EnablementBasis switch
+        {
+            AccountFlagBasis.LeftToAttributeFlow =>
+                $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Initial Password's \"Enable the Connected System Object once the password is set\" did not apply.",
+            AccountFlagBasis.CompletesWithheldEnable =>
+                $"{set}, and the account enabled as its Attribute Flow asks: JIM held the enable back until the account had a password.",
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && enabled =>
+                $"{set}, and the Connected System Object enabled as the Synchronisation Rule's Initial Password asks.",
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies && flags.EnableAccount == true =>
+                $"{set}. The Synchronisation Rule's Initial Password asks for the Connected System Object to be enabled.",
+            AccountFlagBasis.SyncRuleSetting when standIn == InitialPasswordStandIn.Applies =>
+                $"{set}. The Synchronisation Rule's Initial Password does not enable it, so it was left as it was created.",
+            _ => $"{set}."
+        };
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
@@ -1069,9 +1547,10 @@ public class PasswordSynchronisationServer
         }
 
         Log.Information(
-            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Problems} problem(s).",
+            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, " +
+            "{Postponed} waiting for an export to the account to finish, {Problems} problem(s).",
             result.ConnectedSystemsVisited, result.DeliveredCount, result.RetryingCount, result.ParkedCount,
-            result.ExpiredCount, result.WithdrawnCount, result.Problems.Count);
+            result.ExpiredCount, result.WithdrawnCount, result.PostponedCount, result.Problems.Count);
 
         return result;
     }
@@ -1216,9 +1695,9 @@ public class PasswordSynchronisationServer
             PendingPasswordChangeStatus.Expired => PasswordChangeTargetState.Expired,
             PendingPasswordChangeStatus.Cancelled => PasswordChangeTargetState.Cancelled,
             // Pending: held by a paused system, waiting out a backoff after an attempt, or not yet attempted. Only
-            // a propagated change is ever held; an explicit set and a provisioned first password are both
-            // delivered on a paused system (decision D1; widened by #1697).
-            _ when !systemEnabled && row.IsPropagated => PasswordChangeTargetState.Held,
+            // a propagated change is ever held, and not one carrying an account's first password; an explicit set and
+            // a provisioned first password are both delivered on a paused system (decision D1; widened by #1697, #2160).
+            _ when !systemEnabled && row.IsHeldWhilePasswordSynchronisationIsOff => PasswordChangeTargetState.Held,
             _ when row.LastAttemptedAt != null => PasswordChangeTargetState.Retrying,
             _ => PasswordChangeTargetState.Queued
         };
@@ -1253,7 +1732,10 @@ public class PasswordSynchronisationServer
             State = set ? PasswordChangeTargetState.Set : PasswordChangeTargetState.Parked,
             Message = set ? newest.Message : newest.ErrorMessage ?? newest.Message,
             OccurredAt = newest.OccurredAt,
-            AttemptCount = attemptCount
+            AttemptCount = attemptCount,
+            // The password is set either way; the warning says the system could not apply everything asked of it,
+            // and the Activity's Message above says what it applied instead (#2159).
+            CompletedWithWarning = set && newest.CompletedWithWarning
         };
     }
 

@@ -1,0 +1,126 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Values built from ..." (Generated Value Forms, #2014, mock screen 2): every value an Attribute Flow builds from this
+   generated value, on any Synchronisation Rule, where it is written unchanged, and what happens when a target refuses
+   it. Display only: the switch it reports lives on the Attribute Flow that builds the value, which may be on a rule this
+   form does not save. "Before issuing" says whether each is checked with the generated value's candidates, and where,
+   or why not (Generated Value Forms, #2023). The "If a target refuses it" column follows this form's Collision
+   Remediation switch as it now stands. The host loads the rows (ConnectedSystemServer.DescribeValuesBuiltFromGeneratedValueAsync). *@
+
+<div class="mt-5" data-testid="generated-value-built-values-panel">
+    <MudText Typo="Typo.subtitle2" Class="mb-1">@GeneratedValueBuiltValueWording.PanelTitle(GeneratedAttributeName)</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@GeneratedValueBuiltValueWording.PanelHelperText(GeneratedAttributeName)</MudText>
+
+    @if (BuiltValues == null)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (BuiltValues.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="generated-value-built-values-empty">
+            @GeneratedValueBuiltValueWording.NoBuiltValuesText(GeneratedAttributeName)
+        </MudText>
+    }
+    else
+    {
+        <MudSimpleTable Elevation="0" Outlined="true">
+            <thead>
+                <tr>
+                    <th>Value</th>
+                    <th>Exported to</th>
+                    <th>Before issuing</th>
+                    <th>If a target refuses it</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var value in BuiltValues)
+                {
+                    var outcome = GeneratedValueBuiltValueWording.RefusalOutcome(value, CollisionRemediation);
+                    var beforeIssuing = GeneratedValueBuiltValueWording.BeforeIssuingOutcome(value);
+                    <tr @key="@($"{value.SyncRuleMappingId}:{value.GeneratedSyncRuleMappingId}")"
+                        data-testid="generated-value-built-value-row" data-outcome="@outcome.ToString()" data-before-issuing="@beforeIssuing.ToString()">
+                        <td>
+                            @if (value.MetaverseAttributeName is { } metaverseAttributeName)
+                            {
+                                <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@metaverseAttributeName" />
+                            }
+                            else
+                            {
+                                <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@value.ConnectedSystemAttributeName" />
+                            }
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+                                @value.SyncRuleName · @GeneratedValueBuiltValueWording.HowBuilt(value)
+                            </MudText>
+                        </td>
+                        <td>
+                            @if (value.ExportedTo.Count == 0)
+                            {
+                                <EmptyValue />
+                            }
+                            else
+                            {
+                                @foreach (var target in value.ExportedTo)
+                                {
+                                    <div @key="@($"{target.ConnectedSystemId}:{target.AttributeId}")" class="mb-1">
+                                        <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@target.AttributeName" />
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@target.ConnectedSystemName</MudText>
+                                    </div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            <MudChip T="string" Variant="Variant.Text" Class="ma-0" Color="@BeforeIssuingColour(beforeIssuing)">
+                                @GeneratedValueBuiltValueWording.BeforeIssuingText(beforeIssuing)
+                            </MudChip>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@GeneratedValueBuiltValueWording.BeforeIssuingDetail(value)</MudText>
+                        </td>
+                        <td>
+                            <MudChip T="string" Variant="Variant.Text" Class="ma-0" Color="@RefusalColour(outcome)">
+                                @GeneratedValueBuiltValueWording.RefusalText(outcome, GeneratedAttributeName)
+                            </MudChip>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The values built from the generated value, from <c>ConnectedSystemServer.DescribeValuesBuiltFromGeneratedValueAsync</c>;
+    /// null while loading.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<GeneratedValueBuiltValueDescription>? BuiltValues { get; set; }
+
+    /// <summary>The generated Metaverse attribute's name, for the title and the column's text.</summary>
+    [Parameter, EditorRequired]
+    public string GeneratedAttributeName { get; set; } = null!;
+
+    /// <summary>The form's own Collision Remediation switch, as it now stands.</summary>
+    [Parameter]
+    public bool CollisionRemediation { get; set; } = true;
+
+    /// <summary>
+    /// Checked reads as good; a value that could be checked but is built on another rule as a warning, since moving it is
+    /// usually the fix; the deliberate cases (switched off, several, excluded) as plain.
+    /// </summary>
+    private static Color BeforeIssuingColour(GeneratedValueBuiltValueBeforeIssuing outcome) => outcome switch
+    {
+        GeneratedValueBuiltValueBeforeIssuing.Checked => Color.Success,
+        GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static Color RefusalColour(GeneratedValueBuiltValueRefusal outcome) => outcome switch
+    {
+        GeneratedValueBuiltValueRefusal.GeneratedValueCorrected => Color.Success,
+        GeneratedValueBuiltValueRefusal.KeepUniqueOff => Color.Warning,
+        _ => Color.Default
+    };
+}

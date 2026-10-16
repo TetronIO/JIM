@@ -25,34 +25,33 @@ function Resume-JIMPendingPasswordChange {
         which is what a parked or cancelled change is.
 
     .PARAMETER Id
-        The unique identifiers of the queued changes to retry. Accepts queued changes from the pipeline.
-        Combines with the other criteria rather than replacing them, so "-Status Parked" alongside piped
-        changes means "these, if they are still parked": a change delivered since you listed it is not retried.
+        The IDs of the queued changes to retry. Combines with the other criteria rather than replacing them, so
+        -Status Parked alongside piped changes means these changes, if they are still parked.
 
     .PARAMETER ConnectedSystemId
-        Retry the changes queued for one Connected System. Accepts a Connected System from the pipeline.
+        Retry the changes queued for this Connected System.
 
     .PARAMETER Status
-        Retry only changes in this state: Pending, Parked or Cancelled. Expired changes are never retried.
+        Retry only changes in this state. An Expired change is never retried, so -Status Expired matches nothing.
 
     .PARAMETER FailureReason
         Retry only changes whose last attempt failed this way.
 
     .PARAMETER MetaverseObjectId
-        Retry only one identity's queued changes.
+        Retry only this Metaverse Object's queued changes.
 
     .PARAMETER Search
-        Retry only changes matching this free-text search over the identity and Connected System names.
+        Retry only changes matching this free-text search over the Metaverse Object and Connected System names.
 
     .PARAMETER EntireQueue
-        Retry every queued password change in the deployment. Required when nothing else narrows the request,
-        so a command that names no criteria cannot act on everything by accident.
+        Retry every queued password change in the deployment. Required when nothing else narrows the request, so a
+        command that names no criteria cannot act on everything by accident.
 
     .PARAMETER Force
         Skips the confirmation prompt.
 
     .OUTPUTS
-        PSCustomObject with an AffectedCount property: how many changes were made due again.
+        One object, whose AffectedCount says how many changes were made due again. Zero is an answer, not an error.
 
     .EXAMPLE
         Resume-JIMPendingPasswordChange -ConnectedSystemId 3
@@ -83,7 +82,7 @@ function Resume-JIMPendingPasswordChange {
         Set-JIMMetaverseObjectPassword
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PasswordQueueActionResponse')]
     param(
         [Parameter(ValueFromPipelineByPropertyName)]
         [guid[]]$Id,
@@ -146,7 +145,7 @@ function Resume-JIMPendingPasswordChange {
         elseif ($EntireQueue) { "every queued password change" }
         else { "the matching queued password changes" }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Attempt delivery again")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Attempt delivery again" -Force:$Force)) {
             return
         }
 

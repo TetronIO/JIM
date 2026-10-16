@@ -1,10 +1,12 @@
 @page "/admin/connected-systems/{ConnectedSystemId:int}/pending-exports/{Id:guid}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
 @using JIM.Utilities
 @using JIM.Web.Models
+@using JIM.Web.Shared.Causality
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -21,6 +23,9 @@
         <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
             @_pendingExport.ChangeType
         </MudChip>
+        <PageInfo Title="Pending Export" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
+            A Pending Export is a change JIM has queued for a Connected System and not yet confirmed: the object it applies to, the attribute changes it carries, and how its attempts have gone.
+        </PageInfo>
     </MudText>
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
@@ -160,6 +165,14 @@
                 </MudCardContent>
             </MudCard>
         </MudItem>
+
+        @* The runs that staged this export, each with why it did and a way into the Causality Explorer (#2100). *@
+        @if (_queuedBy is { } queuedBy)
+        {
+            <MudItem xs="12">
+                <CausalityQueuedByPanel QueuedBy="queuedBy" />
+            </MudItem>
+        }
 
         @if (_pendingExport.ErrorCount > 0 || !string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
         {
@@ -426,7 +439,7 @@ else if (_notFound)
         removed once they are no longer waiting to be applied, so links to an individual one stop
         resolving after its export runs.
     </MudAlert>
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack"
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List
     </MudButton>
@@ -463,6 +476,7 @@ else
     public Guid Id { get; set; }
 
     private PendingExport? _pendingExport;
+    private CausalQueuedBy? _queuedBy;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private Dictionary<string, int> _attributeChangeTotalCounts = new();
     private List<PendingExportUnresolvedReference> _unresolvedReferences = new();
@@ -482,6 +496,7 @@ else
             return;
         }
 
+        _queuedBy = null;
         var detailResult = await jim.ConnectedSystems.GetPendingExportDetailAsync(Id);
         _pendingExport = detailResult?.PendingExport;
         _attributeChangeTotalCounts = detailResult?.AttributeChangeTotalCounts ?? new();
@@ -506,6 +521,9 @@ else
         // Grouped once here rather than per window read: the grid slices its windows from this list, and
         // re-grouping every change on every scroll would do the same work again for no new information.
         _attributeChangeGroups = GetGroupedChanges();
+
+        // The runs that staged it (#2100): a handful of reads however many runs, since the export names at most fifty.
+        _queuedBy = await jim.Activities.GetPendingExportQueuedByAsync(Id);
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
@@ -544,22 +562,9 @@ else
             // change loaded some other way (the paged multi-valued dialog reads the same helper).
             if (_unresolvedReferencesByChangeId.TryGetValue(change.Id, out var reference))
                 return $"{reference.ReferencedMetaverseObjectDisplayName ?? reference.ReferencedMetaverseObjectId.ToString()} [{GetUnresolvedReferenceReasonLabel(reference.Reason).ToLowerInvariant()}]";
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
         }
 
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
+        return PendingExportValueDisplay.Text(change) ?? "[null]";
     }
 
     private static string GetUnresolvedReferenceReasonLabel(UnresolvedReferenceReason reason) => reason switch

@@ -91,8 +91,6 @@ public class ExampleDataControllerTemplateCrudTests
         };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
         var httpContext = new DefaultHttpContext { User = principal };
-        // The initiator triad helper reads the API key id from HttpContext.Items, where the API key middleware stashes it.
-        httpContext.Items["ApiKeyId"] = apiKeyId;
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         // Schema fixtures the resolution mocks hand back.
@@ -300,22 +298,6 @@ public class ExampleDataControllerTemplateCrudTests
     }
 
     [Test]
-    public async Task CreateTemplateAsync_UnknownConnectedSystemAttributeId_ReturnsNotFoundAsync()
-    {
-        var request = BuildValidCreateRequest();
-        request.ObjectTypes[0].Attributes[0].MetaverseAttributeId = null;
-        request.ObjectTypes[0].Attributes[0].ConnectedSystemObjectTypeAttributeId = 777;
-        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(777))
-            .ReturnsAsync((JIM.Models.Staging.ConnectedSystemObjectTypeAttribute?)null);
-
-        var result = await _controller.CreateTemplateAsync(request);
-
-        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
-        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
-        _mockExampleDataRepo.Verify(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
-    }
-
-    [Test]
     public async Task CreateTemplateAsync_UnknownExampleDataSetId_ReturnsNotFoundAsync()
     {
         var request = BuildValidCreateRequest();
@@ -327,6 +309,43 @@ public class ExampleDataControllerTemplateCrudTests
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
         _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
         _mockExampleDataRepo.Verify(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateTemplateAsync_ExpressionReadingAnAttributeTheTemplateDoesNotGenerate_ReturnsCreatedWithAWarningAsync()
+    {
+        // #2055 Phase 3: said, not refused, because a template is built an attribute at a time.
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 10, Expression = "Lower(mv[\"Nickname\"])" }
+        };
+        ExampleDataTemplate? created = null;
+        _mockExampleDataRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { t.Id = 42; created = t; })
+            .Returns(Task.CompletedTask);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(42)).ReturnsAsync(() => created);
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (ExampleDataTemplateDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.Warnings, Has.One.Contains("mv[\"Nickname\"]"));
+    }
+
+    [Test]
+    public async Task CreateTemplateAsync_ExpressionThatDoesNotParse_ReturnsBadRequestAsync()
+    {
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 10, Expression = "Lower(" }
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
     }
 
     [Test]
@@ -373,6 +392,47 @@ public class ExampleDataControllerTemplateCrudTests
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
+    [TestCase("GreaterThanOrEquals", "30")]
+    [TestCase("HasNoValue", null)]
+    [TestCase("lessthan", "5")]
+    public async Task CreateTemplateAsync_DependencyWithACatalogueOperator_IsAcceptedAsync(string comparisonType, string? value)
+    {
+        // #2053: the operator catalogue's names, the same as scoping and Predefined Searches use, for a Number attribute.
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes[0].AttributeDependency = new ExampleDataTemplateAttributeDependencyRequest
+        {
+            MetaverseAttributeId = 11,
+            ComparisonType = comparisonType,
+            StringValue = value
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>().Or.InstanceOf<CreatedAtActionResult>().Or.InstanceOf<CreatedResult>());
+    }
+
+    [TestCase("GreaterThanOrEqual", "30", "Invalid comparison type")]
+    [TestCase("StartsWith", "3", "not valid for the Number attribute")]
+    [TestCase("Equals", "thirty", "'thirty' is not a whole number")]
+    [TestCase("Equals", null, "IntValue is required")]
+    public async Task CreateTemplateAsync_DependencyTheCatalogueRefuses_ReturnsBadRequestAsync(string comparisonType, string? value, string expected)
+    {
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes[0].AttributeDependency = new ExampleDataTemplateAttributeDependencyRequest
+        {
+            MetaverseAttributeId = 11,
+            ComparisonType = comparisonType,
+            StringValue = value
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
+        Assert.That(error.Message, Does.Contain(expected));
         _mockExampleDataRepo.Verify(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
     }
 

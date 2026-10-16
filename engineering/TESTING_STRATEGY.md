@@ -287,7 +287,8 @@ Tear down with `Start-SqlServerTlsTestServer.ps1 -Stop`.
 
 **Characteristics**:
 - One probe per primitive only a real Active Directory can prove: schema discovery over more than 1,000 `attributeSchema` entries (the directory's MaxPageSize), container enumeration over more than 1,000 organisational units, a Full Import of a group over MaxValRange (1,500 members, returned as `member;range=0-1499`), a duplicate member add on export, the order the directory lists `objectClass` values in, and `unicodePwd` over LDAPS and its refusal over plain LDAP
-- Fixtures are created idempotently under `OU=JIM Probes,<base DN>` by the raw platform LDAP client, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create
+- Fixtures are created idempotently under `OU=JIM Probes,OU=Corp,<base DN>` by the raw platform LDAP client, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create
+- `OU=Corp` is one of the containers the lab delegates JIM's access over, and every entry in `jim-ad-delegation.acl` is inheritable, so the probe OU inherits exactly that delegation: the probes act as `svc-jim` with the rights a least-privilege deployment grants it, never wider ones (#2040)
 - Each probe is written to fail against the domain controller for the right reason before its fix lands, and stays as the regression net afterwards
 
 **Gating**: Every fixture carries `[Category("RequiresActiveDirectory")]` and calls `Assert.Ignore` unless `JIM_TEST_AD_HOST` is set, so a normal `dotnet test` / `jim-test` run skips them.
@@ -372,6 +373,16 @@ Beside the five tiers, which test JIM's code, one check tests how JIM is deploye
 **Running it locally**: each leg needs a host where it may create an account, change a sysctl and take port 443, so it is meant for CI's throwaway runners. For a leg on a test host, build a bundle, start `Start-TestIdentityProvider.ps1`, and run `Invoke-DeploymentBoot.ps1` with `-KeepRunning` to look around afterwards.
 
 **Status**: a required check on `main` since 2026-09-29, after 40 green runs and none failed (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`). It pulls Keycloak from quay.io and PostgreSQL from Docker Hub on every run, so an outage at either blocks merges while it lasts; an administrator can take it out of the ruleset for the duration.
+
+### Deployment lab
+
+**Location**: `test/ci/deployment/lab/`, run on a dedicated LXD host, not in CI (see its README; the host's setup is in `TetronIO/ci-runners`).
+
+**Purpose**: What `deployment-boot` cannot reach from GitHub's Ubuntu runners: Red Hat Enterprise Linux (AlmaLinux 9, SELinux enforcing, firewalld, NetworkManager), a host with no route to the internet, a host reboot, and a sign-in from another machine. It found most of #1876's defects, among them #1953 (AppArmor crashing .NET on Ubuntu's rootful Podman) and #2009 (NetworkManager unplugging rootful Podman's pods on AlmaLinux).
+
+**What it does**: installs a bundle on a fresh VM per cell of a matrix (`Cells.psd1`) of operating system, runtime and network, as many cells at once as the host's memory holds. Each cell checks the bundle's checksums, runs `Invoke-DeploymentBoot.ps1` inside the VM (so the lab and CI check the same things), then from the lab host checks readiness over HTTPS, an OIDC sign-in by the initial administrator, a reboot, and that nothing crashed. Upgrade cells install the latest release with real data (an LDAP Connected System whose stored credential must still decrypt), upgrade by the Upgrading guide, reboot, and roll back by it, running every command the guide gives as written there (`Get-DocumentedCommand.ps1`). InstallerCases cells check that every setting the installer refuses, a run stopped with Ctrl+C, and a declined or refused run over an installation leave every file and container exactly as they were, and that a re-run serves its new certificate; ExternalDatabase cells install against a PostgreSQL server of the customer's own, prepared by the deployment guide's SQL, on a VM beside JIM's. The matrix, scheduling, sign-in parsing and report have Pester tests in `test/ci/deployment/lab/Tests/`, which `build-and-test` runs.
+
+**Status**: run by hand against a release candidate, pending a release workflow that runs it on the lab host.
 
 ## The Watermark Bug: A Case Study
 

@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
@@ -45,9 +48,9 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// How a scope transition is written into a delta row's value columns, so the drill-down reads as the change
     /// the administrator just made rather than as an internal transition name.
     /// </summary>
-    private const string ScopeAttributeName = "Scoping Criteria";
-    private const string InScopeValue = "In scope";
-    private const string OutOfScopeValue = "Out of scope";
+    private const string ScopeAttributeName = PreviewScopeAnswer.AttributeName;
+    private const string InScopeValue = PreviewScopeAnswer.InScopeValue;
+    private const string OutOfScopeValue = PreviewScopeAnswer.OutOfScopeValue;
 
     /// <summary>
     /// How many objects entering scope are put to the preview engine per batch. Batched because the engine builds
@@ -239,8 +242,20 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var inScopeNow = _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, asAt);
-            var inScopeProposed = _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, standIn, asAt);
+            var now = Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, rule, asAt));
+            var proposed = Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, standIn, asAt));
+            if (proposed.Failure != null)
+            {
+                if (now.Failure == null)
+                    yield return ScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, cso,
+                        now.Describe(), proposed.Describe());
+                continue;
+            }
+
+            // An object whose scope cannot be decided today is left untouched by the run, joins and all, so a joined
+            // one stands as in scope and an unjoined one as out of it.
+            var inScopeNow = now.Failure == null ? now.InScope : cso.MetaverseObjectId.HasValue;
+            var inScopeProposed = proposed.InScope;
             if (inScopeNow == inScopeProposed)
                 continue;
 
@@ -289,10 +304,12 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     {
         // Out of this rule's scope is not out of scope: the engine acts only when every import rule with criteria
         // has let the object go.
+        // A sibling that cannot decide the object leaves it untouched, which keeps it as covered as being in scope.
         var stillCoveredElsewhere = anySiblingCoversEverything || proposedSiblings.Any(sibling =>
             sibling.Id != rule.Id
             && sibling.ObjectScopingCriteriaGroups.Count > 0
-            && _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sibling, asAt));
+            && Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sibling, asAt)) is var answer
+            && (answer.Failure != null || answer.InScope));
 
         if (stillCoveredElsewhere)
             return null;
@@ -355,19 +372,37 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         var asAt = DateTime.UtcNow;
         var disconnectionsByMetaverseObject = new Dictionary<Guid, int>();
 
+        // The stream carries each value's attribute id, which an attribute criterion reads; an expression reads the
+        // object by attribute name, so the names are supplied from the type's schema when either scope needs them.
+        var metaverseAttributesById = PreviewMetaverseObjectAttributes.WhenReadByName(standIn, rule);
+
         await foreach (var mvo in _application.Metaverse
             .StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId)
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var inScopeNow = _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt);
-            var inScopeProposed = _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, standIn, asAt);
-            if (inScopeNow == inScopeProposed)
-                continue;
+            PreviewMetaverseObjectAttributes.Attach(mvo, metaverseAttributesById);
 
             var targetObject = mvo.ConnectedSystemObjects
                 .FirstOrDefault(cso => cso.ConnectedSystemId == rule.ConnectedSystemId);
+
+            var now = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt));
+            var proposed = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, standIn, asAt));
+            if (proposed.Failure != null)
+            {
+                if (now.Failure == null)
+                    yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, mvo,
+                        targetObject, now.Describe(), proposed.Describe());
+                continue;
+            }
+
+            // As inbound: an identity whose scope cannot be decided today is left as it is, so one with a target
+            // object stands as in scope.
+            var inScopeNow = now.Failure == null ? now.InScope : targetObject != null;
+            var inScopeProposed = proposed.InScope;
+            if (inScopeNow == inScopeProposed)
+                continue;
 
             if (inScopeNow)
             {
@@ -417,6 +452,8 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     #region helpers
 
+    private static PreviewScopeAnswer Decide(Func<bool> isInScope) => PreviewScopeAnswer.Decide(isInScope);
+
     /// <summary>
     /// What the preview engine said an object entering scope would become.
     /// </summary>
@@ -463,7 +500,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             ?? (await _application.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId))?.Attributes
             ?? [];
         var metaverseAttributes = rule.MetaverseObjectType?.Attributes
-            ?? (await _application.Metaverse.GetMetaverseObjectTypeAsync(rule.MetaverseObjectTypeId, false))?.Attributes
+            ?? (await _application.Metaverse.GetMetaverseObjectTypeAsync(rule.MetaverseObjectTypeId, true))?.Attributes
             ?? [];
 
         return SyncRuleScopingProposalMaterialiser.Materialise(rule, proposal, connectedSystemAttributes, metaverseAttributes);
@@ -489,6 +526,19 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// </summary>
     private static string? DescribeIfUnreadable(SyncRuleScopingCriterionProposal criterion, bool wantsConnectedSystemAttribute)
     {
+        // An expression reads one side only: the object the rule scopes (#2054).
+        if (criterion.IsExpression)
+        {
+            var otherSide = wantsConnectedSystemAttribute ? ExpressionInputSource.Metaverse : ExpressionInputSource.ConnectedSystem;
+            var otherSideInput = ExpressionInputResolver.Resolve(criterion.Expression).FirstOrDefault(input => input.Source == otherSide);
+            return otherSideInput == null
+                ? null
+                : $"A proposed Scoping Criterion's expression reads {otherSideInput.Accessor}, but an " +
+                  $"{(wantsConnectedSystemAttribute ? "import" : "export")} Synchronisation Rule evaluates its scope against " +
+                  $"{(wantsConnectedSystemAttribute ? "Connected System attributes (cs[\"...\"])" : "Metaverse Attributes (mv[\"...\"])")}, " +
+                  "so that input would never hold a value.";
+        }
+
         if (criterion.MetaverseAttributeId == null && criterion.ConnectedSystemAttributeId == null)
         {
             return "A proposed Scoping Criterion names no attribute, so there is nothing for it to evaluate and it " +

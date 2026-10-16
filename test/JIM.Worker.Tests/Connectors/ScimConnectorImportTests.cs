@@ -196,7 +196,9 @@ public class ScimConnectorImportTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-            Assert.That(imported.ErrorMessage, Is.Not.Null);
+            Assert.That(imported.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)), Is.EqualTo(new[] { ("score", "1e40") }));
+            Assert.That(imported.Attributes.Select(a => a.Name), Does.Contain("id"),
+                "Staged without its id, the object cannot be matched, and a Full Import marks the object JIM holds for it deleted.");
         }
     }
 

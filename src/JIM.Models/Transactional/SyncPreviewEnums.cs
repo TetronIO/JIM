@@ -48,7 +48,24 @@ public enum SyncPreviewMessageCode
     /// <summary>The enabled Attribute Flows that derive Metaverse attributes from other Metaverse attributes (#1750)
     /// contain a dependency cycle, so no evaluation order exists: the real synchronisation would refuse to start and
     /// process no object at all. The preview evaluates nothing either, and names the cycle.</summary>
-    DerivedFlowCycle
+    DerivedFlowCycle,
+    /// <summary>An Object Matching Rule could not be worked out for the object (#2052); the real sync would neither
+    /// join nor project it (or, matching before provisioning, neither join nor provision it), and would record an
+    /// ObjectMatchingRuleFailed error naming the rule and the fault.</summary>
+    ObjectMatchingRuleFailed,
+    /// <summary>A Scoping Criterion could not be evaluated for the object (#2054): its expression failed, computed a
+    /// value that cannot be compared as its type, or its pattern ran past its time limit. The real sync would record a
+    /// ScopingCriterionFailed error and leave the object untouched, so the preview evaluates nothing further.</summary>
+    ScopingCriterionFailed,
+    /// <summary>Generated Value Forms (#2023): the generated value would be held back because a value built from it
+    /// needs another input the object has no value for yet, so the candidate's values cannot be worked out and checked.
+    /// Not a failure: the real synchronisation generates nothing for the attribute this time, and generates the value
+    /// once the input arrives. The detail names each input and the value that needs it.</summary>
+    GeneratedValueWaiting,
+    /// <summary>Before provisioning, an Object Matching Rule found more than one existing Connected System Object in the
+    /// target (#2052); the real sync would neither join the Metaverse Object to one nor provision it, and would record an
+    /// AmbiguousProvisioningMatch error listing them.</summary>
+    AmbiguousProvisioningMatch
 }
 
 /// <summary>

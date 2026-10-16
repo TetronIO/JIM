@@ -16,7 +16,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Data Generation Template: @_template?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Data Generation Template:</span> <span class="mud-primary-text">@_template?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Data Generation Template:</span> <span class="mud-primary-text">@_template?.Name</span>
+    <PageInfo Title="Example Data Template" DocsPage="configuration/example-data.md#templates">
+        A template describes the Metaverse Objects to generate: how many of each Object Type, and how each attribute's values are made. Executing it adds those objects to the Metaverse, where JIM never deletes them automatically.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_template != null)
@@ -188,6 +192,13 @@
         var rules = new List<KeyValuePair<string, string>>();
 
         void Add(string label, string value) => rules.Add(new KeyValuePair<string, string>(label, value));
+
+        // The condition comes first: it decides whether any of the rules below apply at all.
+        if (attribute.AttributeDependency is { } dependency)
+        {
+            Add("Only when", CriterionOperatorOptions.DescribeCondition(dependency.MetaverseAttribute.Name, dependency.ComparisonType,
+                dependency.MetaverseAttribute.Type, dependency.StringValue));
+        }
 
         switch (attribute.MetaverseAttribute?.Type)
         {

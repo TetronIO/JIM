@@ -14,8 +14,8 @@ function Get-JIMUserInfo {
         This cmdlet requires an active Connect-JIM session.
 
     .OUTPUTS
-        PSCustomObject with user details including authorised, isAdministrator,
-        name, authMethod, metaverseObjectId, roles, and message properties.
+        One object saying who the caller is to JIM. A caller with no JIM identity is answered rather than refused:
+        Authorised is $false and Message says what to do.
 
     .EXAMPLE
         Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
@@ -26,7 +26,7 @@ function Get-JIMUserInfo {
         if ($user.isAdministrator) { Write-Host "Admin access confirmed" }
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.UserInfoResponse')]
     param()
 
     process {

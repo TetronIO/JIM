@@ -252,6 +252,19 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id);
 
     /// <summary>
+    /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded.
+    /// Empty when the item recorded none.
+    /// </summary>
+    public Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// A Run Profile Execution Item's Joined outcome, with none of its children, so a caller can say which Object
+    /// Matching Rule made the join and on what value (#2052) without loading the item's tree. Null when the item
+    /// recorded no Joined outcome.
+    /// </summary>
+    public Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
     /// upward walk can resolve a whole level of a cascade in one round trip.
     /// </summary>
@@ -317,6 +330,97 @@ public interface IActivityRepository
         int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
         Guid excludeRunProfileExecutionItemId);
 
+    /// <summary>
+    /// Reads one level of the downward causal walk (#1811) in one round trip: every consequence of the frontier's
+    /// items, grouped into cohorts and counted in the database, with each cohort's first page of members and the
+    /// members that carry the walk on; and, for the frontier's items that led nowhere, why.
+    /// </summary>
+    /// <remarks>
+    /// The hops are the recorded edges whose cause is a frontier item; the confirming import of an export a
+    /// frontier item executed; the first synchronisation of the same Connected System Object after a frontier
+    /// import; and outstanding work, read live: a Pending Export a frontier item staged or executed that still
+    /// exists, and a deletion it scheduled that the Metaverse Object still carries.
+    ///
+    /// Bounded by what it reads, never by what is recorded: a cohort's count is exact however large, while its
+    /// members and its continuing items come back capped.
+    /// </remarks>
+    /// <param name="frontier">The items whose consequences to read, each with the cohort it belongs to.</param>
+    /// <param name="memberPageSize">How many members to return per cohort.</param>
+    /// <param name="continuingItemLimit">How many continuing items to return per cohort.</param>
+    public Task<CausalConsequenceLevel> GetCausalConsequenceLevelAsync(
+        IReadOnlyList<CausalConsequenceFrontierMember> frontier, int memberPageSize, int continuingItemLimit);
+
+    /// <summary>
+    /// Pages through one cohort's members (#1811): the consequences of the given frontier items that share the
+    /// cohort's values, earliest first and then by name, optionally narrowed to members whose name contains the search text.
+    /// </summary>
+    /// <param name="frontier">The items whose consequences form the cohort: the parent cohort's members.</param>
+    /// <param name="tuple">The cohort's shared values.</param>
+    /// <param name="skip">How many members to skip.</param>
+    /// <param name="take">How many members to return.</param>
+    /// <param name="search">Text a member's name must contain, case-insensitively, or null for every member.</param>
+    /// <returns>The page of members, and how many members match in total.</returns>
+    public Task<(List<CausalConsequenceMember> Members, int TotalCount)> GetCausalConsequenceCohortMembersAsync(
+        IReadOnlyList<Guid> frontier, CausalConsequenceCohortTuple tuple, int skip, int take, string? search);
+
+    /// <summary>
+    /// Loads the items the downward walk shows its cohorts through (#1811): each with its sync outcomes and its Activity,
+    /// so the portal can place what the item recorded on the objects it happened to and name the run that did it.
+    /// </summary>
+    /// <param name="runProfileExecutionItemIds">One item per cohort.</param>
+    /// <returns>The items found, by id; an item since purged is simply absent.</returns>
+    public Task<Dictionary<Guid, ActivityRunProfileExecutionItem>> GetCausalConsequenceRepresentativesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// Reads one page of an object's causal timeline (#2100): the execution items about it, newest first by their
+    /// Activity's time and then by id, with how many there are in all.
+    /// </summary>
+    /// <remarks>
+    /// The items about an object come from several places, taken together and counted once each:
+    /// <list type="bullet">
+    /// <item><description>A Connected System Object: the items that processed it while it existed; once deleted, the
+    /// item its deletion record names, and the items its deletion nulled the id on, found by the external ID and
+    /// Connected System that record keeps, at or before the deletion.</description></item>
+    /// <item><description>A Metaverse Object: the items its change records name, under its own id while it exists and
+    /// under the id its deletion re-keys them to after; the items of the Connected System Objects joined to it; the
+    /// items that record it directly; and the item that scheduled its deletion.</description></item>
+    /// </list>
+    /// One statement, whichever applies: a live object has no deletion record, and a deleted one has nothing left
+    /// under its own id. Every source is read through an index, so a page costs the same however long the object's
+    /// history.
+    /// </remarks>
+    /// <param name="subject">The object whose timeline to read.</param>
+    /// <param name="skip">How many items to skip.</param>
+    /// <param name="take">How many items to return.</param>
+    /// <returns>The page of items, and how many items the object's timeline holds.</returns>
+    public Task<(List<CausalTimelineEntry> Entries, int TotalCount)> GetCausalTimelinePageAsync(
+        CausalTimelineSubject subject, int skip, int take);
+
+    /// <summary>
+    /// Reads the given execution items as timeline entries (#2100), each with its run named: the runs that queued a
+    /// Pending Export, and the items a Causality Explorer trail names.
+    /// </summary>
+    /// <param name="runProfileExecutionItemIds">The items to read.</param>
+    /// <returns>The items found, by id; an item since purged is simply absent.</returns>
+    public Task<Dictionary<Guid, CausalTimelineEntry>> GetCausalTimelineEntriesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// The source-import hop for many items in one round trip (#2100): for each item, the import that last changed its
+    /// record at or before its Activity ran, exactly as <see cref="GetLatestImportItemForCsoAsync"/> and
+    /// <see cref="GetLatestImportItemForExternalIdAsync"/> find it one item at a time. Found by the record's id while it
+    /// exists, and by the item's external ID within its Connected System once a deletion has nulled the id.
+    /// </summary>
+    /// <remarks>
+    /// The causal walk asks per item because it asks about one member at a time; a page of timeline rows asks about
+    /// fifty at once, and the explorer must not issue a query per row to word each one's nearest cause.
+    /// </remarks>
+    /// <param name="runProfileExecutionItemIds">The items whose source import to find.</param>
+    /// <returns>The import event per item; items with no retained import are absent.</returns>
+    public Task<Dictionary<Guid, CausalSourceImportEvent>> GetLatestImportEventsForItemsAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.
@@ -359,6 +463,12 @@ public interface IActivityRepository
     /// must additionally require <see cref="ActivityTargetOperationType.Execute"/>.
     /// </summary>
     public Task<bool> HasAnyRunProfileExecutionAsync();
+
+    /// <summary>
+    /// Whether any of an Activity's Run Profile Execution Items left reference values unresolved (#959), under any
+    /// Unresolved Reference Handling: what decides whether the Activity's page offers View Affected Objects.
+    /// </summary>
+    public Task<bool> HasUnresolvedReferencesAsync(Guid activityId);
 
     /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
@@ -481,7 +591,7 @@ public interface IActivityRepository
     /// Used to determine activity completion status (success/warning/failure) without loading
     /// RPEIs into memory.
     /// </summary>
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Atomically increments <c>AttemptCount</c> and advances <c>LastSeen</c> on the aggregated failed-authentication

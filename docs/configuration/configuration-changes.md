@@ -1,4 +1,11 @@
-# Configuration changes
+---
+title: Configuration Changes
+description: How JIM judges each configuration save, which edits it asks you to confirm, and how to preview what an edit would affect.
+type: concept
+audience: administrator
+---
+
+# Configuration Changes
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
 
@@ -20,6 +27,8 @@ Where a change is sync-affecting or destructive, JIM shows a confirmation before
 
 Cancelling the confirmation abandons the save. Nothing is written.
 
+A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is not saved until you choose: keep editing (nothing is saved), accept the new result, or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
+
 !!! note "Saving is not applying"
 
     A saved configuration change does not reach existing objects until synchronisation runs again, so the confirmation ends by recommending a Full Synchronisation. The Connected System pages show a [changed-since indicator](connected-systems.md#configuration-changes-pending-a-full-synchronisation) so you can see at a glance which systems have configuration waiting for one.
@@ -28,21 +37,21 @@ Cancelling the confirmation abandons the save. Nothing is written.
 
 ## Previewing a change before you make it
 
-A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
+A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the Metaverse and reports which of them would be affected, changing nothing.
 
 This is a preview of a **proposed edit**, across every affected object. For "what would synchronising *this one object* do with the configuration already saved?", see [Sync Preview](sync-preview.md) instead.
 
 Previews are available where a surface has an evaluator for it:
 
 - A Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), the change most worth asking about because it is the one that can make existing objects eligible for deletion the moment it is saved.
-- A Connected System's [partitions and containers](connected-systems.md#previewing-a-partition-or-container-change), where deselecting one container quietly takes everything beneath it out of import scope.
-- A Synchronisation Rule's [destructive toggles](synchronisation-rules.md#previewing-a-destructive-toggle-change): the Deprovisioning Action, which decides whether a scope exit disconnects an object or deletes it from the target system, and the Inbound Out-of-Scope Action, which decides whether objects leaving import scope keep their join.
-- A Synchronisation Rule's [Scoping Criteria](synchronisation-rules.md#previewing-a-scope-change), which decide which objects the rule manages at all: narrowing them takes objects out of scope and hands them to whichever of the two toggles above applies, while widening them projects and provisions identities nobody has counted.
-- A Synchronisation Rule's [Attribute Flow](synchronisation-rules.md#previewing-an-attribute-flow-change), which decides what the objects it manages end up holding: a changed mapping rewrites an attribute on every one of them, and an Expression that malforms one case in a thousand is invisible until it has flowed.
-- A Connected System's [Object Matching Rules](synchronisation-rules.md#previewing-an-object-matching-change), which decide which Metaverse Object each of its unjoined objects joins to: a rule matched too loosely merges an account into the wrong identity, one matched too tightly creates a duplicate beside the right one, and neither fails at the time.
-- A Synchronisation Rule's [behaviour toggles](synchronisation-rules.md#previewing-a-behaviour-change), which decide whether the rule runs at all and what it may create: disabling one withdraws every value it owns, and turning provisioning on creates accounts at scale.
-- A Connected System's [schema selection](connected-systems.md#previewing-a-schema-change), which decides what JIM reads: deselecting an Object Type takes its objects out of management on the next Full Import, disconnecting the joined ones, while deselecting an attribute has no visible effect at all and leaves the values already held flowing without ever being refreshed.
-- [Deleting a Connected System](connected-systems.md#previewing-a-deletion) altogether, which hands its values to the systems that also contribute them, clears the rest, can leave people with no connector at all, and corrects every downstream system to match.
+- A Connected System's [partitions and containers](partitions-and-containers.md#previewing-a-partition-or-container-change), where deselecting one container quietly takes everything beneath it out of import scope.
+- A Synchronisation Rule's [destructive toggles](deprovisioning.md#previewing-a-destructive-toggle-change): the Deprovisioning Action, which decides whether a scope exit disconnects an object or deletes it from the target system, and the Inbound Out-of-Scope Action, which decides whether objects leaving import scope keep their join.
+- A Synchronisation Rule's [Scoping Criteria](scoping-criteria.md#previewing-a-scope-change), which decide which objects the rule manages at all: narrowing them takes objects out of scope and hands them to whichever of the two toggles above applies, while widening them projects and provisions identities nobody has counted.
+- A Synchronisation Rule's [Attribute Flow](attribute-mappings.md#previewing-an-attribute-flow-change), which decides what the objects it manages end up holding: a changed mapping rewrites an attribute on every one of them, and an Expression that malforms one case in a thousand is invisible until it has flowed.
+- A Connected System's [Object Matching Rules](object-matching-rules.md#previewing-an-object-matching-change), which decide which Metaverse Object each of its unjoined objects joins to: a rule matched too loosely merges an account into the wrong identity, one matched too tightly creates a duplicate beside the right one, and neither fails at the time.
+- A Synchronisation Rule's [behaviour toggles](object-matching-rules.md#previewing-a-behaviour-change), which decide whether the rule runs at all and what it may create: disabling one withdraws every value it owns, and turning provisioning on creates accounts at scale.
+- A Connected System's [schema selection](connected-system-schema.md#previewing-a-schema-change), which decides what JIM reads: deselecting an Object Type takes its objects out of management on the next Full Import, disconnecting the joined ones, while deselecting an attribute has no visible effect at all and leaves the values already held flowing without ever being refreshed.
+- [Deleting a Connected System](removing-a-connected-system.md#previewing-a-deletion) altogether, which hands its values to the systems that also contribute them, clears the rest, can leave people with no connector at all, and corrects every downstream system to match.
 
 The panel opens with what saving would do, in one sentence, worst consequence first: a change that disconnects forty thousand objects and makes two eligible for deletion leads with the two deletions, because that is the part you cannot take back. The breakdown sits beneath it, and selecting a row lists the objects behind it.
 
@@ -65,9 +74,10 @@ A pattern only appears where **every** object in the row makes the same kind of 
 
 In the drill-down, each object's name is a link to the object the change would act on, with a **CS** or **MV** marker saying which side of the Metaverse it leads to: the Connected System Object where the row has one (the object an export would remove, or the joined object an import would disconnect), otherwise the Metaverse Object.
 
-Three things are worth knowing before you act on a preview:
+Four things are worth knowing before you act on a preview:
 
 - **A preview that failed shows nothing.** A part-way evaluation has seen an arbitrary subset of the objects, so its counts are real numbers about the wrong population. JIM withholds them rather than presenting them with a caveat beside them.
+- **An object whose scope cannot be decided is counted as one the run would fail.** When a [Scoping Criterion](scoping-criteria.md) cannot be evaluated for an object (an Expression whose value cannot be compared as its Compare As type, say), a synchronisation stops that object with an error and changes nothing about it. Every preview says the same, as **Fails with an error** with the reason, and previews every other object; it never guesses the object's scope.
 - **Object detail may be a sample.** Each summary row keeps a capped number of detail rows by default; the row's own count is always exact. Where the cap applied, the drill-down is labelled as a sample, and you can ask for the full set when you start the preview.
 - **A preview describes the data as it stood.** An import that runs afterwards can move the answer. The panel says when the preview was evaluated so you can judge whether that matters.
 
@@ -89,17 +99,17 @@ Automation gets the same evaluation. Start a preview with [`New-JIMConfiguration
 
 The confirmation appears only when JIM can tell what changed, which means [configuration change tracking](service-settings.md) must be switched on. With tracking off there is no recorded baseline to compare against, so JIM says nothing rather than guessing. Creating a new object is never confirmed either: there is no prior state, so nothing existing is at risk.
 
-Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the configuration change history exactly as a portal change is.
+Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the Configuration Change History exactly as a portal change is.
 
-## See also
+## Related
 
-- [Sync Preview](sync-preview.md) -- previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
-- [Activities](activities.md) -- every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
-- [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
-- [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
-- [Connected Systems](connected-systems.md#previewing-a-partition-or-container-change) -- previewing a change to what JIM imports
-- [Synchronisation Rules](synchronisation-rules.md#previewing-a-destructive-toggle-change) -- previewing a change to the destructive toggles
-- [Object Matching](synchronisation-rules.md#previewing-an-object-matching-change) -- previewing a change to which identity an account joins
-- [Behaviour toggles](synchronisation-rules.md#previewing-a-behaviour-change) -- previewing a change to whether a rule runs, and what it may create
-- [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation) -- the changed-since indicator
-- [Service Settings](service-settings.md) -- switching configuration change tracking on or off
+- [Sync Preview](sync-preview.md): previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
+- [Activities](activities.md): every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
+- [Preview cmdlets](../powershell/previews.md): starting, reading and cancelling a preview from PowerShell
+- [Metaverse](metaverse.md#previewing-a-deletion-settings-change): previewing a change to deletion settings
+- [Connected Systems](partitions-and-containers.md#previewing-a-partition-or-container-change): previewing a change to what JIM imports
+- [Synchronisation Rules](deprovisioning.md#previewing-a-destructive-toggle-change): previewing a change to the destructive toggles
+- [Object Matching](object-matching-rules.md#previewing-an-object-matching-change): previewing a change to which identity an account joins
+- [Behaviour toggles](object-matching-rules.md#previewing-a-behaviour-change): previewing a change to whether a rule runs, and what it may create
+- [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation): the changed-since indicator
+- [Service Settings](service-settings.md): switching configuration change tracking on or off

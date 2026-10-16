@@ -51,7 +51,7 @@ public static class GeneratedValueRejectionAttribution
         ArgumentNullException.ThrowIfNull(exportRules);
         ArgumentNullException.ThrowIfNull(importRules);
 
-        var resolver = new SourceResolver(exportRules, importRules, derivedFlowGraph);
+        var resolver = GeneratedValueBuiltValues.Create(importRules.Concat(exportRules), derivedFlowGraph);
 
         if (!string.IsNullOrWhiteSpace(rejectedAttributeName))
         {
@@ -64,10 +64,11 @@ public static class GeneratedValueRejectionAttribution
             if (carrying == null)
                 return GeneratedValueRejectionAttributionResult.Unattributable($"the export does not carry {named.Name}");
 
-            var sources = resolver.Resolve(carrying);
+            var sources = resolver.SourcesOf(carrying);
             return sources.Count switch
             {
-                0 => GeneratedValueRejectionAttributionResult.Unattributable($"{named.Name} does not carry a generated value"),
+                0 => GeneratedValueRejectionAttributionResult.Unattributable(SwitchedOffReason(resolver, carrying, named.Name)
+                    ?? $"{named.Name} does not carry a generated value"),
                 1 => ToResult(sources[0], carrying),
                 _ => GeneratedValueRejectionAttributionResult.Unattributable($"{named.Name} is built from more than one generated value")
             };
@@ -75,7 +76,7 @@ public static class GeneratedValueRejectionAttribution
 
         // Nothing named: the export must carry exactly one generated value, whether directly or through derivations.
         var carriers = export.AttributeValueChanges
-            .Select(change => (Change: change, Sources: resolver.Resolve(change)))
+            .Select(change => (Change: change, Sources: resolver.SourcesOf(change)))
             .Where(x => x.Sources.Count > 0)
             .ToList();
         var distinctSources = carriers.SelectMany(x => x.Sources).Distinct().ToList();
@@ -91,122 +92,24 @@ public static class GeneratedValueRejectionAttribution
         return ToResult(chosen.Sources[0], chosen.Change);
     }
 
-    private static GeneratedValueRejectionAttributionResult ToResult(GeneratedSource source, PendingExportAttributeValueChange carrying) =>
+    private static GeneratedValueRejectionAttributionResult ToResult(GeneratedValueBuiltValues.GeneratedValueSource source, PendingExportAttributeValueChange carrying) =>
         source.ExportMapping != null
             ? GeneratedValueRejectionAttributionResult.ToExportMapping(source.ExportMapping, carrying)
             : GeneratedValueRejectionAttributionResult.ToMetaverseAttribute(source.MetaverseAttributeId!.Value, carrying, source.ThroughDerivation);
 
     /// <summary>
-    /// One generated value a carried attribute is built from: a generated Metaverse attribute (import mode) or an
-    /// export-mode generated mapping. Equality ignores <see cref="ThroughDerivation"/>, so the same generated value
-    /// reached directly and through a derivation counts once.
+    /// When a named value carries no generated value only because its "Keep unique" switch is off, says so, so the
+    /// administrator reading the export error can tell a deliberate opt-out from a value no generated value is behind.
     /// </summary>
-    private sealed record GeneratedSource(int? MetaverseAttributeId, SyncRuleMapping? ExportMapping, bool ThroughDerivation)
+    private static string? SwitchedOffReason(GeneratedValueBuiltValues resolver, PendingExportAttributeValueChange carrying, string attributeName)
     {
-        public bool Equals(GeneratedSource? other) =>
-            other != null && MetaverseAttributeId == other.MetaverseAttributeId && ReferenceEquals(ExportMapping, other.ExportMapping);
+        var sources = resolver.SourcesOf(carrying, honourSwitch: false);
+        var generatedAttributeId = sources.Count == 1 ? sources[0].MetaverseAttributeId : null;
+        if (!generatedAttributeId.HasValue)
+            return null;
 
-        public override int GetHashCode() => HashCode.Combine(MetaverseAttributeId, ExportMapping);
-    }
-
-    /// <summary>
-    /// Works out which generated values an exported attribute carries, from the export mappings that produce it and,
-    /// behind those, the generated and derived import mappings.
-    /// </summary>
-    private sealed class SourceResolver
-    {
-        private readonly IReadOnlyCollection<SyncRule> _exportRules;
-        private readonly DerivedFlowGraph? _graph;
-        private readonly HashSet<int> _generatedMetaverseAttributeIds;
-        private readonly List<SyncRuleMapping> _importMappings;
-        private readonly Dictionary<string, int> _metaverseAttributeIdsByName = new(StringComparer.OrdinalIgnoreCase);
-
-        public SourceResolver(IReadOnlyCollection<SyncRule> exportRules, IReadOnlyCollection<SyncRule> importRules, DerivedFlowGraph? graph)
-        {
-            _exportRules = exportRules;
-            _graph = graph;
-            _importMappings = importRules
-                .Where(rule => rule.Enabled && rule.Direction == SyncRuleDirection.Import)
-                .SelectMany(rule => rule.AttributeFlowRules)
-                .Where(mapping => mapping.Enabled && mapping.ResolveTargetMetaverseAttributeId().HasValue)
-                .ToList();
-            _generatedMetaverseAttributeIds = _importMappings
-                .Where(mapping => mapping.Generation != null)
-                .Select(mapping => mapping.ResolveTargetMetaverseAttributeId()!.Value)
-                .ToHashSet();
-
-            // Names an export expression may read with mv["..."], from every Metaverse Object Type the rules know.
-            foreach (var attribute in importRules.Concat(exportRules)
-                         .SelectMany(rule => rule.MetaverseObjectType?.Attributes ?? [])
-                         .Concat(_importMappings.Select(mapping => mapping.TargetMetaverseAttribute).OfType<JIM.Models.Core.MetaverseAttribute>()))
-            {
-                _metaverseAttributeIdsByName.TryAdd(attribute.Name, attribute.Id);
-            }
-        }
-
-        public List<GeneratedSource> Resolve(PendingExportAttributeValueChange change)
-        {
-            var sources = new List<GeneratedSource>();
-            foreach (var mapping in ExportMappingsProducing(change))
-            {
-                if (mapping.Generation != null)
-                {
-                    sources.Add(new GeneratedSource(null, mapping, ThroughDerivation: false));
-                    continue;
-                }
-
-                // A single direct source carries the Metaverse value as it is; anything else (an expression) builds a
-                // value from it, which is a derivation for attribution's purposes.
-                var directSource = mapping.Sources.Count == 1 && mapping.Sources[0].Expression == null
-                    ? mapping.Sources[0].MetaverseAttribute?.Id ?? mapping.Sources[0].MetaverseAttributeId
-                    : null;
-
-                var inputs = directSource.HasValue
-                    ? [directSource.Value]
-                    : DerivedFlowGraph.GetMetaverseInputNames(mapping)
-                        .Select(name => _metaverseAttributeIdsByName.TryGetValue(name, out var id) ? id : (int?)null)
-                        .Where(id => id.HasValue)
-                        .Select(id => id!.Value)
-                        .ToList();
-
-                foreach (var input in inputs)
-                    Expand(input, throughDerivation: !directSource.HasValue, sources, []);
-            }
-
-            return sources.Distinct().ToList();
-        }
-
-        private IEnumerable<SyncRuleMapping> ExportMappingsProducing(PendingExportAttributeValueChange change)
-        {
-            var mappings = _exportRules
-                .Where(rule => rule.Enabled || rule.Id == change.SyncRuleId)
-                .Where(rule => !change.SyncRuleId.HasValue || rule.Id == change.SyncRuleId)
-                .SelectMany(rule => rule.AttributeFlowRules)
-                .Where(mapping => mapping.ResolveTargetConnectedSystemAttributeId() == change.AttributeId)
-                .ToList();
-            return mappings;
-        }
-
-        private void Expand(int metaverseAttributeId, bool throughDerivation, List<GeneratedSource> sources, HashSet<int> visited)
-        {
-            if (!visited.Add(metaverseAttributeId))
-                return;
-
-            if (_generatedMetaverseAttributeIds.Contains(metaverseAttributeId))
-            {
-                sources.Add(new GeneratedSource(metaverseAttributeId, null, throughDerivation));
-                return;
-            }
-
-            if (_graph == null)
-                return;
-
-            foreach (var input in _importMappings
-                         .Where(mapping => mapping.ResolveTargetMetaverseAttributeId() == metaverseAttributeId && _graph.IsDerived(mapping))
-                         .SelectMany(mapping => _graph.GetMetaverseInputIds(mapping)))
-            {
-                Expand(input, throughDerivation: true, sources, visited);
-            }
-        }
+        var generatedName = resolver.NameOf(generatedAttributeId.Value);
+        var value = resolver.CarriedMetaverseAttributeNameOf(carrying) ?? attributeName;
+        return $"{value} is built from {generatedName}, but its \"Keep unique with {generatedName}\" switch is off, so a refusal of it is not corrected";
     }
 }

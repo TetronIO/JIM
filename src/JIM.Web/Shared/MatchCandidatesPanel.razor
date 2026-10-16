@@ -1,0 +1,134 @@
+@using JIM.Models.Activities
+@using JIM.Utilities
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The objects an ambiguous match found (#2052), on the Activity item that reports it. An object can join only one
+   Metaverse Object, so the error stops it; what the administrator needs next is to open each colliding object and see
+   which one is right, so every candidate is a link, with what it matched on and where it is connected now. The error
+   message above already says what the rule compared, why the object stopped and how to resolve it; this does not
+   repeat it. *@
+@if (Candidates.Count > 0)
+{
+    <MudTable T="MatchCandidateDetail" Items="@Candidates" Dense="@_dense" Outlined="true" Elevation="0" Class="mb-3"
+              data-testid="jim-match-candidates">
+        <ToolBarContent>
+            <TableDensityToggle @bind-Dense="_dense" />
+            <MudText Class="mx-2 mud-text-disabled">|</MudText>
+            <MudText Typo="Typo.h6">@(_metaverseObjects ? "Matching Metaverse Objects" : "Matching Connected System Objects")</MudText>
+            <TableObjectCount Count="@Candidates.Count" Total="@Total" Class="ml-2" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>@(_metaverseObjects ? "Metaverse Object" : "Connected System Object")</MudTh>
+            <MudTh>Matched On</MudTh>
+            @if (_metaverseObjects)
+            {
+                <MudTh>Joined To</MudTh>
+            }
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Object">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
+                    <ObjectChip Kind="@(_metaverseObjects ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
+                                TypeName="@context.Candidate.TypeNameSnapshot"
+                                Name="@CandidateName(context)"
+                                Tooltip="@CandidateTooltip(context)"
+                                Href="@CandidateHref(context)"
+                                Class="ma-0" />
+                    @if (!context.Exists)
+                    {
+                        <MudText Class="mud-text-secondary" data-testid="@($"jim-match-candidate-deleted-{context.Candidate.CandidateId}")">
+                            (no longer exists)
+                        </MudText>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Matched On">
+                <TextValueDisplay Value="@context.Candidate.MatchedValue" />
+            </MudTd>
+            @if (_metaverseObjects)
+            {
+                <MudTd DataLabel="Joined To">
+                    @if (context.JoinedObjects.Count == 0)
+                    {
+                        <EmptyValue />
+                    }
+                    else
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
+                            @foreach (var joined in context.JoinedObjects)
+                            {
+                                <ObjectChip @key="joined.ConnectedSystemObjectId"
+                                            Kind="ObjectChipKind.ConnectedSystemObject"
+                                            TypeName="@joined.TypeName"
+                                            Name="@ObjectDescription.ChipName(joined.DisplayName, joined.ExternalId)"
+                                            Tooltip="@ObjectDescription.ForConnectedSystemObjectChipTooltip(joined.TypeName, joined.DisplayName, joined.ExternalId, joined.ConnectedSystemName)"
+                                            Href="@Utilities.GetConnectedSystemObjectHref(joined.ConnectedSystemId, joined.ConnectedSystemObjectId)"
+                                            Class="ma-0" />
+                            }
+                        </MudStack>
+                    }
+                </MudTd>
+            }
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    /// <summary>
+    /// The item's candidates, in the order recorded (by display name). Nothing renders when there are none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<MatchCandidateDetail> Candidates { get; set; } = [];
+
+    private bool _dense = true;
+    private bool _metaverseObjects = true;
+
+    /// <summary>
+    /// How many the match found in all; every candidate carries it, and it can exceed the ten listed.
+    /// </summary>
+    private int Total => Candidates.Count > 0 ? Math.Max(Candidates[0].Candidate.CandidateTotal, Candidates.Count) : 0;
+
+    protected override void OnParametersSet()
+    {
+        // Import ambiguity finds Metaverse Objects and export ambiguity Connected System Objects; one match never finds both.
+        _metaverseObjects = Candidates.Count == 0 || Candidates[0].Candidate.CandidateKind == MatchCandidateKind.MetaverseObject;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() != false;
+            StateHasChanged();
+        }
+    }
+
+    private static string CandidateName(MatchCandidateDetail detail) =>
+        ObjectDescription.ChipName(detail.Candidate.DisplayNameSnapshot, null) ?? detail.Candidate.CandidateId.ToString();
+
+    private string CandidateTooltip(MatchCandidateDetail detail) => _metaverseObjects
+        ? ObjectDescription.ForMetaverseObjectChipTooltip(detail.Candidate.TypeNameSnapshot, detail.Candidate.DisplayNameSnapshot)
+        : ObjectDescription.ForConnectedSystemObjectChipTooltip(
+            detail.Candidate.TypeNameSnapshot, detail.Candidate.DisplayNameSnapshot, null, detail.Candidate.ConnectedSystemNameSnapshot);
+
+    /// <summary>A link to the candidate while it exists; none once it has been deleted, since it would lead nowhere.</summary>
+    private string? CandidateHref(MatchCandidateDetail detail)
+    {
+        if (!detail.Exists)
+            return null;
+
+        if (_metaverseObjects)
+        {
+            var pluralName = detail.MetaverseObjectTypePluralName;
+            return pluralName == null ? null : Utilities.GetMetaverseObjectHref(detail.Candidate.CandidateId, pluralName);
+        }
+
+        var connectedSystemId = detail.Candidate.ConnectedSystemId;
+        return connectedSystemId == null
+            ? null
+            : Utilities.GetConnectedSystemObjectHref(connectedSystemId.Value, detail.Candidate.CandidateId);
+    }
+}

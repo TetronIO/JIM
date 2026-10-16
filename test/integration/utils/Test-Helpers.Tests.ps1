@@ -674,6 +674,15 @@ Describe 'Save-ActiveDirectoryCertificate' {
         $text | Should -Match 'openssl s_client -connect 192\.0\.2\.10:636 -servername dc1\.panoply\.local -showcerts </dev/null'
     }
 
+    It 'reads s_client''s diagnostics only after its output, so none can land inside the certificate' {
+        # docker exec carries stdout and stderr on separate streams and 2>&1 merges them in no fixed order,
+        # so a stderr line ("verify return:1", "DONE") could split the PEM block and openssl x509 refuse it.
+        Save-ActiveDirectoryCertificate -DirectoryConfig $script:config -CertificateDirectory $script:certDir | Out-Null
+
+        $fetch = @($script:dockerCalls | Where-Object { (@($_) -join ' ') -like '*s_client*' })
+        (@($fetch[0]) -join ' ') | Should -Match '-showcerts </dev/null 2>/tmp/s_client-dc-primary\.err; cat /tmp/s_client-dc-primary\.err'
+    }
+
     It 'writes the first certificate to the VM''s .pem file and returns its path' {
         $result = Save-ActiveDirectoryCertificate -DirectoryConfig $script:config -CertificateDirectory $script:certDir
 

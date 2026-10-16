@@ -9,20 +9,21 @@ function Get-JIMMetaverseAttributeDeletionPreview {
     .DESCRIPTION
         Returns a non-destructive assessment of what deleting a custom Metaverse Attribute would
         entail: whether it is built-in, how many Metaverse Objects hold a stored value for it (a
-        hard block on deletion), the per-Object-Type value breakdown, and the configuration
-        references (bindings, Attribute Flows, scoping criteria, Object Matching Rules) that would
-        be cascade-removed. Use this to inspect an attribute before calling
+        hard block on deletion), the per-Object-Type value breakdown, the configuration that reads
+        it (Scoping Criteria and Expressions, also a hard block, in Readers), and the configuration
+        references (bindings, and Attribute Flows and Object Matching Rules that map the attribute
+        directly) that would be cascade-removed. Use this to inspect an attribute before calling
         Remove-JIMMetaverseAttribute.
 
     .PARAMETER Id
-        The unique identifier of the Attribute to preview.
+        The ID of the attribute to assess.
 
     .PARAMETER InputObject
-        Attribute object to preview (from pipeline).
+        An attribute from the pipeline, for example from Get-JIMMetaverseAttribute.
 
     .OUTPUTS
-        PSCustomObject describing the deletion impact (BlockedByValues, RequiresConfirmation,
-        TotalObjectsWithValues, ObjectTypeValueCounts, References, and so on).
+        What deleting the attribute would do: whether stored values block it, how many Metaverse Objects of each
+        Object Type hold one, and the configuration that would be removed with it.
 
     .EXAMPLE
         Get-JIMMetaverseAttributeDeletionPreview -Id 42
@@ -39,7 +40,7 @@ function Get-JIMMetaverseAttributeDeletionPreview {
         Get-JIMMetaverseAttribute
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AttributeDeletionImpact')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

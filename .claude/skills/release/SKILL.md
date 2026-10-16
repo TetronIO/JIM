@@ -82,7 +82,7 @@ Cross-reference the identified changes against the documentation and update any 
 - **`docs/administration/`** — Configuration env vars, SSO setup, troubleshooting
 - **`docs/connectors/`** — LDAP, File, etc.
 - **`docs/powershell/`** — Cmdlet reference pages
-- **`docs/developer/`** — Architecture, building, testing, contributing
+- **`engineering/developer/`** — Architecture, building, testing, contributing
 - **`docs/api/`** — REST endpoint docs
 - **`docs/reference/`** — Roadmap, glossary
 - **Any other `.md` files in `docs/`** that are affected by the changes
@@ -124,7 +124,7 @@ The C4 views (System Context, Containers, and the component views) are **hand-au
 
 #### Mermaid Process Diagrams
 
-Review each Mermaid diagram in `docs/developer/diagrams/` against the current codebase behaviour:
+Review each Mermaid diagram in `engineering/developer/diagrams/` against the current codebase behaviour:
 
 - `FULL_IMPORT_FLOW.md` — Object import, duplicate detection, deletion detection
 - `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree
@@ -156,7 +156,7 @@ Fetch the public marketing site at `https://junctional.io/` and compare its cont
 2. **Architecture descriptions** — Does the site's description of JIM's architecture match the current state?
 3. **Connector/integration list** — Are all supported connectors and integrations represented?
 4. **Deployment/requirements** — Are prerequisites and deployment descriptions current?
-5. **Screenshots or visuals** — Are they representative of the current UI?
+5. **Visuals other than the product tour's screenshots** — Are diagrams and illustrations representative of the current product? (The tour's screenshots are refreshed by the `jim-screenshots` job; see Step 9.)
 
 > Note: the legacy `tetron.io/jim` page has been retired; do NOT fetch or reference it.
 
@@ -170,7 +170,7 @@ The prompt should:
 - Group suggestions by area (features, connectors, architecture, deployment, visuals, removals) so the site agent can prioritise
 - For each suggestion, include: **what area it relates to**, **what changed in JIM** (with a brief technical reason or pointer to the changelog entry), **what the site currently says or shows** (if you observed it during the fetch), and **a suggestion for what could be added/changed/removed** — phrased as "consider …", "you may want to …", or "this might be worth refreshing because …", never as "change X to Y"
 - Highlight any deprecations or removals that the site might still be advertising
-- Close with a note that screenshots/visuals are out of scope of this prompt; the site agent should request fresh screenshots from the user separately if it decides any are needed
+- Close with a note that the product tour's screenshots are out of scope of this prompt: JIM's `jim-screenshots` job opens their pull request on junctional.io (branch `screenshots/v<version>`) once the pre-release suite passes, and it merges itself when the release is published, so the site agent should leave the images and `imageVersion` to it, though it may suggest alt text changes where a step's image has visibly changed
 
 After writing the file, tell the user the absolute path to the prompt and remind them it is intentionally outside the repo and should be handed to the junctional.io site agent. Do NOT stage or commit the file.
 
@@ -227,7 +227,22 @@ Now that the changelog is complete and validated, the user can make an informed 
 3. If a version was provided via `$ARGUMENTS`, propose it. Otherwise, suggest a version based on the scope of changes (patch for fixes only, minor for new features, major for breaking changes)
 4. **Ask the user to confirm or choose the version** before proceeding
 
-Do NOT proceed to Step 1 until the user has confirmed the version number.
+Do NOT proceed until the user has confirmed the version number.
+
+## Re-validate the Priority Pages
+
+Each priority docs page records the release it was last checked against, as `validated: vX.Y.Z` in its front matter (PRI-1 in `engineering/DOCUMENTATION_STANDARD.md`). They are the pages that decide whether JIM is adopted, installed and trusted, so none ships unchecked. List the ones due for this release:
+
+```
+pwsh ./scripts/Get-DocsDueForValidation.ps1 -Version <version>
+```
+
+For each page listed, do one of two things, and record which in the release PR's **Priority pages** section (Step 7):
+
+- **Re-validate it.** Read it against the product as this release ships it: every setting and its default, cmdlet and parameter, REST route, portal label, and claim about behaviour (ACC-4), paying most attention to what this release's changelog entries changed. Correct what is wrong in place (MNT-1, MNT-2), then set `validated: v<version>`. Commit these on `release/v<version>` with the other documentation changes.
+- **Defer it,** with a one-line reason, when re-validating it would hold the release up for no good reason (the page is untouched by anything in this release, say, and was validated one release ago). It keeps its older `validated:`, so the next release lists it again. Never defer a page that this release's changes touch.
+
+`Test-DocsConformance.ps1` refuses a `validated:` later than `VERSION`, so the pages can only name the new version once Step 1 has run; that happens in the same pull request, so CI sees them agree.
 
 ## Step 1: Update VERSION File
 
@@ -279,7 +294,8 @@ Show the user:
 1. The version being released
 2. A diff summary of all changes (`git diff --stat`)
 3. The full changelog section for the new version
-4. Ask for confirmation before committing
+4. The priority pages re-validated, and each one deferred with its reason
+5. Ask for confirmation before committing
 
 ## Step 6: Commit on a Release Branch
 
@@ -310,6 +326,11 @@ Updates:
 - `VERSION`: <previous> → <version>
 - `CHANGELOG.md`: new `[<version>] - <date>` section + comparison links
 - `src/JIM.PowerShell/JIM.psd1`: `ModuleVersion` → `<version>`
+
+## Priority pages
+
+- Re-validated against v<version>: <pages>
+- Deferred: <page>: <reason> (one line each; "none" if none)
 
 ## Test plan
 
@@ -380,6 +401,7 @@ The tag-push triggers the release workflow which:
 4. Creates an air-gapped deployment bundle
 5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, and `.env.example` published as `default.env.example`)
 6. Creates a GitHub Release with all assets
+7. Merges the release's screenshot pull requests on junctional.io and tetron.io (stable releases only)
 
 ## Step 9: Post-Release Verification
 
@@ -388,6 +410,8 @@ Tell the user to verify after the workflow completes:
 - [ ] Docker images are available: `ghcr.io/tetronio/jim-web:<version>`, etc.
 - [ ] PowerShell module is available on PSGallery: `Install-Module JIM -RequiredVersion <version>`
 - [ ] The `setup.sh` installer detects the new release
+- [ ] The screenshots are live: junctional.io's product tour and tetron.io's homepage show the v<version> images. The `jim-screenshots` job (in the release commit's `jim-pre-release` run) opened a pull request on each site, and the release run's `publish-screenshots` job merges them, or `jim-screenshots` does if it finished after the release. Nothing needs merging by hand unless a run shows a warning naming why a pull request was not merged; fix that, then re-run the job that warned, or merge the pull request. If `jim-screenshots` failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
+- [ ] Not blocking: if this release changed what a tour image shows, check that step's alt text on junctional.io still describes it, in both dictionaries. Alt text is not updated automatically.
 
 Provide the Actions URL for monitoring:
 ```

@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 
 namespace JIM.Application.Servers;
 
@@ -42,7 +43,7 @@ public static class OptimisticExportApplyCalculator
         foreach (var pe in pendingExports.Where(pe =>
                      pe.ChangeType != PendingExportChangeType.Delete && pe.ConnectedSystemObject != null))
         {
-            ApplyPendingExport(pe.ConnectedSystemObject!, pe.AttributeValueChanges, delta);
+            ApplyPendingExport(pe.Id, pe.ConnectedSystemObject!, pe.AttributeValueChanges, delta);
         }
 
         return delta;
@@ -57,6 +58,7 @@ public static class OptimisticExportApplyCalculator
     /// gives the external-Id dedupe guarantee (D9).
     /// </summary>
     private static void ApplyPendingExport(
+        Guid pendingExportId,
         ConnectedSystemObject cso,
         List<PendingExportAttributeValueChange> changes,
         OptimisticExportApplyDelta delta)
@@ -101,11 +103,11 @@ public static class OptimisticExportApplyCalculator
             switch (change.ChangeType)
             {
                 case PendingExportAttributeChangeType.Add:
-                    ApplyAdd(cso, change, existing, index, delta);
+                    ApplyAdd(pendingExportId, cso, change, existing, index, delta);
                     break;
 
                 case PendingExportAttributeChangeType.Update:
-                    ApplyUpdate(cso, change, existing, index, delta);
+                    ApplyUpdate(pendingExportId, cso, change, existing, index, delta);
                     break;
 
                 case PendingExportAttributeChangeType.Remove:
@@ -150,8 +152,11 @@ public static class OptimisticExportApplyCalculator
     /// <see cref="SyncEngine.ValueExistsOnCso"/> directly (#1079 perf fix: see
     /// <see cref="CalculatorAttributeIndex"/>) - equivalent for every data type, since
     /// ValueExistsOnCso's own per-type arms are exactly "hasValue &amp;&amp; csoValues.Any(match)".
+    /// A payload that cannot be recorded as the attribute's type adds nothing and is reported in
+    /// <see cref="OptimisticExportApplyDelta.UnrecordedChanges"/> (#2183).
     /// </summary>
     private static void ApplyAdd(
+        Guid pendingExportId,
         ConnectedSystemObject cso,
         PendingExportAttributeValueChange change,
         List<ConnectedSystemObjectAttributeValue> existing,
@@ -165,6 +170,12 @@ public static class OptimisticExportApplyCalculator
         }
 
         var newValue = CreateAttributeValue(cso, change, delta);
+        if (newValue == null)
+        {
+            RecordUnrecordedChange(pendingExportId, cso, change, delta);
+            return;
+        }
+
         delta.Additions.Add(newValue);
         existing.Add(newValue);
         AddToIndex(index, newValue);
@@ -177,9 +188,13 @@ public static class OptimisticExportApplyCalculator
     /// RemoveAll is (#1936). It was once a no-op, left for the confirming import to reconcile, but a
     /// target that auto-confirms and is never imported from would then record the old value for ever,
     /// and every later evaluation would see a difference and stage the clear again. Reconciliation
-    /// agrees with this: it confirms an empty Update when the attribute holds no values.
+    /// agrees with this: it confirms an empty Update when the attribute holds no values. A payload that
+    /// cannot be recorded as the attribute's type (#2183) still replaced what the target held, so every
+    /// existing row is removed and nothing is added in its place; the change is reported in
+    /// <see cref="OptimisticExportApplyDelta.UnrecordedChanges"/>.
     /// </summary>
     private static void ApplyUpdate(
+        Guid pendingExportId,
         ConnectedSystemObject cso,
         PendingExportAttributeValueChange change,
         List<ConnectedSystemObjectAttributeValue> existing,
@@ -203,7 +218,16 @@ public static class OptimisticExportApplyCalculator
         existing.Clear();
         ClearIndex(index);
 
+        // A payload that cannot be recorded as the attribute's type (#2183) adds nothing. The values removed above are not
+        // kept: the target no longer holds them, and kept they would let a later export of that same value be judged
+        // already current and never sent. With nothing recorded, any later value is exported.
         var newValue = CreateAttributeValue(cso, change, delta);
+        if (newValue == null)
+        {
+            RecordUnrecordedChange(pendingExportId, cso, change, delta);
+            return;
+        }
+
         delta.Additions.Add(newValue);
         existing.Add(newValue);
         AddToIndex(index, newValue);
@@ -293,8 +317,8 @@ public static class OptimisticExportApplyCalculator
     /// <summary>
     /// Builds a <see cref="CalculatorAttributeIndex"/> for one attribute's seeded working list.
     /// Key derivation mirrors <see cref="SyncEngine.ValueExistsOnCso"/>'s switch exactly, per data
-    /// type: DateTime keys on <c>Ticks</c> (Kind-insensitive, exactly like the <c>==</c> comparison
-    /// it replaces - mirrors the reconciliation's <c>DateTimeTicksValues</c> rationale); Reference
+    /// type: DateTime keys on its canonical key (<see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind
+    /// nor a sub-microsecond part is significant - mirrors the reconciliation's <c>DateTimeTicksValues</c>); Reference
     /// keys on the CSO row's <see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>
     /// (both of a change's UnresolvedReferenceValue and StringValue probe against that one field -
     /// see <see cref="FindMatchesInIndex"/>).
@@ -362,7 +386,7 @@ public static class OptimisticExportApplyCalculator
                 AttributeType = attrType,
                 DateTimeTicksValues = existing
                     .Where(v => v.DateTimeValue.HasValue)
-                    .GroupBy(v => v.DateTimeValue!.Value.Ticks)
+                    .GroupBy(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value))
                     .ToDictionary(g => g.Key, g => g.ToList())
             },
 
@@ -398,7 +422,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) AddToKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, value.DateTimeValue.Value.Ticks, value);
+                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
                 break;
             // Binary: no index to maintain - FindMatchesInIndex scans the working list directly.
         }
@@ -444,7 +468,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) RemoveFromKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, value.DateTimeValue.Value.Ticks, value);
+                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
                 break;
             // Binary: no index to maintain.
         }
@@ -518,7 +542,7 @@ public static class OptimisticExportApplyCalculator
 
             case AttributeDataType.DateTime:
                 if (!change.DateTimeValue.HasValue) return [];
-                return index.DateTimeTicksValues!.TryGetValue(change.DateTimeValue.Value.Ticks, out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
+                return index.DateTimeTicksValues!.TryGetValue(DateTimeAttributeValue.Key(change.DateTimeValue.Value), out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
 
             case AttributeDataType.Binary:
                 // Byte arrays do not hash usefully and Binary attributes are never large
@@ -563,14 +587,57 @@ public static class OptimisticExportApplyCalculator
     }
 
     /// <summary>
+    /// Reports a change whose value could not be recorded as its attribute's type (#2183), naming the type whose column
+    /// does hold it, so the caller can log the cause and leave the Pending Export unconfirmed where nothing else would
+    /// record what the target holds.
+    /// </summary>
+    private static void RecordUnrecordedChange(
+        Guid pendingExportId,
+        ConnectedSystemObject cso,
+        PendingExportAttributeValueChange change,
+        OptimisticExportApplyDelta delta)
+    {
+        delta.UnrecordedChanges.Add(new OptimisticExportUnrecordedChange(
+            pendingExportId,
+            cso.Id,
+            change.Attribute!.Name,
+            change.Attribute.Type,
+            HeldDataType(change)));
+    }
+
+    /// <summary>
+    /// The data type whose column holds a change's value, or null where it holds nothing. Checked in the order
+    /// <see cref="ConnectedSystemObjectAttributeValue.HeldDataType"/> uses.
+    /// </summary>
+    private static AttributeDataType? HeldDataType(PendingExportAttributeValueChange change)
+    {
+        if (change.StringValue != null) return AttributeDataType.Text;
+        if (change.IntValue.HasValue) return AttributeDataType.Number;
+        if (change.LongValue.HasValue) return AttributeDataType.LongNumber;
+        if (change.DecimalValue.HasValue) return AttributeDataType.Decimal;
+        if (change.DateTimeValue.HasValue) return AttributeDataType.DateTime;
+        if (change.ByteValue != null) return AttributeDataType.Binary;
+        if (change.UnresolvedReferenceValue != null || change.ResolvedReferenceCsoId.HasValue) return AttributeDataType.Reference;
+        if (change.GuidValue.HasValue) return AttributeDataType.Guid;
+        return change.BoolValue.HasValue ? AttributeDataType.Boolean : null;
+    }
+
+    /// <summary>
     /// Maps a Pending Export attribute change's typed payload onto a new
     /// <see cref="ConnectedSystemObjectAttributeValue"/> (data-type mapping mirrors
     /// <see cref="SyncEngine.ValueExistsOnCso"/>: Text-&gt;StringValue, Number-&gt;IntValue,
     /// LongNumber-&gt;LongValue, DateTime-&gt;DateTimeValue, Binary-&gt;ByteValue,
     /// Boolean-&gt;BoolValue, Guid-&gt;GuidValue, Reference-&gt;UnresolvedReferenceValue). The row's
     /// Id is pre-generated (raw SQL bulk insert bypasses EF's value generation).
+    /// <para>
+    /// Returns null when the payload holds nothing in the column of the attribute's type (#2183), and the
+    /// caller reports the change as unrecorded. An export Attribute Flow expression stages its result in the
+    /// column of the result's own type, so "TRUE" for a Boolean attribute arrives as text: the Connector
+    /// writes it, but a row built from it would hold nothing, and the confirming import would then remove a
+    /// value holding nothing.
+    /// </para>
     /// </summary>
-    private static ConnectedSystemObjectAttributeValue CreateAttributeValue(
+    private static ConnectedSystemObjectAttributeValue? CreateAttributeValue(
         ConnectedSystemObject cso,
         PendingExportAttributeValueChange change,
         OptimisticExportApplyDelta delta)
@@ -583,7 +650,8 @@ public static class OptimisticExportApplyCalculator
             Attribute = change.Attribute
         };
 
-        switch (change.Attribute?.Type ?? AttributeDataType.NotSet)
+        var attributeType = change.Attribute?.Type ?? AttributeDataType.NotSet;
+        switch (attributeType)
         {
             case AttributeDataType.Text:
                 value.StringValue = change.StringValue;
@@ -598,7 +666,7 @@ public static class OptimisticExportApplyCalculator
                 break;
 
             case AttributeDataType.DateTime:
-                value.DateTimeValue = change.DateTimeValue;
+                value.DateTimeValue = SyncEngine.CanonicalDate(change.DateTimeValue);
                 break;
 
             case AttributeDataType.Binary:
@@ -614,9 +682,15 @@ public static class OptimisticExportApplyCalculator
                 break;
 
             case AttributeDataType.Reference:
-                PopulateReferenceValue(value, change, delta);
+                PopulateReferenceValue(value, change);
                 break;
         }
+
+        if (!value.HoldsValueOfType(attributeType))
+            return null;
+
+        if (attributeType == AttributeDataType.Reference && !value.ReferenceValueId.HasValue)
+            delta.UnresolvedReferenceCount++;
 
         return value;
     }
@@ -629,17 +703,14 @@ public static class OptimisticExportApplyCalculator
     /// (persisted at resolution time - issue #1079, SPEC-1079B) supplies <see cref="ConnectedSystemObjectAttributeValue.ReferenceValueId"/>
     /// directly with no further lookup; when unset (the reference has never been resolved), the row
     /// still confirms and still diffs clean (it matches on <see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>),
-    /// it merely stays unresolved until a future import touches it.
+    /// it merely stays unresolved until a future import touches it, and <see cref="CreateAttributeValue"/>
+    /// counts it as unresolved.
     /// </summary>
     private static void PopulateReferenceValue(
         ConnectedSystemObjectAttributeValue value,
-        PendingExportAttributeValueChange change,
-        OptimisticExportApplyDelta delta)
+        PendingExportAttributeValueChange change)
     {
         value.UnresolvedReferenceValue = change.StringValue ?? change.UnresolvedReferenceValue;
         value.ReferenceValueId = change.ResolvedReferenceCsoId;
-
-        if (!change.ResolvedReferenceCsoId.HasValue)
-            delta.UnresolvedReferenceCount++;
     }
 }

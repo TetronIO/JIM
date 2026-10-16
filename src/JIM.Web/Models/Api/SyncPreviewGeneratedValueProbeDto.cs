@@ -13,8 +13,19 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class SyncPreviewGeneratedValueProbeDto
 {
-    /// <summary>The Metaverse attribute the value was generated for.</summary>
+    /// <summary>
+    /// The Metaverse attribute the value was generated for or, for a value built from a generated value (Generated Value
+    /// Forms, #2023), the attribute that value is held in: Email, or the Connected System attribute an export expression
+    /// writes.
+    /// </summary>
     public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// For a value built from a generated value (Generated Value Forms, #2023), the generated attribute it is built from
+    /// (Account Name): a collision on the value makes JIM generate a different one of those. Null for the generated value
+    /// itself.
+    /// </summary>
+    public string? BuiltFromAttributeName { get; set; }
 
     /// <summary>The value the preview generated.</summary>
     public string Value { get; set; } = null!;
@@ -25,6 +36,7 @@ public class SyncPreviewGeneratedValueProbeDto
     public static SyncPreviewGeneratedValueProbeDto FromModel(SyncPreviewGeneratedValueProbe model) => new()
     {
         AttributeName = model.AttributeName,
+        BuiltFromAttributeName = model.BuiltFromAttributeName,
         Value = model.Value,
         ConnectedSystemNames = [.. model.ConnectedSystemNames]
     };

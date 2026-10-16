@@ -93,7 +93,19 @@ public class SyncPreviewServer
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
         await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, [metaverseObjectId]);
 
-        var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+        OutboundPreviewResult outbound;
+        try
+        {
+            outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // The run stops this object's exports with a ScopingCriterionFailed error rather than deciding its scope
+            // (#2054): nothing is provisioned, updated or deprovisioned for it.
+            result.Errors.Add(ScopingCriterionFailedMessage(ex, null));
+            return result;
+        }
+
         ComposeOutbound(result, outbound);
         BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, BuildConnectedSystemNameLookup(cache));
 
@@ -702,10 +714,20 @@ public class SyncPreviewServer
             .ToList();
         var importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
 
+        // Generated Value Forms (#2023): the values built from each generated value, from the same rules and graph the
+        // run builds them from (SyncTaskProcessorBase.BuildDriftDetectionCache), so the preview checks a candidate's
+        // values with it exactly as the run does. The re-election path reads them through another system's rules.
+        var generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
+        var allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
+
+        // Which Object Matching Rules the run consults (#2176): the object type's own in simple mode, each import
+        // Synchronisation Rule's in advanced mode. A system that cannot be read takes the default, simple mode.
+        var matchingMode = await guardedRepository.GetObjectMatchingRuleModeAsync(connectedSystemId) ?? ObjectMatchingRuleMode.ConnectedSystem;
+
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
             BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
             uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage,
-            driftExportRules, importMappingCache);
+            driftExportRules, importMappingCache, generatedValueBuiltValues, allImportRules, matchingMode);
     }
 
     /// <summary>
@@ -755,6 +777,34 @@ public class SyncPreviewServer
         bool refreshCacheForWorkingMvo,
         bool asTheRunWould)
     {
+        try
+        {
+            return await PreviewCsoCoreUnguardedAsync(cso, context, refreshCacheForWorkingMvo, asTheRunWould);
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // A scope deeper in the chain could not be decided (a survivor's import scope, or an export rule's): the
+            // run records a ScopingCriterionFailed error for the object rather than acting on a guess (#2054), so the
+            // preview reports that error in place of an outcome.
+            var failed = new SyncPreviewResult();
+            failed.Errors.Add(ScopingCriterionFailedMessage(ex, context.ConnectedSystemId));
+            return failed;
+        }
+    }
+
+    private static SyncPreviewMessage ScopingCriterionFailedMessage(ScopingCriterionFailedException ex, int? connectedSystemId) => new()
+    {
+        Code = SyncPreviewMessageCode.ScopingCriterionFailed,
+        Detail = ex.Message,
+        ConnectedSystemId = connectedSystemId
+    };
+
+    private async Task<SyncPreviewResult> PreviewCsoCoreUnguardedAsync(
+        ConnectedSystemObject cso,
+        CsoPreviewContext context,
+        bool refreshCacheForWorkingMvo,
+        bool asTheRunWould)
+    {
         var result = new SyncPreviewResult();
         var connectedSystemId = context.ConnectedSystemId;
         var guardedRepository = context.GuardedRepository;
@@ -775,6 +825,34 @@ public class SyncPreviewServer
             .ToList();
         if (importRules.Count == 0)
         {
+            // In simple mode the run joins an unjoined object through its type's own Object Matching Rules even when no
+            // import rule applies (SyncTaskProcessorBase.AttemptJoinAsync's fallback; #2176): a target directory's
+            // existing accounts join this way. Nothing flows in and no export evaluation is queued, but the run checks the
+            // newly joined object for drift, as for any object it leaves joined.
+            if (!cso.MetaverseObjectId.HasValue && context.MatchingMode == ObjectMatchingRuleMode.ConnectedSystem)
+            {
+                var typeJoin = await ProbeForJoinAsync(cso, [], objectTypes, context.MatchingMode, guardedRepository, result);
+                if (result.HasBlockingErrors)
+                    return result;
+
+                if (typeJoin?.MetaverseObject is { } typeMatchedMvo)
+                {
+                    RecordWouldJoin(inbound, typeJoin);
+                    DescribeMetaverseObject(inbound, typeMatchedMvo);
+                    var joinedRoot = new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                        TargetEntityId = typeMatchedMvo.Id,
+                        TargetEntityDescription = ObjectNaming.FirstPresent(typeMatchedMvo.Name)
+                    };
+                    CopyWouldJoinMatch(joinedRoot, inbound);
+                    result.OutcomeTree.Add(joinedRoot);
+                    if (asTheRunWould)
+                        AddDriftCorrectionRoot(result, await ProposeDriftCorrectionsAsync(result, cso, CloneForPreview(typeMatchedMvo), context));
+                    return result;
+                }
+            }
+
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.NoApplicableSyncRule,
@@ -793,7 +871,7 @@ public class SyncPreviewServer
                 {
                     inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
                     DescribeMetaverseObject(inbound, joinedMvo);
-                    AddDriftCorrectionRoot(result, ProposeDriftCorrections(result, cso, CloneForPreview(joinedMvo), context));
+                    AddDriftCorrectionRoot(result, await ProposeDriftCorrectionsAsync(result, cso, CloneForPreview(joinedMvo), context));
                 }
             }
             return result;
@@ -801,10 +879,21 @@ public class SyncPreviewServer
 
         // Scope is per rule (#1199): an unscoped rule is in scope; a CSO out of scope of every scoped rule
         // stops the chain exactly as the real processor's out-of-scope handling would.
-        var inScopeRules = importRules
-            .Where(sr => sr.ObjectScopingCriteriaGroups.Count == 0
-                || Application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sr))
-            .ToList();
+        List<SyncRule> inScopeRules;
+        try
+        {
+            inScopeRules = importRules
+                .Where(sr => sr.ObjectScopingCriteriaGroups.Count == 0
+                    || Application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, sr))
+                .ToList();
+        }
+        catch (ScopingCriterionFailedException ex)
+        {
+            // The run records a ScopingCriterionFailed error and leaves the object untouched (#2054), so nothing
+            // after scoping happens either.
+            result.Errors.Add(ScopingCriterionFailedMessage(ex, connectedSystemId));
+            return result;
+        }
         if (inScopeRules.Count == 0 && importRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
             var outOfScopeAction = _syncEngine.DetermineOutOfScopeAction(cso, importRules);
@@ -857,13 +946,14 @@ public class SyncPreviewServer
         }
         else
         {
-            var matchedMvo = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, guardedRepository, result);
+            // The match a would-be join is made on (#2052), named on the inbound summary and on the Joined node.
+            var joinMatch = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, context.MatchingMode, guardedRepository, result);
             if (result.HasBlockingErrors)
                 return result;
 
-            if (matchedMvo != null)
+            if (joinMatch?.MetaverseObject is { } matchedMvo)
             {
-                inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
+                RecordWouldJoin(inbound, joinMatch);
                 workingMvo = CloneForPreview(matchedMvo);
                 flaggedForScopeReview = matchedMvo.ScopeReviewPending;
                 DescribeMetaverseObject(inbound, matchedMvo);
@@ -1008,22 +1098,7 @@ public class SyncPreviewServer
 
         foreach (var (syncRuleId, syncRuleName, flowError) in flowErrors)
         {
-            // The ternary here used to collapse ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique
-            // Value Generation, #242) into the same "a required input has no value" message; the latter is a
-            // different failure (the base Expression evaluated fine but returned more than one value), so it
-            // gets its own accurate message, matching the worker's own wording (DescribeAttributeFlowError).
-            var (code, detail) = flowError.Kind switch
-            {
-                AttributeFlowErrorKind.MultiValuedToSingleValued => (
-                    SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                    $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
-                AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
-                    SyncPreviewMessageCode.ExpressionEvaluationError,
-                    $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
-                _ => (
-                    SyncPreviewMessageCode.ExpressionEvaluationError,
-                    $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
-            };
+            var (code, detail) = DescribeFlowError(flowError);
 
             // Only the derived pass stamps the error with its hosting rule (#1750); named as the worker names it.
             if (flowError.SyncRuleName != null)
@@ -1091,15 +1166,17 @@ public class SyncPreviewServer
 
         // Drift correction, as the run would: this object's own values, where an export rule to this Connected System
         // enforces state, against what the Metaverse Object says they should be.
-        var driftedAttributeCount = asTheRunWould ? ProposeDriftCorrections(result, cso, workingMvo, context) : 0;
+        var driftedAttributeCount = asTheRunWould ? await ProposeDriftCorrectionsAsync(result, cso, workingMvo, context) : 0;
 
         foreach (var rule in inScopeRules.Where(rule => result.AffectedSyncRules.All(r => r.Id != rule.Id)))
             result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = rule.Id, Name = rule.Name });
 
         // The speculative outcome tree, in the real tree's shape: a Projected/Joined/AttributeFlow root
         // when attributes would flow, an Attribute Flow child under Projected/Joined, and the outbound
-        // outcomes beneath (mirroring the real processor's exportParent selection).
-        if (flowCount > 0)
+        // outcomes beneath (mirroring the real processor's exportParent selection). A projection or join is a
+        // change in its own right, so the run records its root even when nothing flows (the processor's lone
+        // Projected or Joined outcome for an object with no attribute changes), and so must the preview.
+        if (flowCount > 0 || inbound.WouldProject || inbound.WouldJoinMetaverseObjectId.HasValue)
         {
             var rootType = inbound.WouldProject ? ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 : inbound.WouldJoinMetaverseObjectId.HasValue ? ActivityRunProfileExecutionItemSyncOutcomeType.Joined
@@ -1112,6 +1189,8 @@ public class SyncPreviewServer
                 SyncRuleId = rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected ? projectionSyncRule?.Id : null,
                 SyncRuleName = rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected ? projectionSyncRule?.Name : null
             };
+            if (rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+                CopyWouldJoinMatch(root, inbound);
             result.OutcomeTree.Add(root);
 
             // Unique Value Generation (#242): a GeneratedValueAssigned child per
@@ -1134,8 +1213,9 @@ public class SyncPreviewServer
             }
 
             SyncOutcomeNode? attributeFlowChild = null;
-            if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            if (flowCount > 0
+                && rootType is (ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                    or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
             {
                 attributeFlowChild = new SyncOutcomeNode
                 {
@@ -1208,13 +1288,49 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// Opens the message of an error that stops Drift Detection checking an object (#2180), as the run's error does.
+    /// </summary>
+    private const string DriftNotCheckedPreviewPrefix = "Drift Detection could not check this object, so no correction would be staged. ";
+
+    /// <summary>
+    /// How the preview words an Attribute Flow error, matching the worker's own wording (DescribeAttributeFlowError). A
+    /// ternary here once collapsed ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique Value Generation, #242)
+    /// into the same "a required input has no value" message; the latter is a different failure (the base Expression
+    /// evaluated fine but returned more than one value), so it has its own accurate message.
+    /// </summary>
+    private static (SyncPreviewMessageCode Code, string Detail) DescribeFlowError(AttributeFlowError flowError) =>
+        flowError.Kind switch
+        {
+            AttributeFlowErrorKind.MultiValuedToSingleValued => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
+            AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultNotConvertible => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The Expression targeting '{flowError.TargetAttributeName}' returned '{flowError.Value}', which a {flowError.TargetAttributeType} attribute cannot hold, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"'{flowError.SourceAttributeName}' has {flowError.ValueCount} values but '{flowError.TargetAttributeName}' is single-valued, so the attribute would not flow and would keep its current value. Use Where, Join, Count, Min or Max in the Expression to say which value it should have: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.ExpressionResultMultiValued => (
+                SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+            _ => (
+                SyncPreviewMessageCode.ExpressionEvaluationError,
+                $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
+        };
+
+    /// <summary>
     /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
     /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
     /// correction for an object the export evaluation already proposes an update for is folded into that update, as
-    /// the run merges the two Pending Exports for one object.
+    /// the run merges the two Pending Exports for one object. An object holding a change until its Initial Password is
+    /// delivered is skipped, as the run skips it (#2039; <c>SyncTaskProcessorBase.EvaluateQueuedDriftAsync</c>).
     /// </summary>
-    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System.</returns>
-    private int ProposeDriftCorrections(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
+    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System, or the
+    /// run would skip the object.</returns>
+    private async Task<int> ProposeDriftCorrectionsAsync(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
         CsoPreviewContext context)
     {
         // Not only for an object already joined: the run evaluates drift for every object it leaves joined, the one
@@ -1222,10 +1338,64 @@ public class SyncPreviewServer
         if (context.DriftExportRules.Count == 0)
             return 0;
 
-        var drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-            context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+        DriftDetectionResult drift;
+        try
+        {
+            drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+        }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // The run records this against the object and stages no correction for it (#2180), so the preview reports it
+            // the same way rather than letting the exception escape the preview.
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                Detail = $"{DriftNotCheckedPreviewPrefix}An Expression failed to evaluate: {expressionEx.Message}",
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = expressionEx.TargetAttributeName
+            });
+            return 0;
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                Detail = DriftNotCheckedPreviewPrefix + missingInputEx.DescribeForAdministrator(),
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = missingInputEx.TargetAttributeName
+            });
+            return 0;
+        }
+
+        // A mapping-level error leaves its attribute uncorrected, and the run records it against the object (#2180).
+        result.Errors.AddRange(drift.AttributeFlowErrors.Select(flowError =>
+        {
+            var (code, detail) = DescribeFlowError(flowError);
+            return new SyncPreviewMessage
+            {
+                Code = code,
+                Detail = detail,
+                ConnectedSystemId = context.ConnectedSystemId,
+                AttributeName = flowError.TargetAttributeName
+            };
+        }));
+
         if (!drift.HasDrift)
             return 0;
+
+        // The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection
+        // entirely, since a correction for any attribute would replace the Pending Export holding the change. Asked only
+        // once drift is found, so an object with nothing to correct costs no lookup; the run's own per-page lookup reads
+        // the same partial index.
+        if (cso.Id != Guid.Empty &&
+            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0)
+        {
+            Log.Debug("ProposeDriftCorrectionsAsync: CSO {CsoId} holds a change until its Initial Password is delivered; " +
+                "the run skips Drift Detection for it, so no correction is proposed", cso.Id);
+            return 0;
+        }
 
         // Detection stages each change by attribute id alone, which is all the run persists; the preview names the
         // attribute so it can be shown. The changes are fresh to this preview, so nothing shared is touched.
@@ -1311,24 +1481,31 @@ public class SyncPreviewServer
         CsoPreviewContext context,
         List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)> flowErrors)
     {
-        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id);
+        var outcomes = new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>();
 
         var graph = context.PriorityContext.DerivedFlowGraph;
-        if (graph == null || inScopeRules.Count == 0)
-            return outcomes;
+        var maxLevel = graph == null || inScopeRules.Count == 0
+            ? 0
+            : inScopeRules
+                .Select(rule => rule.MetaverseObjectTypeId)
+                .Distinct()
+                .Select(graph.MaxLevel)
+                .Max();
 
-        var maxLevel = inScopeRules
-            .Select(rule => rule.MetaverseObjectTypeId)
-            .Distinct()
-            .Select(graph.MaxLevel)
-            .Max();
-
-        for (var level = 1; level <= maxLevel; level++)
+        // Level 0 is the generations the ordinary pass recorded; each level after evaluates its derived flows first. A
+        // generation checks the values built from each candidate (Generated Value Forms, #2023), so resolving one can
+        // throw as a derived flow can, and fails the object the same way.
+        for (var level = 0; level <= maxLevel; level++)
         {
             try
             {
-                foreach (var error in _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, context.ObjectTypes, ExpressionEvaluator, context.PriorityContext))
-                    flowErrors.Add((FindHostingRule(inScopeRules, error.SyncRuleName)?.Id, error.SyncRuleName, error));
+                if (level > 0)
+                {
+                    foreach (var error in _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, context.ObjectTypes, ExpressionEvaluator, context.PriorityContext))
+                        flowErrors.Add((FindHostingRule(inScopeRules, error.SyncRuleName)?.Id, error.SyncRuleName, error));
+                }
+
+                outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, cso, inScopeRules, ownCsoId: cso.Id));
             }
             catch (SyncExpressionEvaluationException expressionEx)
             {
@@ -1358,8 +1535,6 @@ public class SyncPreviewServer
                 workingMvo.PendingGeneratedValues.Clear();
                 break;
             }
-
-            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id));
         }
 
         return outcomes;
@@ -1461,6 +1636,11 @@ public class SyncPreviewServer
     /// where the real run would record an error understates what synchronising would do.</param>
     /// <param name="workingMvo">The preview's own working copy of the Metaverse Object.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="cso">The previewed object, linked to <paramref name="workingMvo"/>, whose rules recorded the requests;
+    /// null on the re-election paths, where each request names the surviving account that recorded it.</param>
+    /// <param name="inScopeRules">The rules whose derived flows build values from the generated value for
+    /// <paramref name="cso"/>; null on the re-election paths, where they are the enabled import rules of the surviving
+    /// account's own system.</param>
     /// <param name="ownCsoId">The previewed Connected System Object when it is joined to (or projects)
     /// <paramref name="workingMvo"/>: the person's own account for the connector-space gate, as in the worker.</param>
     /// <param name="disconnectingCsoId">The previewed Connected System Object when it is LEAVING
@@ -1471,19 +1651,25 @@ public class SyncPreviewServer
     /// outcome tree; empty when nothing was generated.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
-        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
+        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, ConnectedSystemObject? cso = null,
+        IReadOnlyList<SyncRule>? inScopeRules = null, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
     {
         var pending = workingMvo.PendingGeneratedValues.ToList();
         if (pending.Count == 0)
             return [];
 
         var forOutcomeTree = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
+        var relinked = new List<(ConnectedSystemObject Source, MetaverseObject? MetaverseObject)>();
         try
         {
             var exportRules = context.Cache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules);
             var requests = new List<GenerationRequest>(pending.Count);
+            var formSources = new List<IGeneratedValueFormSource?>(pending.Count);
             foreach (var p in pending)
             {
+                var formSource = BuildGeneratedValueFormSourceForPreview(p, workingMvo, context, cso, inScopeRules, exportRules, relinked);
+                formSources.Add(formSource);
+
                 var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(p.Mapping, exportRules);
                 var connectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList();
 
@@ -1499,7 +1685,8 @@ public class SyncPreviewServer
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
                     OwnConnectedSystemObjectIds = ownCsoId.HasValue ? [ownCsoId.Value] : [],
                     DisconnectingConnectedSystemObjectId = disconnectingCsoId,
-                    StickyOnly = p.BaseUnavailable
+                    StickyOnly = p.BaseUnavailable,
+                    FormSource = formSource
                 });
             }
 
@@ -1509,13 +1696,20 @@ public class SyncPreviewServer
             {
                 var outcome = outcomes[i];
                 var request = pending[i];
+                var attributeName = request.Mapping.TargetMetaverseAttribute!.Name;
+
+                // Generated Value Forms (#2023): candidates passed over because a value built from them was already held,
+                // recorded where and as the run records them.
+                forOutcomeTree.AddRange(GeneratedValueFormReporting.DescribeSkippedCandidates(outcome.SkippedCandidates)
+                    .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
                 {
                     case GenerationOutcomeKind.Generated:
                         _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
-                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
+                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, attributeName, outcome.Value!));
                         await RecordGeneratedValueProbesAsync(result, request.Mapping, outcome.Value!, context, exportRules);
+                        RecordGeneratedValueFormProbes(result, attributeName, formSources[i], outcome, context);
                         break;
 
                     case GenerationOutcomeKind.Sticky:
@@ -1526,7 +1720,22 @@ public class SyncPreviewServer
                         break;
 
                     case GenerationOutcomeKind.Waiting:
-                        // Nothing to do: any existing value stays, and there is nothing new to apply.
+                        // Nothing to apply: any existing value stays. A value held back because a value built from it
+                        // cannot be worked out yet is said, in the run's words, on the tree and as a warning, since the
+                        // object may have nothing else to show (Generated Value Forms, #2023).
+                        if (outcome.FormWaits.Count > 0)
+                        {
+                            var waitingFor = GeneratedValueFormReporting.DescribeWaits(outcome.FormWaits);
+                            forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
+                            result.Warnings.Add(new SyncPreviewMessage
+                            {
+                                Code = SyncPreviewMessageCode.GeneratedValueWaiting,
+                                Detail = $"{attributeName} would not be generated yet: a value built from it needs an input the object has no value for: {waitingFor}. "
+                                    + "It is generated by a later synchronisation once the input arrives.",
+                                ConnectedSystemId = context.ConnectedSystemId,
+                                AttributeName = attributeName
+                            });
+                        }
                         break;
 
                     case GenerationOutcomeKind.Exhausted:
@@ -1553,9 +1762,98 @@ public class SyncPreviewServer
             // Always clear, on every exit path, exactly like the worker's own resolution method: a leftover
             // request here would carry into whatever else touches this working copy next.
             workingMvo.PendingGeneratedValues.Clear();
+
+            foreach (var (source, metaverseObject) in relinked)
+                source.MetaverseObject = metaverseObject;
         }
 
         return forOutcomeTree;
+    }
+
+    /// <summary>
+    /// The form source for a generated value the preview is about to generate (Generated Value Forms, #2023), as the run
+    /// builds it (<c>SyncTaskProcessorBase.BuildGeneratedValueFormSourceAsync</c>): the values built from it on its own
+    /// Synchronisation Rule, worked out for each candidate by replaying the derived pass, and checked against JIM's own
+    /// records. Each form keeps its probe targets, for the preview to say what the run would probe; a dry run never
+    /// probes. Null when there are none to check, or when the request came from another object's rule.
+    /// </summary>
+    /// <param name="relinked">A surviving account the re-election path left as it found it is linked to
+    /// <paramref name="workingMvo"/> for the call, as the run's is, and recorded here to be put back.</param>
+    private IGeneratedValueFormSource? BuildGeneratedValueFormSourceForPreview(
+        PendingGeneratedValue pending,
+        MetaverseObject workingMvo,
+        CsoPreviewContext context,
+        ConnectedSystemObject? cso,
+        IReadOnlyList<SyncRule>? inScopeRules,
+        IEnumerable<SyncRule> exportRules,
+        List<(ConnectedSystemObject Source, MetaverseObject? MetaverseObject)> relinked)
+    {
+        if (pending.BaseUnavailable)
+            return null;
+
+        var source = inScopeRules != null ? cso : pending.SourceConnectedSystemObject;
+        if (source == null || pending.SourceConnectedSystemObjectId != source.Id)
+            return null;
+
+        var generationId = pending.Mapping.Generation!.Id;
+        if (!context.FormsByGenerationId.TryGetValue(generationId, out var forms))
+        {
+            forms = GeneratedValueParticipation.DescribeForms(pending.Mapping, context.GeneratedValueBuiltValues, exportRules);
+            context.FormsByGenerationId[generationId] = forms;
+        }
+
+        if (forms.Count == 0)
+            return null;
+
+        inScopeRules ??= context.AllImportRules
+            .Where(rule => rule.ConnectedSystemId == source.ConnectedSystemId && rule.MetaverseObjectTypeId == workingMvo.Type?.Id)
+            .ToList();
+
+        if (!ReferenceEquals(source.MetaverseObject, workingMvo))
+        {
+            relinked.Add((source, source.MetaverseObject));
+            source.MetaverseObject = workingMvo;
+        }
+
+        // Another system's account is of a type this preview does not otherwise load; it carries its own.
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes = source.Type != null && context.ObjectTypes.All(t => t.Id != source.TypeId)
+            ? [.. context.ObjectTypes, source.Type]
+            : context.ObjectTypes;
+
+        return GeneratedValueFormSource.Create(_syncEngine, source, pending, forms, inScopeRules, objectTypes, ExpressionEvaluator, context.PriorityContext);
+    }
+
+    /// <summary>
+    /// Records that the real synchronisation would probe for each value built from <paramref name="outcome"/>'s value
+    /// (Generated Value Forms, #2023), naming the Connected Systems it would probe, as
+    /// <see cref="RecordGeneratedValueProbesAsync"/> does for the generated value itself. The form source answers the
+    /// candidate it already evaluated from its cache.
+    /// </summary>
+    private static void RecordGeneratedValueFormProbes(SyncPreviewResult result, string generatedAttributeName, IGeneratedValueFormSource? formSource, GenerationOutcome outcome, CsoPreviewContext context)
+    {
+        if (formSource == null)
+            return;
+
+        foreach (var check in formSource.Evaluate(outcome.Value!, outcome.NumericValue).Checks.Where(check => check.ProbeTargets.Count > 0))
+        {
+            var names = check.ProbeTargets
+                .Select(target => context.SystemNames.GetValueOrDefault(target.ConnectedSystemId))
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count > 0)
+            {
+                result.GeneratedValueProbes.Add(new SyncPreviewGeneratedValueProbe
+                {
+                    AttributeName = check.Name,
+                    Value = check.Value,
+                    BuiltFromAttributeName = generatedAttributeName,
+                    ConnectedSystemNames = names
+                });
+            }
+        }
     }
 
     /// <summary>
@@ -2131,7 +2429,10 @@ public class SyncPreviewServer
         UniqueValueResolveOptions UniqueValueResolveOptions,
         string? DerivedFlowCycleMessage,
         List<SyncRule> DriftExportRules,
-        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache)
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache,
+        GeneratedValueBuiltValues GeneratedValueBuiltValues,
+        List<SyncRule> AllImportRules,
+        ObjectMatchingRuleMode MatchingMode)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse
@@ -2150,6 +2451,13 @@ public class SyncPreviewServer
         /// rules on first need, so a full-system preview asks each Connector once rather than once per object.
         /// </summary>
         public Dictionary<int, List<string>> ProbedSystemNamesByGenerationId { get; } = [];
+
+        /// <summary>
+        /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), the values built from it that are checked
+        /// before it is issued (Generated Value Forms, #2023), described once from this context's own export rules on
+        /// first need, as the run describes them.
+        /// </summary>
+        public Dictionary<int, List<GeneratedValueForm>> FormsByGenerationId { get; } = [];
 
         /// <summary>
         /// The Metaverse Objects flagged for export scope review that a walked object's preview already evaluated
@@ -2215,53 +2523,68 @@ public class SyncPreviewServer
     /// join, without claiming anything. Advanced mode reads each import rule's own matching rules; simple
     /// mode's rules live on the object type. An ambiguous match is an expected block: it lands in the
     /// result's Errors, exactly as the real synchronisation would fail the object with an AmbiguousMatch.
+    /// Returns the whole match, so the preview names the rule and value the join would be made on (#2052).
     /// </summary>
-    private async Task<MetaverseObject?> ProbeForJoinAsync(
+    private async Task<ImportMatch?> ProbeForJoinAsync(
         ConnectedSystemObject cso,
         List<SyncRule> inScopeRules,
         List<ConnectedSystemObjectType> objectTypes,
+        ObjectMatchingRuleMode matchingMode,
         ISyncRepository guardedRepository,
         SyncPreviewResult result)
     {
+        // The rules the run consults, and only those (SyncTaskProcessorBase.AttemptJoinAsync; #2176): in simple mode the
+        // object type's own, each carrying its own Metaverse Object Type, whether or not an import rule applies; in
+        // advanced mode each in-scope import rule's own, never the type's, which a switch to advanced mode keeps for a
+        // later switch back.
         var candidateRuleSets = new List<List<ObjectMatchingRule>>();
-        foreach (var importRule in inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
-        {
-            var matchingRules = importRule.ObjectMatchingRules.ToList();
-            foreach (var matchingRule in matchingRules.Where(mr => mr.MetaverseObjectType == null))
-                matchingRule.MetaverseObjectType = importRule.MetaverseObjectType;
-            candidateRuleSets.Add(matchingRules);
-        }
-
-        // Simple mode fallback, as the real join path implements it: matching rules on the object type
-        // itself, each carrying its own Metaverse Object Type. In advanced mode this set is empty.
-        if (candidateRuleSets.Count == 0)
+        if (matchingMode == ObjectMatchingRuleMode.ConnectedSystem)
         {
             var typeRules = objectTypes.FirstOrDefault(ot => ot.Id == cso.TypeId)?.ObjectMatchingRules?.ToList();
             if (typeRules is { Count: > 0 })
                 candidateRuleSets.Add(typeRules);
         }
+        else
+        {
+            foreach (var importRule in inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
+            {
+                var matchingRules = importRule.ObjectMatchingRules.ToList();
+                foreach (var matchingRule in matchingRules.Where(mr => mr.MetaverseObjectType == null))
+                    matchingRule.MetaverseObjectType = importRule.MetaverseObjectType;
+                candidateRuleSets.Add(matchingRules);
+            }
+        }
 
+        // The same matching engine the synchronisation uses (#2052), against the preview's read-only repository, so
+        // the preview cannot disagree with the run about what a rule computes or what it finds.
         foreach (var matchingRules in candidateRuleSets)
         {
-            foreach (var matchingRule in matchingRules.OrderBy(mr => mr.Order).Where(mr => mr.MetaverseObjectType != null))
+            try
             {
-                try
+                var match = await Application.ObjectMatching.FindMatchingMetaverseObjectAsync(guardedRepository, cso, matchingRules);
+                if (match != null)
+                    return match;
+            }
+            catch (MultipleMatchesException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    var mvo = await guardedRepository.FindMetaverseObjectUsingMatchingRuleAsync(
-                        cso, matchingRule.MetaverseObjectType!, matchingRule);
-                    if (mvo != null)
-                        return mvo;
-                }
-                catch (MultipleMatchesException ex)
+                    Code = SyncPreviewMessageCode.AmbiguousMatch,
+                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    MatchCandidates = [.. ex.Candidates]
+                });
+                return null;
+            }
+            catch (ObjectMatchingRuleFailedException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    result.Errors.Add(new SyncPreviewMessage
-                    {
-                        Code = SyncPreviewMessageCode.AmbiguousMatch,
-                        Detail = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object; a synchronisation would fail it with an AmbiguousMatch error. Matching MVO IDs: {string.Join(", ", ex.Matches)}",
-                        ConnectedSystemId = cso.ConnectedSystemId
-                    });
-                    return null;
-                }
+                    Code = SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = ex.Message,
+                    ConnectedSystemId = cso.ConnectedSystemId
+                });
+                return null;
             }
         }
 
@@ -2301,6 +2624,24 @@ public class SyncPreviewServer
         {
             if (result.AffectedSyncRules.All(r => r.Id != entry.SyncRuleId))
                 result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = entry.SyncRuleId, Name = entry.SyncRuleName });
+
+            // Export matching would stop the Metaverse Object for this rule (#2052): the run records the error and
+            // stages nothing, so the preview reports the error and proposes no export.
+            if (entry.ProvisioningMatchError is { } matchError)
+            {
+                result.Errors.Add(new SyncPreviewMessage
+                {
+                    Code = matchError.ErrorType == ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch
+                        ? SyncPreviewMessageCode.AmbiguousProvisioningMatch
+                        : SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = matchError.Message,
+                    SyncRuleId = matchError.SyncRuleId,
+                    SyncRuleName = matchError.SyncRuleName,
+                    ConnectedSystemId = matchError.ConnectedSystemId,
+                    MatchCandidates = [.. matchError.Candidates]
+                });
+                continue;
+            }
 
             switch (entry.Kind)
             {
@@ -2474,6 +2815,28 @@ public class SyncPreviewServer
     /// <summary>
     /// Names the Metaverse Object a preview's inbound summary is about (#1530): its type, and its name as it stands.
     /// </summary>
+    /// <summary>
+    /// Records on the inbound summary the join a match would make, and what it would be made on (#2052).
+    /// </summary>
+    private static void RecordWouldJoin(SyncPreviewInboundSummary inbound, ImportMatch match)
+    {
+        inbound.WouldJoinMetaverseObjectId = match.MetaverseObject.Id;
+        inbound.WouldJoinObjectMatchingRuleId = match.Rule.Id > 0 ? match.Rule.Id : null;
+        inbound.WouldJoinObjectMatchingRuleDescription = match.Rule.DescribeComparison();
+        inbound.WouldJoinMatchedValue = match.MatchedValue;
+    }
+
+    /// <summary>
+    /// Puts the rule and value a predicted join would be made on (#2052) on its Joined node, as the run records them on its
+    /// Joined outcome.
+    /// </summary>
+    private static void CopyWouldJoinMatch(SyncOutcomeNode joinedNode, SyncPreviewInboundSummary inbound)
+    {
+        joinedNode.ObjectMatchingRuleId = inbound.WouldJoinObjectMatchingRuleId;
+        joinedNode.ObjectMatchingRuleDescriptionSnapshot = inbound.WouldJoinObjectMatchingRuleDescription;
+        joinedNode.MatchedValue = inbound.WouldJoinMatchedValue;
+    }
+
     private static void DescribeMetaverseObject(SyncPreviewInboundSummary inbound, MetaverseObject mvo)
     {
         inbound.MetaverseObjectTypeId = mvo.Type?.Id;

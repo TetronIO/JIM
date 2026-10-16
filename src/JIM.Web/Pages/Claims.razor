@@ -7,12 +7,10 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Your Claims</PageTitle>
-<MudText Typo="Typo.h3">Your Claims</MudText>
-<MudText Typo="Typo.body1" Class="mt-2">
-    Claims are pieces of information about you that your identity provider has asserted during sign-in. JIM uses these
-    values to establish your identity, display your name, and determine what you are authorised to do. The table below
-    lists every claim present on your current session, which is useful for diagnosing sign-in, authorisation, or
-    identity mapping issues.
+<MudText Typo="Typo.h3">Your Claims
+    <PageInfo Title="Your Claims" DocsPage="administration/sso-setup.md#3-verify-claims">
+        Claims are what your identity provider asserted about you when you signed in. JIM uses them to establish who you are, show your name and decide what you may do. This page lists every claim on your session, which helps when diagnosing sign-in, authorisation or identity mapping problems.
+    </PageInfo>
 </MudText>
 
 @if (User != null)

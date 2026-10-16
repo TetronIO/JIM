@@ -525,6 +525,33 @@ public class CausalityLineageModelBuilderTests
     }
 
     /// <summary>
+    /// A grace-period deletion's housekeeping item (#1811): what caused it is the run that scheduled the deletion,
+    /// which is a fact about the Metaverse Object, so the cause renders on the Identity column.
+    /// </summary>
+    [Test]
+    public void Build_HousekeepingDeletion_SchedulingCauseRendersOnTheIdentityColumn()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId, ObjectChangeType = ObjectChangeType.Deleted };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+            parent: null, ordinal: 0, targetEntityId: Guid.NewGuid(), targetEntityDescription: "Erin Byrne");
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion,
+                reasonCode: CausalReasonCode.AuthoritativeSourceDisconnected,
+                connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                members: CausalityTestData.Member("Erin Byrne", SyncItemId,
+                    CausalChainResolution.CauseNotRetained)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.EmptyContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Deleted);
+
+        var schedulingCard = lineage.Columns
+            .SelectMany(column => column.Objects.SelectMany(o => o.Cards).Select(card => (column, card)))
+            .Single(pair => pair.card.Hop != null);
+        Assert.That(schedulingCard.column.Kind, Is.EqualTo(CausalityLineageColumnKind.Identity));
+    }
+
+    /// <summary>
     /// A deprovisioning confirmation: a Full Import on the TARGET system finding the record JIM
     /// deprovisioned already gone, so the item's change type is Deleted and its outcomes are
     /// Deletion detected plus Export confirmed.

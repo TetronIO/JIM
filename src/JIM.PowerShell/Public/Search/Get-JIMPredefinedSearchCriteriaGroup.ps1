@@ -7,15 +7,15 @@ function Get-JIMPredefinedSearchCriteriaGroup {
         Gets the criteria groups (and their criteria) for a Predefined Search.
 
     .DESCRIPTION
-        Returns the criteria groups configured on a Predefined Search. Criteria filter the
-        objects a search returns. In the current release, all criteria across all groups are
-        combined with AND; All/Any group logic and nested-group evaluation are honoured in a later release.
+        Returns the criteria groups configured on a Predefined Search, each with its criteria and nested groups.
+        Criteria filter the objects a search returns: each group is All (AND) or Any (OR), groups nest to any depth,
+        and top-level groups are combined with OR.
 
     .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+        The ID of the Predefined Search.
 
     .OUTPUTS
-        PSCustomObject. The criteria groups, each with their criteria.
+        One object per top-level criteria group, with its criteria and nested groups.
 
     .EXAMPLE
         Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3
@@ -33,7 +33,7 @@ function Get-JIMPredefinedSearchCriteriaGroup {
         New-JIMPredefinedSearchCriterion
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchCriteriaGroupDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

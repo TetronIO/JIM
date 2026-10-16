@@ -176,5 +176,11 @@ public enum ExportMatchingOutcome
     /// <summary>
     /// The Target Metaverse Attribute's data type is not supported for export matching.
     /// </summary>
-    UnsupportedAttributeType = 6
+    UnsupportedAttributeType = 6,
+
+    /// <summary>
+    /// The source Connected System attribute's data type differs from the Target Metaverse Attribute's, so their
+    /// values cannot be compared (#2052).
+    /// </summary>
+    SourceTypeMismatch = 7
 }

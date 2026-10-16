@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
+using System.Globalization;
 namespace JIM.Connectors.File;
 
 internal class FileConnectorImport
@@ -47,6 +48,42 @@ internal class FileConnectorImport
         _progress = progress;
     }
 
+    /// <summary>
+    /// Checks the file's header row against the schema before any row is read (#2051). Columns name their attributes
+    /// ignoring case, so two columns differing only in case cannot be told apart, and a column the schema reads (a
+    /// selected attribute, or an External ID or Secondary External ID) that the file lacks would otherwise be read as no
+    /// value and clear the attribute on every object. Either fails the import, naming the columns.
+    /// </summary>
+    private void ValidateHeader(string[] header)
+    {
+        var clashes = header
+            .GroupBy(column => IdentifierKey.For(column, caseExact: false), StringComparer.Ordinal)
+            .Where(group => group.Distinct(StringComparer.Ordinal).Count() > 1)
+            .Select(group => string.Join(", ", group.Distinct(StringComparer.Ordinal).Select(column => $"'{column}'")))
+            .ToList();
+        if (clashes.Count > 0)
+            throw new InvalidDataException(
+                $"The file '{_reader.FileName}' has columns whose names differ only in case ({string.Join("; ", clashes)}). " +
+                "Columns are matched to attributes ignoring case, so JIM cannot tell which to read. Rename or remove one of each.");
+
+        var columns = header.ToHashSet(IdentifierKey.Comparer(caseExact: false));
+        var objectTypes = _connectedSystem.ObjectTypes!
+            .Where(objectType => objectType.Selected &&
+                                 (string.IsNullOrEmpty(_objectTypeInfo.PredefinedObjectType) ||
+                                  objectType.Name.Equals(_objectTypeInfo.PredefinedObjectType, StringComparison.OrdinalIgnoreCase)));
+        var missing = objectTypes
+            .SelectMany(objectType => objectType.Attributes
+                .Where(attribute => attribute.Selected || attribute.IsExternalId || attribute.IsSecondaryExternalId)
+                .Select(attribute => attribute.Name))
+            .Where(name => !columns.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (missing.Count > 0)
+            throw new InvalidDataException(
+                $"The file '{_reader.FileName}' has no column for {string.Join(", ", missing.Select(name => $"'{name}'"))}, which the schema reads. " +
+                "Add the column, or refresh the schema and deselect the attribute.");
+    }
+
     internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
     {
         _logger.Verbose("GetFullImportObjects() called");
@@ -64,6 +101,7 @@ internal class FileConnectorImport
 
         await _reader.CsvReader.ReadAsync();
         _reader.CsvReader.ReadHeader();
+        ValidateHeader(_reader.CsvReader.HeaderRecord ?? []);
 
         var rowsRead = 0;
         while (await _reader.CsvReader.ReadAsync())
@@ -89,7 +127,7 @@ internal class FileConnectorImport
                 importObject.ObjectType = _reader.CsvReader.GetField(_objectTypeInfo.ObjectTypeColumnName);
 
             // get the schema object type, so we know what attributes we want to pull from the file.
-            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
             if (objectType == null)
             {
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;
@@ -124,6 +162,10 @@ internal class FileConnectorImport
 
                 var isMultiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
 
+                // Every value of the attribute that will not parse, so each is reported rather than the first (#2066).
+                // Allocated only for the rare attribute that has one.
+                List<string>? unreadableValues = null;
+
                 try
                 {
                     if (attribute.Type == AttributeDataType.Text)
@@ -156,7 +198,7 @@ internal class FileConnectorImport
                                     if (int.TryParse(value, out var intValue))
                                         importObjectAttribute.IntValues.Add(intValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as integer");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -178,7 +220,7 @@ internal class FileConnectorImport
                                     if (long.TryParse(value, out var longValue))
                                         importObjectAttribute.LongValues.Add(longValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as long number");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -205,7 +247,7 @@ internal class FileConnectorImport
                                     if (DecimalAttributeValue.TryParse(value, out var decimalValue))
                                         importObjectAttribute.DecimalValues.Add(decimalValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as decimal");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -213,24 +255,47 @@ internal class FileConnectorImport
                                 if (DecimalAttributeValue.TryParse(fieldValue, out var decimalValue))
                                     importObjectAttribute.DecimalValues.Add(decimalValue);
                                 else
-                                    throw new FormatException($"Cannot parse '{fieldValue}' as decimal");
+                                    (unreadableValues ??= []).Add(fieldValue);
                             }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.DateTime)
                     {
+                        // Every value read (#2153), split like every other type when the attribute is multi-valued, each
+                        // as UTC: a value with no time zone is taken as UTC and an offset is honoured, in the configured
+                        // culture. JIM puts each into the form it holds; the Connector does not normalise.
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                            var values = isMultiValued
+                                ? fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                : [fieldValue];
+                            foreach (var value in values)
+                            {
+                                if (DateTime.TryParse(value, _reader.CsvReader.Configuration.CultureInfo, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dateTimeValue))
+                                    importObjectAttribute.DateTimeValues.Add(dateTimeValue);
+                                else
+                                    (unreadableValues ??= []).Add(value);
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Boolean)
                     {
+                        // Every value read (#2153): a true or false attribute holds one, and JIM reports one arriving with
+                        // both rather than the Connector choosing.
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                            var values = isMultiValued
+                                ? fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                : [fieldValue.Trim()];
+                            foreach (var value in values)
+                            {
+                                if (TryParseBoolean(value, out var boolValue))
+                                    importObjectAttribute.BoolValues.Add(boolValue);
+                                else
+                                    (unreadableValues ??= []).Add(value);
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.Guid)
@@ -244,7 +309,7 @@ internal class FileConnectorImport
                                 if (Guid.TryParse(value, out var guidValue))
                                     importObjectAttribute.GuidValues.Add(guidValue);
                                 else
-                                    throw new FormatException($"Cannot parse '{value}' as GUID");
+                                    (unreadableValues ??= []).Add(value);
                             }
                         }
                         else if (!string.IsNullOrEmpty(fieldValue))
@@ -275,14 +340,25 @@ internal class FileConnectorImport
                 }
                 catch (Exception ex) when (ex is not NotSupportedException)
                 {
-                    // Record the error but continue processing other attributes and rows (unless stopOnFirstError is enabled)
-                    var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
-                    var rawValue = _reader.CsvReader.GetField(attribute.Name);
-                    _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
-                        attribute.Name, attribute.Type, rowNumber, LogSanitiser.Sanitise(rawValue));
+                    // A single-valued field the typed reader would not convert. Reported with the others below; the
+                    // exception is kept at Debug for whoever needs the parser's own account of it.
+                    _logger.Debug(ex, "Typed conversion of attribute '{AttributeName}' failed", attribute.Name);
+                    (unreadableValues ??= []).Add(_reader.CsvReader.GetField(attribute.Name) ?? string.Empty);
+                }
 
-                    importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
-                    importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";
+                if (unreadableValues != null)
+                {
+                    // Report every value that would not parse, and leave the attribute out: what did parse of a
+                    // multi-valued attribute is only part of what the file holds, and JIM leaves an attribute with an
+                    // unreadable value as it already held it rather than reading it as the whole set (#2066). The object
+                    // is still returned, so every other attribute imports.
+                    importObject.SourceLocation ??= $"{_reader.FileName}, row {_reader.CsvReader.Context.Parser?.Row ?? 0:N0}";
+                    foreach (var unreadableValue in unreadableValues)
+                    {
+                        _logger.Warning("Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
+                            attribute.Name, attribute.Type, _reader.CsvReader.Context.Parser?.Row ?? 0, LogSanitiser.Sanitise(unreadableValue));
+                        importObject.AddAttributeValueError(attribute.Name, unreadableValue, UnreadableValueReasons.For(attribute.Type, unreadableValue));
+                    }
 
                     if (_stopOnFirstError)
                     {
@@ -291,7 +367,6 @@ internal class FileConnectorImport
                         return FinaliseResult(result, stopwatch);
                     }
 
-                    // Continue processing - the attribute will be skipped but the object can still be imported with other attributes
                     continue;
                 }
 
@@ -313,6 +388,27 @@ internal class FileConnectorImport
             await _progress.ReportObjectsReadAsync(result.ImportObjects.Count);
 
         return FinaliseResult(result, stopwatch);
+    }
+
+    /// <summary>
+    /// Reads <c>true</c> or <c>false</c> in any case, or <c>1</c> or <c>0</c>, as the file's typed reader did.
+    /// </summary>
+    private static bool TryParseBoolean(string value, out bool result)
+    {
+        if (bool.TryParse(value, out result))
+            return true;
+
+        switch (value)
+        {
+            case "1":
+                result = true;
+                return true;
+            case "0":
+                result = false;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

@@ -275,6 +275,43 @@ public class SynchronisationControllerSetPasswordTests
         }
     }
 
+    /// <summary>
+    /// A directory that set the password but could not apply the requested expiry (#2159) reads Set, flagged as
+    /// completed with a warning, with the Activity's words saying what was applied instead. A script resetting a
+    /// password and telling the person they will be asked to change it can check the flag rather than parse prose.
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheExpiryCouldNotBeApplied_ReportsSetWithTheWarningAsync()
+    {
+        const string message = "Password set on Contoso AD. Not everything asked for could be applied: the password ages according to Contoso AD's own policy.";
+        var waiter = new RecordingWaiter(() =>
+        {
+            var outcomes = OutcomeWhereTheTargetIs(PasswordChangeTargetState.Set, message);
+            outcomes.Targets[0].CompletedWithWarning = true;
+            return outcomes;
+        });
+
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password }, waiter);
+
+        var target = BodyOf(result).Targets[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Set));
+            Assert.That(target.CompletedWithWarning, Is.True);
+            Assert.That(target.Message, Is.EqualTo(message));
+        }
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheTargetTookThePasswordAsAsked_ReportsNoWarningAsync()
+    {
+        var waiter = new RecordingWaiter(() => OutcomeWhereTheTargetIs(PasswordChangeTargetState.Set, "Password set on Contoso AD."));
+
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password }, waiter);
+
+        Assert.That(BodyOf(result).Targets[0].CompletedWithWarning, Is.False);
+    }
+
     [Test]
     public async Task SetConnectedSystemObjectPasswordAsync_WithNoExpiryBehaviourGiven_RequiresAChangeAtNextSignInAsync()
     {
@@ -319,6 +356,22 @@ public class SynchronisationControllerSetPasswordTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162).
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WithEnableAccountFalse_RefusesBeforeQueueingAnythingAsync()
+    {
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, EnableAccount = false, Wait = 0 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("enableAccount"));
             Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
         }
     }

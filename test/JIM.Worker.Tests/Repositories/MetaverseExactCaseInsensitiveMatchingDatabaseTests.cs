@@ -17,7 +17,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// <see cref="MetaverseRepository"/> use exact equality rather than <c>EF.Functions.ILike</c>, which
 /// treats <c>%</c>, <c>_</c> and <c>\</c> in the compared value as wildcards:
 /// <list type="bullet">
-/// <item><description><c>FindMetaverseObjectUsingMatchingRuleAsync</c>'s case-insensitive Text branch
+/// <item><description><c>FindMetaverseObjectIdsByMatchValuesAsync</c>'s case-insensitive Text branch
 /// (the inbound Connected System Object to Metaverse Object join); a Connected System Object being
 /// joined to the wrong Metaverse Object because of a stray <c>_</c> or <c>%</c> in its value is a
 /// data-integrity defect, not a cosmetic one.</description></item>
@@ -99,7 +99,7 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         };
     }
 
-    #region Inbound Object Matching (FindMetaverseObjectUsingMatchingRuleAsync)
+    #region Inbound Object Matching (FindMetaverseObjectIdsByMatchValuesAsync)
 
     /// <summary>
     /// Builds an in-memory (unpersisted) Object Matching Rule with a single Text source, and a Connected
@@ -136,7 +136,7 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_CaseInsensitiveUnderscoreValue_DoesNotWildcardMatchAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_CaseInsensitiveUnderscoreValue_DoesNotWildcardMatchAsync()
     {
         await using var seed = NewContext();
         var (type, attribute) = await SeedTypeAndAttributeAsync(seed);
@@ -150,13 +150,14 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(cso, type, rule);
+        var result = await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(
+            type.Id, attribute.Id, AttributeDataType.Text, [cso.AttributeValues[0].StringValue!], rule.CaseSensitive, take: 2);
 
-        Assert.That(result, Is.Null, "j_smith must not wildcard-match jxsmith now that exact case-insensitive equality replaces EF.Functions.ILike");
+        Assert.That(result, Is.Empty, "j_smith must not wildcard-match jxsmith now that exact case-insensitive equality replaces EF.Functions.ILike");
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_CaseInsensitivePercentValue_DoesNotWildcardMatchAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_CaseInsensitivePercentValue_DoesNotWildcardMatchAsync()
     {
         await using var seed = NewContext();
         var (type, attribute) = await SeedTypeAndAttributeAsync(seed);
@@ -170,13 +171,14 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(cso, type, rule);
+        var result = await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(
+            type.Id, attribute.Id, AttributeDataType.Text, [cso.AttributeValues[0].StringValue!], rule.CaseSensitive, take: 2);
 
-        Assert.That(result, Is.Null, "a%b must not wildcard-match aXYZb now that exact case-insensitive equality replaces EF.Functions.ILike");
+        Assert.That(result, Is.Empty, "a%b must not wildcard-match aXYZb now that exact case-insensitive equality replaces EF.Functions.ILike");
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_CaseInsensitiveExactMatchDifferentCasing_StillMatchesAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_CaseInsensitiveExactMatchDifferentCasing_StillMatchesAsync()
     {
         await using var seed = NewContext();
         var (type, attribute) = await SeedTypeAndAttributeAsync(seed);
@@ -189,14 +191,15 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(cso, type, rule);
+        var result = await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(
+            type.Id, attribute.Id, AttributeDataType.Text, [cso.AttributeValues[0].StringValue!], rule.CaseSensitive, take: 2);
 
-        Assert.That(result, Is.Not.Null, "J_Smith must still match j_smith on a case-insensitive rule");
-        Assert.That(result!.Id, Is.EqualTo(mvo.Id));
+        Assert.That(result, Is.Not.Empty, "J_Smith must still match j_smith on a case-insensitive rule");
+        Assert.That(result.Single(), Is.EqualTo(mvo.Id));
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_CaseInsensitiveBackslashValue_MatchesIdenticalValueAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_CaseInsensitiveBackslashValue_MatchesIdenticalValueAsync()
     {
         await using var seed = NewContext();
         var (type, attribute) = await SeedTypeAndAttributeAsync(seed);
@@ -211,14 +214,15 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(cso, type, rule);
+        var result = await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(
+            type.Id, attribute.Id, AttributeDataType.Text, [cso.AttributeValues[0].StringValue!], rule.CaseSensitive, take: 2);
 
-        Assert.That(result, Is.Not.Null, "a value containing a backslash must match its identical counterpart");
-        Assert.That(result!.Id, Is.EqualTo(mvo.Id));
+        Assert.That(result, Is.Not.Empty, "a value containing a backslash must match its identical counterpart");
+        Assert.That(result.Single(), Is.EqualTo(mvo.Id));
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_CaseSensitiveRule_UnaffectedByFixAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_CaseSensitiveRule_UnaffectedByFixAsync()
     {
         await using var seed = NewContext();
         var (type, attribute) = await SeedTypeAndAttributeAsync(seed);
@@ -233,9 +237,10 @@ public class MetaverseExactCaseInsensitiveMatchingDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(cso, type, rule);
+        var result = await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(
+            type.Id, attribute.Id, AttributeDataType.Text, [cso.AttributeValues[0].StringValue!], rule.CaseSensitive, take: 2);
 
-        Assert.That(result, Is.Null, "a case-sensitive rule must not match differently-cased values");
+        Assert.That(result, Is.Empty, "a case-sensitive rule must not match differently-cased values");
     }
 
     #endregion

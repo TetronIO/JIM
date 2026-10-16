@@ -4,7 +4,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -14,7 +13,7 @@ namespace JIM.Web.Causality;
 /// renders on, where the chain's endings close, and how adjacent columns are joined. Pure and
 /// side-effect free, so every projection rule is unit-testable without rendering anything.
 /// </summary>
-public static class CausalityLineageModelBuilder
+public static partial class CausalityLineageModelBuilder
 {
     /// <summary>
     /// Builds the lineage for an item.
@@ -25,10 +24,15 @@ public static class CausalityLineageModelBuilder
     /// What the run did to the object, which decides which side of the Identity the page's own
     /// record column sits on: an export-side item's record is a target, everything else's a source.
     /// </param>
+    /// <param name="consequences">
+    /// The downward walk (#1811): what the item went on to cause, placed in each object's After this run section. Null
+    /// where it has not been read yet, which leaves the Lineage exactly as it would be without it.
+    /// </param>
     public static CausalityLineageModel Build(
         CausalityModel model,
         CausalChain? chain,
-        ObjectChangeType itemChangeType)
+        ObjectChangeType itemChangeType,
+        CausalConsequences? consequences = null)
     {
         var context = model.Context;
         var allEvents = model.AllEvents().ToList();
@@ -59,7 +63,7 @@ public static class CausalityLineageModelBuilder
 
         ColumnState GetRecordColumn(int? systemId, string? systemName, bool isSourceSide)
         {
-            var existing = recordColumns.FirstOrDefault(c => c.SystemId == systemId);
+            var existing = recordColumns.FirstOrDefault(c => c.SystemId == systemId && !c.IsConsequenceObject);
             if (existing != null)
             {
                 existing.SystemName ??= systemName;
@@ -134,8 +138,10 @@ public static class CausalityLineageModelBuilder
             switch (cohort.EdgeType)
             {
                 // A Metaverse Object deletion is a Metaverse-side fact wherever its consequences land.
+                // So is the scheduling of one, which the housekeeping deletion carried out later (#1811).
                 case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
                 case CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval:
+                case CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion:
                     return GetIdentityColumn();
 
                 // The export this import confirms happened to the page's own record.
@@ -181,21 +187,62 @@ public static class CausalityLineageModelBuilder
             foreach (var cohort in cohorts)
             {
                 var column = AssignCohort(cohort);
-                column.Hops.Add((BuildHop(cohort, effectName, effectItemId), hopSequence++));
+                column.Hops.Add((BuildHop(cohort, effectName, effectItemId, context.Links), hopSequence++));
 
                 foreach (var member in cohort.Members)
                 {
                     if (member.Causes.Count > 0)
+                    {
                         Walk(member.Causes, member.DisplayName, member.RunProfileExecutionItemId);
-                    else if (CausalityCauseWording.Ending(member.Resolution) != null
-                             && !column.EndingResolutions.Contains(member.Resolution))
+                        continue;
+                    }
+
+                    if (CausalityCauseWording.Ending(member.Resolution) == null)
+                        continue;
+
+                    if (!column.EndingResolutions.Contains(member.Resolution))
                         column.EndingResolutions.Add(member.Resolution);
+
+                    // Where the walk stopped at its bound on a single item, carrying on from that item shows the next
+                    // levels (#2100). A cohort of several already links each member, so it gets no link of its own.
+                    if (member.Resolution == CausalChainResolution.DepthLimitReached && cohort.MemberCount == 1
+                        && member.RunProfileExecutionItemId is { } farthestItemId && farthestItemId != Guid.Empty)
+                    {
+                        column.Continuations.Add(new CausalityLineageContinuation(
+                            ContinueFromText(member.DisplayName), context.Links.ItemHref(farthestItemId)));
+                    }
                 }
             }
         }
 
         if (chain != null)
             Walk(chain.Cohorts, context.CsoDisplayName ?? context.SubjectMetaverseObjectName, chain.RunProfileExecutionItemId);
+
+        // ─── What the item went on to cause, on the objects it happened to (#1811) ───
+        // Placed after this run and the chain, so a consequence can find the object this run already drew for it (the
+        // target a synchronisation staged an export for is the target the export carried it out on).
+        CausalityLineageConsequenceSummary? consequenceSummary = null;
+        if (consequences != null)
+        {
+            ColumnState NewConsequenceObject(int? systemId, string? systemName, bool isSourceSide)
+            {
+                var created = new ColumnState
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    SystemId = systemId,
+                    SystemName = systemName,
+                    IsSourceSide = isSourceSide,
+                    IsConsequenceObject = true,
+                    CreationOrder = creationOrder++
+                };
+                recordColumns.Add(created);
+                return created;
+            }
+
+            var subject = pageRecordColumn ?? GetIdentityColumn();
+            consequenceSummary = new ConsequencePlacement(context, GetIdentityColumn, NewConsequenceObject, recordColumns, subject)
+                .Place(consequences);
+        }
 
         // The Identity column also exists when the story spans both sides of the Metaverse with no
         // loaded event on the Identity itself and no creation cohort resolved either (a create export
@@ -247,7 +294,9 @@ public static class CausalityLineageModelBuilder
         {
             Columns = columns,
             Joins = joins,
-            IsTruncatedByDepth = chain?.IsTruncatedByDepth ?? false
+            IsTruncatedByDepth = chain?.IsTruncatedByDepth ?? false,
+            Consequences = consequenceSummary,
+            Links = context.Links
         };
     }
 
@@ -255,7 +304,8 @@ public static class CausalityLineageModelBuilder
     /// Prepares one cohort for rendering: sentence, attribution, run kind, timestamp, links and the
     /// member list a plural cohort expands to.
     /// </summary>
-    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId)
+    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId,
+        ICausalityLinks links)
     {
         var soleMember = cohort.MemberCount == 1 ? cohort.Members[0] : null;
 
@@ -267,15 +317,21 @@ public static class CausalityLineageModelBuilder
             ShowConnectedSystemChip = CausalityCauseWording.ShowConnectedSystemChip(cohort),
             RunKind = GetRunKind(cohort),
             Operation = OutcomeDisplayMap.GetHopOperation(cohort),
-            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId) : null,
+            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId, links) : null,
             Occurred = cohort.Members.Count > 0 ? cohort.Members.Min(m => m.Occurred) : default,
             Members = soleMember != null
                 ? []
                 : cohort.Members.Select(m => new CausalityLineageChainHopMember(
                     string.IsNullOrWhiteSpace(m.DisplayName) ? "Unnamed object" : m.DisplayName!,
-                    GetActivityItemHref(m, effectItemId))).ToList()
+                    GetActivityItemHref(m, effectItemId, links))).ToList()
         };
     }
+
+    /// <summary>
+    /// What a link to carry on past the walk's bound says (#2100).
+    /// </summary>
+    internal static string ContinueFromText(string? farthestName) =>
+        string.IsNullOrWhiteSpace(farthestName) ? "Continue from the last item" : $"Continue from {farthestName}";
 
     /// <summary>
     /// The kind of run that recorded a cause, where the hop's seam pins one: a derived import hop was
@@ -309,12 +365,12 @@ public static class CausalityLineageModelBuilder
     /// The href of the item that recorded a cause, or null where there is nothing useful to link to:
     /// the cause named no item, or named the very item being viewed.
     /// </summary>
-    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId)
+    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId, ICausalityLinks links)
     {
         if (member.RunProfileExecutionItemId is not { } itemId || itemId == Guid.Empty)
             return null;
 
-        return itemId == effectItemId ? null : $"/activity/item/{itemId}";
+        return itemId == effectItemId ? null : links.ItemHref(itemId);
     }
 
     /// <summary>
@@ -330,7 +386,18 @@ public static class CausalityLineageModelBuilder
             .ToList();
 
         var endings = state.EndingResolutions
-            .Select(r => new CausalityLineageEnding(r, CausalityCauseWording.Ending(r)!))
+            .Select(r => new CausalityLineageEnding(r, CausalityCauseWording.Ending(r)!)
+            {
+                Continuations = r == CausalChainResolution.DepthLimitReached
+                    ? state.Continuations.DistinctBy(c => c.Href).ToList()
+                    : []
+            })
+            .ToList();
+
+        // Later runs in the order they ran; a branch's ending (which has no time of its own) closes after them.
+        var consequenceCards = state.Consequences
+            .OrderBy(c => c.Card.Occurred ?? DateTime.MaxValue).ThenBy(c => c.Sequence)
+            .Select(c => c.Card)
             .ToList();
 
         ColumnHead head;
@@ -344,7 +411,9 @@ public static class CausalityLineageModelBuilder
                     head = head with { ObjectTypeName = context.MvoTypeName };
                 break;
             case CausalityLineageColumnKind.Record:
-                head = GetRecordHead(state, context);
+                head = state.IsConsequenceObject
+                    ? state.ConsequenceHead ?? new ColumnHead(state.SystemName ?? "Connected System Object", IsRoleHead: false, Href: null, ObjectTypeName: null)
+                    : GetRecordHead(state, context);
                 break;
             default:
                 head = new ColumnHead("Earlier causes", IsRoleHead: false, Href: null, ObjectTypeName: null);
@@ -361,7 +430,9 @@ public static class CausalityLineageModelBuilder
             ObjectTypeName = head.ObjectTypeName,
             Href = head.Href,
             Cards = cards,
-            Endings = endings
+            Endings = endings,
+            Consequences = consequenceCards,
+            MemberCount = head.IsRoleHead ? state.MemberCount : null
         };
     }
 
@@ -385,6 +456,13 @@ public static class CausalityLineageModelBuilder
             .SelectMany(e => e.Links)
             .Any(l => l.Kind == CausalityEntityKind.DeletionRecord);
         if (deletedByThisRun)
+            return null;
+
+        // A deletion the walk found is told by its own card, which names the rule that decided it and links the
+        // deletion record; the note is the fallback for when the item that deleted it is no longer retained (#1811).
+        var deletedByAConsequence = state.Consequences
+            .Any(c => c.Card.Event?.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        if (deletedByAConsequence)
             return null;
 
         // Only the Identity can be known to be gone: the page looks it up, and a record's absence would need
@@ -429,6 +507,14 @@ public static class CausalityLineageModelBuilder
         if (chain != null && FirstSoleMemberName(chain.Cohorts) is { } chainName)
             return new ColumnHead(chainName, IsRoleHead: false, Href: null, ObjectTypeName: null);
 
+        // A Metaverse Object only the consequences reached (an import's, before its Synchronisation drew it) is named
+        // by what a later run recorded doing to it.
+        var consequenceIdentityLink = state.Consequences
+            .SelectMany(c => c.Card.Event?.Links ?? [])
+            .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity && !string.IsNullOrWhiteSpace(l.Label));
+        if (consequenceIdentityLink != null)
+            return new ColumnHead(consequenceIdentityLink.Label, IsRoleHead: false, consequenceIdentityLink.Href, ObjectTypeName: null);
+
         return new ColumnHead("Metaverse Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
     }
 
@@ -442,8 +528,8 @@ public static class CausalityLineageModelBuilder
     {
         if (state.IsPageRecord)
         {
-            string? href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
-                ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            var href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
+                ? context.Links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
             return new ColumnHead(
                 ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? "Connected System Object",
@@ -568,13 +654,15 @@ public static class CausalityLineageModelBuilder
     /// </summary>
     private static bool WasProvisioned(ColumnState state) =>
         state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)
-        || state.Hops.Any(h => h.Hop.Cohort.ReasonCode == CausalReasonCode.ExportCreateStaged);
+        || state.Hops.Any(h => h.Hop.Cohort.ReasonCode == CausalReasonCode.ExportCreateStaged)
+        || state.Consequences.Any(c => c.Card.Event?.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
 
     /// <summary>
     /// Whether this run disconnected the record this column state stands for, under a Disconnect Deprovisioning Action.
     /// </summary>
     private static bool WasDisconnected(ColumnState state) =>
-        state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
+        state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected)
+        || state.Consequences.Any(c => c.Card.Event?.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
 
     /// <summary>
     /// A column under construction: its identity, side, cards-in-progress and endings, before heads
@@ -599,6 +687,34 @@ public static class CausalityLineageModelBuilder
         public List<(CausalityLineageChainHop Hop, int Sequence)> Hops { get; } = [];
 
         public List<CausalChainResolution> EndingResolutions { get; } = [];
+
+        /// <summary>
+        /// The single items the walk stopped at its bound on, to carry on from (#2100).
+        /// </summary>
+        public List<CausalityLineageContinuation> Continuations { get; } = [];
+
+        /// <summary>
+        /// True for an object only the consequences reached (#1811). Keyed by object rather than by system, so it is
+        /// never the column this run's events or the chain's hops look a system up in.
+        /// </summary>
+        public bool IsConsequenceObject { get; init; }
+
+        public List<(CausalityLineageConsequence Card, int Sequence)> Consequences { get; } = [];
+
+        /// <summary>
+        /// A consequence object's head, from the items that acted on it.
+        /// </summary>
+        public ColumnHead? ConsequenceHead { get; set; }
+
+        /// <summary>
+        /// Whether <see cref="ConsequenceHead"/> came from an item about the object itself, which no later item renames.
+        /// </summary>
+        public bool IsHeadFromItem { get; set; }
+
+        /// <summary>
+        /// How many objects a consequence object's role head speaks for.
+        /// </summary>
+        public int? MemberCount { get; set; }
     }
 
     /// <summary>

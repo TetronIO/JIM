@@ -772,6 +772,58 @@ WHERE parent."OutcomeType" = 11
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: Assert a grace-period deletion names the run that scheduled it (#1811). Housekeeping deletes the Metaverse
+# Object in its own Activity, and its deletion item records a MetaverseObjectDeletionScheduleCausedDeletion edge
+# pointing at the item that recorded Metaverse Object deletion scheduled. Edges are not on the REST API's execution
+# item list, so they are read from the database, as Get-MvoDeletionMarkers does.
+# -----------------------------------------------------------------------------------------------------------------
+function Assert-HousekeepingDeletionNamesSchedulingRun {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MvoId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$StepName
+    )
+
+    # Interpolated because psql -c over docker exec takes no bind parameters; a parsed Guid cannot carry SQL.
+    $parsedId = [Guid]::Empty
+    if (-not [Guid]::TryParse($MvoId, [ref]$parsedId)) {
+        throw "Assert-HousekeepingDeletionNamesSchedulingRun: '$MvoId' is not a Metaverse Object id."
+    }
+
+    # Ordinals pinned by CausalEdgeOrdinalTests (MetaverseObjectDeletionScheduleCausedDeletion 5) and
+    # SyncOutcomeTypeOrdinalTests (MvoDeleted 11, MvoDeletionScheduled 17). The edge's effect is the housekeeping item
+    # carrying MvoDeleted; its cause is the item carrying MvoDeletionScheduled, both for this Metaverse Object.
+    $query = @"
+SELECT COUNT(*)
+FROM "CausalEdges" e
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" deleted
+  ON deleted."ActivityRunProfileExecutionItemId" = e."EffectRunProfileExecutionItemId"
+ AND deleted."OutcomeType" = 11 AND deleted."TargetEntityId" = '$parsedId'
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" scheduled
+  ON scheduled."ActivityRunProfileExecutionItemId" = e."CauseRunProfileExecutionItemId"
+ AND scheduled."OutcomeType" = 17 AND scheduled."TargetEntityId" = '$parsedId'
+WHERE e."EdgeType" = 5 AND e."CauseMetaverseObjectId" = '$parsedId';
+"@
+
+    $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-HousekeepingDeletionNamesSchedulingRun: psql query failed for MVO $MvoId. Output: $rows"
+    }
+
+    $count = [int]("$rows".Trim())
+    if ($count -ne 1) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Expected one scheduling edge on the housekeeping deletion, found $count" }
+        throw "$TestName failed: the housekeeping deletion of MVO $MvoId does not name the run that scheduled it ($count matching edge(s))"
+    }
+    Write-Host "  PASSED: The housekeeping deletion names the run that scheduled it" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Count delete-type Pending Exports on the LDAP system
 # -----------------------------------------------------------------------------------------------------------------
 function Get-DeletePendingExportCount {
@@ -1674,6 +1726,9 @@ try {
             throw "Test 4 Assert 2 failed: MVO still exists after grace period should have elapsed"
         }
         Write-Host "  PASSED: MVO deleted after grace period elapsed (housekeeping processed it)" -ForegroundColor Green
+
+        # Assert 2b: the housekeeping deletion names the run that scheduled it (#1811)
+        Assert-HousekeepingDeletionNamesSchedulingRun -MvoId $test4MvoId -TestName "Test 4 Assert 2b" -StepName "AuthoritativeGracePeriod"
 
         # Verify it appears in deleted objects
         $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Grace" -PageSize 10

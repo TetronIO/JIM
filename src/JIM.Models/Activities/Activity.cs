@@ -22,6 +22,13 @@ public class Activity
     /// </summary>
     public const string SyncRuleMappingTargetNamePrefix = "Mapping to ";
 
+    /// <summary>
+    /// The <see cref="TargetName"/> prefix used by configuration test case activities (#2055), which carry the target
+    /// type of what owns the case (a Synchronisation Rule, or a Connected System for a Simple mode Object Matching
+    /// Rule): a test case has no target type of its own. Followed by the case's name, never its values.
+    /// </summary>
+    public const string ConfigurationTestCaseTargetNamePrefix = "Test case ";
+
     public Guid Id { get; set; }
 
     /// <summary>
@@ -585,6 +592,13 @@ public class Activity
     /// "commit message"). Kept general: any activity may carry a reason. Null when not supplied.
     /// </summary>
     public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// What the save gate (#2055 Phase 4b) did with a configuration change that stopped configuration test cases
+    /// passing: the cases saved past, and those whose new result was accepted as expected, by name and status, never
+    /// their values. Null when the change stopped no case passing.
+    /// </summary>
+    public string? ConfigurationTestGateNote { get; set; }
 
     /// <summary>
     /// The per-object configuration-change version number (v1, v2, ...). Assigned as (max existing version for the

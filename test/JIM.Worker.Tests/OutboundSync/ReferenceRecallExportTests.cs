@@ -545,6 +545,107 @@ public class ReferenceRecallExportTests
     }
 
     /// <summary>
+    /// A scoped rule whose criterion cannot be evaluated for the referencing group (a pattern running past its time
+    /// limit) stages nothing for that group and reports it, rather than throwing and losing every other object's recall.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ScopeCannotBeDecided_ReportsTheObjectAndStagesNothingForItAsync()
+    {
+        // Arrange
+        AddScopingCriterion(categoryValue: "^(a+)+$", SearchComparisonType.MatchesPattern);
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SetGroupCategory(groupMvo, new string('a', 5000) + "!");
+        SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExportsStaged, Is.EqualTo(0), "an object whose scope is unknown receives no recall");
+            Assert.That(SyncRepo.PendingExports, Is.Empty);
+            Assert.That(result.ScopingFailures.Select(f => f.MetaverseObjectId), Is.EqualTo(new[] { groupMvo.Id }));
+            Assert.That(result.ScopingFailures.Single().Message, Does.Contain("time limit"));
+        }
+    }
+
+    /// <summary>
+    /// The full-evaluation fallback's twin of the test above: an object routed off the fast path whose scope cannot be
+    /// decided is reported and receives nothing, and the recall does not throw.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_FallbackScopeCannotBeDecided_ReportsTheObjectAndStagesNothingForItAsync()
+    {
+        // Arrange
+        AddExpressionMappingMentioningMembers();
+        AddScopingCriterion(categoryValue: "^(a+)+$", SearchComparisonType.MatchesPattern);
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SetGroupCategory(groupMvo, new string('a', 5000) + "!");
+        SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FastPathReferencingObjects, Is.EqualTo(0), "precondition: routed through the fallback");
+            Assert.That(SyncRepo.PendingExports, Is.Empty, "an object whose scope is unknown receives no recall");
+            Assert.That(result.ScopingFailures.Select(f => f.MetaverseObjectId), Is.EqualTo(new[] { groupMvo.Id }));
+        }
+    }
+
+    /// <summary>
+    /// The fast path evaluates scope against a lean object holding only the scoping attributes' values, which cannot
+    /// serve an expression criterion (#2054): its inputs are names, read from the full object. A type whose rule scopes
+    /// on an expression takes the full-evaluation fallback, and its in-scope group still receives the removal.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ExpressionScopedRule_RoutesToFallbackAndStagesRemovalAsync()
+    {
+        // Arrange
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Id = 920,
+            Type = SearchGroupType.All,
+            Criteria =
+            {
+                new SyncRuleScopingCriteria
+                {
+                    Id = 921, Expression = $"Lower(mv[\"{MvCategoryAttribute.Name}\"])", CompareAs = AttributeDataType.Text,
+                    ComparisonType = SearchComparisonType.Equals, StringValue = "distribution"
+                }
+            }
+        });
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SetGroupCategory(groupMvo, "Distribution");
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FastPathReferencingObjects, Is.Zero);
+            Assert.That(result.FallbackReferencingObjects, Is.EqualTo(1));
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id), Has.Exactly(1).Items,
+                "the in-scope group receives the removal");
+        }
+    }
+
+    /// <summary>
     /// Merging into an existing (unexported) Update Pending Export: recall changes join the
     /// existing ones, an unrelated pending change survives, a stale Add whose unresolved reference
     /// is the deleted Metaverse Object is purged (it could never resolve, and would wedge the whole
@@ -928,7 +1029,7 @@ public class ReferenceRecallExportTests
     /// <summary>
     /// Scopes the export rule to groups whose Group Category equals the given value.
     /// </summary>
-    private void AddScopingCriterion(string categoryValue)
+    private void AddScopingCriterion(string categoryValue, SearchComparisonType comparisonType = SearchComparisonType.Equals)
     {
         var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
         exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
@@ -942,7 +1043,7 @@ public class ReferenceRecallExportTests
                     Id = 911,
                     MetaverseAttribute = MvCategoryAttribute,
                     MetaverseAttributeId = MvCategoryAttribute.Id,
-                    ComparisonType = SearchComparisonType.Equals,
+                    ComparisonType = comparisonType,
                     StringValue = categoryValue
                 }
             }

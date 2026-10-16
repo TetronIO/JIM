@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
@@ -17,10 +18,18 @@ public class CreateObjectMatchingRuleSourceRequest
     public int Order { get; set; } = 0;
 
     /// <summary>
-    /// The Connected System attribute ID. Required: sources are matched against the rule's
-    /// Target Metaverse Attribute, for both import and export matching.
+    /// The Connected System attribute whose values are compared with the rule's Target Metaverse Attribute, for both
+    /// import and export matching. Give exactly one of this or <see cref="Expression"/>.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// An expression computing the value to compare with the rule's Target Metaverse Attribute, such as
+    /// <c>"E" + Trim(cs["employeeId"])</c>. It reads the Connected System Object only (<c>cs["attributeName"]</c>), and
+    /// its result is converted to the Target Metaverse Attribute's type; a list of text values is compared value by
+    /// value. Give exactly one of this or <see cref="ConnectedSystemAttributeId"/>.
+    /// </summary>
+    public string? Expression { get; set; }
 }
 
 /// <summary>
@@ -62,10 +71,11 @@ public class CreateObjectMatchingRuleRequest
     public List<CreateObjectMatchingRuleSourceRequest> Sources { get; set; } = new();
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
+    /// Omitted or null follows the sources: case is respected when any source attribute is declared case-exact, and
+    /// ignored otherwise, including for an expression source.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 }
 
 /// <summary>
@@ -95,10 +105,11 @@ public class CreateSyncRuleObjectMatchingRuleRequest
     public List<CreateObjectMatchingRuleSourceRequest> Sources { get; set; } = new();
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
+    /// Omitted or null follows the sources: case is respected when any source attribute is declared case-exact, and
+    /// ignored otherwise, including for an expression source.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 }
 
 /// <summary>
@@ -117,8 +128,19 @@ public class SwitchObjectMatchingModeRequest
 /// <summary>
 /// Request DTO for updating an Object Matching Rule.
 /// </summary>
-public class UpdateObjectMatchingRuleRequest
+public class UpdateObjectMatchingRuleRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The new evaluation order for this rule.
     /// </summary>

@@ -21,7 +21,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+    <PageInfo Title="Activity" DocsPage="configuration/activities.md">
+        An Activity records one thing JIM did: what started it, when, and how it ended. A Run Profile's Activity also lists what the run did to each object it touched.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -105,55 +109,14 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
-                @{
-                    if (_activity.InitiatedByType == ActivityInitiatorType.User)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                            @if (_activity.InitiatedById.HasValue && _initiatorMetaverseObjectHeader != null)
-                            {
-                                <MudLink Href="@Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader)">@_activity.InitiatedByName</MudLink>
-                            }
-                            else
-                            {
-                                <span>@_activity.InitiatedByName</span>
-                            }
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                            @if (_activity.InitiatedById.HasValue)
-                            {
-                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
-                            }
-                            else
-                            {
-                                <span>@_activity.InitiatedByName</span>
-                            }
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.System)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                            <span>@(_activity.InitiatedByName ?? "System")</span>
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.Anonymous)
-                    {
-                        @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
-                            <span>Anonymous</span>
-                        </MudText>
-                    }
-                    else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
-                    {
-                        <MudText>@_activity.InitiatedByName</MudText>
-                    }
-                }
+                <MudText>
+                    <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                                       InitiatedById="@_activity.InitiatedById"
+                                       InitiatedByName="@_activity.InitiatedByName"
+                                       UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
+                                       ScheduleName="@_activity.ScheduledByScheduleName"
+                                       ScheduleExecutionId="@_activity.ScheduleExecutionId" />
+                </MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
@@ -295,6 +258,16 @@
             @foreach (var warningLine in _activity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@warningLine</MudText>
+            }
+            @* A run that left references unresolved under Warn says so here, and the objects are one click away (#959):
+               the Connector Space filtered to them, which shows the references as they stand now. *@
+            @if (_hasUnresolvedReferences && _activity.ConnectedSystemId is { } unresolvedConnectedSystemId)
+            {
+                <AlertButton Severity="Severity.Warning"
+                             Href="@UnresolvedReferenceDisplay.ConnectorSpaceHref(unresolvedConnectedSystemId)"
+                             Class="mt-3">
+                    View Affected Objects
+                </AlertButton>
             }
         </MudAlert>
     }
@@ -984,44 +957,7 @@
                         <MudText Typo="Typo.button">Outcomes</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @{
-                            var outcomes = Helpers.ParseOutcomeSummary(context.Item.OutcomeSummary);
-                            var itemErrorType = context.Item.ErrorType;
-                            var hasError = itemErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet;
-                        }
-                        @if (outcomes.Count > 0)
-                        {
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                @foreach (var (outcomeType, count) in outcomes)
-                                {
-                                    <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Variant="Variant.Text"
-                                                 Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
-                                                 Class="jim-stat-chip">
-                                            @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
-                                        </MudChip>
-                                    </MudTooltip>
-                                }
-                                @if (hasError)
-                                {
-                                    var errorType = itemErrorType!.Value;
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                        @Helpers.GetErrorTypeChipLabel(errorType)
-                                    </MudChip>
-                                }
-                            </MudStack>
-                        }
-                        else if (hasError)
-                        {
-                            var errorType = itemErrorType!.Value;
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                @Helpers.GetErrorTypeChipLabel(errorType)
-                            </MudChip>
-                        }
-                        else
-                        {
-                            <EmptyValue />
-                        }
+                        <OutcomeSummaryChips OutcomeSummary="@context.Item.OutcomeSummary" ErrorType="@context.Item.ErrorType" />
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -1193,6 +1129,7 @@
     /// Structured detail for a failure caused by a directory server's certificate, when the Activity carries it.
     /// </summary>
     private ServerCertificateDiagnostic? _serverCertificate;
+    private bool _hasUnresolvedReferences;
     private Activity? _parentActivity;
 
     // The preview that informed this change (#134), its Activity, and its verdict; empty where there is none.
@@ -1347,6 +1284,11 @@
         }
 
         _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
+
+        // Asked only where the answer can show: inside a warning, on a run against a Connected System.
+        _hasUnresolvedReferences = !string.IsNullOrEmpty(_activity.WarningMessage)
+                                   && _activity.ConnectedSystemId != null
+                                   && await jim.Activities.HasUnresolvedReferencesAsync(_activity.Id);
 
         // Seed the ETA sample window so the estimate appears as soon as a second sample lands.
         UpdateEtaEstimate(_activity);
@@ -1651,6 +1593,9 @@
         if (s.TotalJoins > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Joined, s.TotalJoins);
         if (s.TotalAttributeFlows > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, s.TotalAttributeFlows);
         if (s.TotalGeneratedValues > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, s.TotalGeneratedValues);
+        // Generated Value Forms (#2023): values held back for an input a value built from them needs, so the run's
+        // warning has a chip listing the objects it means.
+        if (s.TotalGeneratedValuesWaiting > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, s.TotalGeneratedValuesWaiting);
         if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
         // Retained joins (#1649): counted from the items' change type, which the filter also matches, so the chip
         // finds items recorded before the outcome type existed as well as those recorded since.

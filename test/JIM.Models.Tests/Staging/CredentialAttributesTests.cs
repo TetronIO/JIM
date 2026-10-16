@@ -31,7 +31,12 @@ public class CredentialAttributesTests
         "lmPwdHistory",
         "supplementalCredentials",
         "unixUserPassword",
-        "msDS-ManagedPassword"
+        "msDS-ManagedPassword",
+
+        // The password policy history attributes of OpenLDAP and 389 Directory Server: operational, so offered by
+        // schema discovery since #2153 (D8), and they hold hashes of previous passwords.
+        "pwdHistory",
+        "passwordHistory"
     ];
 
     /// <summary>

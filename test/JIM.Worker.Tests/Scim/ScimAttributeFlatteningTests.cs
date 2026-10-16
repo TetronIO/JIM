@@ -315,6 +315,59 @@ public class ScimAttributeFlatteningTests
             Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Binary));
         }
     }
+
+    [Test]
+    public void Flatten_MultiValuedComplexWithABooleanSubAttribute_DoesNotEmitTheBoolean()
+    {
+        // The Boolean rule (#2153): flattening decorrelates "primary" from its entry, and as a single-valued
+        // Boolean it would report a surplus on every import of a resource whose entries' flags differ. The
+        // entry's other sub-attributes still flatten.
+        var roles = new ScimSchemaAttribute
+        {
+            Name = "roles",
+            Type = ScimAttributeTypes.Complex,
+            MultiValued = true,
+            SubAttributes = [Simple("value", ScimAttributeTypes.String), Simple("display", ScimAttributeTypes.String), Simple("primary", ScimAttributeTypes.Boolean)]
+        };
+
+        var flattened = ScimAttributeMapper.Flatten(roles, ScimUrns.User);
+
+        Assert.That(flattened.Select(a => a.Name).ToList(), Is.EqualTo(new[] { "roles.value", "roles.display" }));
+    }
+
+    [Test]
+    public void Flatten_SingleValuedComplexWithABooleanSubAttribute_StillEmitsIt()
+    {
+        // A single-valued complex attribute's Boolean holds one value, so it is kept.
+        var account = new ScimSchemaAttribute
+        {
+            Name = "account",
+            Type = ScimAttributeTypes.Complex,
+            SubAttributes = [Simple("name", ScimAttributeTypes.String), Simple("locked", ScimAttributeTypes.Boolean)]
+        };
+
+        var flattened = ScimAttributeMapper.Flatten(account, ScimUrns.User);
+
+        Assert.That(flattened.Select(a => a.Name).ToList(), Is.EqualTo(new[] { "account.name", "account.locked" }));
+    }
+
+    [Test]
+    public void FlattenSchema_CoreUser_EmitsNoMultiValuedBoolean()
+    {
+        // roles.primary, entitlements.primary and x509Certificates.primary were the core schema's three.
+        var flattened = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flattened.Where(a => a.Type == AttributeDataType.Boolean && a.AttributePlurality == AttributePlurality.MultiValued).Select(a => a.Name), Is.Empty);
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("roles.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("entitlements.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Not.Contain("x509Certificates.primary"));
+            Assert.That(flattened.Select(a => a.Name), Does.Contain("roles.value"));
+            Assert.That(flattened.Select(a => a.Name), Does.Contain("emails.primary"),
+                "A canonical-type primary slot is a single-valued selector, not a decorrelated flag, so it stays.");
+        }
+    }
     #endregion
 
     #region references
@@ -502,6 +555,71 @@ public class ScimAttributeFlatteningTests
             Assert.That(connectorAttribute.Required, Is.True);
             Assert.That(connectorAttribute.Writability, Is.EqualTo(AttributeWritability.Writable));
             Assert.That(connectorAttribute.ClassName, Is.EqualTo(ScimUrns.User));
+        }
+    }
+    #endregion
+
+    #region case-exact declaration (#2051)
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactString_DeclaresItCaseExact()
+    {
+        var attribute = new ScimSchemaAttribute { Name = "employeeCode", Type = ScimAttributeTypes.String, CaseExact = true };
+
+        var connectorAttribute = ScimAttributeMapper.Flatten(attribute, ScimUrns.User)[0].ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.True);
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_StringWithoutCaseExact_IgnoresCase()
+    {
+        // RFC 7643 section 7: caseExact defaults to false.
+        var connectorAttribute = ScimAttributeMapper.Flatten(Simple("userName", ScimAttributeTypes.String), ScimUrns.User)[0]
+            .ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.False);
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactSubAttribute_DeclaresTheFlattenedLeafCaseExact()
+    {
+        // A canonical slot's declaration is its value sub-attribute's, since that is what the slot holds.
+        var emails = Emails();
+        emails.SubAttributes.Single(a => a.Name == "value").CaseExact = true;
+
+        var flattened = ScimAttributeMapper.Flatten(emails, ScimUrns.User);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flattened.Single(a => a.Name == "emails.work").ToConnectorSchemaAttribute().CaseExact, Is.True);
+            Assert.That(flattened.Single(a => a.Name == "emails.primary").ToConnectorSchemaAttribute().CaseExact, Is.True,
+                "The primary slot holds the same value sub-attribute.");
+        }
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_CaseExactOnANonTextType_IsNotDeclared()
+    {
+        // caseExact describes how text compares; a binary or reference attribute carries no declaration.
+        var attribute = new ScimSchemaAttribute { Name = "photo", Type = ScimAttributeTypes.Binary, CaseExact = true };
+
+        var connectorAttribute = ScimAttributeMapper.Flatten(attribute, ScimUrns.User)[0].ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.CaseExact, Is.False);
+    }
+
+    [Test]
+    public void CommonAttributes_IdAndExternalId_AreCaseExact()
+    {
+        // RFC 7643 section 3.1 defines both with "caseExact" true; they are not in any /Schemas document, so the
+        // declaration has to be stated where they are synthesised.
+        var common = ScimCommonAttributes.For(ScimUrns.User).ToDictionary(a => a.Name, a => a.ToConnectorSchemaAttribute());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(common[ScimCommonAttributes.Id].CaseExact, Is.True);
+            Assert.That(common[ScimCommonAttributes.ExternalId].CaseExact, Is.True);
+            Assert.That(common["meta.resourceType"].CaseExact, Is.False);
         }
     }
     #endregion

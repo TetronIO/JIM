@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
-using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Application;
@@ -11,6 +10,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -88,12 +88,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var authorisedProperty = value!.GetType().GetProperty("authorised");
-        Assert.That(authorisedProperty?.GetValue(value), Is.True);
+        Assert.That(value!.Authorised, Is.True);
     }
 
     [Test]
@@ -111,12 +110,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var rolesProperty = value!.GetType().GetProperty("roles");
-        var roles = rolesProperty?.GetValue(value) as IEnumerable<string>;
+        var roles = value!.Roles;
         Assert.That(roles, Is.Not.Null);
         Assert.That(roles, Does.Contain(Constants.BuiltInRoles.Administrator));
         Assert.That(roles, Does.Contain(Constants.BuiltInRoles.User));
@@ -136,12 +134,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var idProperty = value!.GetType().GetProperty("metaverseObjectId");
-        Assert.That(idProperty?.GetValue(value)?.ToString(), Is.EqualTo(mvoId.ToString()));
+        Assert.That(value!.MetaverseObjectId?.ToString(), Is.EqualTo(mvoId.ToString()));
     }
 
     [Test]
@@ -158,12 +155,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var nameProperty = value!.GetType().GetProperty("name");
-        Assert.That(nameProperty?.GetValue(value), Is.EqualTo("Test User"));
+        Assert.That(value!.Name, Is.EqualTo("Test User"));
     }
 
     [Test]
@@ -181,12 +177,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var isAdminProperty = value!.GetType().GetProperty("isAdministrator");
-        Assert.That(isAdminProperty?.GetValue(value), Is.True);
+        Assert.That(value!.IsAdministrator, Is.True);
     }
 
     [Test]
@@ -203,12 +198,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var isAdminProperty = value!.GetType().GetProperty("isAdministrator");
-        Assert.That(isAdminProperty?.GetValue(value), Is.False);
+        Assert.That(value!.IsAdministrator, Is.False);
     }
 
     #endregion
@@ -242,12 +236,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var authorisedProperty = value!.GetType().GetProperty("authorised");
-        Assert.That(authorisedProperty?.GetValue(value), Is.False);
+        Assert.That(value!.Authorised, Is.False);
     }
 
     [Test]
@@ -261,12 +254,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var rolesProperty = value!.GetType().GetProperty("roles");
-        var roles = rolesProperty?.GetValue(value) as IEnumerable<string>;
+        var roles = value!.Roles;
         Assert.That(roles, Is.Not.Null);
         Assert.That(roles, Is.Empty);
     }
@@ -282,12 +274,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var idProperty = value!.GetType().GetProperty("metaverseObjectId");
-        Assert.That(idProperty?.GetValue(value), Is.Null);
+        Assert.That(value!.MetaverseObjectId, Is.Null);
     }
 
     [Test]
@@ -301,12 +292,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var isAdminProperty = value!.GetType().GetProperty("isAdministrator");
-        Assert.That(isAdminProperty?.GetValue(value), Is.False);
+        Assert.That(value!.IsAdministrator, Is.False);
     }
 
     [Test]
@@ -320,12 +310,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var messageProperty = value!.GetType().GetProperty("message");
-        var message = messageProperty?.GetValue(value) as string;
+        var message = value!.Message;
         Assert.That(message, Is.Not.Null.And.Not.Empty);
         Assert.That(message, Does.Contain("synchronised").IgnoreCase.Or.Contain("administrator").IgnoreCase);
     }
@@ -350,12 +339,11 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var authMethodProperty = value!.GetType().GetProperty("authMethod");
-        Assert.That(authMethodProperty?.GetValue(value), Is.EqualTo("api_key"));
+        Assert.That(value!.AuthMethod, Is.EqualTo("api_key"));
     }
 
     [Test]
@@ -372,12 +360,39 @@ public class UserInfoControllerTests
 
         // Act
         var result = await _controller.GetAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as UserInfoResponse;
 
         // Assert
         Assert.That(value, Is.Not.Null);
-        var authMethodProperty = value!.GetType().GetProperty("authMethod");
-        Assert.That(authMethodProperty?.GetValue(value), Is.EqualTo("oauth"));
+        Assert.That(value!.AuthMethod, Is.EqualTo("oauth"));
+    }
+
+    #endregion
+
+    #region Wire format
+
+    [Test]
+    public async Task GetAsync_WhenUserHasMetaverseObjectId_SerialisesWithoutMessageAsync()
+    {
+        SetUserClaims(
+            new Claim("name", "Test User"),
+            new Claim(Constants.BuiltInClaims.MetaverseObjectId, Guid.NewGuid().ToString()));
+
+        var value = (await _controller.GetAsync() as OkObjectResult)?.Value;
+
+        Assert.That(HealthControllerTests.SerialisedPropertyNames(value),
+            Is.EqualTo(new[] { "authorised", "isAdministrator", "name", "authMethod", "metaverseObjectId", "roles" }));
+    }
+
+    [Test]
+    public async Task GetAsync_WhenUserHasNoMetaverseObjectId_SerialisesWithMessageAsync()
+    {
+        SetUserClaims(new Claim("name", "Test User"));
+
+        var value = (await _controller.GetAsync() as OkObjectResult)?.Value;
+
+        Assert.That(HealthControllerTests.SerialisedPropertyNames(value),
+            Is.EqualTo(new[] { "authorised", "isAdministrator", "name", "authMethod", "metaverseObjectId", "roles", "message" }));
     }
 
     #endregion

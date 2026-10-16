@@ -1,6 +1,11 @@
-# JIM SQL Connector
+---
+title: JIM SQL Connector
+description: Synchronise identities with tables in Microsoft SQL Server and Oracle Database, as a source, a target or both, and the settings it takes.
+type: object
+audience: administrator
+---
 
-## Overview
+# JIM SQL Connector
 
 The JIM SQL Connector connects JIM to identity data held in a relational database: an HR or payroll system, a student record system, or any line-of-business application that keeps its users, groups and departments in tables. JIM can read those tables as a source of identity, write to them as a target, or both.
 
@@ -18,7 +23,7 @@ One Connected System covers one database, and can synchronise several of its tab
 | **Microsoft SQL Server** | Host, optional port, database name; named instances supported (`SERVER\INSTANCE`) | Encrypted by default. Identity columns and defaults are read back when JIM creates a row. |
 | **Oracle Database** | Host, optional port, service name or SID | Encrypted by default with Native Network Encryption. Sequence-backed and identity keys are read back when JIM creates a row. Oracle Database Free 23ai works without changes. |
 
-Both databases use the same settings and the same Object Types document, and behave the same way; only the connection details differ. Support for PostgreSQL and MySQL is planned as further dialects of this same connector; see [Wider database support](#wider-database-support).
+Both databases use the same settings and the same Object Types document, and behave the same way; only the connection details differ. For other database engines, see [Wider database support](#wider-database-support).
 
 ## What the connector can do
 
@@ -33,15 +38,15 @@ Both databases use the same settings and the same Object Types document, and beh
 | Partitions and Containers | ❌ | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
 | Parallel Export | ❌ | Exports are written one object at a time, each in its own transaction. |
 | Password set | ❌ | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
-| Probe | ✅ | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
+| Probe | ✅ | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](jim-sql-connector-values-in-use.md). |
 
 ## Before you begin
 
 You will need:
 
-- **A database account for JIM**, with only the permissions the Run Profiles you plan to run need: read access for import, read and write access for export. Concrete grants for both databases are in [Database account permissions](#database-account-permissions). Create a dedicated account rather than sharing one.
+- **A database account for JIM**, with only the permissions the Run Profiles you plan to run need: read access for import, read and write access for export. Concrete grants for both databases are in [Database account permissions](jim-sql-connector-security.md#database-account-permissions). Create a dedicated account rather than sharing one.
 - **Network access** from the JIM host to the database server on its listening port (1433 for SQL Server, 1521 for Oracle, or whatever your DBA has set).
-- **The server's certificate authority**, if the database uses a certificate your operating system does not already trust (an internal CA or a self-signed certificate). Add it under **Admin > Certificates** first, or add it when the connection test shows you the certificate; see [When the connection test fails on the certificate](#when-the-connection-test-fails-on-the-certificate).
+- **The server's certificate authority**, if the database uses a certificate your operating system does not already trust (an internal CA or a self-signed certificate). Add it under **Admin > Certificates** first, or add it when the connection test shows you the certificate; see [When the connection test fails on the certificate](jim-sql-connector-security.md#when-the-connection-test-fails-on-the-certificate).
 - **To know your tables**: which table or view holds each kind of object, which column (or columns) identifies a row, and which columns hold other rows' keys. A DBA can usually answer this in minutes.
 - **The time zone the database records in**, if it stores dates and times without an offset. Most do; see [Dates and times](#dates-and-times).
 
@@ -156,7 +161,7 @@ The document is checked when you save. A mistake is reported immediately, naming
 
 #### Related table fields
 
-A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`.
+A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`. Every row is a value, whatever the column's type, so a related table of dates imports each date. A related table of true or false values becomes a single-valued attribute, because a Boolean holds one value; a parent with rows holding both has each value reported rather than one chosen.
 
 | Field | Required | What it is |
 |-------|----------|------------|
@@ -174,7 +179,7 @@ On the Connected System's **Schema** tab, import the schema. JIM reads the datab
 What you will see:
 
 - **The External ID is chosen for you.** The anchor column becomes the Object Type's External ID attribute. Where an Object Type has a two-or-more-column key, JIM composes a single read-only Text attribute from them, named by joining the column names with `+` (`REGION+EMPLOYEE_NO`).
-- **Each attribute's data type**, decided from the column's SQL type; the full mapping is in [Type mapping](#type-mapping). The attribute's Description tells you the column type it was decided from (`Source column type: NUMBER(10).`), and where the database cannot be definitive (Oracle's `NUMBER` columns in particular) you can change the type on the Schema tab. See [Attribute data types](../configuration/connected-systems.md#attribute-data-types) for when you would want to.
+- **Each attribute's data type**, decided from the column's SQL type; the full mapping is in [Type mapping](#type-mapping). The attribute's Description tells you the column type it was decided from (`Source column type: NUMBER(10).`), and where the database cannot be definitive (Oracle's `NUMBER` columns in particular) you can change the type on the Schema tab. See [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types) for when you would want to.
 - **Writability.** Columns of a table are writable; the key columns are set when JIM creates a row and never changed afterwards; columns of a view or a `select` statement are read-only.
 - **Reference hints.** Where a table has a foreign key to another Object Type's key column, the attribute's Description says so and shows you the `referencesObjectType` line to add to your document. JIM suggests; you decide.
 - **Columns JIM cannot synchronise.** A column of a type JIM has no equivalent for (`xml`, `geography`, and the others listed under [Type mapping](#type-mapping)) is left out, and the schema import's warnings name it. Expose it through a view that casts it to a supported type if you need it.
@@ -187,9 +192,9 @@ Create [Run Profiles](../configuration/run-profiles.md) for the operations you n
 
 ### Full Import
 
-A Full Import reads every row of each selected Object Type, a page at a time (the Run Profile's Page Size), and reads the related tables for each page in one query rather than one per row. The first page of each Object Type reports the row count, so the Activity shows a real percentage and time remaining.
+A Full Import reads every row of each selected Object Type, a page at a time (the Run Profile's Page Size), and reads the related tables for each page in one query rather than one per row. A related table's rows, and a change log's, are matched to their object as the database compares the anchor column: ignoring case, unless its collation is case-sensitive. The first page of each Object Type reports the row count, so the Activity shows a real percentage and time remaining.
 
-Most problems affect one row and are reported against that one object, leaving the rest of the import to continue: a value that cannot be converted to the attribute's type, for example, or a fractional value in a column you have recorded as a whole number (JIM reports it rather than rounding it). A problem that would affect every row fails the run with a message saying what to change: a table the account cannot see, a `NULL` in an anchor column, or a number too wide for JIM to hold exactly.
+Most problems affect one row and are reported against that one object, leaving the rest of the import to continue: a value that cannot be converted to the attribute's type, for example, or a fractional value in a column you have recorded as a whole number (JIM reports it rather than rounding it). Every such value is reported with what the column held, the row's other columns are still read, and JIM leaves the attribute as it already held it; see [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import). A problem that would affect every row fails the run with a message saying what to change: a table the account cannot see, a `NULL` in an anchor column, or a number too wide for JIM to hold exactly.
 
 ### Delta Import
 
@@ -218,7 +223,8 @@ An Export writes each Pending Export to the Object Type's table. Everything belo
 | Update | Updates only the columns whose values changed. Key columns are never rewritten. |
 | Delete | Deletes the related-table rows, then the row. A row that has already gone counts as deleted. |
 | Add or remove a multi-valued value | Inserts or deletes one row of the related table. |
-| Reference | Writes the referenced object's own key. If the referenced object does not exist in this database yet, JIM writes the rest of the object now and fills the reference in on a later run, once it does; see [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling) for how a reference that cannot be resolved is reported. |
+| Set a multi-valued attribute to one value | Deletes the object's rows in the related table, then inserts one row holding the value (none, when the attribute is cleared). This is how a single-valued Metaverse attribute flowing to a related table is written, so the table holds exactly that value. |
+| Reference | Writes the referenced object's own key. If the referenced object does not exist in this database yet, JIM writes the rest of the object now and fills the reference in on a later run, once it does; see [Unresolved reference handling](../configuration/unresolved-references.md) for how a reference that cannot be resolved is reported. |
 
 JIM checks every write took effect. A statement the database accepted but which changed nothing (a trigger discarding the insert, a row deleted outside JIM) is reported as a failure for that object, with a message saying what to check, rather than being recorded as done. One object's failure never stops the rest of the batch, and the failed export is retried with JIM's normal backoff.
 
@@ -229,13 +235,7 @@ Because a committed database transaction is a confirmed write, exports to a data
 
 ### Probing for values already in use
 
-When a synchronisation generates a value that is exported unchanged to a column of this database, such as an account name sent to a `USERNAME` column, JIM asks the database whether the value is already in use before choosing it. This catches rows JIM has not imported yet: one inserted by the application since the last import, or by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems).
-
-- **One connection per synchronisation**<br /> The connection is made with this Connected System's own settings, credentials and certificate trust, the first time the synchronisation needs it, and closed when the run ends.
-- **One statement per object**<br /> The object's candidate values (up to ten) and a control value JIM already holds for the attribute go in one query, every value bound as a parameter: `SELECT DISTINCT [USERNAME] FROM [HR].[EMPLOYEES] WHERE [USERNAME] IN (@probe0, @probe1, ...)`. The column is compared as it stands, so an index on it serves the query. A control value that does not come back means the account cannot see the rows, and JIM stops trusting the probe for that attribute for the rest of the run.
-- **It searches what the Object Type reads**<br /> The Object Type's table, view or `select` statement, as configured; a multi-valued attribute is searched in its related table. A view or statement that filters rows out (inactive staff, say) hides them from the probe too, so if a value must be unique across every row, point the Object Type at the table.
-- **Case is ignored**<br /> As at every uniqueness check, `JBloggs` in the database stops JIM choosing `jbloggs`, whatever the column's collation. Where the column's collation already ignores case (Microsoft SQL Server's default), JIM compares the column as it stands, so an index on it serves the query. Everywhere else (Oracle Database, a case-sensitive or binary SQL Server collation, or a `select` statement) it compares `LOWER(column)` with the lower-cased values; on a large table, an index on `LOWER(column)` lets the database answer from the index rather than reading every row.
-- **Undetermined is not a failure**<br /> A database that cannot be reached, refuses the query (a missing `SELECT` grant, say) or does not answer in time is reported once on the synchronisation's Activity as a warning naming the reason, and the run continues with JIM's own records for that Connected System.
+Before JIM chooses a Generated Value exported to this database, it can ask the database whether the value is already in use; see [SQL Connector Values Already in Use](jim-sql-connector-values-in-use.md).
 
 ### Type mapping
 
@@ -255,7 +255,7 @@ JIM decides each attribute's type from the column's declared SQL type:
 
 Two things to know:
 
-- **An Oracle `NUMBER(10)` key is a Long Number, not a Number.** Oracle's single `NUMBER` type can only be narrowed by its declared precision, and ten digits is more than a 32-bit number holds. If such a column needs to flow to a built-in Metaverse Attribute that is a Number (`Employee Number` is the usual one), change the attribute's type to Number on the Schema tab; the procedure is in [Attribute data types](../configuration/connected-systems.md#attribute-data-types).
+- **An Oracle `NUMBER(10)` key is a Long Number, not a Number.** Oracle's single `NUMBER` type can only be narrowed by its declared precision, and ten digits is more than a 32-bit number holds. If such a column needs to flow to a built-in Metaverse Attribute that is a Number (`Employee Number` is the usual one), change the attribute's type to Number on the Schema tab; the procedure is in [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types).
 - **Floating-point columns are approximate.** `float`, `real`, `BINARY_FLOAT` and `BINARY_DOUBLE` are read as Decimal so that they can be compared numerically, but a binary floating-point value does not round-trip to decimal exactly. Prefer an exact numeric column where JIM is authoritative for the value.
 
 A Decimal attribute holds 28 significant digits. A value wider than that is reported rather than rounded, naming the column. Column types JIM has no equivalent for (`xml`, `XMLTYPE`, `sql_variant`, `hierarchyid`, `geography`, `geometry`, `INTERVAL`, `time`, `ROWID`, `BFILE`) are left out of the schema with a warning; expose them through a view that casts to a supported type if they need synchronising.
@@ -268,147 +268,17 @@ In a zone with daylight saving, the hour the clocks skip in spring and the hour 
 
 On Oracle, JIM also sets the database session's time zone to the same value, which is what makes `TIMESTAMP WITH LOCAL TIME ZONE` columns read correctly. If the Oracle server does not recognise the zone name you entered, the connection is refused with a message saying so.
 
-JIM holds a date and time to a ten-millionth of a second (seven fractional digits). An Oracle `TIMESTAMP(9)` column is fine as a Delta Import watermark, change-log sequence or anchor so long as its values carry no more digits than that, which is always the case for values from `SYSTIMESTAMP` (microseconds). A value with genuine nanoseconds is read back shortened, so the row a page or a run stopped on is read again.
+A date and time attribute value is held to the microsecond (six fractional digits), so the seventh digit of a `datetime2(7)` value is dropped when it is imported, and the same value imported again is not a change.
+
+The Connector's own Delta Import watermarks and anchors are held more finely, to a ten-millionth of a second (seven fractional digits). An Oracle `TIMESTAMP(9)` column is fine as a Delta Import watermark, change-log sequence or anchor so long as its values carry no more digits than that, which is always the case for values from `SYSTIMESTAMP` (microseconds). A value with genuine nanoseconds is read back shortened, so the row a page or a run stopped on is read again.
 
 ## Worked examples
 
-### Microsoft SQL Server: an HR application
-
-`dbo.Employees` has an `IDENTITY` key, a `ManagerId` pointing at another employee and a `DepartmentId` pointing at `dbo.Departments`; phone numbers are in `dbo.EmployeePhones`.
-
-```json title="Object Types for a SQL Server HR schema"
-{
-  "objectTypes": [
-    {
-      "name": "Person",
-      "schema": "dbo",
-      "table": "Employees",
-      "anchorColumns": [ "EmployeeId" ],
-      "columns": [
-        { "name": "ManagerId", "referencesObjectType": "Person" },
-        { "name": "DepartmentId", "referencesObjectType": "Department" }
-      ],
-      "relatedTables": [
-        {
-          "attributeName": "PhoneNumbers",
-          "schema": "dbo",
-          "table": "EmployeePhones",
-          "valueColumn": "PhoneNumber",
-          "joinColumns": [ "EmployeeId" ]
-        }
-      ]
-    },
-    {
-      "name": "Department",
-      "schema": "dbo",
-      "table": "Departments",
-      "anchorColumns": [ "DepartmentId" ]
-    }
-  ]
-}
-```
-
-After the schema import: `EmployeeId` (`int`) is the External ID and is set only when a row is created; `ManagerId` and `DepartmentId` are references; `PhoneNumbers` is a multi-valued Text attribute; `HireDate` (`datetime2`) is read in the Database Time Zone; `IsActive` (`bit`) is a Boolean. Exporting a new `Person` inserts the row, reads the identity value back as the External ID, then inserts the phone numbers.
-
-### Oracle Database: an HR schema with groups
-
-`HR.EMPLOYEES` has a sequence-backed `EMPLOYEE_ID NUMBER(10)` key and a `MANAGER_ID`; `HR.GROUPS` has members in `HR.GROUP_MEMBERS`.
-
-```json title="Object Types for an Oracle HR schema"
-{
-  "objectTypes": [
-    {
-      "name": "Person",
-      "schema": "HR",
-      "table": "EMPLOYEES",
-      "anchorColumns": [ "EMPLOYEE_ID" ],
-      "columns": [
-        { "name": "MANAGER_ID", "referencesObjectType": "Person" }
-      ]
-    },
-    {
-      "name": "Group",
-      "schema": "HR",
-      "table": "GROUPS",
-      "anchorColumns": [ "GROUP_ID" ],
-      "relatedTables": [
-        {
-          "attributeName": "Members",
-          "schema": "HR",
-          "table": "GROUP_MEMBERS",
-          "valueColumn": "EMPLOYEE_ID",
-          "joinColumns": [ "GROUP_ID" ],
-          "referencesObjectType": "Person"
-        }
-      ]
-    }
-  ]
-}
-```
-
-After the schema import: `EMPLOYEE_ID` is a Long Number (change it to Number on the Schema tab if it is to flow to `Employee Number`); `IS_ACTIVE NUMBER(1)` is a Number unless **Treat NUMBER(1) Columns as Boolean** is on; `HIRE_DATE` (`DATE`) is read in the Database Time Zone; `Members` is a multi-valued reference to `Person`. Exporting a `Group` inserts its row and one `GROUP_MEMBERS` row per member in one transaction.
-
-!!! tip "Reading through a view and writing to a table"
-    If the application publishes a view for readers but takes writes on the underlying table, either point one Connected System at the table for both directions, or use two Connected Systems: one on the view for import, one on the table for export. A single Object Type reads and writes the same source.
+[SQL Connector Worked Examples](jim-sql-connector-examples.md) configures two databases end to end: an HR application on Microsoft SQL Server, and an HR schema with groups on Oracle Database.
 
 ## Security
 
-### Database account permissions
-
-Create a dedicated database account for JIM and grant it only what the Run Profiles you configure will use:
-
-- **For schema discovery and import**<br /> `SELECT` on each table or view in the Object Types document, on each related table, and (for Change-Log Table Delta Imports) on each change-log table. JIM reads the database's own catalogue views, which show the account exactly the objects it can already read; no wider catalogue permission is needed.
-- **For export**<br /> `INSERT`, `UPDATE` and `DELETE` on each Object Type's table and each related table, in addition to `SELECT`.
-- **For probing generated values**<br /> `SELECT` on each table or view a generated value is exported to, which import already needs; on Microsoft SQL Server the same grant lets JIM read the column's collation from the catalogue. See [Probing for values already in use](#probing-for-values-already-in-use).
-- **Nothing else.**<br /> JIM creates no objects and changes no schema. It does not need `db_owner`, `DBA`, or `SELECT ANY TABLE`.
-
-```sql title="Microsoft SQL Server: an import-only account"
-CREATE LOGIN jim_sync WITH PASSWORD = '<a strong password>';
-CREATE USER jim_sync FOR LOGIN jim_sync;
-GRANT SELECT ON SCHEMA::HR TO jim_sync;
-```
-
-```sql title="Microsoft SQL Server: an account that also exports"
-GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::HR TO jim_sync;
-```
-
-```sql title="Oracle Database: an import-only account"
-CREATE USER jim_sync IDENTIFIED BY "<a strong password>";
-GRANT CREATE SESSION TO jim_sync;
-GRANT SELECT ON HR.V_EMPLOYEES TO jim_sync;
-GRANT SELECT ON HR.EMPLOYEE_PHONES TO jim_sync;
-```
-
-```sql title="Oracle Database: an account that also exports"
-GRANT SELECT, INSERT, UPDATE, DELETE ON HR.EMPLOYEES TO jim_sync;
-GRANT SELECT, INSERT, UPDATE, DELETE ON HR.EMPLOYEE_PHONES TO jim_sync;
-```
-
-On Oracle, grant per object rather than `SELECT ANY TABLE`. The account then sees exactly what JIM should, and a schema import that reports a table "cannot be seen" means a grant is missing, not that something is wrong with JIM.
-
-### Encryption in transit
-
-- **SQL Server** connections are encrypted by default and fail rather than fall back to plain text. The server's certificate is always validated; JIM never accepts an unvalidated certificate.
-- **Oracle** connections use Native Network Encryption by default (AES, with SHA-2 integrity checking), or TLS over a TCPS listener if you choose it. Choose **None** only in a lab.
-- Nothing needs installing on the JIM host for either database, and JIM connects only to the host you name, so the connector works unchanged in an air-gapped deployment.
-
-#### When the connection test fails on the certificate
-
-For SQL Server, if the server presents a certificate JIM does not yet trust (one issued by an internal authority, or self-signed), the connection test fails and shows you the certificate: who issued it, what name it was issued for, its validity dates and its thumbprint, which check it failed, and the certificate chain JIM could find above it. Choose what to trust from the card: the root (recommended, since it survives the renewal of every certificate beneath it), an intermediate authority, or the server's own certificate, which needs trusting again when it is renewed. Any of them makes the connection work.
-
-SQL Server sends only its own certificate, not the authorities above it. JIM fetches them from the download address the certificate names, where it names one, and stores any it had to fetch alongside the certificate you trust, so the connection does not depend on that address afterwards. Where the certificate names no address, the card offers the server's own certificate alone; to trust its authority instead, get the authority's certificate from whoever runs your PKI, add it under **Admin > Certificates**, and test again.
-
-An expired certificate, or one issued for a different name from the host you connect to, is still refused; renew it, or connect by a name the certificate carries. So is a chain through a certificate authority that has expired or is not marked as one; that has to be fixed on the server.
-
-For Oracle over TCPS, JIM shows the same detail, but the certificate must be one your operating system already trusts; the Oracle driver does not accept additional trust anchors. Native Network Encryption needs no certificate at all, which is one reason it is the default.
-
-### Credentials and logging
-
-The password is stored encrypted and is used only to open the connection. It does not appear in any log, Activity or configuration history, and the database driver's error messages never include it.
-
-### What you are trusting
-
-The Object Types document, including any `select` statement, is administrator configuration: it decides which tables JIM reads and writes, just as a Synchronisation Rule decides what flows where. Everything JIM sends to the database as data is sent as a parameter, never pasted into a statement, and every table and column name is validated and quoted.
+[SQL Connector Security](jim-sql-connector-security.md) covers the database account's permissions, encryption in transit and a connection test that fails on the certificate, how the password is kept out of logs, and what you are trusting.
 
 ## Licensing notice
 
@@ -418,50 +288,16 @@ The SQL Server dialect uses `Microsoft.Data.SqlClient`, which is MIT licensed.
 
 ## Wider database support
 
-PostgreSQL and MySQL are planned as further dialects of this connector, with the same settings and the same Object Types document; see the [roadmap](../reference/roadmap.md). If you need another database engine, or need one of those sooner, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas); what comes next is decided by who asks.
+The connector supports Microsoft SQL Server and Oracle Database; for other engines, see the [Roadmap](../reference/roadmap.md). If you need another database engine, or need one of those sooner, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas); what comes next is decided by who asks.
 
 ## Troubleshooting
 
-**"Unable to connect. Message: ..."**<br />
-The database driver's own message follows. A wrong host or blocked port times out after the Connection Timeout; a wrong database name, service name or SID is rejected immediately in the database's own words; a wrong password is an authentication failure. On Oracle, check you have chosen the right form (service name or SID) as well as the right value.
-
-**The connection test fails on the certificate (SQL Server)**<br />
-See [When the connection test fails on the certificate](#when-the-connection-test-fails-on-the-certificate).
-
-**"Object Type 'X' reads from HR.TABLE, which this database account cannot see"**<br />
-The name or schema is wrong, or the account has not been granted `SELECT` on it. On Oracle, grants are per table; see [Database account permissions](#database-account-permissions).
-
-**"Object Type 'X' names 'TABLE', which exists in more than one schema"**<br />
-Add `"schema"` to that Object Type.
-
-**An attribute is missing after the schema import**<br />
-Check the import's warnings: a column whose type JIM cannot synchronise is named there. Expose it through a view that casts it to a supported type.
-
-**"The value has a fractional part, and this attribute's data type is Number"**<br />
-The column holds fractional values but the attribute's type is a whole number, usually because the type was changed on the Schema tab. Change it to Decimal, or correct the source data.
-
-**A Delta Import ran as a Full Import**<br />
-Expected on the first run, and after changing the Delta Import Mode. If it happens every time, read the warning on the Activity for the reason.
-
-**Deleted rows are not removed by a Delta Import**<br />
-Watermark Column mode cannot see deletions. Use a change-log table, or schedule a periodic Full Import. See [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md).
-
-**An export reports "No row was written ... though the database raised no error"**<br />
-A trigger or rule on the table discarded the insert, or the account cannot write to the table. Check the table's triggers and the account's grants.
-
-**An export reports "No row ... is identified by this Connected System Object's external ID"**<br />
-The row was deleted or re-keyed outside JIM. Run a Full Import to bring JIM back in line with the table.
-
-**An Oracle export reports "returned no value for its anchor column"**<br />
-The table's key is neither flowed by a Synchronisation Rule nor generated by the database. Back the column with a sequence-based default or an identity column, or flow the key from JIM.
-
-**Dates are out by an hour**<br />
-The column carries no offset and the Database Time Zone does not match what the application records. Set it to the zone the application uses; columns that carry their own offset are unaffected.
+[Troubleshooting the SQL Connector](jim-sql-connector-troubleshooting.md) covers connection, schema import, Delta Import and export failures, each by the message it shows.
 
 ## Related
 
 - [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md)
 - [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md)
-- [Attribute data types](../configuration/connected-systems.md#attribute-data-types)
+- [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types)
 - [Connected Systems](../configuration/connected-systems.md)
 - [Connectors](index.md)

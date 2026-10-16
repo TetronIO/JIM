@@ -679,6 +679,12 @@ Describe 'Run-IntegrationTests.ps1 handling of the Active Directory only scenari
         $numbers | Should -Contain 24
         $numbers | Should -Contain 25
     }
+
+    It 'treats Scenario 027 as independent of the template: the tutorial''s sample data is fixed at 25 people' {
+        $array = [regex]::Match($script:runnerText, '(?s)\$templateIrrelevantScenarioNumbers\s*=\s*@\((?<body>.*?)\r?\n\)')
+        $numbers = @([regex]::Matches($array.Groups['body'].Value, '(?m)^\s*(\d+)\s*,?') | ForEach-Object { [int]$_.Groups[1].Value })
+        $numbers | Should -Contain 27
+    }
 }
 
 Describe 'Test-PasswordContainsToken' {

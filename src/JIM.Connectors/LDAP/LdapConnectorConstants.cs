@@ -39,10 +39,22 @@ internal static class LdapConnectorConstants
     internal const string DELETE_BEHAVIOUR_DISABLE = "Disable";
 
     /// <summary>
+    /// The Active Directory attribute holding an account's control flags, <see cref="UAC_ACCOUNTDISABLE"/> among them.
+    /// </summary>
+    internal const string UserAccountControlAttributeName = "userAccountControl";
+
+    /// <summary>
     /// Active Directory userAccountControl flag for disabled accounts.
     /// When this bit is set (0x2), the account is disabled.
     /// </summary>
     internal const int UAC_ACCOUNTDISABLE = 0x2;
+
+    /// <summary>
+    /// Win32 ERROR_PASSWORD_RESTRICTIONS, which Active Directory embeds in its diagnostic message when it refuses a
+    /// password for failing the policy in force for the account, and when it refuses to create or enable an account
+    /// that has no password at all (#2039).
+    /// </summary>
+    internal const string AD_ERROR_PASSWORD_RESTRICTIONS = "0000052D";
 
     /// <summary>
     /// Active Directory userAccountControl flag for passwords that never expire.
@@ -118,6 +130,16 @@ internal static class LdapConnectorConstants
     /// Required for delta import deletion detection in Active Directory.
     /// </summary>
     internal const string LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417";
+
+    /// <summary>
+    /// LDAP_SERVER_PERMISSIVE_MODIFY_OID - Server control under which a modify that adds a value already present, or
+    /// deletes one already absent, succeeds instead of being rejected. Without it an LDAP modify is refused whole for
+    /// one such value, and none of the others it carries are applied. Sent only where the directory advertises it in
+    /// its rootDSE supportedControl: Active Directory and Samba AD do (Samba honours it for adds but still refuses the
+    /// removal of an absent member); OpenLDAP implements it for adds but does not advertise it, and 389 Directory
+    /// Server refuses it (unavailableCriticalExtension).
+    /// </summary>
+    internal const string LDAP_SERVER_PERMISSIVE_MODIFY_OID = "1.2.840.113556.1.4.1413";
 
     /// <summary>
     /// Attribute names where Active Directory's SAM layer enforces single-valued behaviour despite the

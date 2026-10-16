@@ -34,7 +34,7 @@ public class LogEntry
     public string? Exception { get; set; }
 
     /// <summary>
-    /// The service that generated the log entry (web, worker, scheduler).
+    /// The service that generated the log entry (web, worker, scheduler, database).
     /// </summary>
     public string Service { get; set; } = string.Empty;
 

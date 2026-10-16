@@ -555,6 +555,36 @@ Describe 'New-JIMMetaverseAttribute' {
             $set.ValidValues | Should -Contain 'Decimal'
         }
     }
+
+    Context 'The Boolean rule' {
+
+        It 'Sends a multi-valued Boolean as asked and surfaces the API''s refusal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw 'JIM API error (400): A Boolean attribute holds one value, true or false, so it cannot be multi-valued.' }
+
+                { New-JIMMetaverseAttribute -Name 'isContractor' -Type Boolean -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be multi-valued*'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It 'Creates a single-valued Boolean by default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 7 } }
+
+                New-JIMMetaverseAttribute -Name 'isContractor' -Type Boolean -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+    }
 }
 
 Describe 'Set-JIMMetaverseAttribute' {
@@ -625,6 +655,81 @@ Describe 'Set-JIMMetaverseAttribute' {
                     $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
                     $Body.type -eq 'Number' -and $Body.attributePlurality -eq 'MultiValued'
                 }
+            }
+        }
+
+        It 'Makes the attribute single-valued when -Type Boolean is given without -AttributePlurality' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Boolean -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+
+        It 'Passes a widening to multi-valued through to the schema endpoint, keeping the current type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'DateTime'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -AttributePlurality MultiValued -ChangeReason 'Widen after upgrade' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'DateTime' -and $Body.attributePlurality -eq 'MultiValued' -and
+                    $Body.changeReason -eq 'Widen after upgrade'
+                }
+            }
+        }
+
+        It 'Sends the plurality the attribute already has, leaving the no-op to the API rather than raising an error' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } | Should -Not -Throw
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 'Text' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It 'Sends an explicit multi-valued Boolean as asked and surfaces the API''s refusal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { throw 'JIM API error (400): A Boolean attribute holds one value, true or false, so it cannot be multi-valued.' }
+
+                { Set-JIMMetaverseAttribute -Id 1 -Type Boolean -AttributePlurality MultiValued -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be multi-valued*'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.type -eq 'Boolean' -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It 'Surfaces a refused schema change as an error and sends nothing further' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -like '*/schema' } { throw 'Response status code does not indicate success: 409 (Conflict).' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -notlike '*/schema' } { $null }
+
+                { Set-JIMMetaverseAttribute -Id 1 -AttributePlurality SingleValued -Name 'Renamed' -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*409*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' }
             }
         }
 
@@ -741,6 +846,25 @@ Describe 'Remove-JIMMetaverseAttribute' {
             }
         }
 
+        It 'Refuses deletion, names each reader and does not call DELETE when configuration reads the attribute' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*deletion-preview*' } {
+                    [PSCustomObject]@{
+                        attributeId = 1; attributeName = 'CostCentre'; builtIn = $false; blockedByValues = $false; totalObjectsWithValues = 0; references = @()
+                        blockedByReaders = $true
+                        readers = @([PSCustomObject]@{ description = "Scoping Criterion on 'CostCentre' in Synchronisation Rule 'Export users'" })
+                    }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseAttribute -Id 1 -Force -ErrorAction SilentlyContinue -ErrorVariable refusal
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+                "$refusal" | Should -BeLike "*Export users*"
+            }
+        }
+
         It 'Sends the attribute name as confirmationName when references cascade' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -827,6 +951,25 @@ Describe 'Remove-JIMMetaverseObjectTypeAttribute' {
                 Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force -WarningAction SilentlyContinue
 
                 Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Refuses, names each reader and does not call DELETE when configuration on the type reads the attribute' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*unassign-preview*' } {
+                    [PSCustomObject]@{
+                        attributeName = 'CostCentre'; metaverseObjectTypeName = 'User'; builtIn = $false; wasBound = $true; blockedByValues = $false; objectsWithValues = 0; references = @()
+                        blockedByReaders = $true
+                        readers = @([PSCustomObject]@{ description = "Attribute Flow Expression into 'description' in Synchronisation Rule 'Export users'" })
+                    }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force -ErrorAction SilentlyContinue -ErrorVariable refusal
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+                "$refusal" | Should -BeLike "*Export users*"
             }
         }
 
@@ -1407,7 +1550,12 @@ Describe 'Get-JIMMetaverseObjectProvenance' {
         It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
         It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
         It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
-        It 'Should document its output shape' { $help.returnValues | Out-String | Should -Match 'MetaverseObjectId' }
+        It 'Should declare the shape each parameter set returns' {
+            # The declared output types generate the published property tables (ACC-5), so they are the documentation.
+            $outputs = (Get-Command Get-JIMMetaverseObjectProvenance).OutputType.Name
+            $outputs | Should -Contain 'JIM.MetaverseObjectProvenanceDto'
+            $outputs | Should -Contain 'JIM.MetaverseAttributeProvenanceDto'
+        }
     }
 }
 

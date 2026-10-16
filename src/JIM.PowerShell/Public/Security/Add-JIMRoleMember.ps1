@@ -11,17 +11,17 @@ function Add-JIMRoleMember {
         This grants the object the permissions associated with that Role.
 
     .PARAMETER RoleId
-        The unique identifier (integer) of the Role to add the member to.
+        The ID of the Role to add the member to.
 
     .PARAMETER MetaverseObjectId
-        The unique identifier (GUID) of the Metaverse Object to add.
+        The ID of the Metaverse Object to add.
 
     .PARAMETER InputObject
-        Metaverse Object from the pipeline (e.g., from Get-JIMMetaverseObject).
+        A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Role's configuration
-        change history.
+        Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change
+        History.
 
     .OUTPUTS
         None.
@@ -53,6 +53,7 @@ function Add-JIMRoleMember {
         Remove-JIMRoleMember
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory)]
         [int]$RoleId,

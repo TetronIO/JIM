@@ -83,6 +83,47 @@ public class ConnectedSystemObjectAttributeValue
             ?? (DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(DecimalValue.Value) : null);
     }
 
+    /// <summary>
+    /// Whether this value holds anything in the column a value of <paramref name="type"/> is stored in.
+    /// </summary>
+    public bool HoldsValueOfType(AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => StringValue != null,
+        AttributeDataType.Number => IntValue.HasValue,
+        AttributeDataType.LongNumber => LongValue.HasValue,
+        AttributeDataType.Decimal => DecimalValue.HasValue,
+        AttributeDataType.DateTime => DateTimeValue.HasValue,
+        AttributeDataType.Binary => ByteValue != null,
+        AttributeDataType.Reference => UnresolvedReferenceValue != null || ReferenceValue != null || ReferenceValueId.HasValue,
+        AttributeDataType.Guid => GuidValue.HasValue,
+        AttributeDataType.Boolean => BoolValue.HasValue,
+        _ => false
+    };
+
+    /// <summary>
+    /// The data type whose column holds this value, or null where it holds nothing.
+    /// </summary>
+    public AttributeDataType? HeldDataType()
+    {
+        var held = Array.Find(StoredDataTypes, HoldsValueOfType);
+        return held == AttributeDataType.NotSet ? null : held;
+    }
+
+    /// <summary>
+    /// Whether this value holds something, but nothing in the column <paramref name="type"/> uses: a value stored while
+    /// its attribute had another data type. A schema refresh can redefine an attribute whose Connected System Objects
+    /// already hold values, and it keeps the attribute, so those values stay where the old type put them (#2128). A value
+    /// holding nothing at all is not one.
+    /// </summary>
+    public bool IsHeldUnderAnotherDataType(AttributeDataType type) => !HoldsValueOfType(type) && HeldDataType() != null;
+
+    private static readonly AttributeDataType[] StoredDataTypes =
+    [
+        AttributeDataType.Text, AttributeDataType.Number, AttributeDataType.LongNumber, AttributeDataType.Decimal,
+        AttributeDataType.DateTime, AttributeDataType.Binary, AttributeDataType.Reference, AttributeDataType.Guid,
+        AttributeDataType.Boolean
+    ];
+
     public override string ToString()
     {
         if (Attribute != null)
@@ -97,7 +138,7 @@ public class ConnectedSystemObjectAttributeValue
             return StringValue;
 
         if (DateTimeValue != null)
-            return DateTimeValue.ToString();
+            return JIM.Models.Utility.AttributeDateDisplay.Format(DateTimeValue.Value);
 
         if (IntValue != null)
             return IntValue.ToString();

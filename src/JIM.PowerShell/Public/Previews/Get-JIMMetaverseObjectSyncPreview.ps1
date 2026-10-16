@@ -22,14 +22,19 @@ function Get-JIMMetaverseObjectSyncPreview {
         describes a synchronisation that would fail, not one that would succeed as shown.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Metaverse Object to preview.
+        The Metaverse Object to preview.
 
     .OUTPUTS
-        PSCustomObject with OutcomeTree (the raw, recursive outcome tree), Outcomes (the same
-        tree flattened by ConvertTo-JIMSyncPreviewOutcomeRows into a depth-ordered list for
-        Format-Table), Inbound (always null for this cmdlet), ProposedExports (the Pending
-        Exports a real synchronisation would stage), Errors, Warnings, HasBlockingErrors and
-        AffectedSyncRules.
+        What synchronising from the Metaverse Object as it stands now would do, outbound only, with the outcome tree
+        flattened beside it. Inbound is always empty: a Metaverse Object has no inbound chain of its own. Check
+        HasBlockingErrors first.
+
+        JIM.SyncPreview
+        Outcomes (object[]): The outcome tree flattened in its own display order, for Format-Table: one row per
+            outcome, with Depth, OutcomeType, Target (its description, or its id), SyncRule (its name, or its id),
+            DetailCount, DetailMessage and StagedChangeType. A Joined row made by matching also carries
+            ObjectMatchingRule (what the rule compares, or its id) and MatchedValue (the value the join would match
+            on); both are empty on every other row.
 
     .EXAMPLE
         Get-JIMMetaverseObjectSyncPreview -Id "8f14e45f-ceea-467e-adde-3f8cbb1e4d28"
@@ -47,7 +52,7 @@ function Get-JIMMetaverseObjectSyncPreview {
         Get-JIMMetaverseObject
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncPreview')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id
@@ -65,15 +70,8 @@ function Get-JIMMetaverseObjectSyncPreview {
             return
         }
 
-        [PSCustomObject]@{
-            OutcomeTree       = $preview.OutcomeTree
-            Outcomes          = @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes $preview.OutcomeTree)
-            Inbound           = $preview.Inbound
-            ProposedExports   = $preview.ProposedExports
-            Errors            = $preview.Errors
-            Warnings          = $preview.Warnings
-            HasBlockingErrors = $preview.HasBlockingErrors
-            AffectedSyncRules = $preview.AffectedSyncRules
-        }
+        # The API's own object, so nothing it reports is dropped, with the outcome tree flattened beside it for
+        # Format-Table. Rebuilding it from a list of properties lost GeneratedValueProbes when the API added it.
+        $preview | Add-Member -NotePropertyName 'Outcomes' -NotePropertyValue @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes $preview.OutcomeTree) -Force -PassThru
     }
 }

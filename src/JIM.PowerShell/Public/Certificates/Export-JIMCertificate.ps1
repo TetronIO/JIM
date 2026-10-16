@@ -17,14 +17,14 @@ function Export-JIMCertificate {
         The file path to save the certificate to.
 
     .PARAMETER Force
-        Overwrite the file if it already exists.
+        Overwrites the file if it already exists.
 
     .PARAMETER PassThru
-        If specified, returns the certificate bytes instead of saving to a file.
+        Returns the certificate's bytes instead of writing them to a file.
 
     .OUTPUTS
-        If -PassThru is specified, returns the certificate as a byte array.
-        Otherwise, creates a file at the specified path.
+        With -PassThru, the certificate's bytes, DER-encoded; otherwise nothing, the certificate being
+        written to -Path.
 
     .EXAMPLE
         Export-JIMCertificate -Id $certId -Path "./my-cert.cer"
@@ -48,7 +48,7 @@ function Export-JIMCertificate {
         Test-JIMCertificate
     #>
     [CmdletBinding(DefaultParameterSetName = 'ToFile')]
-    [OutputType([byte[]])]
+    [OutputType([byte[]], ParameterSetName = 'PassThru')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

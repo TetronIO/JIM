@@ -67,27 +67,23 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
     }
 
     /// <summary>
-    /// Resolves the initiating security principal from the current request context as an Activity initiator
-    /// triad: API key authentication (the middleware stashes the key id in HttpContext.Items) takes precedence,
-    /// otherwise the user's id and display name are read from JWT claims.
+    /// Resolves the initiating security principal from the current request's claims as an Activity initiator
+    /// triad: an API key by the key's id and name (<see cref="Middleware.Api.ApiKeyAuthenticationHandler.BuildApiKeyClaims"/>),
+    /// otherwise a person by the Metaverse Object authorisation was granted to, as <see cref="GetCurrentUserAsync"/>
+    /// resolves them. Never the identity provider's subject, which is not a Metaverse Object id: a principal recorded
+    /// by it links to nothing (#2066).
     /// </summary>
-    protected async Task<(ActivityInitiatorType Type, Guid? Id, string? Name)> GetInitiatorInfoAsync()
+    protected (ActivityInitiatorType Type, Guid? Id, string? Name) GetInitiatorInfo()
     {
-        // API key authentication: the middleware stashes the key id in HttpContext.Items.
-        if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
+        if (IsApiKeyAuthenticated())
         {
-            var apiKey = await Application.Security.GetApiKeyAsync(apiKeyId);
-            return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
+            Guid? apiKeyId = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var keyId) ? keyId : null;
+            return (ActivityInitiatorType.ApiKey, apiKeyId, GetApiKeyName() ?? "API Key");
         }
 
-        // User authentication: resolve the principal id and display name from claims.
-        var userIdClaim = User.FindFirst("sub") ?? User.FindFirst(ClaimTypes.NameIdentifier);
-        var nameClaim = User.FindFirst("name") ?? User.FindFirst(ClaimTypes.Name);
-
-        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
-            return (ActivityInitiatorType.User, userId, nameClaim?.Value ?? User.Identity?.Name);
-
-        return (ActivityInitiatorType.User, null, User.Identity?.Name);
+        var name = User.FindFirst("name")?.Value ?? User.Identity?.Name;
+        Guid? userId = IdentityUtilities.TryGetUserId(User, out var metaverseObjectId) ? metaverseObjectId : null;
+        return (ActivityInitiatorType.User, userId, name);
     }
 
     /// <summary>

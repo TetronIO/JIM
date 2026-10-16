@@ -353,6 +353,55 @@ public class SyncEngineExportMergeTests
         Assert.That(survivors, Is.EqualTo(new[] { keep }));
     }
 
+    // ---- A change held until its Initial Password is delivered (#2039) ----
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_HeldChangeWhenTheTargetAlreadyHoldsWhatTheMetaverseNowWants_IsWithdrawn()
+    {
+        // The leaver during the hold: the held change still asserts the enabled value, the Metaverse Object now wants the
+        // disabled one, and the target already holds it (the account was created disabled). The held change no longer
+        // reflects the Metaverse; kept, it would be released once the password is no longer owed and enable the account.
+        var held = HeldChange(attributeId: 1, "512");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [held], [SingleValuedChange(attributeId: 1, "514")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { held }));
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_HeldChangeWhenTheTargetAlreadyHoldsWhatTheMetaverseNowWants_DoesNotSurvive()
+    {
+        // The merge-replace rebuild's side of the same rule: the held change is not carried into the replacement.
+        var held = HeldChange(attributeId: 1, "512");
+        var keep = SingleValuedChange(attributeId: 2, "Leaver");
+
+        var survivors = SyncEngine.SelectSurvivingDriftChanges([], [held, keep], alreadyCurrentChanges: [SingleValuedChange(attributeId: 1, "514")]);
+
+        Assert.That(survivors, Is.EqualTo(new[] { keep }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_HeldChangeTheEvaluationFindsAlreadyCurrentAsAsserted_IsNotWithdrawn()
+    {
+        // The evaluation's answer restates exactly what the held change asserts, so the held change does reflect the
+        // Metaverse: it is no more stale than an incoming restatement of it is a change. Withdrawing it on a record of the
+        // target that is not yet confirmed would leave the account disabled with nothing to enable it.
+        var held = HeldChange(attributeId: 1, "512");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [held], [SingleValuedChange(attributeId: 1, "512")]);
+
+        Assert.That(withdrawn, Is.Empty);
+    }
+
+    private static PendingExportAttributeValueChange HeldChange(int attributeId, string value)
+    {
+        var change = SingleValuedChange(attributeId, value);
+        change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        change.ExportAttemptCount = 1;
+        change.AwaitsInitialPassword = true;
+        return change;
+    }
+
     private static PendingExport PendingExportWith(params PendingExportAttributeValueChange[] changes)
     {
         var pe = new PendingExport

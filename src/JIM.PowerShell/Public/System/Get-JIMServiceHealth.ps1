@@ -43,14 +43,9 @@ function Get-JIMServiceHealth {
         service.
 
     .OUTPUTS
-        JIM.ServiceHealth
-        One object per service with Service, Status, Condition, Reason, CurrentWork, CurrentWorkStartedAt, LastSeenAt,
-        StartedAt, HostName, Version, InstanceId, LastProgressAt and Detail. Fields a never-seen service cannot
-        supply are null.
-
-        JIM.ServiceHealthSummary
-        With -Summary: one object with Overall, WebVersion, GeneratedAt and Services (the JIM.ServiceHealth
-        objects above).
+        One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A
+        service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set
+        to null. With -Summary, one object whose Services holds those three.
 
     .EXAMPLE
         Get-JIMServiceHealth

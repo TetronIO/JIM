@@ -63,6 +63,24 @@ public class SyncPreviewResponseDtoTests
     }
 
     [Test]
+    public void FromModel_ProbeForAValueBuiltFromTheGeneratedValue_CarriesTheAttributeItIsBuiltFrom()
+    {
+        // Generated Value Forms (#2023).
+        var model = new SyncPreviewResult
+        {
+            GeneratedValueProbes =
+            [
+                new SyncPreviewGeneratedValueProbe { AttributeName = "Account Name", Value = "jbloggs", ConnectedSystemNames = ["Corp AD"] },
+                new SyncPreviewGeneratedValueProbe { AttributeName = "Email", Value = "jbloggs@corp.local", BuiltFromAttributeName = "Account Name", ConnectedSystemNames = ["Corp AD"] }
+            ]
+        };
+
+        var dto = SyncPreviewResponse.FromModel(model);
+
+        Assert.That(dto.GeneratedValueProbes.Select(p => p.BuiltFromAttributeName), Is.EqualTo(new[] { null, "Account Name" }));
+    }
+
+    [Test]
     public void FromModel_NoGeneratedValueProbes_IsAnEmptyList()
     {
         Assert.That(SyncPreviewResponse.FromModel(new SyncPreviewResult()).GeneratedValueProbes, Is.Empty);
@@ -112,6 +130,53 @@ public class SyncPreviewResponseDtoTests
             Assert.That(dto.Inbound.AttributeFlowChanges[0].AttributeName, Is.EqualTo("mail"));
             Assert.That(dto.Inbound.AttributeFlowChanges[0].IsAddition, Is.True);
             Assert.That(dto.Inbound.AttributeFlowChanges[0].Value, Is.EqualTo("jdoe@example.com"));
+        }
+    }
+
+    [Test]
+    public void FromModel_InboundWouldJoin_CarriesTheRuleAndValueItWouldMatchOn()
+    {
+        var mvoId = Guid.NewGuid();
+        var model = new SyncPreviewResult
+        {
+            Inbound = new SyncPreviewInboundSummary
+            {
+                WouldJoinMetaverseObjectId = mvoId,
+                WouldJoinObjectMatchingRuleId = 12,
+                WouldJoinObjectMatchingRuleDescription = "Employee ID equals \"E\" + Trim(cs[\"employeeId\"])",
+                WouldJoinMatchedValue = "E123"
+            }
+        };
+
+        var dto = SyncPreviewResponse.FromModel(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Inbound!.WouldJoinMetaverseObjectId, Is.EqualTo(mvoId));
+            Assert.That(dto.Inbound.WouldJoinObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(dto.Inbound.WouldJoinObjectMatchingRuleDescription, Is.EqualTo("Employee ID equals \"E\" + Trim(cs[\"employeeId\"])"));
+            Assert.That(dto.Inbound.WouldJoinMatchedValue, Is.EqualTo("E123"));
+        }
+    }
+
+    [Test]
+    public void FromModel_OutcomeTreeJoinedNode_CarriesTheRuleAndValueItWouldMatchOn()
+    {
+        var root = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 12,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeId",
+            MatchedValue = "E123"
+        };
+
+        var rootDto = SyncPreviewResponse.FromModel(new SyncPreviewResult { OutcomeTree = [root] }).OutcomeTree.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDto.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(rootDto.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeId"));
+            Assert.That(rootDto.MatchedValue, Is.EqualTo("E123"));
         }
     }
 

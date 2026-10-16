@@ -1,761 +1,60 @@
 ---
 title: Metaverse
+description: "The cmdlets that find and read Metaverse Objects, explain where their values and connections come from, and list those pending deletion."
+type: reference
+audience: automation-author
 ---
 
 # Metaverse
 
-The metaverse is the central identity store in JIM. These cmdlets manage the metaverse schema (object types and attributes), query Metaverse Objects, and review pending deletions.
+The Metaverse is the central identity store in JIM. These cmdlets find and read Metaverse Objects, explain where each value and connection comes from, and review the Metaverse Objects pending deletion. A Metaverse Object's password is set with the [Password Synchronisation](password-synchronisation.md#set-jimmetaverseobjectpassword) cmdlets, and the values JIM generated for it are listed with the [Generated Values](generated-values.md) cmdlets. The Metaverse schema is managed with the [Metaverse Object Type](metaverse-object-types.md) and [Metaverse Attribute](metaverse-attributes.md) cmdlets.
 
-## Object Types
+---
 
-### Get-JIMMetaverseObjectType
+## Search-JIMMetaverseObject
 
-Retrieves Metaverse Object Type definitions. Returns all object types by default, or a specific type by ID or name.
+Runs a [Predefined Search](predefined-searches.md), returning each match in summary with the attributes the search lists. It answers quickly at scale, 100,000 objects and more, so use it for lists and searches; use [`Get-JIMMetaverseObject`](#get-jimmetaverseobject) for an object in full, or to choose the attributes.
 
-#### Syntax
+<!-- BEGIN GENERATED: Search-JIMMetaverseObject -->
+### Syntax
 
 ```powershell
 # List (default)
-Get-JIMMetaverseObjectType [-IncludeChildObjects] [-Page <int>] [-PageSize <int>]
-
-# ById
-Get-JIMMetaverseObjectType -Id <int> [-IncludeChildObjects]
-
-# ByName
-Get-JIMMetaverseObjectType -Name <string> [-IncludeChildObjects]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | No | | The ID of a specific object type to retrieve |
-| `Name` | `string` | No | | The name of a specific object type to retrieve |
-| `IncludeChildObjects` | `switch` | No | `false` | Include child object counts for each object type |
-| `Page` | `int` | No | `1` | Page number for paginated results |
-| `PageSize` | `int` | No | `100` | Number of results per page (maximum 1000) |
-
-#### Output
-
-Object type definitions including ID, name, and optionally child object counts. With `-Id` or `-Name`, the full object type, which also carries `DeletionRuleAdvisory` and `DeletionSourceWarnings`: the Connected Systems that project into the type without being one of its authoritative sources under `WhenAuthoritativeSourceDisconnected`, each with `ConnectedSystemId` and `ConnectedSystemName` (empty when there are none; see [deletion behaviour](../configuration/metaverse.md#authoritative-source-trigger-modes)). The list form returns summaries without either.
-
-#### Examples
-
-```powershell title="List all object types"
-Get-JIMMetaverseObjectType
-```
-
-```powershell title="Get a specific object type by name with child counts"
-Get-JIMMetaverseObjectType -Name "Person" -IncludeChildObjects
-```
-
-```powershell title="Page through object types"
-Get-JIMMetaverseObjectType -Page 2 -PageSize 50
-```
-
-```powershell title="Fail a health check when a projecting system is not an authoritative source"
-if ((Get-JIMMetaverseObjectType -Name "Person").DeletionSourceWarnings) {
-    throw "A Connected System projects into Person without being one of its authoritative sources"
-}
-```
-
----
-
-### Set-JIMMetaverseObjectType
-
-Modifies an existing Metaverse Object Type: its identity (name, plural name, icon) and/or its automatic deletion behaviour. The built-in `User` and `Group` types accept deletion-rule changes but reject changes to their name, plural name and icon.
-
-#### Syntax
-
-```powershell
-# ById (default)
-Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
-    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
-
-# ByName
-Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
-    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
-
-# ByInputObject
-Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
-    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | The ID of the object type to modify. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName) | | The name of the object type to modify (used to locate it; use `NewName` to rename) |
-| `InputObject` | `object` | Yes (ByInputObject) | | An object type object from the pipeline |
-| `NewName` | `string` | No | | A new singular name (rename). Must be unique (case-insensitive). Rejected for built-in types. |
-| `PluralName` | `string` | No | | A new plural name. Must be unique (case-insensitive). Rejected for built-in types. |
-| `Icon` | `string` | No | | The MudBlazor icon name shown in the UI. Pass `$null` or `''` to clear it. Rejected for built-in types. |
-| `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
-| `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected. How they trigger deletion is governed by `DeletionTriggerMode`. |
-| `DeletionTriggerMode` | `string` | No | | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to leave the stored mode unchanged. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) read before making this change. The change's Activity records the link, so the audit answers not only what changed but what the caller was told it would do. |
-| `PassThru` | `switch` | No | `false` | Return the updated object type |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-!!! note "Deletion rules"
-    The deletion rule controls how Metaverse Objects of this type are automatically cleaned up:
-
-    - **Manual**<br /> Objects are never automatically deleted; an administrator must delete them explicitly
-    - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
-    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when its authoritative sources disconnect. `DeletionTriggerMode` controls whether every selected source must disconnect first (`AllSourcesDisconnect`) or any one selected source disconnecting is enough (`SpecificSourcesDisconnect`)
-
-    Under `WhenLastConnectorDisconnected`, provisioned target accounts count as connectors, so an object of a type with provisioning export Synchronisation Rules outlives its last source while a target account exists; see [deletion behaviour](../configuration/metaverse.md#deletion-behaviour). When that combination applies, the cmdlet surfaces the API's advisory as a warning, and the returned object carries it as `DeletionRuleAdvisory`.
-
-    Under `WhenAuthoritativeSourceDisconnected`, a Connected System that projects into the type without being one of its authoritative sources creates objects no selected source governs; see [projecting systems that are not authoritative sources](../configuration/metaverse.md#authoritative-source-trigger-modes). The cmdlet writes one warning per such system, and the returned object lists them as `DeletionSourceWarnings`. Join-only contributors are never listed.
-
-#### Output
-
-When `-PassThru` is specified, returns the updated object type definition. Otherwise, no output.
-
-#### Examples
-
-```powershell title="Set deletion rule by name"
-Set-JIMMetaverseObjectType -Name "Person" -DeletionRule WhenLastConnectorDisconnected
-```
-
-```powershell title="Configure a 30-day grace period with pipeline input"
-Get-JIMMetaverseObjectType -Name "Group" | Set-JIMMetaverseObjectType -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionGracePeriod "30.00:00:00" -PassThru
-```
-
-```powershell title="Set deletion triggers for specific Connected Systems"
-Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7)
-```
-
-```powershell title="Require both HR systems to disconnect before deletion"
-Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7) -DeletionTriggerMode AllSourcesDisconnect
-```
-
-```powershell title="Rename a custom type and set its icon"
-Set-JIMMetaverseObjectType -Id 5 -NewName "Gadget" -PluralName "Gadgets" -Icon "Devices"
-```
-
-```powershell title="Clear a custom type's icon"
-Set-JIMMetaverseObjectType -Id 5 -Icon $null
-```
-
-```powershell title="Apply a previewed change, recording which preview informed it"
-$preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
-Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
-```
-
----
-
-### New-JIMMetaverseObjectType
-
-Creates a new Metaverse Object Type. Use this when the built-in `User`, `Group`, and other seeded types do not fit; for example, modelling `Device`, `Contractor`, or `ServiceAccount` identities. The new type is created with `BuiltIn = false` so it can be removed via `Reset-JIMSystem` or by administrators in the UI later.
-
-#### Syntax
-
-```powershell
-New-JIMMetaverseObjectType -Name <string> -PluralName <string>
-    [-Icon <string>] [-AttributeIds <int[]>]
-    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Name` | `string` | Yes | | Singular name of the new type. Must be unique. |
-| `PluralName` | `string` | Yes | | Plural name of the new type. Must be unique. |
-| `Icon` | `string` | No | | Optional MudBlazor icon name to associate with the type in the UI. |
-| `AttributeIds` | `int[]` | No | | Optional array of existing Metaverse attribute IDs to associate with this type at creation time. Attributes can also be associated later. |
-| `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
-| `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. How they trigger deletion is governed by `DeletionTriggerMode`. |
-| `DeletionTriggerMode` | `string` | No | `AllSourcesDisconnect` | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to accept the server default. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-#### Output
-
-The newly created object type definition. As for `Set-JIMMetaverseObjectType`, `DeletionRuleAdvisory` and each entry in `DeletionSourceWarnings` are written with `Write-Warning`.
-
-#### Examples
-
-```powershell title="Create a simple custom type"
-New-JIMMetaverseObjectType -Name "Device" -PluralName "Devices"
-```
-
-```powershell title="Create a type with attributes attached at creation"
-New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" -AttributeIds 1,2,3
-```
-
-```powershell title="Create a type that is auto-deleted seven days after its authoritative source disconnects"
-New-JIMMetaverseObjectType -Name "ServiceAccount" -PluralName "ServiceAccounts" `
-    -DeletionRule WhenAuthoritativeSourceDisconnected `
-    -DeletionTriggerConnectedSystemIds 5 `
-    -DeletionGracePeriod ([TimeSpan]::FromDays(7))
-```
-
-```powershell title="Create a type deleted as soon as either HR system disconnects"
-New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" `
-    -DeletionRule WhenAuthoritativeSourceDisconnected `
-    -DeletionTriggerConnectedSystemIds 3, 7 `
-    -DeletionTriggerMode SpecificSourcesDisconnect `
-    -DeletionGracePeriod ([TimeSpan]::FromDays(7))
-```
-
----
-
-### Remove-JIMMetaverseObjectType
-
-Deletes a custom Metaverse Object Type. The cmdlet fetches a delete preview first and refuses when deletion is not safe, so it never silently destroys data or configuration.
-
-#### Syntax
-
-```powershell
-# ById (default)
-Remove-JIMMetaverseObjectType -Id <int> [-ChangeReason <string>] [-Force]
-
-# ByName
-Remove-JIMMetaverseObjectType -Name <string> [-ChangeReason <string>] [-Force]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | The ID of the object type to delete. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName) | | The name of the object type to delete |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `Force` | `switch` | No | `false` | Skips the interactive confirmation prompt (the server-side type-the-name safeguard is still satisfied) |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **High** impact level. Use `-WhatIf` to preview or `-Confirm` to require confirmation.
-
-!!! warning "Safeguards"
-    Deletion is **refused** when the type is built-in (`User`, `Group`), when any Metaverse Object of the type exists, or when any Synchronisation Rule targets it; the cmdlet reports which. When the type is clear, its Predefined Searches, Example Data Template entries and attribute bindings are cascade-removed (the bound attributes themselves are kept), and the removal is audited.
-
-#### Output
-
-None.
-
-#### Examples
-
-```powershell title="Delete a custom type by name"
-Remove-JIMMetaverseObjectType -Name "Device" -Force
-```
-
-```powershell title="Preview what a deletion would do"
-Remove-JIMMetaverseObjectType -Id 5 -WhatIf
-```
-
----
-
-## Attributes
-
-### Get-JIMMetaverseAttribute
-
-Retrieves metaverse attribute definitions. Returns all attributes by default, or a specific attribute by ID or name.
-
-#### Syntax
-
-```powershell
-# List (default)
-Get-JIMMetaverseAttribute [-Page <int>] [-PageSize <int>]
-
-# ById
-Get-JIMMetaverseAttribute -Id <int>
-
-# ByName
-Get-JIMMetaverseAttribute -Name <string>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | No | | The ID of a specific attribute to retrieve. Accepts pipeline input. |
-| `Name` | `string` | No | | The name of a specific attribute to retrieve |
-| `Page` | `int` | No | `1` | Page number for paginated results |
-| `PageSize` | `int` | No | `100` | Number of results per page (maximum 1000) |
-
-#### Output
-
-Attribute definitions including ID, name, type, and plurality. Retrieving a single attribute by `-Id` also returns its Object Type bindings and Standard Mappings (the counterpart attribute names in the SCIM 2.0 and LDAP/Active Directory standards, with notes).
-
-#### Examples
-
-```powershell title="List all metaverse attributes"
-Get-JIMMetaverseAttribute
-```
-
-```powershell title="Get a specific attribute by name"
-Get-JIMMetaverseAttribute -Name "Display Name"
-```
-
-```powershell title="Page through attributes"
-Get-JIMMetaverseAttribute -Page 1 -PageSize 50
-```
-
----
-
-### New-JIMMetaverseAttribute
-
-Creates a new metaverse attribute definition.
-
-#### Syntax
-
-```powershell
-New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <string>]
-    [-ObjectTypeIds <int[]>] [-ChangeReason <string>]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Name` | `string` | Yes | | The name of the new attribute |
-| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
-| `AttributePlurality` | `string` | No | `SingleValued` | Whether the attribute holds one or many values. Valid values: `SingleValued`, `MultiValued` |
-| `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate the attribute with |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-#### Output
-
-The newly created attribute definition.
-
-#### Examples
-
-```powershell title="Create a simple text attribute"
-New-JIMMetaverseAttribute -Name "Cost Centre" -Type Text
-```
-
-```powershell title="Create a multi-valued reference attribute"
-New-JIMMetaverseAttribute -Name "Direct Reports" -Type Reference -AttributePlurality MultiValued
-```
-
-```powershell title="Create an attribute and associate it with object types"
-$personType = Get-JIMMetaverseObjectType -Name "Person"
-$groupType = Get-JIMMetaverseObjectType -Name "Group"
-New-JIMMetaverseAttribute -Name "Department" -Type Text -ObjectTypeIds @($personType.Id, $groupType.Id)
-```
-
----
-
-### Set-JIMMetaverseAttribute
-
-Modifies an existing metaverse attribute definition.
-
-#### Syntax
-
-```powershell
-# ById (default)
-Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-Type <string>]
-    [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
-
-# ByInputObject
-Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint <string>]
-    [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | The ID of the attribute to modify. Accepts pipeline input. |
-| `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
-| `Name` | `string` | No | | The new name. Subject to the same case-insensitive uniqueness check as creation. |
-| `RenderingHint` | `string` | No | | How a multi-valued attribute's values display. Valid values: `Default`, `Table`, `ChipSet`, `List` |
-| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
-| `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
-| `StandardMappings` | `array` | No | | The attribute's full set of Standard Mappings, replacing any existing ones; an empty array (`@()`) clears them. Each element is a hashtable with a `Standard` (`Scim`, `Ldap` or `Jim`), a `CounterpartName`, and optional `Notes`. Guidance only; never affects synchronisation. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `PassThru` | `switch` | No | `false` | Return the updated attribute definition |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-!!! note "Type and plurality changes"
-    Changing `-Type` or `-AttributePlurality` is refused while any Metaverse Object holds a stored value for the attribute; clear the values first. To change an attribute's Object Type bindings, use [`Add-JIMMetaverseObjectTypeAttribute`](#add-jimmetaverseobjecttypeattribute) and [`Remove-JIMMetaverseObjectTypeAttribute`](#remove-jimmetaverseobjecttypeattribute) rather than this cmdlet.
-
-#### Output
-
-When `-PassThru` is specified, returns the updated attribute definition. Otherwise, no output.
-
-#### Examples
-
-```powershell title="Rename an attribute"
-Set-JIMMetaverseAttribute -Id 42 -Name "costCentreCode" -PassThru
-```
-
-```powershell title="Set the rendering hint for a multi-valued attribute"
-Get-JIMMetaverseAttribute -Name "proxyAddresses" | Set-JIMMetaverseAttribute -RenderingHint List
-```
-
-```powershell title="Change an attribute's data type (refused if any object holds a value)"
-Set-JIMMetaverseAttribute -Id 42 -Type Integer
-```
-
-```powershell title="Record how a custom attribute corresponds to the SCIM 2.0 and LDAP standards"
-Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(
-    @{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' },
-    @{ Standard = 'Ldap'; CounterpartName = 'costCentre' }
-)
-```
-
----
-
-### Remove-JIMMetaverseAttribute
-
-Deletes a metaverse attribute definition. Built-in attributes cannot be deleted.
-
-#### Syntax
-
-```powershell
-# ById (default)
-Remove-JIMMetaverseAttribute -Id <int> [-ChangeReason <string>] [-Force]
-
-# ByInputObject
-Remove-JIMMetaverseAttribute -InputObject <object> [-ChangeReason <string>] [-Force]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | The ID of the attribute to delete. Accepts pipeline input. |
-| `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `Force` | `switch` | No | `false` | Suppress confirmation prompts |
-
-!!! warning "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **High** impact level. You will be prompted for confirmation unless `-Force` is specified.
-
-!!! note "Built-in attributes, stored values, and cascade"
-    Built-in attributes cannot be deleted. For a custom attribute, deletion is refused while any Metaverse Object holds a stored value for it (clear the values first). When only configuration references exist (Attribute Flows, scoping criteria, Object Matching Rules), they are cascade-removed; the cmdlet satisfies the server's type-the-name confirmation for you, so `-Force` only suppresses the interactive prompt. Use [`Get-JIMMetaverseAttributeDeletionPreview`](#get-jimmetaverseattributedeletionpreview) to inspect the impact first.
-
-#### Output
-
-No output on success.
-
-#### Examples
-
-```powershell title="Delete an attribute by ID"
-Remove-JIMMetaverseAttribute -Id 42
-```
-
-```powershell title="Delete an attribute without confirmation"
-Remove-JIMMetaverseAttribute -Id 42 -Force
-```
-
-```powershell title="Delete via pipeline"
-Get-JIMMetaverseAttribute -Name "legacyCode" | Remove-JIMMetaverseAttribute -Force
-```
-
----
-
-### Test-JIMMetaverseAttributeName
-
-Checks whether a Metaverse Attribute name is available. The comparison is case-insensitive, so "CostCentre" is reported as taken if "costCentre" already exists. Returns `$true` when the name is free, `$false` when it is in use.
-
-#### Syntax
-
-```powershell
-Test-JIMMetaverseAttributeName -Name <string> [-ExcludeId <int>]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Name` | `string` | Yes | | The attribute name to test |
-| `ExcludeId` | `int` | No | | An existing attribute ID to exclude from the check (use when renaming, so the attribute's own name is not treated as a clash) |
-
-#### Output
-
-A `[bool]`: `$true` if the name is available, otherwise `$false`.
-
-#### Examples
-
-```powershell title="Guard a create call with an availability check"
-if (Test-JIMMetaverseAttributeName -Name "costCentre") {
-    New-JIMMetaverseAttribute -Name "costCentre" -Type Text
-}
-```
-
-```powershell title="Check availability while renaming attribute 42"
-Test-JIMMetaverseAttributeName -Name "costCentre" -ExcludeId 42
-```
-
----
-
-### Get-JIMMetaverseAttributeDeletionPreview
-
-Returns a non-destructive assessment of what deleting a custom attribute would entail: whether it is built-in, how many Metaverse Objects hold a stored value (a hard block), the per-Object-Type value breakdown, and the configuration references that would be cascade-removed. Inspect this before calling [`Remove-JIMMetaverseAttribute`](#remove-jimmetaverseattribute).
-
-#### Syntax
-
-```powershell
-# ById (default)
-Get-JIMMetaverseAttributeDeletionPreview -Id <int>
-
-# ByInputObject
-Get-JIMMetaverseAttributeDeletionPreview -InputObject <object>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | The ID of the attribute to preview. Accepts pipeline input. |
-| `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
-
-#### Output
-
-An object describing the deletion impact (`BlockedByValues`, `RequiresConfirmation`, `TotalObjectsWithValues`, `ObjectTypeValueCounts`, `References`, and so on).
-
-#### Examples
-
-```powershell title="Preview the impact of deleting an attribute"
-Get-JIMMetaverseAttribute -Name "costCentre" | Get-JIMMetaverseAttributeDeletionPreview
-```
-
----
-
-### Add-JIMMetaverseObjectTypeAttribute
-
-Binds a custom Metaverse Attribute to a Metaverse Object Type, making the attribute available on objects of that type. Binding an already-bound attribute is a no-op; built-in attributes cannot be re-bound.
-
-#### Syntax
-
-```powershell
-Add-JIMMetaverseObjectTypeAttribute -AttributeId <int> -ObjectTypeId <int>
-    [-ChangeReason <string>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `AttributeId` | `int` | Yes | | The ID of the attribute to bind. Accepts pipeline input by property name (`Id`). |
-| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type to bind the attribute to |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `PassThru` | `switch` | No | `false` | Return the updated attribute |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level.
-
-#### Examples
-
-```powershell title="Bind an attribute to an Object Type"
-Add-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1
-```
-
-```powershell title="Bind the pipeline attribute and return it"
-Get-JIMMetaverseAttribute -Name "costCentre" | Add-JIMMetaverseObjectTypeAttribute -ObjectTypeId 1 -PassThru
-```
-
----
-
-### Remove-JIMMetaverseObjectTypeAttribute
-
-Unassigns a custom Metaverse Attribute from a Metaverse Object Type. Follows the same safeguard as attribute deletion: refused while any Metaverse Object of the target type holds a stored value; otherwise the binding, and any Synchronisation Rule references scoped to that type, are cascade-removed behind the server's type-the-name confirmation (which the cmdlet satisfies for you). Built-in attributes cannot be unassigned.
-
-#### Syntax
-
-```powershell
-Remove-JIMMetaverseObjectTypeAttribute -AttributeId <int> -ObjectTypeId <int>
-    [-ChangeReason <string>] [-Force]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `AttributeId` | `int` | Yes | | The ID of the attribute to unassign. Accepts pipeline input by property name (`Id`). |
-| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type to unassign the attribute from |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in [configuration change history](history.md#get-jimconfigurationchangehistory) |
-| `Force` | `switch` | No | `false` | Suppress the interactive confirmation prompt |
-
-!!! warning "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **High** impact level. You will be prompted for confirmation unless `-Force` is specified.
-
-#### Examples
-
-```powershell title="Unassign an attribute from an Object Type"
-Remove-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1
-```
-
-```powershell title="Unassign without a prompt"
-Remove-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1 -Force
-```
-
----
-
-### Get-JIMMetaverseAttributePriority
-
-Gets a metaverse attribute's import priority order: the ordered list of import contributions to the attribute for a given Metaverse Object Type, highest priority first. When more than one Connected System contributes to the same attribute, the highest-priority contributor still connected wins.
-
-#### Syntax
-
-```powershell
-Get-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
-| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
-
-#### Output
-
-The attribute's priority order, including each contributing mapping's Synchronisation Rule, Connected System, and "Null is a value" flag.
-
-#### Examples
-
-```powershell title="Get the priority order for an attribute"
-Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
-```
-
-```powershell title="List just the contributing mappings, in priority order"
-(Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1).Contributors
-```
-
----
-
-### Set-JIMMetaverseAttributePriority
-
-Replaces a metaverse attribute's entire import priority order in one call. Every current contributing mapping must be listed exactly once, in the desired priority order. The one exception is a mapping whose Synchronisation Rule is being deleted (its contributed-values recall has not finished yet): it may be left out, and stays at the bottom of the order. A refused order names the mappings it is missing and any listed mapping that is not a contributor.
-
-#### Syntax
-
-```powershell
-Set-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -MappingId <int[]>
-    [-NullIsValueMappingId <int[]>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
-| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
-| `MappingId` | `int[]` | Yes | | Every current contributing mapping ID, in the desired priority order (highest first). A mapping whose Synchronisation Rule is being deleted may be omitted. |
-| `NullIsValueMappingId` | `int[]` | No | | Mapping IDs (from `-MappingId`) that should have "Null is a value" enabled |
-| `PassThru` | `switch` | No | `$false` | Returns the resulting priority order |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-#### Output
-
-If `-PassThru` is specified, returns the resulting priority order.
-
-#### Examples
-
-```powershell title="Set the full priority order"
-Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12, 78
-```
-
-```powershell title="Set the order and flag a source as authoritative for 'no value'"
-Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -NullIsValueMappingId 45 -PassThru
-```
-
----
-
-### Move-JIMMetaverseAttributePriority
-
-Repositions a single contributor within a metaverse attribute's priority order, without needing to restate the whole list.
-
-#### Syntax
-
-```powershell
-Move-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -MappingId <int>
-    -Position <int> [-NullIsValue] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
-| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
-| `MappingId` | `int` | Yes | | The contributing mapping to move. Accepts pipeline input. |
-| `Position` | `int` | Yes | | The desired 1-based priority position (1 = highest priority) |
-| `NullIsValue` | `switch` | No | | When specified, also enables the moved mapping's "Null is a value" flag |
-| `PassThru` | `switch` | No | `$false` | Returns the resulting priority order |
-
-!!! info "ShouldProcess"
-    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
-
-#### Output
-
-If `-PassThru` is specified, returns the resulting priority order.
-
-#### Examples
-
-```powershell title="Move a mapping to the highest priority"
-Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1
-```
-
----
-
-## Objects
-
-### Search-JIMMetaverseObject
-
-Searches for Metaverse Objects using a predefined search definition, returning lightweight headers with only the attributes configured in the search. Optimised for fast responses at scale (100k+ objects).
-
-Use this cmdlet for fast list views and searches. Use `Get-JIMMetaverseObject` when you need full object details or custom attribute selection.
-
-#### Syntax
-
-```powershell
-# List (default)
-Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>]
-    [-SortBy <string>] [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
+Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>] [-SortBy <string>] [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>]
-    [-SortBy <string>] [-SortDirection <string>] [-PageSize <int>] -All [-Force]
+Search-JIMMetaverseObject -PredefinedSearchUri <string> -All [-Search <string>] [-HasAttribute <string>] [-SortBy <string>] [-SortDirection <string>] [-Force] [-PageSize <int>]
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `PredefinedSearchUri` | `string` | Yes | | URI identifier of the predefined search (e.g. `users`, `groups`) |
-| `Search` | `string` | No | | Search query to filter across all string attribute values (case-insensitive, partial match) |
-| `HasAttribute` | `string` | No | | Return only objects that hold a value for the named Metaverse Attribute. Matched case-insensitively; a multi-valued attribute counts once; an unrecognised name yields no results. |
-| `SortBy` | `string` | No | | Attribute name to sort results by (defaults to creation date) |
-| `SortDirection` | `string` | No | `desc` | Sort direction: `asc` or `desc` |
-| `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
-| `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
-| `Page` | `int` | No | `1` | Page number for paginated results (cannot be used with `-All`) |
-| `PageSize` | `int` | No | `100` | Number of items per page (maximum 100) |
+| `PredefinedSearchUri` | `string` | Yes |  | The URI of the Predefined Search to run, such as users or groups. It decides which Object Type is searched and which attributes are returned. |
+| `Search` | `string` | No |  | Text to look for in the objects' text attribute values, ignoring case; part of a value is enough. |
+| `HasAttribute` | `string` | No |  | Returns only the objects that hold a value for this Metaverse Attribute, named exactly but ignoring case. A multi-valued attribute counts once. A name JIM does not recognise returns nothing. |
+| `SortBy` | `string` | No |  | The attribute to sort by. Without it, objects are sorted by when they were created. |
+| `SortDirection` | `string` | No | `'desc'` | The sort order. desc is the default. One of `asc` or `desc`. |
+| `All` | `switch` | Yes (ListAll) |  | Returns every page of results rather than one. It stops after 1,000 pages, about 100,000 objects at the default page size, with a warning; `-Force` reads on. Cannot be used with `-Page`. |
+| `Force` | `switch` | No (ListAll) |  | With `-All`, reads every page, past the 1,000-page limit. |
+| `Page` | `int` | No (List) | `1` | The page of results to return, counting from 1. At least 1. |
+| `PageSize` | `int` | No | `100` | How many objects each page holds. From 1 to 100. |
 
-#### Output
+### Output
 
-Lightweight Metaverse Object headers including ID, display name, object type, and the attributes defined in the predefined search.
+One object in summary per match, with its display name, Object Type and the attributes the Predefined Search lists.
 
-#### Examples
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier (GUID) of the Metaverse Object. |
+| `Created` | `datetime` | When the object was created. |
+| `DisplayName` | `string` | The display name of the object (always included). |
+| `Status` | `string` | The current status of the object. One of `Normal` or `Obsolete`. |
+| `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
+| `Attributes` | `object` | The object's other attribute values, keyed by attribute name: the attributes the request named, or for a Predefined Search, the attributes the search lists. Each value has its natural type: text, a number, a boolean, an ISO-8601 date and time, a GUID, or base64 for Binary; a Reference holds the referenced Metaverse Object's ID as a GUID. A multi-valued attribute shows one of its values (the last). DisplayName is not included, as it has its own property. |
+<!-- END GENERATED: Search-JIMMetaverseObject -->
+
+### Examples
 
 ```powershell title="Search for users"
 Search-JIMMetaverseObject -PredefinedSearchUri "users"
@@ -785,62 +84,89 @@ Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -
 
 ---
 
-### Get-JIMMetaverseObject
+## Get-JIMMetaverseObject
 
-Retrieves Metaverse Objects. Supports searching by ID, object type, attribute values, and wildcard patterns.
+Gets Metaverse Objects: one by ID, or a page of them filtered by Object Type, display name or an attribute's value, or how many match.
 
-#### Syntax
+<!-- BEGIN GENERATED: Get-JIMMetaverseObject -->
+### Syntax
 
 ```powershell
 # List (default)
-Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>]
-    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>]
-    [-Page <int>] [-PageSize <int>]
+Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>] [-AttributeName <string>] [-AttributeValue <string>] [-Attributes <string[]>] [-Page <int>] [-PageSize <int>]
 
 # ById
-Get-JIMMetaverseObject -Id <guid> [-Attributes <string[]>]
+Get-JIMMetaverseObject -Id <guid>
+
+# Count
+Get-JIMMetaverseObject -Count [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>] [-AttributeName <string>] [-AttributeValue <string>]
 
 # ListAll
-Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>]
-    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>] -All [-Force]
+Get-JIMMetaverseObject -All [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>] [-AttributeName <string>] [-AttributeValue <string>] [-Attributes <string[]>] [-Force] [-PageSize <int>]
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes (ById) | | The GUID of a specific Metaverse Object. Accepts pipeline input. |
-| `ObjectTypeId` | `int` | No | | Filter by object type ID |
-| `ObjectTypeName` | `string` | No | | Filter by object type name |
-| `Search` | `string` | No | | Search string; supports wildcards |
-| `AttributeName` | `string` | No | | Attribute name to search on; requires `AttributeValue` |
-| `AttributeValue` | `string` | No | | Attribute value to match, exactly but ignoring case (`_` and `%` are literal characters, not wildcards); requires `AttributeName` |
-| `Attributes` | `string[]` | No | | Attribute names to include in results; use `"*"` to return all attributes |
-| `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
-| `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
-| `Page` | `int` | No | `1` | Page number for paginated results |
-| `PageSize` | `int` | No | `100` | Number of results per page (maximum 100) |
+| `Id` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to get. Accepts pipeline input by property name. |
+| `ObjectTypeId` | `int` | No (List, Count, ListAll) |  | Returns only the objects of the Object Type with this ID. |
+| `ObjectTypeName` | `string` | No (List, Count, ListAll) |  | Returns only the objects of the Object Type with this name. |
+| `Search` | `string` | No (List, Count, ListAll) |  | Returns only the objects whose display name matches. Supports wildcards. |
+| `AttributeName` | `string` | No (List, Count, ListAll) |  | Returns only the objects whose value for this attribute matches `-AttributeValue`. Give both together. |
+| `AttributeValue` | `string` | No (List, Count, ListAll) |  | The value `-AttributeName` must match: exactly, but ignoring case. The _ and % characters match only themselves. |
+| `Attributes` | `string[]` | No (List, ListAll) |  | The attributes to include with each object, by name; "*" includes them all. DisplayName is always included. |
+| `All` | `switch` | Yes (ListAll) |  | Returns every page of results rather than one. It stops after 1,000 pages, about 100,000 objects at the default page size, with a warning; `-Force` reads on. Cannot be used with `-Page`. |
+| `Force` | `switch` | No (ListAll) |  | With `-All`, reads every page, past the 1,000-page limit. |
+| `Count` | `switch` | Yes (Count) |  | Returns only the number of matching objects. |
+| `Page` | `int` | No (List) | `1` | The page of results to return, counting from 1. At least 1. |
+| `PageSize` | `int` | No (List, ListAll) | `100` | How many objects each page holds. From 1 to 100. |
 
-#### Output
+### Output
 
-Metaverse Objects including their ID, object type, and requested attributes.
+By default, one page of matching objects, each in summary. With `-Id`, the Metaverse Object in full: its values, where each came from, and the Connected System Objects joined to it. With `-Count`, the number of matching objects.
 
-The object type is returned as a nested `Type` object with `Id` and `Name` properties (for example `$obj.Type.Name`), identical in both the list and single-object responses. (Prior to this release the list response exposed flat `TypeId` and `TypeName` properties instead; this is a breaking change to the output shape.)
+**By default, or with `-All`**: properties as under [Search-JIMMetaverseObject](#search-jimmetaverseobject).
 
-When retrieved by ID, `ConnectedSystemObjects` lists every Connected System Object joined to the Metaverse Object, carrying the same data the portal's Connections tab shows: `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. `IsSource` and `IsTarget` say whether an enabled Import or Export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` is derived from the object's status and any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is populated only for `UpdatePending`; it is `$null` for every other state, including a pending Create or Delete. The list form does not carry these rows; only the `-Id` form does.
+**With `-Id`**:
 
-When retrieved by ID, `CreatedByType`, `CreatedById` and `CreatedByName` name who made the Metaverse Object's earliest recorded change, and `LastUpdatedByType`, `LastUpdatedById` and `LastUpdatedByName` who made its latest, as the portal's Properties tab shows them. The type is `User`, `ApiKey` or `System`, and the name is as it was at the time. All six are `$null` when no change history is recorded (change tracking off, or the history purged).
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier of the Metaverse Object. |
+| `Created` | `datetime` | When the Metaverse Object was created (UTC). |
+| `LastUpdated` | `datetime` | When the Metaverse Object last changed (UTC). |
+| `CreatedByType` | `string` | The kind of principal behind the earliest recorded change (User, ApiKey or System), with CreatedById and CreatedByName; empty when no change history is recorded, as when change tracking is off or the history has been purged. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
+| `CreatedById` | `guid` | The unique identifier of the principal behind the earliest recorded change; empty when no change history is recorded. |
+| `CreatedByName` | `string` | The name of the principal behind the earliest recorded change, as it was then. |
+| `LastUpdatedByType` | `string` | The kind of principal behind the latest recorded change (User, ApiKey or System), with LastUpdatedById and LastUpdatedByName; empty when no change history is recorded. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
+| `LastUpdatedById` | `guid` | The unique identifier of the principal behind the latest recorded change; empty when no change history is recorded. |
+| `LastUpdatedByName` | `string` | The name of the principal behind the latest recorded change, as it was then. |
+| `DisplayName` | `string` | The Metaverse Object's display name; empty when it has none. |
+| `Status` | `string` | Whether the Metaverse Object is in use (Normal) or has been marked Obsolete. One of `Normal` or `Obsolete`. |
+| `Origin` | `string` | How the Metaverse Object came to exist: Projected from a Connected System Object, or Internal, created in JIM itself. JIM never deletes an Internal object automatically. One of `Projected` or `Internal`. |
+| `LastConnectorDisconnectedDate` | `datetime` | When the last Connected System Object was disconnected from the Metaverse Object (UTC); empty while one is still joined. |
+| `IsPendingDeletion` | `bool` | Whether the Metaverse Object is due to be deleted under its Object Type's deletion rule. |
+| `DeletionEligibleDate` | `datetime` | When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); empty when it is not pending deletion. |
+| `DeletionTriggeredBySystemName` | `string` | The Connected System whose disconnection made the Metaverse Object pending deletion. Empty when it is not pending deletion, when no single system triggered it (its last connection went without one), or when the deletion was scheduled before JIM recorded the trigger. |
+| `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
+| `AttributeValues` | `object[]` | Every value the Metaverse Object holds, one entry per value, each with the attribute it belongs to and the Connected System and Synchronisation Rule that contributed it. Each has `Id`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `StringValue`, `DateTimeValue`, `IntValue`, `LongValue`, `DecimalValue`, `ByteValue`, `GuidValue`, `BoolValue`, `ReferenceValueId`, `ReferenceValueDisplayName`, `ContributedBySystemId`, `ContributedBySystemName`, `ContributedBySyncRuleId`, `ContributedBySyncRuleName` and `NullValue`. |
+| `ConnectedSystemObjects` | `object[]` | Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its connection, as the portal's Connections tab shows them. Each has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. |
 
-When retrieved by ID, each attribute value also carries its provenance: `ContributedBySystemId`/`ContributedBySystemName` identify the Connected System, and `ContributedBySyncRuleId`/`ContributedBySyncRuleName` identify the exact Synchronisation Rule that won [attribute priority resolution](../concepts/attribute-priority.md) and contributed the value. A value row with `NullValue` set to `true` is an asserted null: a deliberate, authoritative "no value" assertion carrying provenance only; treat it as no value present, distinct from the attribute having no row at all.
+**With `-Count`**: an `int`.
+<!-- END GENERATED: Get-JIMMetaverseObject -->
 
-#### Examples
+With `-Id`, each entry in `AttributeValues` says where its value came from: `ContributedBySystemId` and `ContributedBySystemName` name the Connected System, and `ContributedBySyncRuleId` and `ContributedBySyncRuleName` the Synchronisation Rule that won [Attribute Priority](../concepts/attribute-priority.md). An entry whose `NullValue` is `$true` is an asserted null: a source's deliberate statement that the attribute has no value, carrying provenance only. Treat it as no value, though it is not the same as the attribute having no entry at all.
 
-```powershell title="Get a specific object by ID"
-Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Attributes "*"
+Each entry in `ConnectedSystemObjects` carries what the portal's Connections tab shows. `IsSource` and `IsTarget` say whether an enabled import or export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` combines the object's status with any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is filled in only for `UpdatePending`.
+
+### Examples
+
+```powershell title="Get a Metaverse Object by ID"
+Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
-```powershell title="Search for Person objects by display name"
-Get-JIMMetaverseObject -ObjectTypeName "Person" -Search "Smith*" -Attributes @("Display Name", "Mail")
+```powershell title="Search for Users by display name"
+Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Smith*" -Attributes @("Display Name", "Mail")
 ```
 
 ```powershell title="Find objects by attribute value"
@@ -851,33 +177,34 @@ Get-JIMMetaverseObject -AttributeName "Employee Id" -AttributeValue "12345" -Att
 Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name", "Member")
 ```
 
-```powershell title="Fetch a very large metaverse, overriding the -All safety cap"
+```powershell title="Fetch a very large Metaverse, overriding the -All safety cap"
 # -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
 # API's maximum retrieval depth of 1,000,000 rows.
-Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
+Get-JIMMetaverseObject -ObjectTypeName "User" -All -Force
 ```
 
-```powershell title="See which systems an Identity is joined to, and how"
+```powershell title="See which Connected Systems a Metaverse Object is joined to, and how"
 (Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890").ConnectedSystemObjects |
     Format-Table ConnectedSystemName, ObjectTypeName, JoinType, State, IsSource, IsTarget
 ```
 
-```powershell title="Find an Identity's accounts whose export has failed"
+```powershell title="Find a Metaverse Object's Connected System Objects whose export has failed"
 (Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890").ConnectedSystemObjects |
     Where-Object { $_.State -eq "ExportFailed" }
 ```
 
 ```powershell title="Page through results manually"
-Get-JIMMetaverseObject -ObjectTypeName "Person" -Page 3 -PageSize 50
+Get-JIMMetaverseObject -ObjectTypeName "User" -Page 3 -PageSize 50
 ```
 
 ---
 
-### Get-JIMMetaverseObjectChangeHistory
+## Get-JIMMetaverseObjectChangeHistory
 
-Retrieves the change history for a Metaverse Object. Each record carries the initiator, Synchronisation Rule, and Run Profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+Gets a Metaverse Object's change history, newest first: who or what made each change, the Synchronisation Rule and Run Profile behind it, and the values it changed.
 
-#### Syntax
+<!-- BEGIN GENERATED: Get-JIMMetaverseObjectChangeHistory -->
+### Syntax
 
 ```powershell
 # Page (default)
@@ -887,21 +214,44 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> [-Page <int>] [-PageSize <int>]
 Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
-| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
-| `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
-| `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
+| `Id` | `guid` | Yes |  | The ID of the Metaverse Object. Accepts pipeline input by property name. |
+| `All` | `switch` | Yes (All) |  | Returns every page of changes rather than one. It stops after 1,000 pages, about 50,000 changes at the default page size, with a warning; `-Force` reads on. Cannot be used with `-Page`. |
+| `Force` | `switch` | No (All) |  | With `-All`, reads every page, past the 1,000-page limit. |
+| `Page` | `int` | No (Page) | `1` | The page of changes to return, counting from 1. At least 1. |
+| `PageSize` | `int` | No | `50` | How many changes each page holds. From 1 to 100. |
 
-#### Output
+### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes. Each value change carries `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, naming the Synchronisation Rule that contributed that specific value (a single change record can flow attributes from several rules); both are `$null` when the value was not contributed by a rule. `ContributedBySystemId` and `ContributedBySystemName` name the Connected System that rule belongs to, resolved from the still-live rule; both are `$null` once the contributing rule has since been deleted, even though `ContributedBySyncRuleName`'s snapshot survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value.
+One object per change, newest first.
 
-#### Examples
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier of the change. |
+| `ChangeType` | `string` | What the change did to the Metaverse Object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `ChangeTime` | `datetime` | When the change was made (UTC). |
+| `InitiatedByType` | `string` | The kind of principal that made the change: a User, an API key, or JIM itself (System). One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
+| `InitiatedById` | `guid` | The unique identifier of the principal that made the change; empty for System. |
+| `InitiatedByName` | `string` | The name of the principal that made the change, as it was then. |
+| `ChangeInitiatorType` | `string` | What within JIM made the change, such as a Synchronisation Rule, a User or Example Data. One of `NotSet`, `User`, `WorkflowInstance`, `GroupMembershipRuleEvaluation`, `SynchronisationRule`, `ExampleData` or `System`. |
+| `SyncRuleId` | `int` | The unique identifier of the Synchronisation Rule that made the change, when one did. |
+| `SyncRuleName` | `string` | That Synchronisation Rule's name. |
+| `ActivityRunProfileExecutionItemId` | `guid` | The Activity execution item that recorded the change, when a Run Profile made it. |
+| `CsoId` | `guid` | The unique identifier of the Connected System Object whose synchronisation made the change, when one did. |
+| `CsoExternalId` | `string` | That Connected System Object's external id, as it was then; kept after the object is deleted. |
+| `ConnectedSystemId` | `int` | The unique identifier of the Connected System the Run Profile belonged to, when one made the change. |
+| `ConnectedSystemName` | `string` | That Connected System's name. |
+| `RunProfileName` | `string` | The name of the Run Profile that made the change, when one did. |
+| `ConnectedSystemRunType` | `string` | The kind of Run Profile that made the change, when one did. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `AttributeId` and `ValueChanges`. |
+<!-- END GENERATED: Get-JIMMetaverseObjectChangeHistory -->
+
+Each value change under `AttributeChanges` names the Synchronisation Rule that contributed it, in `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, because one change can carry values from several rules; both are empty when no rule contributed the value. `ContributedBySystemId` and `ContributedBySystemName` name that rule's Connected System, and are empty once the rule has been deleted, though its name survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value.
+
+### Examples
 
 ```powershell title="Get the most recent page of changes"
 Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -918,13 +268,14 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ---
 
-### Get-JIMMetaverseObjectProvenance
+## Get-JIMMetaverseObjectProvenance
 
 Shows where a Metaverse Object's attribute values came from: which Connected System and Synchronisation Rule contributed each one, or that no contributor is recorded.
 
-With just `-Id`, returns a summary: one entry per attribute holding at least one value, with its distinct origins ordered by value count descending. With `-AttributeName` or `-AttributeId`, returns full provenance for that one attribute: the current value(s) and their origin, the joined Connected System Object the value came from, the change that most recently set it, every Synchronisation Rule mapping that could contribute to it (in priority order, each with the value it would currently supply and its standing against the value in use), and the attribute's change history.
+With just `-Id`, it summarises every attribute that holds a value. With `-AttributeName` or `-AttributeId`, it returns everything the portal's attribute inspector shows for that one attribute.
 
-#### Syntax
+<!-- BEGIN GENERATED: Get-JIMMetaverseObjectProvenance -->
+### Syntax
 
 ```powershell
 # Summary (default)
@@ -937,21 +288,47 @@ Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeName <string>
 Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeId <int>
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `AttributeName` | `string` | No | | Name of the attribute to get detailed provenance for. Resolved against the attributes the object holds a value for (an exact, case-insensitive match); use `-AttributeId` for an attribute with no value. Cannot be used with `-AttributeId`. |
-| `AttributeId` | `int` | No | | Identifier of the attribute to get detailed provenance for. Cannot be used with `-AttributeName`. |
+| `Id` | `guid` | Yes |  | The ID of the Metaverse Object. Accepts pipeline input by property name. |
+| `AttributeName` | `string` | Yes (ByAttributeName) |  | The name of the attribute to inspect, matched exactly but ignoring case among the attributes the object holds a value for. An attribute it holds no value for is an error. Cannot be used with `-AttributeId`. |
+| `AttributeId` | `int` | Yes (ByAttributeId) |  | The ID of the attribute to inspect. Cannot be used with `-AttributeName`. |
 
-#### Output
+### Output
 
-With just `-Id`: a `PSCustomObject` with `MetaverseObjectId` and `Attributes` (each with `AttributeId`, `AttributeName` and `Origins`, an array of `{Kind, ConnectedSystemId, ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue, Corrected, PersonId, PersonName}`). `Kind` is one of `NotRecorded`, `SynchronisationRule`, `GeneratedValue` or `SetByPerson`; a `GeneratedValue` origin still names the Connected System and Synchronisation Rule, and `Corrected` is true once a collision has revised the value.
+With just `-Id`, a summary: each attribute that holds a value, with the distinct origins of its values. With `-AttributeName` or `-AttributeId`, everything the portal's attribute inspector shows for that attribute.
 
-With `-AttributeName` or `-AttributeId`: a `PSCustomObject` with `MetaverseObjectId`, `MetaverseObjectTypeId`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `CurrentValues` (each with `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `Origin`), `CurrentValueTotalCount`, `ContributingConnectedSystemObject`, `LastSet` (the Activity that set the current value), `Sources` (each mapping's `MappingId`, `Rank`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `IsGeneratedValue`, `Expression`, `State`, `CandidateValues`, `Note`; `State` is one of `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`), `History` (newest first, up to 50 entries, each with `IsGeneratedValue` set when a Generated Value Attribute Flow produced the value) and `HistoryTruncated`.
+**By default**:
 
-#### Examples
+| Property | Type | Description |
+|----------|------|-------------|
+| `MetaverseObjectId` | `guid` | The unique identifier of the Metaverse Object. |
+| `Attributes` | `object[]` | One entry per attribute that holds a value, each with the distinct origins of its values, the most common first. Each has `AttributeId`, `AttributeName` and `Origins`. |
+
+**With `-AttributeName` or `-AttributeId`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `MetaverseObjectId` | `guid` | The unique identifier of the Metaverse Object. |
+| `MetaverseObjectTypeId` | `int` | The unique identifier of the Metaverse Object's Object Type. |
+| `AttributeId` | `int` | The unique identifier of the attribute. |
+| `AttributeName` | `string` | The attribute's name. |
+| `AttributeType` | `string` | The kind of value the attribute holds. One of `NotSet`, `Text`, `Number`, `DateTime`, `Binary`, `Reference`, `Guid`, `Boolean`, `LongNumber` or `Decimal`. |
+| `AttributePlurality` | `string` | Whether the attribute holds one value or many. One of `SingleValued` or `MultiValued`. |
+| `CurrentValues` | `object[]` | The values the attribute holds now, each with its origin; at most 50, CurrentValueTotalCount giving the full count. Each has `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName` and `Origin`. |
+| `CurrentValueTotalCount` | `int` | How many values the attribute holds, including any beyond the 50 CurrentValues lists. |
+| `ContributingConnectedSystemObject` | `object` | The joined Connected System Object the current value came from; empty when none can be identified. It has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
+| `LastSet` | `object` | The most recent recorded change that set the current value, with its Activity; empty when no change is recorded. It has `ChangeTime`, `ActivityId`, `ActivityRunProfileExecutionItemId`, `ActivityDescription`, `InitiatedByName` and `ChangeInitiatorType`. |
+| `Sources` | `object[]` | Every Attribute Flow that can contribute to the attribute on this Object Type, in priority order, each with the value it would supply now and how that compares with the value in use. Each has `Rank`, `MappingId`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `IsGeneratedValue`, `Expression`, `State`, `CandidateValues` and `Note`. |
+| `History` | `object[]` | The attribute's change history, newest first: at most 50 entries, HistoryTruncated saying whether there were more. Each has `Kind`, `Value`, `PreviousValue`, `SyncRuleId`, `SyncRuleName`, `IsGeneratedValue` and `Change`. |
+| `HistoryTruncated` | `bool` | Whether History stops short of the attribute's full history. |
+<!-- END GENERATED: Get-JIMMetaverseObjectProvenance -->
+
+In the summary, each origin's `Kind` is `NotRecorded`, `SynchronisationRule`, `GeneratedValue` or `SetByPerson`. A `GeneratedValue` origin still names its Connected System and Synchronisation Rule, and its `Corrected` is `$true` once JIM revised the value after a collision. For one attribute, each entry in `Sources` has a `State` saying how its value stands against the one in use: `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`.
+
+### Examples
 
 ```powershell title="Get the origin of every attribute holding a value"
 Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -973,51 +350,59 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 ---
 
-### Get-JIMMetaverseObjectConnection
+## Get-JIMMetaverseObjectConnection
 
-Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
+Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
 
 For each Connected System Object joined to the Metaverse Object, it returns how the object was joined (the method, the Synchronisation Rule responsible, the date and the Activity) and the scoping of every relevant enabled Synchronisation Rule, evaluated now against current values. With `-IncludeNotConnected`, it also returns one entry per enabled export Synchronisation Rule whose Connected System holds no object joined to this one, with the reason, a one-line hint, what would change it, and a plain-text summary to paste into a ticket.
 
-#### Syntax
+<!-- BEGIN GENERATED: Get-JIMMetaverseObjectConnection -->
+### Syntax
 
 ```powershell
 Get-JIMMetaverseObjectConnection -Id <guid> [-ConnectedSystemName <string>] [-IncludeNotConnected]
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name, so a Metaverse Object from `Get-JIMMetaverseObject` can be piped in. |
-| `ConnectedSystemName` | `string` | No | | Return only the entries for the Connected System with this name (an exact, case-insensitive match). Errors when nothing matches. |
-| `IncludeNotConnected` | `switch` | No | `$false` | Also explain the enabled export Synchronisation Rules whose Connected System holds no object joined to this Metaverse Object. |
+| `Id` | `guid` | Yes |  | The ID of the Metaverse Object. Accepts pipeline input by property name. |
+| `ConnectedSystemName` | `string` | No |  | Returns only the entries for the Connected System with this name, matched exactly but ignoring case. Nothing matching is an error. |
+| `IncludeNotConnected` | `switch` | No |  | Also explains each enabled export Synchronisation Rule whose Connected System holds no object joined to this one. |
 
-#### Output
+### Output
 
-One `PSCustomObject` per entry. Joined connections and not-connected entries share the same properties, so they can be listed, filtered and sorted together:
+One object per entry: each joined Connected System Object and, with `-IncludeNotConnected`, each export Synchronisation Rule that has not connected. Every entry has the same properties, so the two can be listed, filtered and sorted together. Values of credential attributes are withheld.
 
-| Property | Description |
-|----------|-------------|
-| `MetaverseObjectId`, `MetaverseObjectName` | The Metaverse Object explained. |
-| `ConnectedSystem`, `ConnectedSystemId` | The Connected System's name and identifier. |
-| `Connected` | `$true` for a joined connection, `$false` for a not-connected entry. |
-| `Object`, `ConnectedSystemObjectId` | The joined Connected System Object's external id and identifier; empty when not connected. |
-| `ObjectType` | The Connected System Object Type. |
-| `Role` | `Source`, `Target`, `Source and Target` or `None`: whether enabled import or export Synchronisation Rules use the object. A not-connected entry is always `Target`. |
-| `State` | For a joined connection, its state (`InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`). For a not-connected entry, the reason: `NotInScope`, `ProvisioningDisabled`, `RuleMisconfigured` or `NotYetProvisioned`. |
-| `SyncRule` | The export Synchronisation Rule a not-connected entry is about; empty for a joined connection. |
-| `Join` | How a joined connection was joined: `JoinType`, `Method` (`Projection`, `Provisioning`, `InboundMatching` or `ExportMatching`), `DateJoined`, `SyncRuleId`, `SyncRuleName`, `Source` (`Recorded`, `Derived` from Activity history, or `NotRecorded`), `Description` (one sentence, for example *Projected by the Synchronisation Rule "HR Users Import"*), `ActivityId` and `RunProfileExecutionItemId`. Empty for a not-connected entry. |
-| `Hint` | A not-connected entry's one-line qualifier, for example *Fails on Department; Cost Centre or Job Title*. |
-| `BulletsTitle`, `Bullets` | What a not-connected entry needs, or what happens next, as plain-text lines. |
-| `Summary` | A not-connected entry as plain text to paste into a ticket, ending with the evaluation time in UTC. |
-| `Scoping` | One explanation per Synchronisation Rule: `SyncRuleId`, `SyncRuleName`, `Direction`, `Outcome` (`InScope`, `OutOfScope` or `Undetermined`), `HasCriteria`, `EvaluatedAt`, `Hint`, `Groups` (the criteria tree) and `Criteria`, a flat list of every criterion with `Path`, `Met`, `Outcome`, `AttributeName`, `AttributeType`, `ComparisonType`, `Expected`, `Actual` (the value the outcome turned on; empty when several values all went the same way), `ValueCount`, `Masked`, `Description` and `ActualDescription`. |
-| `Conflicts` | Enabled export Synchronisation Rules that cannot connect because this connection holds the Metaverse Object's one slot in the Connected System with an object of another type: `SyncRuleId`, `SyncRuleName`, `TargetObjectTypeName`, `ExistingObjectTypeName`, `Description` and `Scoping`. |
-| `EvaluatedAt` | When every scoping evaluation was made, in UTC. |
+| Property | Type | Description |
+|----------|------|-------------|
+| `MetaverseObjectId` | `guid` | The unique identifier of the Metaverse Object. |
+| `MetaverseObjectName` | `string` | The Metaverse Object's display name. |
+| `ConnectedSystem` | `string` | The Connected System's name. |
+| `ConnectedSystemId` | `int` | The unique identifier of the Connected System. |
+| `Connected` | `bool` | `$true` for a joined Connected System Object, `$false` for an export Synchronisation Rule that has not connected. |
+| `Object` | `string` | The joined Connected System Object's name, or its external id where it has none; empty when not connected. |
+| `ConnectedSystemObjectId` | `guid` | The unique identifier of the joined Connected System Object; empty when not connected. |
+| `ObjectType` | `string` | The Connected System Object Type's name. |
+| `Role` | `string` | Source, Target, Source and Target or None, from the enabled Synchronisation Rules for that Connected System and Object Type; always Target when not connected. |
+| `State` | `string` | For a connection, its state, such as InSync or UpdatePending; when not connected, why: NotInScope, ProvisioningDisabled, RuleMisconfigured or NotYetProvisioned. |
+| `SyncRule` | `string` | The export Synchronisation Rule that has not connected; empty for a connection. |
+| `Join` | `object` | For a connection, how it was joined: JoinType, Method, DateJoined, SyncRuleId, SyncRuleName, Source, Description, ActivityId and RunProfileExecutionItemId. |
+| `Hint` | `string` | When not connected, a one-line hint at what would change it. |
+| `BulletsTitle` | `string` | When not connected, the heading for Bullets. |
+| `Bullets` | `string[]` | When not connected, what would change it, a line each. |
+| `Summary` | `string` | When not connected, a plain-text summary to paste into a ticket. |
+| `Scoping` | `object[]` | One explanation per relevant Synchronisation Rule, evaluated now against current values: SyncRuleName, Direction, Outcome, Hint, Groups and Criteria, each criterion with Path, Met, Outcome, AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and ActualDescription; an expression criterion adds Expression, ExpressionInputs (each attribute it read, with Accessor, Values, ValueCount and Masked) and, when it could not be evaluated, FailureReason. |
+| `Conflicts` | `object[]` | For a connection, the export Synchronisation Rules that cannot connect because it holds the slot. |
+| `EvaluatedAt` | `datetime` | When JIM evaluated the explanations (UTC). |
+<!-- END GENERATED: Get-JIMMetaverseObjectConnection -->
 
-A criterion's `Path` locates it in the tree: the top-level group's position, then each child's position within its group, one-based and dot-separated, criteria counted before child groups (`1.3.2` is the second child of the third child of the first top-level group). Values of credential attributes are withheld: `Masked` is `$true` and `Expected` and `Actual` are empty.
+`Join.Method` is `Projection`, `Provisioning`, `InboundMatching` or `ExportMatching`, and `Join.Source` says whether JIM recorded the join (`Recorded`), worked it out from Activity history (`Derived`), or has no record of it (`NotRecorded`). A join made by matching also carries `ObjectMatchingRuleId` and `MatchValue`, what it matched on. Each `Scoping` entry's `Outcome` is `InScope`, `OutOfScope` or `Undetermined`.
 
-#### Examples
+A criterion's `Path` locates it in the criteria tree: the top-level group's position, then each child's position within its group, counting from 1 and criteria before child groups, so `1.3.2` is the second child of the third child of the first top-level group. A criterion on a credential attribute has `Masked` set to `$true`, and its `Expected` and `Actual` are empty.
+
+### Examples
 
 ```powershell title="See where a Metaverse Object is connected, and why it is not connected elsewhere"
 Get-JIMMetaverseObjectConnection -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -IncludeNotConnected |
@@ -1051,299 +436,83 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 
 ---
 
-### Get-JIMGeneratedValue
+## Get-JIMPendingDeletion
 
-Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
-committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
-and its state. Empty when the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
-[Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
+Gets the Metaverse Objects pending deletion: a page of them, how many there are, or a summary of where their deletions stand.
 
-#### Syntax
-
-```powershell
-Get-JIMGeneratedValue -MetaverseObjectId <guid>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `MetaverseObjectId` | `guid` | Yes | | The Metaverse Object's ID. Accepts pipeline input by property name. Alias: `Id` |
-
-#### Output
-
-One `PSCustomObject` per generated value:
-
-| Property | Description |
-|----------|--------------|
-| `AssignmentId` | The assignment's own identifier |
-| `MetaverseAttributeId` | The Metaverse Attribute this value was generated for |
-| `AttributeName` | Its name |
-| `Value` | The committed value |
-| `TokenKind` | `OnlyIfTaken`, `Sequence` or `Random` |
-| `SyncRuleId` | The Synchronisation Rule whose generated mapping produced this value |
-| `SyncRuleName` | Its name |
-| `SyncRuleMappingId` | The mapping responsible |
-| `State` | `Proposed`, `Committed`, `Remediated` or `NeedsDecision` |
-| `AssignedDate` | When the assignment was created |
-
-#### Examples
-
-```powershell title="List everything JIM generated for an Identity"
-Get-JIMGeneratedValue -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-```
-
-```powershell title="Pipe a Metaverse Object straight in"
-Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGeneratedValue
-```
-
-### Get-JIMRetiredGeneratedValue
-
-Lists an attribute's retired generated values, newest first: the values JIM issued for it and will never issue again, whichever Attribute Flow generates it. Every page is read, so the whole list is returned. Read-only; the only way to forget retired values is `Restart-JIMGeneratedValues` on a sequence. See [Retired values](../configuration/synchronisation-rules.md#retired-values) for when a value is retired.
-
-#### Syntax
-
-```powershell
-# An import flow's Metaverse Attribute, by ID
-Get-JIMRetiredGeneratedValue -MetaverseAttributeId <int> [-Search <string>]
-
-# An import flow's Metaverse Attribute, by name
-Get-JIMRetiredGeneratedValue -MetaverseAttributeName <string> [-Search <string>]
-
-# An export flow's Connected System attribute
-Get-JIMRetiredGeneratedValue -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeId <int> [-Search <string>]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `MetaverseAttributeId` | `int` | Yes (by ID) | | The Metaverse Attribute's ID. Accepts pipeline input by property name, so a Metaverse Attribute from `Get-JIMMetaverseAttribute` pipes straight in. Alias: `Id` |
-| `MetaverseAttributeName` | `string` | Yes (by name) | | The Metaverse Attribute's name, for example `Account Name` |
-| `ConnectedSystemId` | `int` | Yes (export) | | The Connected System whose attribute an export flow generates |
-| `ObjectTypeId` | `int` | Yes (export) | | The Connected System Object Type the attribute belongs to |
-| `AttributeId` | `int` | Yes (export) | | The Connected System attribute's ID |
-| `Search` | `string` | No | | Text matched, ignoring case, against the value and the name of the object that held it |
-
-#### Output
-
-One `PSCustomObject` per retired value:
-
-| Property | Description |
-|----------|--------------|
-| `Id` | The entry's own identifier |
-| `MetaverseAttributeId` | The Metaverse Attribute (import flow); empty for an export flow |
-| `ConnectedSystemObjectTypeAttributeId` | The Connected System attribute (export flow); empty for an import flow |
-| `AttributeName` | The attribute's name |
-| `Value` | The value as it was issued |
-| `RetiredAt` | When it was retired (UTC) |
-| `Reason` | `ObjectDeleted`, `Superseded` or `Recalled` (`Regenerated` is reserved for a later release) |
-| `FromObjectId` | The object that held it: a Metaverse Object, or for an export flow a Connected System Object |
-| `FromObjectDisplayName` | That object's name, as it was when the value was retired |
-| `FromObjectExists` | Whether that object still exists |
-| `ActivityId` | The Activity during which it was retired, when one was recorded (a removed flow records none) |
-| `HeldBy` | `FromObjectDisplayName` for reading, with `(deleted)` added once the object is gone |
-
-#### Examples
-
-```powershell title="List every retired Account Name"
-Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name"
-```
-
-```powershell title="Find out whether a leaver's account name is retired, and why"
-Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name" -Search "fenwick" |
-    Select-Object Value, RetiredAt, Reason, HeldBy
-```
-
-```powershell title="Pipe a Metaverse Attribute straight in"
-Get-JIMMetaverseAttribute -Name "Employee Number" | Get-JIMRetiredGeneratedValue
-```
-
----
-
-## Set-JIMMetaverseObjectPassword
-
-Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation.
-
-One command, aimed one of two ways. With `-ConnectedSystemId`, the password goes to the Metaverse Object's Connected System Objects in those systems: the reset case, where you chose the password for the person. Without it, the password goes to every Connected System configured for [Password Synchronisation](../concepts/passwords.md#password-synchronisation) in which the Metaverse Object has a Connected System Object: the event case, where their password changed somewhere and the rest should hold it. Both go through the same queue and the same [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service), which makes the first attempt within about a second, whatever the synchronisation engine is doing; what differs is the defaults, set out under Parameters.
-
-Supply the password with `-Password`, or have JIM generate one that satisfies the discovered policy of every Connected System the Metaverse Object has a Connected System Object in with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`; JIM holds its own copy, encrypted, only until the systems have it.
-
+<!-- BEGIN GENERATED: Get-JIMPendingDeletion -->
 ### Syntax
-
-```powershell
-# Named Connected System Objects: expires at next sign-in, waits up to 10 seconds
-Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Password <securestring>
-    [-ExpiryBehaviour <string>] [-EnableAccount] [-Wait <int>] [-Force]
-
-Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Generate
-    [-ExpiryBehaviour <string>] [-EnableAccount] [-Wait <int>] [-Force]
-
-# Every configured system: expiry left to each system, returns on enqueue
-Set-JIMMetaverseObjectPassword -Id <guid> -Password <securestring>
-    [-ExpiryBehaviour <string>] [-Wait <int>] [-Force]
-
-Set-JIMMetaverseObjectPassword -Id <guid> -Generate
-    [-ExpiryBehaviour <string>] [-Wait <int>] [-Force]
-```
-
-!!! tip "Use `-Generate` rather than choosing a password yourself"
-    One password has to satisfy the strictest of several systems at once, and their password policies are not
-    something you can see in order to reason about them. JIM can: `-Generate` has it reconcile the discovered
-    policies of every Connected System the password is going to (the longest minimum length any of them demands,
-    and only the character categories all of them count) and produce a password that satisfies all of them.
-
-    Where no single password can satisfy them all, JIM refuses outright rather than handing back one that would
-    be accepted on the first Connected System Object and refused on the second, after the first has already changed. A system
-    JIM could read no policy from is reported as a warning, because the password is about to go there and JIM
-    cannot promise it will be accepted.
-
-    The generated password is returned on the result's `GeneratedPassword` property as a SecureString.
-    **That is the only chance to capture it.**
-
-```powershell title="Set one compliant password across two named systems, and read it back"
-$result = Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -ConnectedSystemId 1,2 -Generate -Force
-ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `ConnectedSystemId` | `int[]` | No | | The Connected Systems to set the password in. The Metaverse Object must have a Connected System Object in every one named; the command refuses, and sets nothing, where it does not. Omit it to propagate to every Connected System configured for Password Synchronisation. |
-| `Password` | `securestring` | Yes (unless `-Generate`) | | The password. Encrypted before JIM stores it and held only until delivered. |
-| `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate the password. With `-ConnectedSystemId`, against the named systems' policies; without, against every system the Metaverse Object has a Connected System Object in. |
-| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` with `-ConnectedSystemId`; `ExpiresAccordingToTargetPolicy` without | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. The defaults follow who chose the password: you did when naming Connected System Objects; the person did otherwise. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the named Connected System Objects as part of setting the password. Only available with `-ConnectedSystemId`: a propagated password never enables a Connected System Object, because it reaches objects an administrator may have disabled on purpose. |
-| `Wait` | `int` | No | `10` with `-ConnectedSystemId`; `0` without | Seconds, 0 to 30, to wait for the systems to answer. The wait ends early once every target has settled. A script that needs to watch for longer should poll `Get-JIMPendingPasswordChange -MetaverseObjectId` instead. |
-| `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
-
-To set a password on every Connected System Object the Metaverse Object has regardless of which systems are configured for Password Synchronisation, name its systems: `-ConnectedSystemId (Get-JIMMetaverseObject -Id $id).ConnectedSystemObjects.ConnectedSystemId`.
-
-### Output
-
-One `PSCustomObject` describing the change. No property carries the password you supplied.
-
-| Property | Description |
-|----------|-------------|
-| `ActivityId` | The Activity recording the change. Its child Activities hold each system's outcome once delivery has been attempted. |
-| `Origin` | `Explicit` when Connected System Objects were named, `Propagated` when the password went to every configured system. |
-| `Settled` | Whether every target had reached an outcome you need not wait on by the time the command returned. A target that is retrying counts as settled: its next attempt is minutes away. |
-| `QueuedForNoSystems` | `$true` when a propagated change found no Connected System configured for Password Synchronisation in which the Metaverse Object has a Connected System Object, so nothing was queued. Worth checking: silence here would let a script believe a password propagated when nothing was recorded. |
-| `Targets` | One entry per Connected System the change was queued for, in name order. |
-| `GeneratedPassword` | The password JIM produced, as a SecureString. Present only with `-Generate`. |
-
-Each entry under `Targets`:
-
-| Property | Description |
-|----------|-------------|
-| `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
-| `ConnectedSystemObjectId` | The Connected System Object the password is aimed at, or `$null` where the Metaverse Object has none in this system yet; a propagated change is queued regardless, bounded by its time to live, so it lands when provisioning catches up. |
-| `Enabled` | Whether the system is currently taking propagated passwords. `$false` on a propagated change means it is held until somebody switches the system on; a named Connected System Object is delivered to either way. |
-| `State` | `Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`. |
-| `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
-| `Message` | The system's own words on its most recent outcome (why it refused, or that the password was set), or `$null` before anything has been said. |
-| `AttemptCount` | How many delivery attempts this system has had. |
-| `FailureReason` | Why the most recent attempt failed: `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. Empty before any attempt and once the password is set. |
-
-A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal and can still read the other targets from the exception it caught. A target still in flight when a wait ran out is reported as a warning.
-
-### Examples
-
-```powershell title="Reset a password in two named Connected Systems and see what each did with it"
-$password = Read-Host -AsSecureString "New password"
-$result = Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -ConnectedSystemId 1,2 -Password $password
-$result.Targets | Select-Object ConnectedSystemName, State, Message
-```
-
-```powershell title="Record a password change and return at once"
-$password = Read-Host -AsSecureString "New password"
-Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -Password $password -Force
-```
-
-```powershell title="Propagate, wait up to ten seconds, and report which systems took the password"
-$result = Set-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10 -Force
-$result.Targets | Select-Object ConnectedSystemName, State, Message
-if (-not $result.Settled) {
-    Write-Warning "Not every system had answered after 10 seconds; check the Metaverse Object's Password tab."
-}
-```
-
-A service desk script uses this to tell the caller their reset has landed before they hang up: `State` is `Set` where it has, `Retrying` with a `NextAttemptAt` where a directory was unreachable, and `Parked` with the directory's own `Message` where it refused.
-
-```powershell title="Catch the case where nothing was queued"
-$result = Set-JIMMetaverseObjectPassword -Id $id -Password $password -Force
-if ($result.QueuedForNoSystems) { Write-Warning "No system is configured to receive this Metaverse Object's password changes." }
-```
-
-```powershell title="Set one generated password on every Connected System Object the Metaverse Object has, whatever is configured"
-$systems = (Get-JIMMetaverseObject -Id $id).ConnectedSystemObjects.ConnectedSystemId
-Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId $systems -Generate -Force
-```
-
-### Notes
-
-- **This resets the passwords on whichever Connected System Objects you point it at.** Anyone who can call it can reset the password of any Connected System Object in these Connector Spaces, subject only to what each Connected System's service account is permitted to do.
-- Each Connected System is delivered to on its own. One refusing does not stop the others, and the person is left with a different password there until you deal with it, so check every target rather than the first.
-- A refused password will be refused again if you resend it. Generate a different one, and set it on every Connected System Object rather than only the one that failed, or the person ends up with two.
-- A named system whose Password Synchronisation is switched off is still delivered to; the switch governs propagated changes, and you named the Connected System Object. A propagated change to that system is held until it is switched on.
-
----
-
-## Pending Deletions
-
-### Get-JIMPendingDeletion
-
-Retrieves Metaverse Objects that are pending deletion. Supports listing individual items, returning a count, or a summary breakdown by object type.
-
-#### Syntax
 
 ```powershell
 # List (default)
 Get-JIMPendingDeletion [-ObjectTypeId <int>] [-Page <int>] [-PageSize <int>]
 
 # Count
-Get-JIMPendingDeletion [-ObjectTypeId <int>] -Count
+Get-JIMPendingDeletion -Count [-ObjectTypeId <int>]
 
 # Summary
 Get-JIMPendingDeletion -Summary
 ```
 
-#### Parameters
+### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ObjectTypeId` | `int` | No | | Filter by object type ID (List and Count parameter sets only) |
-| `Page` | `int` | No | `1` | Page number for paginated results (List parameter set only) |
-| `PageSize` | `int` | No | `25` | Number of results per page, maximum 100 (List parameter set only) |
-| `Count` | `switch` | No | `false` | Return only the total count of pending deletions |
-| `Summary` | `switch` | No | `false` | Return a summary breakdown by object type |
+| `ObjectTypeId` | `int` | No (List, Count) |  | Returns only the Metaverse Objects of the Object Type with this ID. |
+| `Page` | `int` | No (List) | `1` | The page of results to return, counting from 1. At least 1. |
+| `PageSize` | `int` | No (List) | `25` | How many objects each page holds. From 1 to 100. |
+| `Count` | `switch` | Yes (Count) |  | Returns only the number of Metaverse Objects pending deletion. |
+| `Summary` | `switch` | Yes (Summary) |  | Returns how many are pending deletion, and where their deletions stand, across every Object Type. |
 
-#### Output
+### Output
 
-Depending on the parameter set:
+By default, one page of Metaverse Objects pending deletion. With `-Count`, how many there are. With `-Summary`, the counts by where each deletion stands.
 
-- **List**: pending deletion items including object details and scheduled deletion date. The object type is returned as a nested `Type` object with `Id` and `Name` properties (previously flat `TypeId`/`TypeName`; this is a breaking change to the output shape).
-- **Count**: total number of pending deletions as an integer
-- **Summary**: breakdown of pending deletion counts grouped by object type
+**By default**:
 
-#### Examples
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier of the Metaverse Object. |
+| `DisplayName` | `string` | The display name of the Metaverse Object. |
+| `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
+| `LastConnectorDisconnectedDate` | `datetime` | When the last Connected System Object was disconnected from the Metaverse Object (UTC). |
+| `DeletionEligibleDate` | `datetime` | When the Metaverse Object becomes due for deletion, once its grace period ends (UTC). |
+| `DaysUntilDeletion` | `int` | How many days remain until the Metaverse Object is due for deletion; negative once it is overdue. |
+| `GracePeriod` | `string` | The grace period its Object Type sets. |
+| `ConnectedSystemObjectCount` | `int` | How many Connected System Objects are still joined to the Metaverse Object. |
+| `Status` | `string` | Where the deletion stands: Deprovisioning while Connected System Objects remain joined, AwaitingGracePeriod once none remain but the grace period is still running, and ReadyForDeletion once it has ended. |
+| `DeletionTriggeredBySystemId` | `int` | The unique identifier of the Connected System whose disconnection scheduled the deletion; empty when no single system triggered it, or when it was scheduled before JIM recorded the trigger. |
+| `DeletionTriggeredBySystemName` | `string` | That Connected System's name, captured when the deletion was scheduled so it survives the system's own deletion. |
+| `ReasonCode` | `string` | Why the deletion rule marked the Metaverse Object for deletion. NoConnectorRemainsStateConvergence means JIM found it with nothing joined rather than through one system's disconnection, which is why DeletionTriggeredBySystemName is empty; NotSet when the deletion was scheduled before JIM recorded a reason. One of `NotSet`, `LastConnectorDisconnected`, `LastConnectorDisconnectedNoSourcesConfigured`, `AllAuthoritativeSourcesDisconnected`, `AuthoritativeSourceDisconnected`, `ExportCreateStaged`, `ExportUpdateStaged`, `ExportDeleteStaged`, `NoConnectorRemainsStateConvergence`, `GeneratedValueAlreadyInUse`, `GeneratedValueAnchoredElsewhere` or `GeneratedValueRenameAuthorised`. |
 
-```powershell title="List all pending deletions"
+**With `-Count`**: an `int`.
+
+**With `-Summary`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `TotalCount` | `int` | How many Metaverse Objects are pending deletion. |
+| `DeprovisioningCount` | `int` | How many still have Connected System Objects joined, awaiting deprovisioning. |
+| `AwaitingGracePeriodCount` | `int` | How many have nothing joined but are still within their grace period. |
+| `ReadyForDeletionCount` | `int` | How many are due for deletion: their grace period has ended and nothing is joined. |
+<!-- END GENERATED: Get-JIMPendingDeletion -->
+
+### Examples
+
+```powershell title="List pending deletions"
 Get-JIMPendingDeletion
 ```
 
-```powershell title="Get pending deletions for a specific object type"
-$personType = Get-JIMMetaverseObjectType -Name "Person"
-Get-JIMPendingDeletion -ObjectTypeId $personType.Id -PageSize 50
+```powershell title="List pending deletions for one Object Type"
+$userType = Get-JIMMetaverseObjectType -Name "User"
+Get-JIMPendingDeletion -ObjectTypeId $userType.Id -PageSize 50
 ```
 
-```powershell title="Get a count of all pending deletions"
+```powershell title="Count pending deletions"
 Get-JIMPendingDeletion -Count
 ```
 
-```powershell title="Get a summary breakdown by object type"
+```powershell title="Summarise where pending deletions stand"
 Get-JIMPendingDeletion -Summary
 ```
 
@@ -1351,6 +520,10 @@ Get-JIMPendingDeletion -Summary
 
 ## See also
 
-- [Metaverse](../configuration/metaverse.md): object types, attributes, objects, and pending deletions
-- [Synchronisation Rules](synchronisation-rules.md)
-- [Connected Systems](connected-systems.md)
+- [Metaverse Object Types](metaverse-object-types.md): the Object Types Metaverse Objects belong to
+- [Metaverse Attributes](metaverse-attributes.md): the attributes they hold, and Attribute Priority
+- [Metaverse](../configuration/metaverse.md): Object Types, attributes, Metaverse Objects and pending deletions
+- [Metaverse Objects](../configuration/metaverse-objects.md): where a value comes from, and why a Metaverse Object is connected where it is
+- [Password Synchronisation](password-synchronisation.md): set a Metaverse Object's password, and follow its delivery
+- [Generated Values](generated-values.md): the values JIM generated for a Metaverse Object
+- [Synchronisation Rules](synchronisation-rules.md): the Attribute Flows that contribute values

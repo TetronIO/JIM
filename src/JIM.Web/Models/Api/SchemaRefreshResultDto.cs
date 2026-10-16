@@ -48,9 +48,22 @@ public class SchemaRefreshResultDto
     public List<string> UpdatedObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// Object types the Connected System now reports under a name differing only in case. Each keeps its id and
+    /// configuration and takes the new casing; it is not listed as added or removed.
+    /// </summary>
+    public List<SchemaNameChange> RenamedObjectTypes { get; set; } = new();
+
+    /// <summary>
     /// Attributes that are new, grouped by object type name.
     /// </summary>
     public Dictionary<string, List<string>> AddedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Attributes the Connected System now reports under a name differing only in case, grouped by object type name.
+    /// Each keeps its id, so the Synchronisation Rule mappings and Object Matching Rules using it are unaffected, and
+    /// takes the new casing; it is not listed as added or removed.
+    /// </summary>
+    public Dictionary<string, List<SchemaNameChange>> RenamedAttributes { get; set; } = new();
 
     /// <summary>
     /// Attributes the Connected System no longer reports, grouped by object type name. Retained in JIM, not
@@ -62,6 +75,21 @@ public class SchemaRefreshResultDto
     /// Attributes whose definition (data type or plurality) the Connector restated, grouped by object type name.
     /// </summary>
     public Dictionary<string, List<SchemaAttributeDefinitionChangeDto>> ChangedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Changes to how the Connected System classifies a selected Object Type (its class kind, or inheritance
+    /// involving another selected Object Type), grouped by Object Type name. They can change which Object Type
+    /// existing entries resolve to at the next import; see HasObjectTypeClassificationChanges.
+    /// </summary>
+    public Dictionary<string, List<SchemaObjectTypeClassificationChangeDto>> ChangedObjectTypeClassifications { get; set; } = new();
+
+    /// <summary>
+    /// Existing Object Types whose classification the Connected System now reports differently in a way that cannot
+    /// change which Object Type an entry resolves to (an unselected type, inheritance naming no other selected type,
+    /// or a class kind change that does not make a class auxiliary or stop it being one). Applying the refresh
+    /// records it; an Object Type listed in ChangedObjectTypeClassifications is not repeated here.
+    /// </summary>
+    public List<string> ObjectTypesWithClassificationUpdates { get; set; } = new();
 
     /// <summary>
     /// Attributes no longer reported that are still referenced by Synchronisation Rules. Key is the attribute
@@ -97,6 +125,15 @@ public class SchemaRefreshResultDto
     public bool HasRemovalsOrDefinitionChanges { get; set; }
 
     /// <summary>
+    /// Whether the refresh changes how the Connected System classifies a selected Object Type, which can change which
+    /// Object Type existing entries resolve to. By default each object that would change Object Type is refused at
+    /// the next import, reported as an Object Type Changed error and kept as it is; a Full Import Run Profile with
+    /// <c>allowObjectTypeChanges</c> enabled carries the change out. Not a destructive change: cancelling keeps
+    /// things as they are, so it never sets HasRemovalsOrDefinitionChanges.
+    /// </summary>
+    public bool HasObjectTypeClassificationChanges { get; set; }
+
+    /// <summary>
     /// What the destructive changes invalidate (#1485): the Synchronisation Rules and Attribute Flow mappings
     /// that would be disabled by committing with <c>disableDependents</c> (or deleted by committing with
     /// <c>removeDependents</c>), each with its reason, plus Object Matching Rules needing attention. Null when
@@ -125,17 +162,24 @@ public class SchemaRefreshResultDto
             AddedObjectTypes = result.AddedObjectTypes,
             RemovedObjectTypes = result.RemovedObjectTypes,
             UpdatedObjectTypes = result.UpdatedObjectTypes,
+            RenamedObjectTypes = result.RenamedObjectTypes,
+            ObjectTypesWithClassificationUpdates = result.ObjectTypesWithClassificationUpdates,
             AddedAttributes = result.AddedAttributes,
+            RenamedAttributes = result.RenamedAttributes,
             RemovedAttributes = result.RemovedAttributes,
             ChangedAttributes = result.ChangedAttributes.ToDictionary(
                 kvp => kvp.Key,
                 kvp => kvp.Value.Select(SchemaAttributeDefinitionChangeDto.FromModel).ToList()),
+            ChangedObjectTypeClassifications = result.ChangedObjectTypeClassifications.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(SchemaObjectTypeClassificationChangeDto.FromModel).ToList()),
             AttributesInUse = result.AttributesInUse,
             BlockedCredentialAttributes = result.BlockedCredentialAttributes,
             DiscoveryWarnings = result.DiscoveryWarnings,
             PasswordPolicyDiscovered = result.PasswordPolicyDiscovered,
             HasChanges = result.HasChanges,
-            HasRemovalsOrDefinitionChanges = result.HasRemovalsOrDefinitionChanges
+            HasRemovalsOrDefinitionChanges = result.HasRemovalsOrDefinitionChanges,
+            HasObjectTypeClassificationChanges = result.HasObjectTypeClassificationChanges
         };
     }
 }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.TestSupport;
 using JIM.InMemoryData;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -47,8 +48,8 @@ public static class TestUtilities
         Assert.That(csioAttribute, Is.Not.Null);
 
         // look up the attribute in the ConnectedSystemObjectTypesData list and validate that the Connected System Object that has been built, is compliant with the schema.
-        var schemaObjectType = connectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
-        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(sourceSystemAttributeNames.ToString(), StringComparison.InvariantCultureIgnoreCase));
+        var schemaObjectType = connectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(sourceSystemAttributeNames.ToString(), StringComparison.OrdinalIgnoreCase));
 
         // make sure schema attributes that are single valued, only have a single value
         if (schemaAttribute.AttributePlurality == AttributePlurality.SingleValued)
@@ -57,7 +58,7 @@ public static class TestUtilities
         switch (schemaAttribute.Type)
         {
             case AttributeDataType.Boolean:
-                Assert.That(csoAttributeValues[0].BoolValue, Is.EqualTo(csioAttribute!.BoolValue));
+                Assert.That(csoAttributeValues.Select(v => v.BoolValue!.Value), Is.EquivalentTo(csioAttribute!.BoolValues));
                 break;
             case AttributeDataType.Guid:
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same)
@@ -92,7 +93,7 @@ public static class TestUtilities
                     Assert.That(csoAttributeValues.Any(q => q.StringValue == csioStringValue));
                 break;
             case AttributeDataType.DateTime:
-                Assert.That(csoAttributeValues[0].DateTimeValue, Is.EqualTo(csioAttribute!.DateTimeValue));
+                Assert.That(csoAttributeValues.Select(v => v.DateTimeValue!.Value), Is.EquivalentTo(csioAttribute!.DateTimeValues));
                 break;
             case AttributeDataType.Binary:
                 // this is quite crude, and could be improved.
@@ -140,6 +141,13 @@ public static class TestUtilities
         Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
         Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
     }
+
+    /// <summary>
+    /// A configuration test case repository holding no cases (#2055 Phase 4), for a fixture that mocks
+    /// IRepository: a save reads the cases covering what it saves for the save gate, and change capture and the
+    /// preflight read them into the snapshot; a bare mock would hand them null.
+    /// </summary>
+    public static IConfigurationTestRepository CreateEmptyConfigurationTestRepository() => new EmptyConfigurationTestRepository();
 
     /// <summary>
     /// Attaches empty <see cref="JimDbContext.ObjectMatchingRules"/> and

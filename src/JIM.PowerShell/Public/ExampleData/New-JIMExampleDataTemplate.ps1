@@ -15,27 +15,25 @@ function New-JIMExampleDataTemplate {
         The name for the Data Generation Template.
 
     .PARAMETER ObjectType
-        One hashtable per Object Type the template generates objects for. Each hashtable supports:
-        - MetaverseObjectType: a Metaverse Object Type name or id (required)
-        - ObjectsToCreate: how many objects to generate (defaults to 1)
-        - Attributes: an optional array of attribute-generation hashtables using the API's request field
-          names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate,
-          BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues,
-          ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds,
-          AttributeDependency, ConnectedSystemObjectTypeAttributeId), except that MetaverseAttribute may be
-          a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids
-          (order taken from array position).
-        Unknown keys throw, so typos are caught before anything is sent.
+        One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a
+        Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted)
+        and Attributes, an optional array of attribute generation hashtables using the API's request field names
+        (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate,
+        BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues,
+        ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds,
+        AttributeDependency), except that MetaverseAttribute may be a
+        Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order.
+        Unknown keys throw, so a typo is caught before anything is sent.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Data Generation
-        Template's configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the created Data Generation Template object.
+        Returns the created Data Generation Template.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Data Generation Template object.
+        With -PassThru, the created Data Generation Template; otherwise nothing.
 
     .EXAMPLE
         New-JIMExampleDataTemplate -Name "Demo Users" -ObjectType @{
@@ -61,7 +59,7 @@ function New-JIMExampleDataTemplate {
         Invoke-JIMExampleDataTemplate
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateDto')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
@@ -97,6 +95,12 @@ function New-JIMExampleDataTemplate {
 
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates" -Method 'POST' -Body $body
                 Write-Verbose "Created Data Generation Template: $($response.id)"
+
+                # What the save said about the template's expressions without refusing it (#2055 Phase 3): each
+                # written as the server phrased it.
+                foreach ($saveWarning in @($response.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
 
                 if ($PassThru) {
                     $response

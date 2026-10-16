@@ -1,11 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Application.Servers.Scoping;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -19,9 +22,39 @@ namespace JIM.Application.Servers;
 /// </remarks>
 public class ScopingEvaluationServer
 {
-    public ScopingEvaluationServer()
+    private readonly Lazy<IExpressionEvaluator> _expressions;
+
+    /// <param name="expressionEvaluator">Evaluates expression criteria (#2054). Omitted, one is created the first time an
+    /// expression criterion is reached, so a rule set without any costs nothing.</param>
+    public ScopingEvaluationServer(IExpressionEvaluator? expressionEvaluator = null)
     {
+        _expressions = expressionEvaluator != null
+            ? new Lazy<IExpressionEvaluator>(expressionEvaluator)
+            : new Lazy<IExpressionEvaluator>(() => new DynamicExpressoEvaluator());
     }
+
+    /// <summary>
+    /// Whether evaluating the rule's scope can fail for some object rather than answer in or out: true when any criterion
+    /// compares with a pattern, which can run past its time limit on a value, or compares an expression, which can fail
+    /// to evaluate or compute a value that is not of the type it is compared as (#2054). A caller that must not act on an
+    /// undecidable scope can check such rules ahead of acting and skip the check for every other rule.
+    /// </summary>
+    public static bool CanFailToEvaluate(SyncRule rule) =>
+        rule.ObjectScopingCriteriaGroups.Any(GroupCanFailToEvaluate);
+
+    /// <summary>
+    /// Whether any of the rule's criteria compares an expression (#2054). A caller that reads only the scoping
+    /// attributes' values by id cannot evaluate such a rule and must load the whole object.
+    /// </summary>
+    public static bool HasExpressionCriteria(SyncRule rule) =>
+        rule.ObjectScopingCriteriaGroups.Any(GroupHasExpressionCriteria);
+
+    private static bool GroupHasExpressionCriteria(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria.Any(criterion => criterion.IsExpression) || group.ChildGroups.Any(GroupHasExpressionCriteria);
+
+    private static bool GroupCanFailToEvaluate(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria.Any(criterion => criterion.IsExpression || SearchComparisonOperators.IsPattern(criterion.ComparisonType)) ||
+        group.ChildGroups.Any(GroupCanFailToEvaluate);
 
     #region Export (MVO) Scoping
 
@@ -44,7 +77,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(exportRule.ObjectScopingCriteriaGroups, new MvoScopingValueSource(mvo), nowUtc ?? DateTime.UtcNow);
+        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc ?? DateTime.UtcNow, _expressions);
     }
 
     /// <summary>
@@ -59,7 +92,7 @@ public class ScopingEvaluationServer
         if (exportRule.Direction != SyncRuleDirection.Export)
             throw new ArgumentException($"Synchronisation Rule {exportRule.Id} is not an export rule.", nameof(exportRule));
 
-        return Explain(exportRule, new MvoScopingValueSource(mvo), nowUtc);
+        return Explain(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc);
     }
 
     #endregion
@@ -85,7 +118,7 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(importRule.ObjectScopingCriteriaGroups, new CsoScopingValueSource(cso), nowUtc ?? DateTime.UtcNow);
+        return ScopingEvaluator.IsInScope(importRule, new CsoScopingValueSource(cso, importRule.ConnectedSystemObjectType?.Attributes), nowUtc ?? DateTime.UtcNow, _expressions);
     }
 
     /// <summary>
@@ -97,12 +130,24 @@ public class ScopingEvaluationServer
         if (importRule.Direction != SyncRuleDirection.Import)
             throw new ArgumentException($"Synchronisation Rule {importRule.Id} is not an import rule.", nameof(importRule));
 
-        return Explain(importRule, new CsoScopingValueSource(cso), nowUtc);
+        return Explain(importRule, new CsoScopingValueSource(cso, importRule.ConnectedSystemObjectType?.Attributes), nowUtc);
     }
 
     #endregion
 
-    private static ScopingExplanation Explain<TSource>(SyncRule rule, TSource source, DateTime? nowUtc)
+    /// <summary>
+    /// The dates an expression criterion computes for <paramref name="cso"/> as of <paramref name="nowUtc"/>; none when
+    /// it computes none, or cannot be evaluated or read as dates. The Scope tester uses these to find when a relative
+    /// date criterion's outcome can next change.
+    /// </summary>
+    internal IReadOnlyList<DateTime> ComputedDates(SyncRuleScopingCriteria criterion, ConnectedSystemObject cso, DateTime nowUtc) =>
+        ScopingEvaluator.ComputedDates(criterion, new CsoScopingValueSource(cso), nowUtc, _expressions.Value);
+
+    /// <summary>The dates an expression criterion computes for <paramref name="mvo"/>; see the import overload.</summary>
+    internal IReadOnlyList<DateTime> ComputedDates(SyncRuleScopingCriteria criterion, MetaverseObject mvo, DateTime nowUtc) =>
+        ScopingEvaluator.ComputedDates(criterion, new MvoScopingValueSource(mvo), nowUtc, _expressions.Value);
+
+    private ScopingExplanation Explain<TSource>(SyncRule rule, TSource source, DateTime? nowUtc)
         where TSource : struct, IScopingValueSource
     {
         var explanation = new ScopingExplanation
@@ -115,7 +160,7 @@ public class ScopingEvaluationServer
         };
 
         explanation.Outcome = explanation.HasCriteria
-            ? ScopingEvaluator.Explain(rule.ObjectScopingCriteriaGroups, source, explanation.EvaluatedAt, explanation.Groups)
+            ? ScopingEvaluator.Explain(rule.ObjectScopingCriteriaGroups, source, explanation.EvaluatedAt, explanation.Groups, _expressions)
             : ScopingRuleOutcome.InScope;
 
         ScopingExplanationSummariser.Describe(explanation);

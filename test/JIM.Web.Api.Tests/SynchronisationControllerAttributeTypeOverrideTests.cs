@@ -64,6 +64,12 @@ public class SynchronisationControllerAttributeTypeOverrideTests
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _mockRepository.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
@@ -121,6 +127,25 @@ public class SynchronisationControllerAttributeTypeOverrideTests
             Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Number));
             Assert.That(attribute.TypeSetByAdministrator, Is.True,
                 "Recorded so the next schema refresh leaves the type alone instead of restoring what discovery inferred.");
+        }
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemAttributeAsync_TypeOverrideToBooleanOnAMultiValuedAttribute_MakesItSingleValuedAsync()
+    {
+        // The Boolean rule (#2153): a Boolean holds one value, so overriding to Boolean also makes the attribute
+        // single-valued, exactly as the portal's Schema tab does.
+        Arrange(supportsUserSelectedAttributeTypes: true, out var attribute);
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+
+        var result = await _controller.UpdateConnectedSystemAttributeAsync(ConnectedSystemId, ObjectTypeId, AttributeId,
+            new UpdateConnectedSystemAttributeRequest { Type = AttributeDataType.Boolean });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Boolean));
+            Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
         }
     }
 

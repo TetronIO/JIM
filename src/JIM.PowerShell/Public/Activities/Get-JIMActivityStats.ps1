@@ -13,10 +13,10 @@ function Get-JIMActivityStats {
         This cmdlet only works with activities that are Run Profile executions.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Activity to get statistics for.
+        The Run Profile Activity to get statistics for.
 
     .OUTPUTS
-        PSCustomObject containing execution statistics.
+        The Run Profile execution's statistics.
 
     .EXAMPLE
         Get-JIMActivityStats -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -39,7 +39,7 @@ function Get-JIMActivityStats {
         Start-JIMRunProfile
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ActivityRunProfileExecutionStatsDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ActivityId')]

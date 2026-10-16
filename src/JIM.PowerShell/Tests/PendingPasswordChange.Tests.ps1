@@ -139,6 +139,36 @@ Describe 'Get-JIMPendingPasswordChange' {
             }
         }
 
+        It 'Should pass ProvisionedConnectedSystemObjectId through for a change carrying a first password' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $account = [guid]::NewGuid()
+
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Items = @(
+                            [PSCustomObject]@{
+                                Id                                 = [guid]::NewGuid()
+                                MetaverseObjectDisplayName         = 'Grace Hopper'
+                                ConnectedSystemName                = 'Corporate AD'
+                                Status                             = 'Pending'
+                                Origin                             = 'Propagated'
+                                SyncRuleId                         = 7
+                                ProvisionedConnectedSystemObjectId = $account
+                            }
+                        )
+                        TotalCount = 1
+                    }
+                }
+
+                $result = @(Get-JIMPendingPasswordChange)
+
+                $result[0].Origin | Should -Be 'Propagated'
+                $result[0].ProvisionedConnectedSystemObjectId | Should -Be $account
+                $result[0].SyncRuleId | Should -Be 7
+            }
+        }
+
         It 'Should read the summary endpoint for -Summary' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

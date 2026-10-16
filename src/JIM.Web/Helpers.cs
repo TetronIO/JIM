@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
@@ -100,6 +101,16 @@ public static class Helpers
         var valued = plurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued";
         return $"{side}: {type.ToString().SplitOnCapitalLetters()}, {valued}";
     }
+
+    /// <summary>
+    /// The page that holds a piece of configuration reading an attribute: its Synchronisation Rule, or its Example
+    /// Data Template. Null for an Object Matching Rule defined on a Connected System Object Type, which has no page
+    /// of its own.
+    /// </summary>
+    public static string? AttributeReaderHref(AttributeReader reader) =>
+        reader.SyncRuleId is { } syncRuleId ? $"/admin/sync-rules/{syncRuleId}"
+        : reader.ExampleDataTemplateId is { } templateId ? $"/admin/example-data/templates/{templateId}"
+        : null;
 
     /// <summary>
     /// Converts a string to a format that can be used as a Url parameter.
@@ -200,6 +211,14 @@ public static class Helpers
     }
 
     /// <summary>
+    /// An attribute's date as the portal shows it ("12 Jul 2026 14:30:00", or "12 Jul 2026 14:30:00.25" when it has a
+    /// fraction of a second), so two values a fraction apart never look the same (#2153). For attribute values only;
+    /// Activity and audit timestamps keep <see cref="ToFriendlyDate"/>. Converts nothing: call <c>ToLocalTime()</c>
+    /// first where the surface shows local time.
+    /// </summary>
+    public static string ToFriendlyAttributeDate(this DateTime dateTime) => DateTimeAttributeValue.ToDisplayString(dateTime);
+
+    /// <summary>
     /// The date half of <see cref="ToFriendlyDate"/> ("12 Jul 2026"), for a heading that names a day once so the
     /// entries beneath it can carry the time alone. Same culture-independent form; callers convert to local time
     /// first where the day should be the viewer's.
@@ -236,38 +255,42 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Extension method that converts a DateTime into a relative time string (e.g., "2 hours ago", "just now").
+    /// Extension method that converts a DateTime into a relative time string, in the past ("2 hours ago", "just now")
+    /// or the future ("in 3 hours", for a Schedule's next run).
     /// </summary>
-    public static string ToRelativeTime(this DateTime dateTime)
+    public static string ToRelativeTime(this DateTime dateTime) => dateTime.ToRelativeTime(DateTime.UtcNow);
+
+    /// <summary>
+    /// Converts a DateTime into a relative time string measured against the given UTC instant. Past and future read the
+    /// same way, in whole units rounded down: "3 hours ago" and "in 3 hours".
+    /// </summary>
+    public static string ToRelativeTime(this DateTime dateTime, DateTime utcNow)
     {
-        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+        var timeSpan = utcNow - dateTime.ToUniversalTime();
+        var isFuture = timeSpan < TimeSpan.Zero;
+        var distance = timeSpan.Duration();
 
-        if (timeSpan.TotalSeconds < 60)
-            return "just now";
-        if (timeSpan.TotalMinutes < 60)
-        {
-            var minutes = (int)timeSpan.TotalMinutes;
-            return $"{minutes} {(minutes == 1 ? "minute" : "minutes")} ago";
-        }
-        if (timeSpan.TotalHours < 24)
-        {
-            var hours = (int)timeSpan.TotalHours;
-            return $"{hours} {(hours == 1 ? "hour" : "hours")} ago";
-        }
-        if (timeSpan.TotalDays < 30)
-        {
-            var days = (int)timeSpan.TotalDays;
-            return $"{days} {(days == 1 ? "day" : "days")} ago";
-        }
-        if (timeSpan.TotalDays < 365)
-        {
-            var months = (int)(timeSpan.TotalDays / 30);
-            return $"{months} {(months == 1 ? "month" : "months")} ago";
-        }
+        if (distance.TotalSeconds < 60)
+            return isFuture ? "in under a minute" : "just now";
 
-        var years = (int)(timeSpan.TotalDays / 365);
-        return $"{years} {(years == 1 ? "year" : "years")} ago";
+        var amount = DescribeRelativeDistance(distance);
+        return isFuture ? $"in {amount}" : $"{amount} ago";
     }
+
+    private static string DescribeRelativeDistance(TimeSpan distance)
+    {
+        if (distance.TotalMinutes < 60)
+            return CountOf((int)distance.TotalMinutes, "minute");
+        if (distance.TotalHours < 24)
+            return CountOf((int)distance.TotalHours, "hour");
+        if (distance.TotalDays < 30)
+            return CountOf((int)distance.TotalDays, "day");
+        if (distance.TotalDays < 365)
+            return CountOf((int)(distance.TotalDays / 30), "month");
+        return CountOf((int)(distance.TotalDays / 365), "year");
+    }
+
+    private static string CountOf(int count, string unit) => $"{count} {unit}{(count == 1 ? "" : "s")}";
 
     /// <summary>
     /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.
@@ -335,10 +358,16 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
             [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
+
+            // Raised on an object that otherwise imported or exported (#959): only the reference values that could not
+            // be linked are affected, so "Failed" would overstate it. Raised by import and export alike (#1398), so
+            // the heading names the condition rather than a phase.
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Reference Unresolved",
 
             // Import-phase diagnostics: the object imported and its changes were applied.
             [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
@@ -346,10 +375,10 @@ public static class Helpers
 
             // Synchronisation-phase errors: the Connected System Object exists but synchronisation failed.
             [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
             // One error type covering two outcomes: Fail this mapping costs the object one attribute and nothing
@@ -360,6 +389,8 @@ public static class Helpers
             // Raised while evaluating outbound exports during synchronisation, before anything is exported,
             // so it belongs with the synchronisation phase rather than "Export Failed".
             [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = "Synchronisation Failed",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
@@ -371,6 +402,9 @@ public static class Helpers
             // The Connected System refused the export because another object there holds the value; the heading
             // names the conflict, since that is what an administrator has to resolve.
             [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
+            // Active Directory will not enable an account with no password (#2039); the heading names what the
+            // account is missing, since that is what the message's remedies supply.
+            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened
@@ -799,11 +833,30 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// The Attribute Flow tab's Mapping Type filter chip colour: a source type's own colour, and the Derived chip's
+    /// colour for a Derived Attribute Flow (#2014), so the filter matches the chip on each derived row.
+    /// </summary>
+    public static Color GetMappingTypeChipColour(AttributeFlowMappingType mappingType)
+    {
+        return mappingType switch
+        {
+            AttributeFlowMappingType.AttributeMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.AttributeMapping),
+            AttributeFlowMappingType.ExpressionMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.ExpressionMapping),
+            AttributeFlowMappingType.Derived => Color.Secondary,
+            AttributeFlowMappingType.GeneratedMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.GeneratedMapping),
+            AttributeFlowMappingType.AdvancedMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.AdvancedMapping),
+            _ => Color.Default
+        };
+    }
+
     #endregion
 
     #region Initiator Icon Helpers
     /// <summary>
-    /// Gets the MudBlazor icon for an activity initiator type.
+    /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
+    /// appears (<see cref="Shared.ActivityInitiator"/>, change history). System has its own rather than the Schedule's
+    /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
     /// </summary>
     public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
     {
@@ -811,6 +864,8 @@ public static class Helpers
         {
             ActivityInitiatorType.User => Icons.Material.Filled.Person,
             ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
+            ActivityInitiatorType.System => Icons.Material.Filled.Dns,
+            ActivityInitiatorType.Anonymous => Icons.Material.Filled.QuestionMark,
             _ => Icons.Material.Filled.HelpOutline
         };
     }
@@ -851,13 +906,17 @@ public static class Helpers
     /// Gets the in-app link for a Synchronisation Rule activity target, or null when the rule id is unknown.
     /// Attribute Flow mapping activities carry the rule's target type (a mapping has no target type of its own) with
     /// a "Mapping to ..." name; their target deep-links to the rule's Attribute Flow tab, where mappings are managed.
+    /// Configuration test case activities carry it too, with a "Test case ..." name, and deep-link to its Tests tab.
     /// </summary>
     public static string? GetSyncRuleActivityHref(int? syncRuleId, string? targetName)
     {
         if (!syncRuleId.HasValue)
             return null;
-        return targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true
-            ? $"/admin/sync-rules/{syncRuleId}?t=attribute-flow"
+        if (targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true)
+            return $"/admin/sync-rules/{syncRuleId}?t=attribute-flow";
+        // A configuration test case (#2055 Phase 4) is managed on the rule's Tests tab.
+        return targetName?.StartsWith(Activity.ConfigurationTestCaseTargetNamePrefix, StringComparison.Ordinal) == true
+            ? $"/admin/sync-rules/{syncRuleId}?t=tests"
             : $"/admin/sync-rules/{syncRuleId}";
     }
 
@@ -908,7 +967,7 @@ public static class Helpers
 
     /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
-    /// Accepts "User", "ApiKey", "Import", or other values.
+    /// Accepts "User", "ApiKey", "Import", "System", or other values.
     /// </summary>
     public static string GetInitiatorIcon(string? initiatorType)
     {
@@ -917,6 +976,7 @@ public static class Helpers
             "User" => Icons.Material.Filled.Person,
             "ApiKey" => Icons.Material.Filled.Key,
             "Import" => Icons.Material.Filled.Input,
+            "System" => Icons.Material.Filled.Dns,
             _ => Icons.Material.Filled.HelpOutline
         };
     }

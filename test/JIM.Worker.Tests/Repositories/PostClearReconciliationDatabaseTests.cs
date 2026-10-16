@@ -452,13 +452,14 @@ public class PostClearReconciliationDatabaseTests
             GracePeriod = TimeSpan.FromDays(7)
         };
         var initiatorId = Guid.NewGuid();
+        var schedulingItemId = Guid.NewGuid();
 
         int markedCount;
         await using (var writeContext = NewContext())
         {
             var repository = new PostgresDataRepository(writeContext);
             markedCount = await repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
-                new List<Guid> { mvoId }, ActivityInitiatorType.System, initiatorId, "System", snapshot.ToJson());
+                [(mvoId, schedulingItemId)], ActivityInitiatorType.System, initiatorId, "System", snapshot.ToJson());
         }
 
         Assert.That(markedCount, Is.EqualTo(1));
@@ -471,6 +472,8 @@ public class PostClearReconciliationDatabaseTests
         Assert.That(persisted.DeletionInitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
         Assert.That(persisted.DeletionInitiatedById, Is.EqualTo(initiatorId));
         Assert.That(persisted.DeletionInitiatedByName, Is.EqualTo("System"));
+        Assert.That(persisted.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItemId),
+            "each object is marked with the item recording its marking (#1811)");
 
         var persistedSnapshot = MvoDeletionPolicySnapshot.FromJson(persisted.DeletionPolicySnapshotJson);
         Assert.That(persistedSnapshot, Is.Not.Null);
@@ -488,7 +491,7 @@ public class PostClearReconciliationDatabaseTests
         {
             var repository = new PostgresDataRepository(writeContext);
             markedCount = await repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
-                new List<Guid> { mvoId }, ActivityInitiatorType.System, null, "System", null);
+                [(mvoId, Guid.NewGuid())], ActivityInitiatorType.System, null, "System", null);
         }
 
         Assert.That(markedCount, Is.Zero, "an object already pending deletion must be skipped");

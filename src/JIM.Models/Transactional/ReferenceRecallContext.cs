@@ -30,6 +30,13 @@ public class ReferenceRecallContext
     public Dictionary<Guid, Dictionary<int, string>> ResolvedReferenceValuesBySystem { get; init; } = [];
 
     /// <summary>
+    /// The entries of <see cref="ResolvedReferenceValuesBySystem"/> whose anchor attribute is case-exact, as
+    /// (deletedMvoId, connectedSystemId). A target's reference value names the deleted object only in that exact case;
+    /// every other value names it in any case (#2051).
+    /// </summary>
+    public HashSet<(Guid DeletedMetaverseObjectId, int ConnectedSystemId)> CaseExactReferenceValues { get; init; } = [];
+
+    /// <summary>
     /// Per deleted Metaverse Object: the Connected System Object it was joined to in each
     /// Connected System, keyed deletedMvoId -> (connectedSystemId -> csoId). Captured before
     /// deletion disconnects them; the set-based recall fast path (#1003) matches target-side

@@ -63,6 +63,17 @@ public static class GeneratedValueAvailabilityWording
             _ => "any of them"
         };
 
+        // A value built from the generated value (Generated Value Forms, #2023): a collision on it makes JIM draw another
+        // value for the attribute it is built from, so the note names both.
+        if (probe.BuiltFromAttributeName != null)
+        {
+            return (
+                $"This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {DerivedFlowWording.JoinNames(names)} " +
+                $"for the {probe.AttributeName} built from {probe.BuiltFromAttributeName}. If {pronoun} already has an account using ",
+                probe.Value,
+                $" (one JIM doesn't import), the synchronisation will generate a different {probe.BuiltFromAttributeName} instead.");
+        }
+
         return (
             $"This preview checks JIM's own records only. When the synchronisation runs, JIM also probes {DerivedFlowWording.JoinNames(names)}. " +
             $"If {pronoun} already has an account using ",

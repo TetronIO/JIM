@@ -107,7 +107,8 @@ public class DeletePathForeignKeyCoverageTests
             "ConnectedSystemObjects",
             "ConnectedSystems",
             "MetaverseObjects",
-            "TrustedCertificates"
+            "TrustedCertificates",
+            "ExampleDataTemplateAttributes"
         ],
         // Nothing beyond the truncate: the mixed deletes are keyed on "BuiltIn" = false and so remove only part
         // of each table they name, which is not the total removal this list asserts.
@@ -170,8 +171,6 @@ public class DeletePathForeignKeyCoverageTests
             ["FK_MetaverseObjectAttributeValues_ConnectedSystemObjects_Unres~"] =
                 "The metaverse value is retained and only the now-unresolvable staged reference cleared; step 7b " +
                 "nulls it.",
-            ["FK_ExampleDataTemplateAttributes_ConnectedSystemAttributes_Con~"] =
-                "Example Data Templates are retained; step 2c nulls the reference to this system's schema attributes.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectTypes_Del~"] =
                 "On the preserve-history path the change rows are kept; step 2d nulls DeletedObjectTypeId before " +
                 "step 13 removes the Object Types. On the delete-history path the rows are already gone.",

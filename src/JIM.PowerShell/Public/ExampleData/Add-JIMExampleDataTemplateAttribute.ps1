@@ -10,8 +10,7 @@ function Add-JIMExampleDataTemplateAttribute {
         Adds one attribute's generation configuration to an Object Type within an existing Data
         Generation Template, without restating the rest of the template: the cmdlet reads the template,
         appends the new attribute to the named Object Type, and writes the whole configuration back.
-        Supply exactly one of -MetaverseAttribute or -ConnectedSystemObjectTypeAttributeId to say which
-        attribute values are generated for.
+        -MetaverseAttribute names the attribute values are generated for.
 
     .PARAMETER TemplateId
         The unique identifier of the Data Generation Template to add the attribute to.
@@ -24,13 +23,10 @@ function Add-JIMExampleDataTemplateAttribute {
         receives the attribute.
 
     .PARAMETER MetaverseAttribute
-        The Metaverse Attribute (name or id) values are generated for, when targeting the Metaverse.
-
-    .PARAMETER ConnectedSystemObjectTypeAttributeId
-        The id of the Connected System attribute values are generated for, when targeting a Connected System.
+        The Metaverse Attribute (name or id) values are generated for. Always needed: the cmdlet stops with an error if it is omitted.
 
     .PARAMETER Pattern
-        A variable-replacement pattern for constructing string values, e.g. "{0}.{1}@contoso.com".
+        A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com".
 
     .PARAMETER Expression
         An expression that constructs the value from other already-generated attributes via mv["Attribute Name"].
@@ -84,17 +80,21 @@ function Add-JIMExampleDataTemplateAttribute {
 
     .PARAMETER AttributeDependency
         A condition on another attribute that must hold for this attribute to be generated:
-        @{ MetaverseAttribute = <name or id>; ComparisonType = <Equals|NotEquals|LessThan|GreaterThan|GreaterThanOrEqual|LessThanOrEqual|Like>; StringValue = <value> }.
+        @{ MetaverseAttribute = <name or id>; ComparisonType = <operator>; StringValue = <value> }. The operators are
+        the ones Synchronisation Rule scoping offers for the depended-on attribute's data type, such as Equals,
+        GreaterThanOrEquals, StartsWith, MatchesPattern, HasValue and HasNoValue (which take no StringValue). Write
+        StringValue as the attribute's type reads it: numbers with a full stop, dates as 2026-07-01, Booleans as
+        true or false. Text is compared case-sensitively.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Data Generation
-        Template's configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Data Generation Template object.
+        Returns the updated Data Generation Template.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Data Generation Template object.
+        With -PassThru, the updated Data Generation Template; otherwise nothing.
 
     .EXAMPLE
         Add-JIMExampleDataTemplateAttribute -TemplateName "Demo Users" -ObjectType "User" -MetaverseAttribute "Display Name" -Pattern "{0} {1}" -ExampleDataSet "Firstnames Female", "Lastnames"
@@ -118,7 +118,7 @@ function Add-JIMExampleDataTemplateAttribute {
         Remove-JIMExampleDataTemplate
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$TemplateId,
@@ -132,9 +132,6 @@ function Add-JIMExampleDataTemplateAttribute {
 
         [Parameter()]
         [object]$MetaverseAttribute,
-
-        [Parameter()]
-        [int]$ConnectedSystemObjectTypeAttributeId,
 
         [Parameter()]
         [string]$Pattern,
@@ -206,11 +203,10 @@ function Add-JIMExampleDataTemplateAttribute {
             return
         }
 
-        # Exactly one target attribute must be named.
-        $hasMetaverseAttribute = $PSBoundParameters.ContainsKey('MetaverseAttribute')
-        $hasConnectedSystemAttribute = $PSBoundParameters.ContainsKey('ConnectedSystemObjectTypeAttributeId')
-        if ($hasMetaverseAttribute -eq $hasConnectedSystemAttribute) {
-            Write-Error "Specify exactly one of -MetaverseAttribute or -ConnectedSystemObjectTypeAttributeId to say which attribute values are generated for."
+        # The target attribute must be named. -MetaverseAttribute is not declared Mandatory so that this check,
+        # rather than an interactive prompt, answers a call that leaves it out.
+        if (-not $PSBoundParameters.ContainsKey('MetaverseAttribute')) {
+            Write-Error "Specify -MetaverseAttribute to say which attribute values are generated for."
             return
         }
 
@@ -267,9 +263,7 @@ function Add-JIMExampleDataTemplateAttribute {
 
                 # Assemble the new attribute from the flat parameters and reuse the shared converter,
                 # so names resolve to ids identically to New/Set-JIMExampleDataTemplate's hashtable path.
-                $attributeSpec = @{}
-                if ($hasMetaverseAttribute) { $attributeSpec.MetaverseAttribute = $MetaverseAttribute }
-                if ($hasConnectedSystemAttribute) { $attributeSpec.ConnectedSystemObjectTypeAttributeId = $ConnectedSystemObjectTypeAttributeId }
+                $attributeSpec = @{ MetaverseAttribute = $MetaverseAttribute }
 
                 foreach ($scalarParameter in 'Pattern', 'Expression', 'PopulatedValuesPercentage', 'BoolTrueDistribution', 'BoolShouldBeRandom',
                     'MinDate', 'MaxDate', 'MinNumber', 'MaxNumber', 'SequentialNumbers', 'RandomNumbers',
@@ -313,6 +307,12 @@ function Add-JIMExampleDataTemplateAttribute {
 
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates/$TemplateId" -Method 'PUT' -Body $body
                 Write-Verbose "Added attribute to Data Generation Template: $TemplateId"
+
+                # What the save said about the template's expressions without refusing it (#2055 Phase 3): each
+                # written as the server phrased it.
+                foreach ($saveWarning in @($response.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
 
                 if ($PassThru) {
                     $response

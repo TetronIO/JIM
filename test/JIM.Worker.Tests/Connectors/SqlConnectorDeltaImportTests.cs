@@ -349,6 +349,47 @@ public class SqlConnectorDeltaImportTests
     }
 
     [Test]
+    public async Task ImportAsync_ChangeLogRowNamingAnAnchorThatIgnoresCaseInAnotherCase_ImportsTheChangeAsync()
+    {
+        // Microsoft SQL Server's default collation reads 'ABC' back for a change logged against 'abc' (#2051).
+        var provider = CodeChangeLogProvider(caseSensitiveCollation: false, employees: [["ABC", "Ada"]], changes: [[1, "abc", "U"]]);
+
+        var run = await RunDeltaAsync(provider, CodeChangeLogDocument, CodeSystem(caseExact: false), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
+
+        var changed = run.ImportObjects.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changed.ChangeType, Is.EqualTo(ObjectChangeType.Updated));
+            Assert.That(AttributeOf(changed, "DISPLAY_NAME").StringValues, Is.EqualTo(new[] { "Ada" }));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_ChangeLogRowsNamingAnAnchorThatIgnoresCaseInTwoCases_EmitsOnlyItsLatestChangeAsync()
+    {
+        var provider = CodeChangeLogProvider(caseSensitiveCollation: false, employees: [["ABC", "Ada"]], changes: [[1, "ABC", "I"], [2, "abc", "D"]]);
+
+        var run = await RunDeltaAsync(provider, CodeChangeLogDocument, CodeSystem(caseExact: false), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ImportObjects, Has.Count.EqualTo(1), "'ABC' and 'abc' are one object where the anchor ignores case.");
+            Assert.That(run.ImportObjects[0].ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_ChangeLogRowsForTwoCaseExactAnchorsDifferingOnlyInCase_ImportsEachAsync()
+    {
+        var provider = CodeChangeLogProvider(caseSensitiveCollation: true, employees: [["ABC", "Ada"], ["abc", "Grace"]], changes: [[1, "ABC", "U"], [2, "abc", "U"]]);
+
+        var run = await RunDeltaAsync(provider, CodeChangeLogDocument, CodeSystem(caseExact: true), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
+
+        Assert.That(run.ImportObjects.Select(importObject => AttributeOf(importObject, "DISPLAY_NAME").StringValues.Single()),
+            Is.EquivalentTo(new[] { "Ada", "Grace" }));
+    }
+
+    [Test]
     public async Task ImportAsync_ChangeLogMode_ReadsOnlyChangesBeyondThePersistedWatermark()
     {
         var provider = ChangeLogProvider(
@@ -1349,6 +1390,44 @@ public class SqlConnectorDeltaImportTests
     /// <summary>
     /// A stand-in database holding an object type's rows and its change log.
     /// </summary>
+    private const string CodeChangeLogDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_CODE" ],
+              "changeLog": {
+                "schema": "HR",
+                "table": "EMPLOYEE_CHANGES",
+                "anchorColumns": [ "EMPLOYEE_CODE" ],
+                "sequenceColumn": "CHANGE_NUMBER",
+                "changeTypeColumn": "CHANGE_TYPE",
+                "createValues": [ "I" ],
+                "updateValues": [ "U" ],
+                "deleteValues": [ "D" ]
+              }
+            }
+          ]
+        }
+        """;
+
+    private static FakeSqlProvider CodeChangeLogProvider(bool caseSensitiveCollation, object?[][] employees, object?[][] changes)
+    {
+        var provider = new FakeSqlProvider { CaseSensitiveCollation = caseSensitiveCollation };
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_CODE", "DISPLAY_NAME"], employees);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_CHANGES", ["CHANGE_NUMBER", "EMPLOYEE_CODE", "CHANGE_TYPE"], changes);
+        return provider;
+    }
+
+    private static ConnectedSystem CodeSystem(bool caseExact)
+    {
+        var code = Attribute("EMPLOYEE_CODE", AttributeDataType.Text, isExternalId: true);
+        code.CaseExact = caseExact;
+        return new ConnectedSystem { Name = "HR Database", ObjectTypes = [ObjectType("Person", code, Attribute("DISPLAY_NAME", AttributeDataType.Text))] };
+    }
+
     private static FakeSqlProvider ChangeLogProvider(object?[][] employees, object?[][] changes)
     {
         var provider = new FakeSqlProvider();

@@ -296,11 +296,13 @@ public partial class ConnectedSystemServer
                     case MvoDeletionFate.DeletionScheduled:
                         graceMarkedMvos.Add(mvo);
                         result.MetaverseObjectsMarkedForDeletion++;
-                        executionItems.Add(BuildDeletionRuleExecutionItem(
+                        var schedulingItem = BuildDeletionRuleExecutionItem(
                             mvo, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
                             ConnectedSystemObjectObsoletionService.BuildMvoDeletionDetailMessage(
                                 decision.Fate, decision.Reason, decision.GracePeriod ?? mvo.Type?.DeletionGracePeriod, mvo.DeletionEligibleDate),
-                            policySnapshotJson));
+                            policySnapshotJson);
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(mvo, schedulingItem);
+                        executionItems.Add(schedulingItem);
                         break;
 
                     case MvoDeletionFate.DeletedImmediately:
@@ -332,6 +334,9 @@ public partial class ConnectedSystemServer
                 var referenceRecallResult = await syncServer.StageReferenceRecallExportsAsync(
                     referenceRecallContext, deletionCandidateIds, exportEvaluationCache);
                 result.PendingExportsStaged += referenceRecallResult.PendingExportsStaged;
+
+                // A referencing object whose export scope could not be decided received no recall: its error.
+                executionItems.AddRange(referenceRecallResult.ScopingFailureExecutionItems());
             }
 
             if (executionItems.Count > 0)

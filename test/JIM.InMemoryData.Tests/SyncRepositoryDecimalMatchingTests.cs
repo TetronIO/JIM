@@ -104,7 +104,7 @@ public class SyncRepositoryDecimalMatchingTests
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
     {
         var mvoType = new MetaverseObjectType { Id = 5 };
         var mvo = new MetaverseObject
@@ -118,88 +118,48 @@ public class SyncRepositoryDecimalMatchingTests
         };
         _repo.SeedMetaverseObject(mvo);
 
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 10.5m }
-            }
-        };
+        var result = await _repo.FindMetaverseObjectIdsByMatchValuesAsync(
+            mvoType.Id, metaverseAttributeId: 10, AttributeDataType.Decimal, [10.5m], caseSensitive: false, take: 2);
 
-        var rule = CreateMatchingRule(sourceAttrId: 1, targetAttrId: 10);
-        var result = await _repo.FindMetaverseObjectUsingMatchingRuleAsync(cso, mvoType, rule);
-
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Id, Is.EqualTo(mvo.Id));
+        Assert.That(result, Is.EqualTo(new[] { mvo.Id }));
     }
 
     [Test]
-    public async Task FindConnectedSystemObjectUsingMatchingRuleAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
+    public async Task GetExportMatchCandidateIdsAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
     {
-        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
-        var csoType = new ConnectedSystemObjectType { Id = 2, Name = "user" };
+        var cso = SeedDecimalCso(10.5m);
 
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = connectedSystem.Id,
-            TypeId = csoType.Id,
-            Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 10.5m }
-            }
-        };
-        _repo.SeedConnectedSystemObject(cso);
+        var result = await _repo.GetExportMatchCandidateIdsAsync(1, 2, "salary", AttributeDataType.Decimal, caseSensitive: true, [10.50m]);
 
-        var mvo = new MetaverseObject
-        {
-            Id = Guid.NewGuid(),
-            AttributeValues = new List<MetaverseObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), AttributeId = 10, DecimalValue = 10.50m }
-            }
-        };
-
-        var rule = CreateMatchingRule(sourceAttrId: 1, targetAttrId: 10);
-        var result = await _repo.FindConnectedSystemObjectUsingMatchingRuleAsync(mvo, connectedSystem, csoType, rule);
-
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+        Assert.That(result.Select(r => r.ConnectedSystemObjectId), Is.EqualTo(new[] { cso.Id }));
     }
 
     [Test]
-    public async Task FindConnectedSystemObjectUsingMatchingRuleAsync_DecimalValuesNumericallyDifferent_ReturnsNullAsync()
+    public async Task GetExportMatchCandidateIdsAsync_DecimalValuesNumericallyDifferent_ReturnsNothingAsync()
     {
-        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
-        var csoType = new ConnectedSystemObjectType { Id = 2, Name = "user" };
+        SeedDecimalCso(10.51m);
 
+        var result = await _repo.GetExportMatchCandidateIdsAsync(1, 2, "salary", AttributeDataType.Decimal, caseSensitive: true, [10.50m]);
+
+        Assert.That(result, Is.Empty);
+    }
+
+    /// <summary>An unjoined, Normal object of type 2 in Connected System 1 holding the given salary.</summary>
+    private ConnectedSystemObject SeedDecimalCso(decimal salary)
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "salary", Type = AttributeDataType.Decimal };
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            ConnectedSystemId = connectedSystem.Id,
-            TypeId = csoType.Id,
+            ConnectedSystemId = 1,
+            TypeId = 2,
             Status = ConnectedSystemObjectStatus.Normal,
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>
             {
-                new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 10.51m }
+                new() { Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, DecimalValue = salary }
             }
         };
         _repo.SeedConnectedSystemObject(cso);
-
-        var mvo = new MetaverseObject
-        {
-            Id = Guid.NewGuid(),
-            AttributeValues = new List<MetaverseObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), AttributeId = 10, DecimalValue = 10.50m }
-            }
-        };
-
-        var rule = CreateMatchingRule(sourceAttrId: 1, targetAttrId: 10);
-        var result = await _repo.FindConnectedSystemObjectUsingMatchingRuleAsync(mvo, connectedSystem, csoType, rule);
-
-        Assert.That(result, Is.Null);
+        return cso;
     }
 }

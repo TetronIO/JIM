@@ -6,6 +6,7 @@ using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Utilities;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -39,7 +40,7 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
     /// </remarks>
     /// <returns>User identity, roles, and authorisation status.</returns>
     [HttpGet(Name = "GetUserInfo")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(UserInfoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public Task<IActionResult> GetAsync()
     {
@@ -59,29 +60,29 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
         {
             _logger.LogDebug("UserInfo: Authenticated user '{Name}' has no JIM identity (no MetaverseObject)", LogSanitiser.Sanitise(name));
 
-            return Task.FromResult<IActionResult>(Ok(new
+            return Task.FromResult<IActionResult>(Ok(new UserInfoResponse
             {
-                authorised = false,
-                isAdministrator = false,
-                name,
-                authMethod,
-                metaverseObjectId = (Guid?)null,
-                roles = Array.Empty<string>(),
-                message = "You are authenticated but do not have a JIM identity. Identities are created when you are synchronised into JIM from a Connected System, or provisioned by an administrator. Contact your JIM administrator if you believe this is in error."
+                Authorised = false,
+                IsAdministrator = false,
+                Name = name,
+                AuthMethod = authMethod,
+                MetaverseObjectId = null,
+                Roles = [],
+                Message = "You are authenticated but do not have a JIM identity. Identities are created when you are synchronised into JIM from a Connected System, or provisioned by an administrator. Contact your JIM administrator if you believe this is in error."
             }));
         }
 
         _logger.LogDebug("UserInfo: User '{Name}' (MVO {MetaverseObjectId}) has roles: {Roles}",
             LogSanitiser.Sanitise(name), mvoId, LogSanitiser.Sanitise(string.Join(", ", roles)));
 
-        return Task.FromResult<IActionResult>(Ok(new
+        return Task.FromResult<IActionResult>(Ok(new UserInfoResponse
         {
-            authorised = true,
-            isAdministrator,
-            name,
-            authMethod,
-            metaverseObjectId = (Guid?)mvoId,
-            roles
+            Authorised = true,
+            IsAdministrator = isAdministrator,
+            Name = name,
+            AuthMethod = authMethod,
+            MetaverseObjectId = mvoId,
+            Roles = roles
         }));
     }
 }

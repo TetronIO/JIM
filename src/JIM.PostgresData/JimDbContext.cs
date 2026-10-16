@@ -24,6 +24,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
     public virtual DbSet<CausalEdge> CausalEdges { get; set; } = null!;
+    public virtual DbSet<ActivityRunProfileExecutionItemMatchCandidate> ActivityRunProfileExecutionItemMatchCandidates { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
     public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
@@ -52,6 +53,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectorDefinitionSetting> ConnectorDefinitionSettings { get; set; } = null!;
     public virtual DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreview> ConfigurationChangePreviews { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewDeltaMatchCandidate> ConfigurationChangePreviewDeltaMatchCandidates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewGroup> ConfigurationChangePreviewGroups { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewDelta> ConfigurationChangePreviewDeltas { get; set; } = null!;
     public virtual DbSet<ExampleDataObjectType> ExampleDataObjectTypes { get; set; } = null!;
@@ -97,6 +99,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingGeneration> SyncRuleMappingGenerations { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingGenerationExclusion> SyncRuleMappingGenerationExclusions { get; set; } = null!;
     public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
+    public virtual DbSet<ConfigurationTestCase> ConfigurationTestCases { get; set; } = null!;
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
     public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
     public virtual DbSet<GeneratedValueRevisionPending> GeneratedValueRevisionsPending { get; set; } = null!;
@@ -244,6 +247,11 @@ public class JimDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // PostgreSQL's lower(), so identity lookups fold a parameter in SQL as they fold the column (#2051).
+        modelBuilder.HasDbFunction(typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Lower))!)
+            .HasName("lower")
+            .IsBuiltIn();
+
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.AttributeValues)
             .WithOne(av => av.ConnectedSystemObject)
@@ -292,6 +300,28 @@ public class JimDbContext : DbContext
         // scan a table this large.
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
             .HasIndex(rpei => rpei.ExternalIdSnapshot);
+
+        // The Causality Explorer's object timelines (#2100). Each column is null on almost every row and is read
+        // only for one object at a time, so each index is filtered to the rows that carry a value: it costs nothing
+        // on the synchronisation flush that writes the overwhelming majority of rows, and the one write that sets the
+        // column (a deletion's re-key or record, an export scope review) pays for a small index.
+        // An item that records a Metaverse Object directly (an export scope review, #1971).
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(rpei => rpei.MetaverseObjectId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItems_MetaverseObjectId")
+            .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
+
+        // A deleted Metaverse Object's change records, which its deletion re-keys from its own id to this one.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasIndex(mvoc => mvoc.DeletedMetaverseObjectId)
+            .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
+            .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
+
+        // A deleted Connected System Object's deletion record, the only place its id survives.
+        modelBuilder.Entity<ConnectedSystemObjectChange>()
+            .HasIndex(csoc => csoc.DeletedConnectedSystemObjectId)
+            .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
+            .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
@@ -654,10 +684,22 @@ public class JimDbContext : DbContext
             .Property(srm => srm.Enabled)
             .HasDefaultValue(true);
 
+        // Keep unique (Generated Value Forms, #2023 / #2014). Defaults to true so every value built from a generated
+        // value before the switch existed keeps being corrected with it; the store-level default backfills existing rows.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.KeepUnique)
+            .HasDefaultValue(true);
+
         // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
         // existing Run Profiles); the store-level default backfills existing rows on migration.
         modelBuilder.Entity<ConnectedSystemRunProfile>()
             .Property(rp => rp.VerifyImportContentHashes)
+            .HasDefaultValue(false);
+
+        // #2049: Allow Object Type Changes defaults to false, so an object that changes Object Type is refused
+        // rather than retired and recreated; the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.AllowObjectTypeChanges)
             .HasDefaultValue(false);
 
         // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
@@ -713,6 +755,12 @@ public class JimDbContext : DbContext
             .ValueGeneratedOnAddOrUpdate();
         csoXmin.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
         csoXmin.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
+        // PendingExport: the runs that staged it (#2100). Defaults to an empty list so the column can be added beside
+        // exports already queued, which name only their latest stager and fall back to it.
+        modelBuilder.Entity<PendingExport>()
+            .PrimitiveCollection(pe => pe.StagedByRunProfileExecutionItemIds)
+            .HasDefaultValueSql("'{}'::uuid[]");
 
         // PendingExport: relationship to source MVO (Q1 decision)
         modelBuilder.Entity<PendingExport>()
@@ -828,6 +876,22 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
+        // The changes held until an Initial Password is delivered (#2039), found by Drift Detection's per-page skip
+        // (ISyncRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync) and by every import's sweep of the
+        // holds it did not reconcile (ISyncRepository.GetInitialPasswordHoldSummariesAsync). Partial, because a held change
+        // exists only between an Active Directory Create and its password's delivery, so the index is all but empty and
+        // the per-page lookup costs nothing, while every other directory and every other change, which never carry the
+        // flag, add nothing to it. Named, so it is a second index beside the foreign key's own on PendingExportId
+        // rather than a filter applied to that one. The foreign key's index is declared explicitly beside it because
+        // EF's convention treats any index leading with the foreign key column as covering it, partial or not, and
+        // would otherwise drop the full index every load and cascade by Pending Export relies on.
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId)
+            .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
+            .HasFilter("\"AwaitsInitialPassword\"");
+
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
         // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.
@@ -862,6 +926,23 @@ public class JimDbContext : DbContext
             .WithMany()
             .HasForeignKey(ppc => ppc.SyncRuleId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // The account a row owes its first password (#2160): a Provisioned row's own account, or the account a waiting
+        // password change delivers its first password to in place of the Initial Password. Set null rather than cascade,
+        // like the row's own account: deleting the account ends the obligation, and the password change it was carrying
+        // stays to be delivered or to expire as any other would.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ProvisionedConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // What an export that writes an account's flags asks for: any first password still owed to the account, so the
+        // delivery leaves the flags to the Attribute Flow (#2064, #2160). Filtered because most rows owe none.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.ProvisionedConnectedSystemObjectId)
+            .HasFilter("\"ProvisionedConnectedSystemObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_PendingPasswordChanges_ProvisionedConnectedSystemObjectId");
 
         // What a provisioned row's delivery attempt asks for: the rule whose settings it generates from. Filtered
         // because most rows carry no rule at all, and an unfiltered index over a mostly-null column indexes
@@ -924,6 +1005,16 @@ public class JimDbContext : DbContext
             .HasIndex(av => av.UnresolvedReferenceValue)
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
             .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
+
+        // Partial index on the values still unresolved, by object (#959). The index above cannot answer "which objects
+        // hold unresolved references" cheaply: a value that resolves keeps its imported text, so it covers every
+        // reference that was ever deferred, which on a large directory is most group memberships. This one holds only
+        // the values whose reference is still missing, so the Connected System page's signpost, the Connector Space's
+        // filter and its per-row count read a handful of rows rather than every membership. Its cost is one entry per
+        // value an import leaves unresolved, removed again when the value resolves.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(["ConnectedSystemObjectId"], "IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved")
+            .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL AND \"ReferenceValueId\" IS NULL");
 
         // Composite index on (AttributeId, StringValue) — speeds up the target-side join in the
         // fixup query where UnresolvedReferenceValue is matched against the secondary external ID
@@ -1007,6 +1098,20 @@ public class JimDbContext : DbContext
             .HasIndex(cso => cso.JoinSyncRuleId)
             .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
             .HasFilter("\"JoinSyncRuleId\" IS NOT NULL");
+
+        // Join provenance (#2052): the Object Matching Rule that found the object's Metaverse Object. SetNull on rule
+        // deletion for the JoinSyncRuleId reason (the object survives, and JoinMatchValue still says what it matched
+        // on), and partially indexed for the same reason: deleting a rule must not scan the whole Connector Space.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasOne<ObjectMatchingRule>()
+            .WithMany()
+            .HasForeignKey(cso => cso.JoinObjectMatchingRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.JoinObjectMatchingRuleId)
+            .HasDatabaseName("IX_ConnectedSystemObjects_JoinObjectMatchingRuleId")
+            .HasFilter("\"JoinObjectMatchingRuleId\" IS NOT NULL");
 
         // Additional performance indexes for worker task queue processing
         // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
@@ -1092,6 +1197,27 @@ public class JimDbContext : DbContext
             .HasIndex(e => e.CauseMetaverseObjectId)
             .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
 
+        // The export cycle a confirmation names (#1811): the downward walk reaches a confirming import through it, and
+        // Phase 1's upward walk reaches an export through it. Filtered because most edges name no Pending Export.
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CausePendingExportId)
+            .HasDatabaseName("IX_CausalEdges_CausePendingExportId")
+            .HasFilter(@"""CausePendingExportId"" IS NOT NULL");
+
+        // Ambiguous match candidates (#2052): cascade with the Activity item that reports them, as a causal edge's
+        // effect side does; the candidate itself is snapshot scalars with no foreign key, so a candidate deleted to
+        // resolve the ambiguity still reads. Read by item, so indexed by item.
+        modelBuilder.Entity<ActivityRunProfileExecutionItemMatchCandidate>()
+            .HasOne(c => c.ActivityRunProfileExecutionItem)
+            .WithMany()
+            .HasForeignKey(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("FK_MatchCandidates_ActivityRunProfileExecutionItems");
+
+        modelBuilder.Entity<ActivityRunProfileExecutionItemMatchCandidate>()
+            .HasIndex(c => c.ActivityRunProfileExecutionItemId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItemMatchCandidates_RpeiId");
+
         // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
         // so the existing history-retention housekeeping removes preview results with the Activity that owns them;
         // no separate cleanup, and no way for preview data (which holds attribute values) to outlive its retention.
@@ -1139,6 +1265,20 @@ public class JimDbContext : DbContext
             // disconnected") is the other access path, and it must not degrade into a scan of every delta row.
             delta.HasIndex(d => new { d.ActivityId, d.TransitionType })
                 .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
+        });
+
+        // The objects an ambiguous row predicts it would find (#2052): owned by the row and cascading from it, so they
+        // leave with the preview like everything else here.
+        modelBuilder.Entity<ConfigurationChangePreviewDeltaMatchCandidate>(candidate =>
+        {
+            candidate.HasOne(c => c.ConfigurationChangePreviewDelta)
+                .WithMany(d => d.MatchCandidates)
+                .HasForeignKey(c => c.ConfigurationChangePreviewDeltaId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltas");
+
+            candidate.HasIndex(c => c.ConfigurationChangePreviewDeltaId)
+                .HasDatabaseName("IX_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltaId");
         });
 
         // Performance index for Metaverse Object deletion automation
@@ -1419,6 +1559,44 @@ public class JimDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint(
                 "CK_GeneratedValueSequences_OneAttribute",
                 "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1"));
+
+        // ConfigurationTestCase (#2055 Phase 4): a saved test case is configuration of what it covers, so each of its
+        // three references cascades, and the case is deleted with its Attribute Flow, Synchronisation Rule or Object
+        // Matching Rule. Exactly the reference its Kind covers is set (AttributeFlow and GeneratedValue an Attribute
+        // Flow, Scope a Synchronisation Rule, ObjectMatchingRule an Object Matching Rule), so the runner can never meet
+        // a case naming the wrong thing, or two things, whatever wrote the row.
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.SyncRuleMapping)
+            .WithMany()
+            .HasForeignKey(c => c.SyncRuleMappingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.SyncRule)
+            .WithMany()
+            .HasForeignKey(c => c.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .HasOne(c => c.ObjectMatchingRule)
+            .WithMany()
+            .HasForeignKey(c => c.ObjectMatchingRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .Property(c => c.Name)
+            .HasMaxLength(ConfigurationTestCase.MaxNameLength);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .Property(c => c.Description)
+            .HasMaxLength(ConfigurationTestCase.MaxDescriptionLength);
+
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_ConfigurationTestCases_CoversWhatItsKindTests",
+                "(\"Kind\" IN (0, 1) AND \"SyncRuleMappingId\" IS NOT NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NULL) OR " +
+                "(\"Kind\" = 2 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NOT NULL AND \"ObjectMatchingRuleId\" IS NULL) OR " +
+                "(\"Kind\" = 3 AND \"SyncRuleMappingId\" IS NULL AND \"SyncRuleId\" IS NULL AND \"ObjectMatchingRuleId\" IS NOT NULL)"));
 
         // GeneratedValueAssignment: exactly one of the two (object, attribute) pairs must be populated, matching
         // whether the owning flow is an import or export mapping. All four owning-side FKs cascade: the

@@ -1,0 +1,82 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Built from generated value" (Generated Value Forms, #2014, mock screen 1): on an Attribute Flow whose Expression
+   builds its value from a generated value, which one, and the flow's Keep unique switch, which decides whether a
+   target's refusal of this value corrects the generated value. While the generated flow's own Collision Remediation is
+   off the switch is marked not in effect but stays changeable, so it can be set before Collision Remediation is turned
+   back on. A value built from several generated values has no switch, since neither can be corrected. Nothing is shown
+   for any other flow. The host works the description out (ConnectedSystemServer.DescribeBuiltFromGeneratedValueAsync);
+   the switch edits Mapping.KeepUnique in place, so it saves with the rest of the Attribute Flow. *@
+
+@if (Description is { } described)
+{
+    var several = described.Kind == GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues;
+    var notInEffect = !several && !described.CollisionRemediation;
+    <MudPaper Outlined="true" Class="@($"pa-3 mt-3 jim-built-from-generated-value{(notInEffect || several ? " jim-built-from-generated-value-inactive" : string.Empty)}")"
+              data-testid="built-from-generated-value">
+        <div class="d-flex align-center flex-wrap gap-2">
+            @if (several)
+            {
+                <MudText Typo="Typo.subtitle2">Built from more than one generated value</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.subtitle2">Built from generated value</MudText>
+                <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@described.GeneratedAttributeName" />
+                @if (notInEffect)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" data-testid="built-from-generated-value-not-in-effect">Not in effect</MudChip>
+                }
+            }
+        </div>
+
+        @if (several)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                @GeneratedValueBuiltValueWording.BuiltFromSeveralText(described.BuiltFromAttributeNames)
+            </MudText>
+        }
+        else
+        {
+            <MudSwitch T="bool" Value="@Mapping.KeepUnique" ValueChanged="OnKeepUniqueChangedAsync" Color="Color.Primary" Class="mt-2"
+                       Label="@GeneratedValueBuiltValueWording.SwitchLabel(described.GeneratedAttributeName)" Disabled="Disabled"
+                       data-testid="built-from-generated-value-keep-unique" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @(notInEffect
+                    ? GeneratedValueBuiltValueWording.NotInEffectText(described.GeneratedAttributeName)
+                    : GeneratedValueBuiltValueWording.SwitchHelpText(described, Mapping.KeepUnique))
+            </MudText>
+        }
+    </MudPaper>
+}
+
+@code {
+    /// <summary>
+    /// What the flow is built from, from <c>ConnectedSystemServer.DescribeBuiltFromGeneratedValueAsync</c>; null for a
+    /// flow built from no generated value, or before the first answer.
+    /// </summary>
+    [Parameter]
+    public GeneratedValueBuiltValueDescription? Description { get; set; }
+
+    /// <summary>The Attribute Flow being edited, whose <see cref="SyncRuleMapping.KeepUnique"/> the switch edits in place.</summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMapping Mapping { get; set; } = null!;
+
+    /// <summary>Raised after the switch changes.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private async Task OnKeepUniqueChangedAsync(bool keepUnique)
+    {
+        Mapping.KeepUnique = keepUnique;
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+}

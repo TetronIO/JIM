@@ -15,18 +15,21 @@ function Set-JIMPredefinedSearch {
         (Search-JIMMetaverseObject). They remain visible in the admin UI and to this cmdlet.
 
     .PARAMETER Id
-        The unique identifier of the Predefined Search to update.
+        The ID of the Predefined Search to update.
 
     .PARAMETER IsEnabled
-        When specified, sets whether the search is available to end users. Pass $true to
-        enable, $false to disable. Omit to leave the current state unchanged.
+        Whether end users can see and run the search: $true to enable it, $false to disable it. Left as it is when
+        omitted.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Predefined
-        Search's configuration change history.
+        Why the change was made, recorded on the audit Activity and shown in the search's Configuration Change
+        History.
 
     .PARAMETER PassThru
-        If specified, emits the updated Predefined Search header.
+        Returns the updated search.
+
+    .OUTPUTS
+        With -PassThru, the updated search in full, as Get-JIMPredefinedSearch -Id returns it; otherwise nothing.
 
     .EXAMPLE
         Set-JIMPredefinedSearch -Id 3 -IsEnabled $false
@@ -46,14 +49,14 @@ function Set-JIMPredefinedSearch {
     .EXAMPLE
         Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favour of new search (CHG0128)"
 
-        Disables the search and records the reason on its configuration change history.
+        Disables the search and records the reason on its Configuration Change History.
 
     .LINK
         Get-JIMPredefinedSearch
         Search-JIMMetaverseObject
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$Id,

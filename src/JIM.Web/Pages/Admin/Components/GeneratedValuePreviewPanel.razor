@@ -5,6 +5,7 @@
 @using JIM.Models.Interfaces
 @using JIM.Models.Logic
 @using JIM.Models.Transactional
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject IExpressionEvaluator ExpressionEvaluator
 @implements IDisposable
@@ -67,6 +68,46 @@
                     <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.RandomSourceOfRandomness</MudText>
                 </div>
                 break;
+        }
+
+        @* Generated Value Forms (#2023, mock screen 3): the values checked with each candidate, worked out from it. *@
+        @if (_builtValueRows.Count > 0)
+        {
+            <div class="mt-2" data-testid="jim-generated-value-built-values-preview">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Checked with each candidate</MudText>
+                <MudSimpleTable Dense="true" Elevation="0" Outlined="true" Class="mt-1">
+                    <thead>
+                        <tr>
+                            <th>@(TargetName ?? "Value")</th>
+                            @foreach (var builtValue in _builtValueRows[0].Values)
+                            {
+                                <th @key="builtValue.Name">@builtValue.Name</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _builtValueRows)
+                        {
+                            <tr @key="row.Candidate">
+                                <td class="jim-text-code">@row.Candidate</td>
+                                @foreach (var builtValue in row.Values)
+                                {
+                                    <td @key="builtValue.Name" class="jim-text-code">
+                                        @if (builtValue.Error != null)
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" title="@builtValue.Error">Could not be worked out</MudText>
+                                        }
+                                        else
+                                        {
+                                            <TextValueDisplay Value="@builtValue.Value" />
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
         }
 
         @if (_placementText != null)
@@ -171,6 +212,15 @@
     [Parameter]
     public IReadOnlyDictionary<string, string?> SampleValues { get; set; } = new Dictionary<string, string?>();
 
+    /// <summary>
+    /// The values built from this generated value (Generated Value Forms, #2023), as its "Values built from" panel
+    /// describes them; those checked before issuing are worked out for each candidate. Null or empty for none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<GeneratedValueBuiltValueDescription>? BuiltValues { get; set; }
+
+    private List<(string Candidate, List<GeneratedValueBuiltValuePreviewValue> Values)> _builtValueRows = [];
+
     private GeneratedValueCandidatePreview? _preview;
     private string? _placementText;
     private string? _sampleSourceCaption;
@@ -270,7 +320,7 @@
             {
                 var testResult = ExpressionEvaluator.Test(expression, new ExpressionContext(context.Metaverse, context.ConnectedSystem));
                 if (testResult.IsValid)
-                    sampleBaseValue = testResult.Result?.ToString();
+                    sampleBaseValue = ExpressionText.TryFormat(testResult.Result, out var formatted) ? formatted : null;
                 else
                     _evaluationError = testResult.ErrorMessage;
             }
@@ -288,10 +338,38 @@
         _preview = jim.UniqueValues.DescribeGeneratedCandidates(
             generation, TargetType ?? AttributeDataType.Text, sampleBaseValue, PreviewCandidateCount);
 
+        _builtValueRows = BuildBuiltValueRows(generation.TokenKind);
+
         // QA fix (#242 Phase 3 D2): the compact "Where the number goes" row uses its own terse wording rather
         // than _preview.PlacementText, which is a full sentence shared with the REST/PowerShell surfaces.
         _placementText = GeneratedValuePreviewHelpers.DescribeNumberPlacement(
             !string.IsNullOrEmpty(sampleBaseValue), sampleBaseValue?.Contains('@') == true, generation.TokenKind);
+    }
+
+    /// <summary>
+    /// The values checked with each previewed candidate, one row per candidate: the first value and those that follow for
+    /// "only if taken" and a sequence, the example for a random token. Empty when nothing is checked with it.
+    /// </summary>
+    private List<(string Candidate, List<GeneratedValueBuiltValuePreviewValue> Values)> BuildBuiltValueRows(GeneratedValueTokenKind tokenKind)
+    {
+        if (_preview == null || BuiltValues is not { Count: > 0 } builtValues)
+            return [];
+
+        var candidates = tokenKind switch
+        {
+            GeneratedValueTokenKind.OnlyIfTaken => new[] { _preview.FirstValue }.Concat(_preview.Candidates),
+            GeneratedValueTokenKind.Sequence => _preview.Candidates,
+            _ => new[] { _preview.Example }
+        };
+
+        return candidates
+            .OfType<string>()
+            .Where(candidate => candidate.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .Take(PreviewCandidateCount)
+            .Select(candidate => (candidate, GeneratedValueBuiltValuePreview.WorkOut(candidate, builtValues, SampleValues, ExpressionEvaluator)))
+            .Where(row => row.Item2.Count > 0)
+            .ToList();
     }
 
     private async Task RefreshIoAsync(CancellationToken token)
@@ -333,7 +411,8 @@
         generation.RandomLength,
         generation.Separator,
         TargetType,
-        string.Join(',', SampleValues.Select(kv => $"{kv.Key}={kv.Value}")));
+        string.Join(',', SampleValues.Select(kv => $"{kv.Key}={kv.Value}")),
+        string.Join(',', (BuiltValues ?? []).Select(v => $"{v.SyncRuleMappingId}:{v.CheckedBeforeIssuing}:{v.Expression}")));
 
     private string BuildIoKey() => string.Join('|', Mapping.Id, SyncRuleId, TargetMetaverseAttributeId, ConnectedSystemId, MetaverseObjectTypeId, Direction);
 

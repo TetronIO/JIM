@@ -1,5 +1,8 @@
 ---
 title: Preview Features
+description: What a Preview feature is, where to turn one on, and what to expect from a feature JIM is still rolling out.
+type: concept
+audience: administrator
 ---
 
 # Preview Features
@@ -8,9 +11,9 @@ JIM rolls some features out gradually, behind a Preview feature flag, before the
 
 ## What Preview means
 
-A Preview feature is **supported, with a caveat**: it works, but its behaviour may still change, based on feedback, before it is considered final. Nothing about a Preview feature is experimental in the sense of being unstable or unsupported; it is simply not yet locked in. Every Preview feature is off by default, so turning one on is always a deliberate choice, never something that changes under you on an upgrade.
+A Preview feature is **supported, with a caveat**: it works, but its behaviour may still change, based on feedback, before it is considered final. Nothing about a Preview feature is experimental in the sense of being unstable or unsupported; it is not yet locked in. Every Preview feature is off by default, so turning one on is always a deliberate choice, never something that changes under you on an upgrade.
 
-A feature stops being a Preview feature once JIM considers its behaviour settled. At that point the flag is removed and the feature is simply part of JIM; nothing you configured while it was in Preview needs to change.
+A feature stops being a Preview feature once JIM considers its behaviour settled. At that point the flag is removed and the feature is part of JIM; nothing you configured while it was in Preview needs to change.
 
 ## Turning a Preview feature on
 
@@ -23,7 +26,7 @@ You can also manage Preview features from PowerShell or the REST API:
 - **PowerShell**<br /> [`Get-JIMFeature`, `Enable-JIMFeature`, `Disable-JIMFeature`](../powershell/feature-flags.md)
 - **REST API**<br /> the Features endpoints in the [interactive API reference](../../api/reference/)
 
-Turning a Preview feature on or off is recorded in its [configuration change history](../configuration/activities.md#configuration-change-history), the same as any other Service Setting change.
+Turning a Preview feature on or off is recorded in its [Configuration Change History](../configuration/activities.md#configuration-change-history), the same as any other Service Setting change.
 
 ## In development features
 
@@ -31,5 +34,5 @@ Some feature flags exist purely for JIM's own development and its integration te
 
 ## See also
 
-- [Service Settings](../configuration/service-settings.md) -- how the underlying settings work, including change history and the read-only/configurable distinction
-- [Feature Flags PowerShell cmdlets](../powershell/feature-flags.md) -- `Get-JIMFeature`, `Enable-JIMFeature`, `Disable-JIMFeature`
+- [Service Settings](../configuration/service-settings.md): how the underlying settings work, including change history and the read-only/configurable distinction
+- [Feature Flags PowerShell cmdlets](../powershell/feature-flags.md): `Get-JIMFeature`, `Enable-JIMFeature`, `Disable-JIMFeature`

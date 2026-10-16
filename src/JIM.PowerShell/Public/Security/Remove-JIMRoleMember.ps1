@@ -14,17 +14,20 @@ function Remove-JIMRoleMember {
         removing the last Administrator, as either action would cause a lockout.
 
     .PARAMETER RoleId
-        The unique identifier (integer) of the Role to remove the member from.
+        The ID of the Role to remove the member from.
 
     .PARAMETER MetaverseObjectId
-        The unique identifier (GUID) of the Metaverse Object to remove.
+        The ID of the Metaverse Object to remove.
+
+    .PARAMETER InputObject
+        A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Skips the confirmation prompt.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Role's configuration
-        change history.
+        Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change
+        History.
 
     .OUTPUTS
         None.
@@ -55,6 +58,7 @@ function Remove-JIMRoleMember {
         Add-JIMRoleMember
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory)]
         [int]$RoleId,
@@ -81,7 +85,7 @@ function Remove-JIMRoleMember {
 
         $objectId = if ($InputObject) { $InputObject.id } else { $MetaverseObjectId }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($objectId, "Remove from Role $RoleId")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $objectId -Action "Remove from Role $RoleId" -Force:$Force) {
             Write-Verbose "Removing metaverse object $objectId from role $RoleId"
 
             try {

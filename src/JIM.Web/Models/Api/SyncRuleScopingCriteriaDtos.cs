@@ -8,105 +8,127 @@ using JIM.Models.Search;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of a Synchronisation Rule scoping criteria (a single filter condition).
+/// One scoping criterion: an attribute, or the value an expression computes, compared with a value.
 /// </summary>
 public class SyncRuleScopingCriteriaDto
 {
     /// <summary>
-    /// The unique identifier of the scoping criteria.
+    /// The ID of the criterion.
     /// </summary>
     public int Id { get; set; }
 
     /// <summary>
-    /// The Metaverse Attribute ID being evaluated (for export Synchronisation Rules).
+    /// The ID of the Metaverse attribute the criterion tests, on an export Synchronisation Rule's criterion; null
+    /// on an import one.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Metaverse Attribute being evaluated (for export Synchronisation Rules).
+    /// The name of the Metaverse attribute the criterion tests; null on an import Synchronisation Rule's criterion.
     /// </summary>
     public string? MetaverseAttributeName { get; set; }
 
     /// <summary>
-    /// The Connected System Attribute ID being evaluated (for import Synchronisation Rules).
+    /// The ID of the Connected System attribute the criterion tests, on an import Synchronisation Rule's criterion;
+    /// null on an export one.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Connected System Attribute being evaluated (for import Synchronisation Rules).
+    /// The name of the Connected System attribute the criterion tests; null on an export Synchronisation Rule's
+    /// criterion.
     /// </summary>
     public string? ConnectedSystemAttributeName { get; set; }
 
     /// <summary>
-    /// The data type of the attribute.
+    /// The expression whose computed value the criterion tests, in place of an attribute; null on an attribute
+    /// criterion. It reads cs["..."] on an import Synchronisation Rule and mv["..."] on an export one.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type an expression's computed value is compared as (Text, Number, LongNumber, Decimal, DateTime, Boolean or
+    /// Guid); null on an attribute criterion.
+    /// </summary>
+    public string? CompareAs { get; set; }
+
+    /// <summary>
+    /// The tested attribute's data type, or an expression's Compare As type, which decides which value property holds
+    /// the value.
     /// </summary>
     public string AttributeDataType { get; set; } = null!;
 
     /// <summary>
-    /// The comparison operator (Equals, NotEquals, Contains, StartsWith, etc.).
+    /// Something the administrator should know about the criterion as saved, or null. Set when an expression is compared
+    /// against a relative date, which makes every Temporal Scope Reconciliation evaluate every object of the type.
+    /// </summary>
+    public string? Notice { get; set; }
+
+    /// <summary>
+    /// How the attribute is compared with the value: Equals, NotEquals, StartsWith, NotStartsWith, EndsWith,
+    /// NotEndsWith, Contains, NotContains, LessThan, LessThanOrEquals, GreaterThan or GreaterThanOrEquals.
     /// </summary>
     public string ComparisonType { get; set; } = null!;
 
     /// <summary>
-    /// The string value to compare against (for text attributes).
+    /// The value a Text attribute is compared with.
     /// </summary>
     public string? StringValue { get; set; }
 
     /// <summary>
-    /// The integer value to compare against (for number attributes).
+    /// The value a Number attribute is compared with.
     /// </summary>
     public int? IntValue { get; set; }
 
     /// <summary>
-    /// The long integer value to compare against (for long number attributes).
+    /// The value a LongNumber attribute is compared with.
     /// </summary>
     public long? LongValue { get; set; }
 
     /// <summary>
-    /// The decimal value to compare against (for decimal attributes).
+    /// The value a Decimal attribute is compared with.
     /// </summary>
     public decimal? DecimalValue { get; set; }
 
     /// <summary>
-    /// The date/time value to compare against (for datetime attributes).
+    /// The date and time a DateTime attribute is compared with, when ValueMode is Absolute.
     /// </summary>
     public DateTime? DateTimeValue { get; set; }
 
     /// <summary>
-    /// The boolean value to compare against (for boolean attributes).
+    /// The value a Boolean attribute is compared with.
     /// </summary>
     public bool? BoolValue { get; set; }
 
     /// <summary>
-    /// The GUID value to compare against (for GUID attributes).
+    /// The value a Guid attribute is compared with.
     /// </summary>
     public Guid? GuidValue { get; set; }
 
     /// <summary>
-    /// When true (default), value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
-    /// Only applies to text/string comparisons.
+    /// Whether a Text comparison respects case; false ignores it.
     /// </summary>
     public bool CaseSensitive { get; set; } = true;
 
     /// <summary>
-    /// For DateTime attributes, whether the criterion compares against a fixed date ("Absolute", the default)
-    /// or a date resolved relative to now ("Relative").
+    /// For a DateTime attribute, Absolute when it is compared with DateTimeValue, or Relative when it is compared
+    /// with a date worked out from now each time the criterion is evaluated.
     /// </summary>
     public string ValueMode { get; set; } = nameof(DateCriteriaValueMode.Absolute);
 
     /// <summary>
-    /// The relative offset count (when ValueMode is Relative).
+    /// How many RelativeUnit from now the date is, when ValueMode is Relative; null otherwise.
     /// </summary>
     public int? RelativeCount { get; set; }
 
     /// <summary>
-    /// The relative offset unit: Hours, Days, Weeks, Months, Years (when ValueMode is Relative).
+    /// The unit RelativeCount counts (Hours, Days, Weeks, Months or Years), when ValueMode is Relative; null
+    /// otherwise.
     /// </summary>
     public string? RelativeUnit { get; set; }
 
     /// <summary>
-    /// The relative offset direction: Ago or FromNow (when ValueMode is Relative).
+    /// Ago for a date in the past, FromNow for one in the future, when ValueMode is Relative; null otherwise.
     /// </summary>
     public string? RelativeDirection { get; set; }
 
@@ -123,7 +145,7 @@ public class SyncRuleScopingCriteriaDto
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = ApiDateValues.Canonical(entity.DateTimeValue),
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
             CaseSensitive = entity.CaseSensitive,
@@ -134,7 +156,14 @@ public class SyncRuleScopingCriteriaDto
         };
 
         // Set attribute info based on which one is set
-        if (entity.MetaverseAttribute != null)
+        if (entity.IsExpression)
+        {
+            dto.Expression = entity.Expression;
+            dto.CompareAs = entity.CompareAs?.ToString();
+            dto.AttributeDataType = entity.CompareAs?.ToString() ?? "Unknown";
+            dto.Notice = entity.NeedsFullReconciliationPass ? SyncRuleScopingCriteria.FullReconciliationPassNotice : null;
+        }
+        else if (entity.MetaverseAttribute != null)
         {
             dto.MetaverseAttributeId = entity.MetaverseAttribute.Id;
             dto.MetaverseAttributeName = entity.MetaverseAttribute.Name;
@@ -156,32 +185,34 @@ public class SyncRuleScopingCriteriaDto
 }
 
 /// <summary>
-/// API representation of a Synchronisation Rule scoping criteria group (contains criteria with AND/OR logic).
+/// A scoping criteria group: criteria and child groups combined by All or Any.
 /// </summary>
 public class SyncRuleScopingCriteriaGroupDto
 {
     /// <summary>
-    /// The unique identifier of the criteria group.
+    /// The ID of the group.
     /// </summary>
     public int Id { get; set; }
 
     /// <summary>
-    /// The logical operator for this group: "All" (AND) or "Any" (OR).
+    /// How the group combines what it contains: All is met when every criterion and child group in it is met, Any
+    /// when at least one is.
     /// </summary>
     public string Type { get; set; } = null!;
 
     /// <summary>
-    /// The position/order of this group (for ordering at same level).
+    /// Where the group sits among the groups beside it, used to order them; it does not change which objects are in
+    /// scope.
     /// </summary>
     public int Position { get; set; }
 
     /// <summary>
-    /// The criteria in this group.
+    /// The criteria in the group.
     /// </summary>
     public List<SyncRuleScopingCriteriaDto> Criteria { get; set; } = new();
 
     /// <summary>
-    /// Nested child groups (for complex logical expressions).
+    /// The groups inside this one, each with what it contains.
     /// </summary>
     public List<SyncRuleScopingCriteriaGroupDto> ChildGroups { get; set; } = new();
 
@@ -204,8 +235,19 @@ public class SyncRuleScopingCriteriaGroupDto
 /// <summary>
 /// Request DTO for creating a new scoping criteria group.
 /// </summary>
-public class CreateScopingCriteriaGroupRequest
+public class CreateScopingCriteriaGroupRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The logical operator for this group: "All" (AND) or "Any" (OR).
     /// </summary>
@@ -221,8 +263,19 @@ public class CreateScopingCriteriaGroupRequest
 /// <summary>
 /// Request DTO for updating a scoping criteria group.
 /// </summary>
-public class UpdateScopingCriteriaGroupRequest
+public class UpdateScopingCriteriaGroupRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The logical operator for this group: "All" (AND) or "Any" (OR).
     /// </summary>
@@ -238,9 +291,35 @@ public class UpdateScopingCriteriaGroupRequest
 /// Request DTO for creating a new scoping criterion within a group.
 /// For export Synchronisation Rules, provide MetaverseAttributeId.
 /// For import Synchronisation Rules, provide ConnectedSystemAttributeId.
+/// To compare a computed value instead, provide Expression and CompareAs and no attribute.
 /// </summary>
-public class CreateScopingCriterionRequest
+public class CreateScopingCriterionRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
+    /// <summary>
+    /// An expression whose computed value the criterion compares, in place of an attribute: cs["..."] reads the
+    /// Connected System Object on an import Synchronisation Rule, mv["..."] the Metaverse Object on an export one.
+    /// Requires CompareAs, and excludes MetaverseAttributeId and ConnectedSystemAttributeId.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// The type the expression's computed value is compared as, which decides the operators and value properties that
+    /// apply: Text, Number, LongNumber, Decimal, DateTime, Boolean or Guid. Required with Expression; not allowed
+    /// without it.
+    /// </summary>
+    public string? CompareAs { get; set; }
+
     /// <summary>
     /// The Metaverse Attribute ID to evaluate (for export Synchronisation Rules).
     /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.
@@ -296,11 +375,10 @@ public class CreateScopingCriterionRequest
     public Guid? GuidValue { get; set; }
 
     /// <summary>
-    /// When true (default), value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
-    /// Only applies to text/string comparisons.
+    /// Whether text comparisons respect case. True compares exactly; false ignores case differences. Only applies to
+    /// text comparisons. When omitted, a new criterion respects case and an updated one keeps its current setting.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 
     /// <summary>
     /// For DateTime attributes, whether the criterion compares against a fixed date ("Absolute", the default)

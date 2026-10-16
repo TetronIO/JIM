@@ -1,0 +1,3 @@
+# Docs conformance baseline: the existing debt each Ratchet rule allows, per page. Counts only ever fall.
+# Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
+# The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.

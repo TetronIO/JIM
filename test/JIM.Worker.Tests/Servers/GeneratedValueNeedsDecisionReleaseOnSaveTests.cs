@@ -46,6 +46,10 @@ public class GeneratedValueNeedsDecisionReleaseOnSaveTests
         var mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         _mockCsRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(mockMvRepo.Object);
@@ -87,6 +91,52 @@ public class GeneratedValueNeedsDecisionReleaseOnSaveTests
 
         _mockSyncRepo.Verify(r => r.GetGeneratedValueAssignmentsForGenerationAsync(It.IsAny<int>()), Times.Never,
             "an unrelated edit must not set values retrying against settings the target has already answered");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenABuiltValuesKeepUniqueChanges_ReleasesTheGeneratedValuesNeedsDecisionAsync()
+    {
+        // Generated Value Forms (#2023): switching off Keep unique on a value built from Account Name is the
+        // administrator's answer to a decision Account Name waits on.
+        var (rule, mail) = ExportRuleWithBuiltValue(keepUnique: false);
+        _mockCsRepo.Setup(r => r.GetSyncRuleMappingKeepUniqueAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new Dictionary<int, bool> { [mail.Id] = true });
+
+        var saved = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
+
+        Assert.That(saved, Is.True, "precondition: the Synchronisation Rule must have saved");
+        _mockSyncRepo.Verify(r => r.UpdateGeneratedValueAssignmentAsync(It.Is<GeneratedValueAssignment>(a => a.State == GeneratedValueAssignmentState.Committed)), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenABuiltValuesKeepUniqueIsUnchanged_LeavesTheNeedsDecisionAsync()
+    {
+        var (rule, mail) = ExportRuleWithBuiltValue(keepUnique: true);
+        _mockCsRepo.Setup(r => r.GetSyncRuleMappingKeepUniqueAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new Dictionary<int, bool> { [mail.Id] = true });
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
+
+        _mockSyncRepo.Verify(r => r.GetGeneratedValueAssignmentsForGenerationAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_KeepUniqueOffOnADirectFlow_IsRefused()
+    {
+        var (rule, _) = ExportRuleWithBuiltValue(keepUnique: true);
+        var direct = new SyncRuleMapping
+        {
+            Id = 81, SyncRule = rule, SyncRuleId = rule.Id, KeepUnique = false,
+            TargetConnectedSystemAttribute = rule.ConnectedSystemObjectType.Attributes[0],
+            TargetConnectedSystemAttributeId = rule.ConnectedSystemObjectType.Attributes[0].Id
+        };
+        direct.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = _accountName, MetaverseAttributeId = _accountName.Id });
+        rule.AttributeFlowRules.Clear();
+        rule.AttributeFlowRules.Add(direct);
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() => _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain("Keep unique"));
     }
 
     [Test]
@@ -138,6 +188,47 @@ public class GeneratedValueNeedsDecisionReleaseOnSaveTests
         State = GeneratedValueAssignmentState.NeedsDecision,
         NeedsDecisionEnteredAt = DateTime.UtcNow
     };
+
+    /// <summary>
+    /// An HR import rule generating Account Name (the generation the Needs Decision belongs to), and a directory export
+    /// rule writing an email address built from it with an export expression.
+    /// </summary>
+    private (SyncRule ExportRule, SyncRuleMapping Mail) ExportRuleWithBuiltValue(bool keepUnique)
+    {
+        var person = new MetaverseObjectType { Id = 1, Name = "person", Attributes = [_accountName] };
+        var hrImport = new SyncRule
+        {
+            Id = 30, Name = "HR Import", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemId = 2,
+            MetaverseObjectTypeId = person.Id, MetaverseObjectType = person
+        };
+        var generated = new SyncRuleMapping
+        {
+            Id = 60, SyncRule = hrImport, SyncRuleId = hrImport.Id,
+            TargetMetaverseAttribute = _accountName, TargetMetaverseAttributeId = _accountName.Id,
+            Generation = Generation(attemptLimit: 1000)
+        };
+        generated.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"first\"])" });
+        hrImport.AttributeFlowRules.Add(generated);
+        _mockCsRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => [hrImport]);
+
+        var mailAttribute = new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "mail", Type = AttributeDataType.Text };
+        var rule = new SyncRule
+        {
+            Id = SyncRuleId, Name = "Directory Export", Direction = SyncRuleDirection.Export, Enabled = true,
+            ConnectedSystemId = 1, ConnectedSystem = new ConnectedSystem { Id = 1, Name = "Directory" },
+            MetaverseObjectTypeId = person.Id, MetaverseObjectType = person,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user", Attributes = [mailAttribute] }
+        };
+        var mail = new SyncRuleMapping
+        {
+            Id = 80, SyncRule = rule, SyncRuleId = rule.Id, KeepUnique = keepUnique,
+            TargetConnectedSystemAttribute = mailAttribute, TargetConnectedSystemAttributeId = mailAttribute.Id
+        };
+        mail.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" });
+        rule.AttributeFlowRules.Add(mail);
+        _mockCsRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => [rule]);
+        return (rule, mail);
+    }
 
     private SyncRule Rule(SyncRuleMappingGeneration generation)
     {

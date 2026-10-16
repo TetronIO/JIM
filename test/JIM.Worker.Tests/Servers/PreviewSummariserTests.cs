@@ -29,6 +29,50 @@ public class PreviewSummariserTests
             NewValue: newValue);
 
     [Test]
+    public void BuildGroups_DeltaWithMatchCandidates_KeepsThemOnItsRowInOrder()
+    {
+        // #2052: an ambiguous row names the objects it found; the stored row keeps them, snapshot and all, so the
+        // drill-down can link each one long after the preview ran.
+        var mvoA = Guid.CreateVersion7();
+        var mvoB = Guid.CreateVersion7();
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        summariser.Add(new PreviewDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
+            ObjectDisplayName: "Jane Smith",
+            ObjectTypeName: "User",
+            NewValue: "More than one match (on E1)",
+            MatchCandidates:
+            [
+                new ActivityRunProfileExecutionItemMatchCandidate
+                {
+                    CandidateKind = MatchCandidateKind.MetaverseObject, CandidateId = mvoB, DisplayNameSnapshot = "Jane Smith (B)",
+                    TypeNameSnapshot = "Person", MatchedValue = "E1", ObjectMatchingRuleId = 3, ObjectMatchingRuleDescriptionSnapshot = "rule 1",
+                    Ordinal = 1, CandidateTotal = 12
+                },
+                new ActivityRunProfileExecutionItemMatchCandidate
+                {
+                    CandidateKind = MatchCandidateKind.MetaverseObject, CandidateId = mvoA, DisplayNameSnapshot = "Jane Smith (A)",
+                    TypeNameSnapshot = "Person", MatchedValue = "E1", Ordinal = 0, CandidateTotal = 12
+                }
+            ]));
+
+        var row = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems).Single().Deltas.Single();
+
+        Assert.That(row.MatchCandidates.Select(c => c.CandidateId), Is.EqualTo(new[] { mvoA, mvoB }), "kept in recorded order");
+        var stored = row.MatchCandidates[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.CandidateKind, Is.EqualTo(MatchCandidateKind.MetaverseObject));
+            Assert.That(stored.DisplayNameSnapshot, Is.EqualTo("Jane Smith (B)"));
+            Assert.That(stored.TypeNameSnapshot, Is.EqualTo("Person"));
+            Assert.That(stored.MatchedValue, Is.EqualTo("E1"));
+            Assert.That(stored.ObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(stored.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("rule 1"));
+            Assert.That(stored.Ordinal, Is.EqualTo(1));
+            Assert.That(stored.CandidateTotal, Is.EqualTo(12));
+        }
+    }
+
+    [Test]
     public void BuildGroups_DistinctValuePairsWithinGuard_SplitsIntoOneGroupPerPair()
     {
         var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);

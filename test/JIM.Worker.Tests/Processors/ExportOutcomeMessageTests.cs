@@ -137,6 +137,24 @@ public class ExportOutcomeMessageTests
             "and the next export run will send them again. The service log names the cause."));
     }
 
+    /// <summary>
+    /// Initial Passwords JIM could not record, and enabled states it could not record against a password still owed
+    /// (#2064), reach the export Activity as warnings rather than only the service log; the count is the logic here.
+    /// </summary>
+    [TestCase(1, "1 ")]
+    [TestCase(1_250, "1,250 ")]
+    public void ForInitialPasswordsNotStaged_StartsWithTheCount(int accounts, string expectedStart)
+    {
+        Assert.That(ExportOutcomeMessage.ForInitialPasswordsNotStaged(accounts), Does.StartWith(expectedStart));
+    }
+
+    [TestCase(1, "1 ")]
+    [TestCase(1_250, "1,250 ")]
+    public void ForInitialPasswordMarkingFailed_StartsWithTheCount(int accounts, string expectedStart)
+    {
+        Assert.That(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(accounts), Does.StartWith(expectedStart));
+    }
+
     [Test]
     public void ForUnrecorded_OneExport_UsesTheSingular()
     {

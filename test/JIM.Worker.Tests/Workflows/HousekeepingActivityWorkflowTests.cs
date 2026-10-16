@@ -92,10 +92,11 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync((Guid activityId) =>
             {
                 var rpeis = _persistedRpeis.Where(r => r.ActivityId == activityId).ToList();
-                return (
+                return new ActivityRpeiErrorCounts(
                     rpeis.Count(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
                     rpeis.Count,
-                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError));
+                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged));
             });
 
         // No settings rows exist, so every Service Setting read falls back to its default
@@ -573,6 +574,78 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The grace-period link (#1811): housekeeping deletes the object in its own Activity, days or weeks after the
+    /// run that scheduled the deletion, and the object carries the item that scheduled it. The deletion must record
+    /// that item as its cause, or the deletion cannot say which run decided on it and the run cannot say what its
+    /// decision led to. Recorded whatever the tracking level, because the deletion item exists either way.
+    /// </summary>
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task PerformHousekeeping_MvoCarryingItsSchedulingItem_RecordsTheSchedulingItemAsTheDeletionsCauseAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        UseSyncOutcomeTrackingLevel(trackingLevel);
+        var schedulingItemId = Guid.NewGuid();
+        var scheduledMvo = CreateEligiblePersonMvo("Sana Scheduled");
+        scheduledMvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItemId;
+        scheduledMvo.DeletionTriggeredBySystemId = 1;
+        scheduledMvo.DeletionTriggeredBySystemName = "Source HR";
+        scheduledMvo.DeletionPolicySnapshotJson = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            TriggeringSystemId = 9,
+            TriggeringSystemName = "Yellowstone APAC"
+        }.ToJson();
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([scheduledMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var edge = deletionRpei.CausalEdges.SingleOrDefault(e => e.EdgeType == CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion);
+        Assert.That(edge, Is.Not.Null, "the deletion names the run that scheduled it");
+        var mvoDeleted = deletionRpei.SyncOutcomes.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(edge!.CauseRunProfileExecutionItemId, Is.EqualTo(schedulingItemId));
+            Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(scheduledMvo.Id));
+            Assert.That(edge!.CauseDisplayName, Is.EqualTo("Sana Scheduled"));
+            Assert.That(edge!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected),
+                "the reason comes from the decision-time snapshot, as on the deletion's other edges");
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9), "the snapshot's triggering system wins over the object's own marker");
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(edge!.EffectSyncOutcome, Is.SameAs(mvoDeleted),
+                "the edge explains the MvoDeleted outcome where one is recorded, and the item as a whole where none is");
+        }
+    }
+
+    /// <summary>
+    /// An object scheduled before the link was recorded carries no scheduling item. Its deletion goes ahead exactly
+    /// as before and records no edge: an edge pointing at nothing would read as a cause that has aged out of history.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_MvoWithoutASchedulingItem_RecordsNoSchedulingEdgeAsync()
+    {
+        var scheduledMvo = CreateEligiblePersonMvo("Sana Scheduled");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([scheduledMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_deletedMvoIds, Does.Contain(scheduledMvo.Id));
+            Assert.That(deletionRpei.CausalEdges.Where(e => e.EdgeType == CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion), Is.Empty);
+        }
+    }
+
+    /// <summary>
     /// Idle-tick silence pin: a housekeeping pass with nothing to delete must create no Activity at all, so a
     /// quiet worker does not fill the Activities list with no-op entries.
     /// </summary>
@@ -713,6 +786,23 @@ public class HousekeepingActivityWorkflowTests
             }
         };
         SyncRepo.SeedSyncRule(exportRule);
+    }
+
+    /// <summary>
+    /// Sets the sync outcome tracking level every Service Setting read in the batch sees.
+    /// </summary>
+    private void UseSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel level)
+    {
+        _mockServiceSettingsRepository
+            .Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+                DisplayName = "Sync outcome tracking level",
+                Category = ServiceSettingCategory.History,
+                ValueType = ServiceSettingValueType.Enum,
+                DefaultValue = level.ToString()
+            });
     }
 
     /// <summary>

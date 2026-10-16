@@ -28,6 +28,7 @@ $script:JIMOpaqueValueProperties = @(
     'csAttributes'      # SyncRuleMappingPreview CS attributes: keyed by attribute name
     'properties'        # LogEntryDto.Properties: keyed by Serilog property name
     'validationErrors'  # ApiErrorResponse.ValidationErrors: keyed by field name
+    'changedObjectTypeClassifications' # SchemaRefreshResultDto: keyed by Object Type name (#2049)
 )
 
 function ConvertTo-JIMPascalCaseName {

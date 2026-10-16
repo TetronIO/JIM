@@ -20,11 +20,9 @@ function Get-JIMConfigurationChangePreview {
         The preview's Activity id, as returned by New-JIMConfigurationChangePreview.
 
     .OUTPUTS
-        PSCustomObject with ActivityId, Surface, ActivityStatus, Message, ErrorMessage,
-        ObjectsProcessed, ObjectsToProcess, the four stage statuses (ValidationStatus,
-        ImpactCountsStatus, SummaryStatus, DeltasStatus), IsComplete, HasFailed, ValidationFindings,
-        ImpactCounts, Groups, EstimatedAffectedObjects, EstimatedDeltaRows, DeltaPersistence,
-        DispatchedToWorker and StalenessBaseline.
+        The preview, with each stage's results as far as it has got; it is safe to read while the preview runs.
+        IsComplete means every stage that was going to run has finished: an empty summary means nothing would change
+        only once it is $true.
 
     .EXAMPLE
         Get-JIMConfigurationChangePreview -ActivityId 019fc824-f8c6-7588-8d9a-24a295e7621d
@@ -46,7 +44,7 @@ function Get-JIMConfigurationChangePreview {
         Stop-JIMConfigurationChangePreview
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConfigurationChangePreviewResponse')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$ActivityId

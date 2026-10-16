@@ -141,8 +141,15 @@ internal class LdapConnectorSchema
         string? subclassof;
         var objectClassName = objectType.Name;
 
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         while (continueGettingClasses)
         {
+            // A class already walked means a cycle, which a domain controller should never publish but which would
+            // otherwise loop for ever.
+            if (!visited.Add(objectClassName))
+                break;
+
             if (!_classSchemaCache.TryGetValue(objectClassName, out var objectClassEntry))
             {
                 // some object classes do not have a schema entry, i.e. some system objects.
@@ -152,7 +159,8 @@ internal class LdapConnectorSchema
             ldapdisplayname = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname");
             subclassof = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "subclassof");
 
-            if (ldapdisplayname == subclassof)
+            // top names itself as its own subClassOf, which ends the walk.
+            if (ldapdisplayname == subclassof || subclassof == null)
                 continueGettingClasses = false;
 
             objectClassEntries.Add(objectClassEntry);
@@ -162,6 +170,13 @@ internal class LdapConnectorSchema
 
         foreach (var objectClassEntry in objectClassEntries)
             GetObjectClassAttributesRecursively(objectClassEntry, objectType);
+
+        // Record every class it inherits from, so an entry carrying this class and one of those resolves to this, the
+        // more specific, whatever order the directory lists them in (#2043). The first entry is the class itself.
+        foreach (var superiorName in objectClassEntries.Skip(1)
+                     .Select(entry => LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname"))
+                     .OfType<string>())
+            objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.SuperiorClass, superiorName));
 
         // todo (#492): it's possible there's some duplication of attributes going on due to attributes being specified on structural and auxiliary classes, so de-dupe before we return
         objectType.Attributes = objectType.Attributes.OrderBy(q => q.Name).ToList();
@@ -216,7 +231,9 @@ internal class LdapConnectorSchema
 
         foreach (string attributeName in objectClassEntry.Attributes[propertyName].GetValues(typeof(string)))
         {
-            if (objectType.Attributes.All(q => q.Name != attributeName))
+            // Active Directory attribute names ignore case, so one listed again by another class, in another case, is
+            // the attribute already added (#2051).
+            if (objectType.Attributes.All(q => !string.Equals(q.Name, attributeName, StringComparison.OrdinalIgnoreCase)))
             {
                 var attr = GetAdSchemaAttribute(attributeName, objectClassName, required, objectType.Name);
                 if (attr != null)
@@ -297,7 +314,11 @@ internal class LdapConnectorSchema
         var linkId = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "linkid");
         var writability = LdapConnectorUtilities.DetermineAttributeWritability(systemOnly, systemFlags, linkId);
 
-        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability);
+        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability)
+        {
+            // Active Directory states case-sensitivity through the syntax rather than a matching rule (#2051).
+            CaseExact = attributeDataType == AttributeDataType.Text && omSyntax.HasValue && LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax.Value)
+        };
 
         if (!string.IsNullOrEmpty(description))
             attribute.Description = description;
@@ -428,6 +449,12 @@ internal class LdapConnectorSchema
             var contentRules = ParseAllDitContentRules(subschemaEntry);
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} DIT Content Rules", contentRules.Count);
 
+            // Operational attribute types an ordinary entry can carry, offered on every structural type below (D8).
+            var operationalAttributeTypes = attributeTypeDefs.Values
+                .Where(Rfc4512OperationalAttributes.IsDiscoverable)
+                .ToList();
+            _logger.Debug("GetRfcSchemaAsync: {Count} operational attribute types will be offered on structural types", operationalAttributeTypes.Count);
+
             // Step 6: Build the connector schema. Abstract classes are excluded: they exist only to be inherited
             // from. Auxiliary classes are always reported, because JIM merges an administrator's selected auxiliary
             // classes into the structural type they extend, and cannot do that for a class it never discovered.
@@ -463,6 +490,11 @@ internal class LdapConnectorSchema
                 // value on export instead, and marks the attribute read-only below so it cannot be flowed.
                 objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(
                     ObjectTypeTags.Keys.ClassMembershipAttribute, LdapConnectorConstants.ObjectClassAttributeName));
+
+                // Record every class it inherits from, so an entry carrying this class and one of those resolves to
+                // this, the more specific, whatever order the directory lists them in (#2043).
+                foreach (var (superiorName, _) in WalkSuperiorClasses(objectClassDef, objectClassDefs))
+                    objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.SuperiorClass, superiorName));
 
                 // Collect attributes by walking the class hierarchy (SUP chain)
                 var allMust = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -500,7 +532,13 @@ internal class LdapConnectorSchema
                         externalIdAttrName, _rootDse.ExternalIdDataType, AttributePlurality.SingleValued,
                         required: false, className: objectClassDef.Name!, writability: AttributeWritability.ReadOnly)
                     {
-                        Description = "System-assigned unique identifier for this entry"
+                        Description = "System-assigned unique identifier for this entry",
+
+                        // The directory still publishes the operational attribute's type (entryUUID: uuidMatch), so
+                        // its declaration is read from there like any other attribute's (#2051).
+                        CaseExact = _rootDse.ExternalIdDataType == AttributeDataType.Text &&
+                                    attributeTypeDefs.TryGetValue(externalIdAttrName, out var externalIdDef) &&
+                                    Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(externalIdDef, attributeTypeDefs))
                     });
                 }
 
@@ -525,6 +563,9 @@ internal class LdapConnectorSchema
                 if (objectClassAttribute != null)
                     objectClassAttribute.Writability = AttributeWritability.ReadOnly;
 
+                if (isStructural)
+                    AddOperationalAttributes(objectType, objectClassDef.Name!, operationalAttributeTypes, attributeTypeDefs);
+
                 objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
 
                 ApplyExternalIdRecommendations(objectType);
@@ -540,7 +581,44 @@ internal class LdapConnectorSchema
     }
 
     /// <summary>
-    /// Recursively collects MUST and MAY attributes from an object class and all its superiors.
+    /// Offers the directory's operational attributes on a structural Object Type (#2153, D8): each is unselected (as
+    /// every discovered attribute is), read-only, attached to no class, and tagged so the schema screen can group it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only structural types receive them. An auxiliary class is merged into the structural type an entry carries,
+    /// which already has them, and offering them twice would hand the merge two attributes of one name.
+    /// </para>
+    /// <para>
+    /// An attribute the type already has is left as it is. That is what keeps the synthesised External ID
+    /// (<c>entryUUID</c> is itself operational) exactly as earlier discovery reported it, so a refresh restates
+    /// nothing about it.
+    /// </para>
+    /// </remarks>
+    private void AddOperationalAttributes(
+        ConnectorSchemaObjectType objectType,
+        string objectClassName,
+        List<Rfc4512AttributeTypeDescription> operationalAttributeTypes,
+        Dictionary<string, Rfc4512AttributeTypeDescription> attributeTypeDefs)
+    {
+        var existingNames = objectType.Attributes.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var operationalAttributes = operationalAttributeTypes
+            .Where(attributeType => !existingNames.Contains(attributeType.Name!))
+            .Select(attributeType => BuildRfcSchemaAttribute(attributeType.Name!, attributeTypeDefs, objectClassName, required: false, objectType.Name))
+            .OfType<ConnectorSchemaAttribute>();
+
+        foreach (var attribute in operationalAttributes)
+        {
+            // Usage alone makes it read-only (DetermineRfcAttributeWritability), and it belongs to no object class.
+            attribute.ClassName = null;
+            attribute.IsOperational = true;
+            objectType.Attributes.Add(attribute);
+        }
+    }
+
+    /// <summary>
+    /// Collects MUST and MAY attributes from an object class and all its superiors.
     /// </summary>
     private static void CollectClassAttributes(
         Rfc4512ObjectClassDescription classDef,
@@ -548,16 +626,42 @@ internal class LdapConnectorSchema
         HashSet<string> mustAttributes,
         HashSet<string> mayAttributes)
     {
-        foreach (var attr in classDef.MustAttributes)
-            mustAttributes.Add(attr);
-        foreach (var attr in classDef.MayAttributes)
-            mayAttributes.Add(attr);
+        var definitions = WalkSuperiorClasses(classDef, allClasses)
+            .Select(superior => superior.Definition)
+            .OfType<Rfc4512ObjectClassDescription>()
+            .Prepend(classDef);
 
-        // Walk the superclass chain
-        if (classDef.SuperiorName != null &&
-            allClasses.TryGetValue(classDef.SuperiorName, out var superClass))
+        foreach (var definition in definitions)
         {
-            CollectClassAttributes(superClass, allClasses, mustAttributes, mayAttributes);
+            mustAttributes.UnionWith(definition.MustAttributes);
+            mayAttributes.UnionWith(definition.MayAttributes);
+        }
+    }
+
+    /// <summary>
+    /// Every class <paramref name="classDef"/> inherits from, nearest first, each with its definition, or null for a
+    /// superior the schema names but does not define (where the walk ends).
+    /// </summary>
+    /// <remarks>
+    /// Stops at a class it has already passed, so a cycle in a hand-edited schema ends the walk instead of
+    /// recursing until the process runs out of stack.
+    /// </remarks>
+    private static IEnumerable<(string Name, Rfc4512ObjectClassDescription? Definition)> WalkSuperiorClasses(
+        Rfc4512ObjectClassDescription classDef,
+        Dictionary<string, Rfc4512ObjectClassDescription> allClasses)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { classDef.Name ?? string.Empty };
+        var current = classDef;
+        while (current.SuperiorName is { } superiorName && visited.Add(superiorName))
+        {
+            if (!allClasses.TryGetValue(superiorName, out var superior))
+            {
+                yield return (superiorName, null);
+                yield break;
+            }
+
+            yield return (superiorName, superior);
+            current = superior;
         }
     }
 
@@ -580,7 +684,7 @@ internal class LdapConnectorSchema
         }
 
         // Resolve SYNTAX OID — walk the SUP chain if the attribute inherits its syntax
-        var syntaxOid = ResolveSyntaxOid(attrDef, attributeTypeDefs);
+        var syntaxOid = Rfc4512SchemaParser.ResolveSyntaxOid(attrDef, attributeTypeDefs);
         var attributeDataType = Rfc4512SchemaParser.GetRfcAttributeDataType(syntaxOid);
 
         // Override data type for external ID attribute
@@ -590,43 +694,18 @@ internal class LdapConnectorSchema
         var plurality = attrDef.IsSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
         var writability = Rfc4512SchemaParser.DetermineRfcAttributeWritability(attrDef.Usage, attrDef.IsNoUserModification);
 
-        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, plurality, required, objectClassName, writability);
+        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, plurality, required, objectClassName, writability)
+        {
+            // Case-exactness follows the EQUALITY matching rule, inherited through SUP like SYNTAX. It describes
+            // how text compares, so it is only declared on Text attributes (#2051).
+            CaseExact = attributeDataType == AttributeDataType.Text &&
+                        Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(attrDef, attributeTypeDefs))
+        };
 
         if (!string.IsNullOrEmpty(attrDef.Description))
             attribute.Description = attrDef.Description;
 
         return attribute;
-    }
-
-    /// <summary>
-    /// Resolves the SYNTAX OID for an attribute type, walking the SUP (superior) chain
-    /// if the attribute inherits its syntax from a parent attribute type.
-    /// </summary>
-    private static string? ResolveSyntaxOid(
-        Rfc4512AttributeTypeDescription attrDef,
-        Dictionary<string, Rfc4512AttributeTypeDescription> allAttributes)
-    {
-        // Direct SYNTAX specified — use it
-        if (attrDef.SyntaxOid != null)
-            return attrDef.SyntaxOid;
-
-        // Walk the SUP chain to find inherited SYNTAX (max 10 levels to prevent infinite loops)
-        var current = attrDef;
-        for (var depth = 0; depth < 10; depth++)
-        {
-            if (current.SuperiorName == null)
-                break;
-
-            if (!allAttributes.TryGetValue(current.SuperiorName, out var superAttr))
-                break;
-
-            if (superAttr.SyntaxOid != null)
-                return superAttr.SyntaxOid;
-
-            current = superAttr;
-        }
-
-        return null;
     }
 
     /// <summary>

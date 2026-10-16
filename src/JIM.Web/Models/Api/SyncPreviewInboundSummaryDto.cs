@@ -33,6 +33,23 @@ public class SyncPreviewInboundSummaryDto
     public Guid? WouldJoinMetaverseObjectId { get; set; }
 
     /// <summary>
+    /// When the object would join, the id of the Object Matching Rule that would find the Metaverse Object; null
+    /// otherwise.
+    /// </summary>
+    public int? WouldJoinObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// When the object would join, what that Object Matching Rule compares, for example
+    /// <c>Employee ID equals employeeId</c>; null otherwise.
+    /// </summary>
+    public string? WouldJoinObjectMatchingRuleDescription { get; set; }
+
+    /// <summary>
+    /// When the object would join, the value it would match on: what the rule computes from the object. Null otherwise.
+    /// </summary>
+    public string? WouldJoinMatchedValue { get; set; }
+
+    /// <summary>
     /// The Metaverse Object the Connected System Object is already joined to, when it is; the preview then
     /// evaluates flows and the outbound chain against it.
     /// </summary>
@@ -50,6 +67,9 @@ public class SyncPreviewInboundSummaryDto
         ProjectedMetaverseObjectTypeId = model.ProjectedMetaverseObjectTypeId,
         ProjectedMetaverseObjectTypeName = model.ProjectedMetaverseObjectTypeName,
         WouldJoinMetaverseObjectId = model.WouldJoinMetaverseObjectId,
+        WouldJoinObjectMatchingRuleId = model.WouldJoinObjectMatchingRuleId,
+        WouldJoinObjectMatchingRuleDescription = model.WouldJoinObjectMatchingRuleDescription,
+        WouldJoinMatchedValue = model.WouldJoinMatchedValue,
         AlreadyJoinedMetaverseObjectId = model.AlreadyJoinedMetaverseObjectId,
         AttributeFlowChanges = [.. model.AttributeFlowChanges.Select(SyncPreviewAttributeFlowChangeDto.FromModel)]
     };

@@ -12,25 +12,16 @@ function Get-JIMRunProfile {
         Full Sync, Delta Sync, Export) that can be executed against a Connected System.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System to get Run Profiles for.
+        The Connected System whose Run Profiles to get.
 
     .PARAMETER ConnectedSystemName
-        The name of the Connected System to get Run Profiles for. Must be an exact match.
+        The name of the Connected System whose Run Profiles to get. Must be an exact match.
 
     .PARAMETER Name
-        Filter Run Profiles by name. Supports wildcards (e.g., "Full*").
+        Return only the Run Profiles whose name matches, for example "Full*".
 
     .OUTPUTS
-        PSCustomObject representing Run Profile(s), with these properties:
-        - id, name, connectedSystemId, runType, pageSize
-        - partitionName: the partition targeted, or null when the Run Profile follows every selected partition
-        - targetsDeselectedPartition: true when the targeted partition is no longer selected on the Connected
-          System. Such a Run Profile is inoperable; a deselected partition is not managed by JIM, so
-          Start-JIMRunProfile refuses it rather than reading scope that has been withdrawn.
-        - filePath, verifyImportContentHashes
-        - safeguards: the Run Profile Safeguards limits (maxCreates, maxUpdates, maxDeletes), always
-          present; each member is null when that limit is not set
-        - ConnectedSystemId (added for pipeline chaining)
+        Each Run Profile on the Connected System, or each one whose name matches -Name.
 
     .EXAMPLE
         Get-JIMRunProfile -ConnectedSystemId 1
@@ -58,13 +49,19 @@ function Get-JIMRunProfile {
         Lists the Run Profiles left inoperable by the current partition selections, so an operator can repoint or
         remove them before a scheduled run fails.
 
+    .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object allowObjectTypeChanges
+
+        Lists the Full Import Run Profiles that carry out Object Type changes rather than refusing them, so an
+        operator can check none of them runs on a Schedule.
+
     .LINK
         Start-JIMRunProfile
         New-JIMRunProfile
         Get-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RunProfileDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]

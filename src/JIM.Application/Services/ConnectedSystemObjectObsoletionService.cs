@@ -196,6 +196,10 @@ public static class ConnectedSystemObjectObsoletionService
         if (mvoDeletionPolicySnapshotJson != null)
             deletionExecutionItem.DeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson;
 
+        // This item is the one that scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+        if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
+            MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(mvo, deletionExecutionItem);
+
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
         // surviving contributor where one exists. An attribute with another contributor is always handed to the
         // survivor (a safe change-of-value, not a clear); the question the freeze answers is what happens to the
@@ -284,14 +288,14 @@ public static class ConnectedSystemObjectObsoletionService
             if (mvo.PendingAttributeValueRemovals.Count > 0 || mvo.PendingAttributeValueAdditions.Count > 0)
             {
                 // Capture pending changes BEFORE applying (which clears the pending lists), using the same
-                // construction as the normal Attribute Flow path: additions
-                // FIRST in changedAttributes, and every removal in removedAttributes. Both orderings matter to
-                // export evaluation (CreateAttributeValueChanges): a single-valued attribute exports its FIRST
-                // matching changed value, so the re-elected survivor's addition must precede the leaver's removal
-                // or the target would be staged with the stale value (then dropped by no-net-change detection,
-                // leaving the target stale forever); and a removal only null-clears (single-valued) or stages a
-                // Remove (multi-valued) when present in removedAttributes, so a re-elected attribute exports as a
-                // change-of-value (the addition wins) while a genuinely cleared one exports as a clear.
+                // construction as the normal Attribute Flow path: additions FIRST in changedAttributes, and every
+                // removal in removedAttributes. Export evaluation (CreateAttributeValueChanges) shapes each change by
+                // the target attribute's plurality (#2182). Where the source or target is single-valued it exports
+                // one Update carrying the first changed value that is not in removedAttributes, so the re-elected
+                // survivor's addition is exported rather than the leaver's stale value (which no-net-change detection
+                // would then drop, leaving the target stale forever), and a genuinely cleared attribute, with no
+                // such value, exports as a null-clearing Update. Where both are multi-valued, a value in
+                // removedAttributes stages a Remove and any other stages an Add.
                 var additions = mvo.PendingAttributeValueAdditions.ToList();
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
                 var changedAttributes = additions.Concat(removals).ToList();

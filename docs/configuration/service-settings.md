@@ -1,10 +1,13 @@
 ---
 title: Service Settings
+description: The settings that change how JIM runs, their defaults and overrides, read-only settings, and reverting one.
+type: object
+audience: administrator
 ---
 
 # Service Settings
 
-**Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, maintenance mode, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
+**Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, recovering work from a crashed Worker, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
 
 ## Default vs override
 
@@ -26,9 +29,10 @@ Settings are grouped by concern:
 - **Instance**<br /> Service identity (name, ID) for distinguishing JIM deployments.
 - **SSO**<br /> Single sign-on and authentication settings.
 - **Synchronisation**<br /> Sync pipeline and change tracking settings.
-- **Maintenance**<br /> Maintenance mode and system health settings.
+- **Maintenance**<br /> Recovering the work of a Worker that has crashed.
 - **History**<br /> Audit history retention and cleanup settings.
-- **Security**<br /> Credential encryption and [API rate limiting](../api/rate-limiting.md) settings.
+- **Security**<br /> Where encryption keys are kept, and [API rate limiting](../api/rate-limiting.md).
+- **UI**<br /> How often progress is reported while JIM generates Example Data.
 - **Preview Features**<br /> Feature flags: features JIM is rolling out gradually. See below.
 
 The category is mostly a UI grouping; it does not change semantics.
@@ -45,7 +49,7 @@ Nearly every Service Setting is operational and saves in silence. The few that s
 
 ## Change history
 
-Every update and revert records a versioned entry in the setting's [configuration change history](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
+Every update and revert records a versioned entry in the setting's [Configuration Change History](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
 
 When you save or revert a setting in the admin portal, an optional "Reason for change" prompt lets you record why (a change ticket number, for example); automation can pass the same reason via `-ChangeReason` or the REST request. Encrypted setting values are never stored in the history: a changed secret is shown as changed, never by value.
 
@@ -75,6 +79,6 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 - **PowerShell**<br /> [Service Settings cmdlets](../powershell/service-settings.md) (`Get-JIMServiceSetting`, `Set-JIMServiceSetting`, etc.)
 - **REST API**<br /> Service Settings endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
-- [Administration: Configuration Reference](../administration/configuration.md) -- detailed reference for the settings that exist and what each one does
+- [Administration: Configuration Reference](../administration/configuration.md#service-settings): every Service Setting, what it does and its default

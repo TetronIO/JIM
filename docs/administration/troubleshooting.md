@@ -1,13 +1,14 @@
 ---
 title: Troubleshooting
+description: Fix a JIM installation that will not start, serve HTTPS or let you sign in, by the message it shows.
+type: troubleshooting
+audience: operator
+validated: v0.16.0
 ---
 
 # Troubleshooting
 
-!!! info "Documentation In Progress"
-    This page is under active development. Content will be added in a future update.
-
-<!-- TODO: Common issues and resolutions for deployment, authentication, synchronisation, and connectivity problems -->
+This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
 ## Start-up
 
@@ -15,7 +16,7 @@ title: Troubleshooting
 
 At start-up, `jim.worker`, `jim.web` and `jim.scheduler` each wait for PostgreSQL before doing anything else, and log every attempt with the time spent so far and the reason:
 
-```
+```text
 The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: Name or service not known. Retrying in 15s.
 ```
 
@@ -64,61 +65,7 @@ ALTER DATABASE jim OWNER TO jim;
 
 ## Podman
 
-The commands here are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
-
-### `podman ps` shows none of JIM's containers
-
-**What it means.** Each account has its own Podman containers. A rootful JIM's belong to root, so `podman ps` run as yourself sees none of them; a rootless JIM's belong to the `jim` account, so root's Podman sees none either. Nothing is wrong with JIM.
-
-**How to fix.** For a rootful JIM, run Podman as root: `sudo podman ps`. For a rootless one, run it as the `jim` account, with `jim-podman ps` (see [Rootless commands](podman.md#rootless-commands)). Run as root from a folder the account cannot read, such as `/root`, Podman as `jim` fails with `cannot chdir to /root: Permission denied`; the `jim-podman` function starts from the root folder for that reason.
-
-### `systemctl --user -M jim@` fails with `Transport endpoint is not connected` {#rootless-systemctl-fails}
-
-It may also print `Failed to start transient service unit: Connection reset by peer`, or for `status`, `Failed to get properties`.
-
-**What it means.** JIM v0.16.0 gave `systemctl --user -M jim@` for operating a rootless JIM, in this documentation and at the end of an installation. It reaches the account's systemd manager by a route that fails on a minimal RHEL-family host, such as AlmaLinux 9 installed from its generic cloud image, which lacks the `systemd-container` package. A command that fails this way changes nothing, and JIM carries on as it was. An upgrade that went on past such a failed stop has the new release's files and images in place while JIM still runs, and reports, the old release. Your data is unaffected.
-
-**How to fix.** Run the command with `jim-systemctl` instead (see [Rootless commands](podman.md#rootless-commands)), which reaches the manager through the account's own bus and needs no extra package; for example `jim-systemctl stop jim.service`. To finish such an upgrade, restart the database and then JIM, `jim-systemctl restart jim-database.service` and `jim-systemctl restart jim.service`, and verify it as [Upgrading](upgrading.md#verifying) describes. Installing `systemd-container` from your distribution's repository makes `-M` work too.
-
-### A rootless JIM stops when you log out, or does not start after a reboot
-
-**What it means.** A rootless JIM runs under its account's own systemd manager, and lingering is not enabled for the account, so that manager, and JIM with it, runs only while the account has a session. The installer enables it; an account set up by hand may lack it. Your data is unaffected.
-
-**How to fix.** As root, `loginctl enable-linger jim`, then start JIM: `jim-systemctl start jim.service`.
-
-### A rootless `jim.service` is `not found`, or the installer stops over folder settings meant for another account
-
-**What it means.** The `jim` account's systemd manager runs Quadlet and Podman with its own environment, and a setting of `XDG_CONFIG_HOME`, `XDG_DATA_HOME` or `XDG_RUNTIME_DIR` made for every account points them at another account's folders. Quadlet then looks for JIM's units in the wrong folder and generates none, so `jim-systemctl start jim.service` answers `Unit jim.service not found`. The installer checks for this before installing anything, and stops naming each setting. A rootful JIM is unaffected. Nothing has been lost: the units, and any data, are where JIM put them.
-
-**How to fix.** Find the settings (`jim-systemctl show-environment | grep ^XDG_` shows what the manager has), usually in `/etc/environment`, `/etc/environment.d/` or `/etc/security/pam_env.conf`. Remove them, or limit them to the accounts they are meant for, then restart the manager, `sudo systemctl restart user@$(id -u jim).service`, and run the installer again or start JIM: `jim-systemctl start jim.service`.
-
-### A rootless `jim.service` fails with `rootlessport cannot expose privileged port 443`
-
-The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=443' to /etc/sysctl.conf (currently 1024), or choose a larger port number (>= 1024)`.
-
-**What it means.** A rootless container cannot publish a port below the kernel's unprivileged-port threshold. The installer lowers it in `/etc/sysctl.d/90-jim.conf`; that file is missing, or something set the threshold back.
-
-**How to fix.** As root: `echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system`, then `jim-systemctl restart jim.service`. Or move JIM to a port of 1024 or above (see [Port Mapping](deployment.md#port-mapping)).
-
-### On Ubuntu, JIM never becomes ready, and its logs show `Permission denied` or `Resource temporarily unavailable`
-
-**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop a rootful JIM's containers using the network at all. `jim-web` logs `OIDC discovery attempt 1/5 failed: Permission denied`, `jim-worker` logs `The database is not reachable yet ... Resource temporarily unavailable`, and `sudo dmesg | grep DENIED` shows `profile="crun"` with `class="net"`.
-
-**How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
-
-### On Ubuntu, JIM's services keep crashing and restarting
-
-JIM becomes ready, but `jim-web`, `jim-worker` or `jim-scheduler` restart now and then, most often while JIM first prepares its database and after the server starts; a page or a PowerShell command can fail with `The response ended prematurely`.
-
-**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop the processes in a rootful JIM's containers signalling one another. The .NET runtime signals its own threads to reclaim memory, so a service aborts and Podman restarts it. `sudo podman inspect --format '{{.Name}} {{.RestartCount}}' jim-web jim-worker jim-scheduler` counts the restarts, and `sudo journalctl -k | grep DENIED` shows `operation="signal"` with a `peer` ending `//&crun`. A synchronisation running when the worker crashes stops there; the worker fails its Activity when it starts again, and the next run carries on from where JIM's data stands (see [Pausing work first](upgrading.md#pausing-work)).
-
-**How to fix.** Add the signal rule [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart the server, which Podman needs to load its profile with the rule. The installer adds the rule; an installation made by the installer of v0.16.0 or earlier needs it adding by hand.
-
-### Other machines cannot reach JIM, but it answers on the server itself
-
-**What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
-
-**How to fix.** `firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https` (or `--add-port=<port>/tcp` for another port), which opens it without reloading firewalld: a reload would take a rootful Podman JIM's network away (see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor)). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor).
+Problems particular to running JIM on Podman, such as a rootless JIM that will not start, or Ubuntu's AppArmor profiles stopping JIM's containers, are on [Troubleshooting Podman](troubleshooting-podman.md).
 
 ## HTTPS
 
@@ -134,9 +81,9 @@ The browser reports that the site cannot be reached or refused the connection, o
 
 Docker Compose first warns that a `secret file ... does not exist`, then stops without starting `jim.web`.
 
-**What it means.** JIM's certificate or key is missing from the installation's `tls` folder. Nothing has changed in your installation; `jim.web` has simply not been started.
+**What it means.** JIM's certificate or key is missing from the installation's `tls` folder. Nothing has changed in your installation; `jim.web` has not been started.
 
-**How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
+**How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](tls-and-reverse-proxy.md#the-certificate). Then run your `docker compose ... up -d` command again.
 
 ### `jim.web` keeps restarting with `Access to the path '/run/jim-tls/tls.key' is denied`
 
@@ -160,7 +107,7 @@ Sign-in reaches your identity provider, but the return to JIM (`/signin-oidc`) s
 
 **What it means.** JIM's response to a sign-in sets cookies larger than nginx's default buffer for a response's headers, so nginx gives up on it. Nothing is wrong with JIM or your identity provider.
 
-**How to fix.** Add these to the nginx `location` that proxies JIM, as the [nginx example](deployment.md#nginx-example) does, then reload nginx:
+**How to fix.** Add these to the nginx `location` that proxies JIM, as the [nginx example](tls-and-reverse-proxy.md#nginx-example) does, then reload nginx:
 
 ```nginx
 proxy_buffer_size 16k;
@@ -171,19 +118,19 @@ proxy_buffers 8 16k;
 
 ### Sign-in loops between JIM and the identity provider
 
-You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. (Earlier versions of JIM sent the browser back to the identity provider again and again instead, and the portal never loaded.) The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
+You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
 
-```
+```text
 '.AspNetCore.Correlation.<random characters>' cookie not found.
 ```
 
 and the [security audit log](security-audit-events.md) records a failed sign-in with the reason `OIDC correlation failed`.
 
-**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. A standard installation serves HTTPS only, so this happens when JIM's plain HTTP port has been published to other machines, typically by a compose override of your own or by starting JIM without `docker-compose.production.yml`. Safari can do the same even at `http://localhost`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
+**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. A standard installation serves HTTPS only, so this happens when JIM's plain HTTP port has been published to other machines, typically by a compose override of your own or by starting JIM without `docker-compose.production.yml`. Safari can do the same even at `http://localhost`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) explains the HTTPS requirement.
 
 **How to fix.**
 
-1. Serve JIM over HTTPS: start it with `docker-compose.production.yml`, which does, and remove any override that publishes port `8080` beyond the host's loopback interface. If a reverse proxy in front of JIM forwards plain HTTP to it, [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
+1. Serve JIM over HTTPS: start it with `docker-compose.production.yml`, which does, and remove any override that publishes port `8080` beyond the host's loopback interface. If a reverse proxy in front of JIM forwards plain HTTP to it, [set `JIM_TRUSTED_PROXIES`](tls-and-reverse-proxy.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
 2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for a plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
 3. Open JIM at its `https://` address.
 
@@ -199,7 +146,7 @@ You clicked **Login** (or let `Connect-JIM` open your browser) and the identity 
 
 1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 7](sso-setup/ad-fs.md#step-7-configure-powershell-module-authentication-optional-but-recommended), [Keycloak Step 6a](sso-setup/keycloak.md#step-6a-configure-powershell-module-authentication-recommended).
 2. If the public client is a **separate registration** from the web application (always the case for Keycloak), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
-3. If the public client **shares a registration** with the web application (Entra ID or AD FS with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; just ensure the web app registration has the loopback redirect URI added under its native/mobile platform.
+3. If the public client **shares a registration** with the web application (Entra ID or AD FS with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
 
 Verify the config the server is advertising:
 
@@ -217,7 +164,7 @@ Some messages in the container logs look alarming but are expected and harmless.
 
 During startup you may see:
 
-```
+```text
 jim.scheduler  | Cannot load library libgssapi_krb5.so.2
 jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
 ```
@@ -230,9 +177,20 @@ jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No 
 
 **How to confirm the scheduler is healthy despite the message.** Immediately after the probe lines you should see:
 
-```
+```text
 jim.scheduler  | info: Microsoft.Hosting.Lifetime[0]
 jim.scheduler  |       Application started. Press Ctrl+C to shut down.
 ```
 
 The container should also transition to `healthy` in `docker ps`.
+
+## Still stuck?
+
+Collect these before asking for help:
+
+- **The JIM version,** shown at the foot of every portal page and by `Connect-JIM`, or the release you installed.
+- **How JIM is installed:** Docker or Podman, with the bundled database or your own, and behind a reverse proxy or not.
+- **The services' logs from the time of the problem:** `docker logs jim.web`, and likewise `jim.worker`, `jim.scheduler` and `jim.database`; on Podman, `sudo podman logs jim-web` and the rest (see [Troubleshooting Podman](troubleshooting-podman.md#still-stuck)).
+- **For a sign-in problem,** the `jim.web` warning beginning `Sign-in stopped`, and the failed sign-in in the [security audit log](security-audit-events.md).
+
+Then ask in the [Q&A](https://github.com/TetronIO/JIM/discussions/categories/q-a) category of GitHub Discussions, or open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) for a bug. Leave secrets out of anything you share: `.env` and `jim-config.yaml` hold them.

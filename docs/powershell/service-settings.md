@@ -1,5 +1,8 @@
 ---
 title: Service Settings
+description: "The cmdlets that read Service Settings, change them, and return them to their defaults."
+type: reference
+audience: automation-author
 ---
 
 # Service Settings
@@ -15,6 +18,7 @@ Cmdlets for viewing and modifying JIM runtime configuration. Settings use dot-no
 
 Retrieves service settings. When called without parameters, returns all settings. Specify `-Key` to retrieve a single setting by its dot-notation key.
 
+<!-- BEGIN GENERATED: Get-JIMServiceSetting -->
 ### Syntax
 
 ```powershell
@@ -29,21 +33,25 @@ Get-JIMServiceSetting [-Key] <string>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes (ByKey, Position 0) | | Dot-notation setting key, e.g. `"ChangeTracking.CsoChanges.Enabled"`. |
+| `Key` | `string` | Yes (ByKey) |  | The key of the one setting to return, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances with the following properties:
+Each service setting, with its default, its stored value and the value in effect.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Key` | `string` | Dot-notation setting key |
-| `Value` | `string` | Current stored value (may be null if no override is set) |
-| `EffectiveValue` | `string` | The value in effect: the override if set, otherwise the default |
-| `IsOverridden` | `bool` | Whether an administrator has set a custom value |
-| `IsReadOnly` | `bool` | Whether the setting can be modified at runtime |
-| `Description` | `string` | Human-readable description of the setting |
-| `Category` | `string` | Logical grouping, e.g. `"ChangeTracking"`, `"Sync"`, `"History"` |
+| `Key` | `string` | Unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled"). |
+| `DisplayName` | `string` | Human-readable display name. |
+| `Description` | `string` | Description of what this setting controls. |
+| `Category` | `string` | Category for grouping (e.g., "SSO", "Synchronisation", "Maintenance"). |
+| `ValueType` | `string` | Data type of the setting value (e.g., "String", "Boolean", "Integer"). |
+| `DefaultValue` | `string` | The default value as a string. |
+| `Value` | `string` | The current overridden value, or empty if using the default. |
+| `EffectiveValue` | `string` | The effective value (Value if set, otherwise DefaultValue). |
+| `IsReadOnly` | `bool` | Whether this setting is read-only (e.g., mirrored from environment variables). |
+| `IsOverridden` | `bool` | Whether the current value differs from the default. |
+<!-- END GENERATED: Get-JIMServiceSetting -->
 
 ### Examples
 
@@ -69,24 +77,28 @@ Get-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent"
 
 Updates a service setting value. Read-only settings cannot be modified; attempting to do so produces a non-terminating error. Each change creates an audit activity. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
+<!-- BEGIN GENERATED: Set-JIMServiceSetting -->
 ### Syntax
 
 ```powershell
-Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-PassThru]
-    [-WhatIf] [-Confirm]
+Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes (Position 0) | | Dot-notation setting key to update |
-| `Value` | `string` | Yes (Position 1) | | New value for the setting. Accepts null or empty strings. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated setting object |
+| `Key` | `string` | Yes |  | The key of the setting to change, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. |
+| `Value` | `string` | Yes |  | The new value, as a string. Can be given by position, as the second argument. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the setting's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the setting as updated. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated service setting object. Otherwise, no output.
+With `-PassThru`, the setting as updated; otherwise nothing.
+
+Properties as under [Get-JIMServiceSetting](#get-jimservicesetting).
+<!-- END GENERATED: Set-JIMServiceSetting -->
 
 ### Examples
 
@@ -118,6 +130,7 @@ Set-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent" -Val
 
 Reverts a service setting to its default value by clearing the administrator override. Read-only settings cannot be reverted; attempting to do so produces a non-terminating error. Each reset creates an audit activity. Supports `ShouldProcess` (Medium impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
+<!-- BEGIN GENERATED: Reset-JIMServiceSetting -->
 ### Syntax
 
 ```powershell
@@ -128,13 +141,16 @@ Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru] [-W
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes (Position 0) | | Dot-notation setting key to reset. Accepts pipeline input by property name. |
-| `ChangeReason` | `string` | No | | Optional reason for the revert, recorded against the setting's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the setting object after the reset |
+| `Key` | `string` | Yes |  | The key of the setting to revert, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. Accepts pipeline input by property name. |
+| `ChangeReason` | `string` | No |  | Optional reason for the revert, recorded on the audit Activity and shown in the setting's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the setting as reverted. |
 
 ### Output
 
-When `-PassThru` is specified, returns the service setting object with its restored default value. Otherwise, no output.
+With `-PassThru`, the setting as reverted; otherwise nothing.
+
+Properties as under [Get-JIMServiceSetting](#get-jimservicesetting).
+<!-- END GENERATED: Reset-JIMServiceSetting -->
 
 ### Examples
 

@@ -4,6 +4,7 @@
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Utilities;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -31,10 +32,10 @@ public class HealthController(JimApplication application) : ControllerBase
     /// </summary>
     /// <returns>Health status and timestamp.</returns>
     [HttpGet(Name = "GetHealth")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HealthStatusResponse), StatusCodes.Status200OK)]
     public IActionResult Get()
     {
-        return Ok(new { status = "healthy", timestamp = DateTime.UtcNow });
+        return Ok(new HealthStatusResponse { Status = "healthy", Timestamp = DateTime.UtcNow });
     }
 
     /// <summary>
@@ -47,7 +48,7 @@ public class HealthController(JimApplication application) : ControllerBase
     /// </remarks>
     /// <returns>Readiness status and timestamp.</returns>
     [HttpGet("ready", Name = "GetHealthReady")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HealthStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ReadyAsync()
     {
@@ -65,11 +66,7 @@ public class HealthController(JimApplication application) : ControllerBase
                 });
             }
 
-            return Ok(new
-            {
-                status = "ready",
-                timestamp = DateTime.UtcNow
-            });
+            return Ok(new HealthStatusResponse { Status = "ready", Timestamp = DateTime.UtcNow });
         }
         catch (Exception ex)
         {
@@ -92,10 +89,10 @@ public class HealthController(JimApplication application) : ControllerBase
     /// </remarks>
     /// <returns>Liveness status and timestamp.</returns>
     [HttpGet("live", Name = "GetHealthLive")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HealthStatusResponse), StatusCodes.Status200OK)]
     public IActionResult Live()
     {
-        return Ok(new { status = "alive", timestamp = DateTime.UtcNow });
+        return Ok(new HealthStatusResponse { Status = "alive", Timestamp = DateTime.UtcNow });
     }
 
     /// <summary>
@@ -103,9 +100,9 @@ public class HealthController(JimApplication application) : ControllerBase
     /// </summary>
     /// <returns>Product name and version string.</returns>
     [HttpGet("version", Name = "GetHealthVersion")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(VersionResponse), StatusCodes.Status200OK)]
     public IActionResult Version()
     {
-        return Ok(new { product = "JIM", version = JimVersion.Current });
+        return Ok(new VersionResponse { Product = "JIM", Version = JimVersion.Current });
     }
 }

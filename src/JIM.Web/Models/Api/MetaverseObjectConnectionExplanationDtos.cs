@@ -136,6 +136,12 @@ public class JoinRecordDto
 
     public Guid? RunProfileExecutionItemId { get; set; }
 
+    /// <summary>The Object Matching Rule that found the match, for a join made by matching; null when not recorded or since deleted.</summary>
+    public int? ObjectMatchingRuleId { get; set; }
+
+    /// <summary>What a join made by matching matched on, as recorded when it was made.</summary>
+    public string? MatchValue { get; set; }
+
     public static JoinRecordDto FromModel(JoinRecord model) => new()
     {
         JoinType = model.JoinType,
@@ -146,7 +152,9 @@ public class JoinRecordDto
         Source = model.Source,
         Description = model.Description,
         ActivityId = model.ActivityId,
-        RunProfileExecutionItemId = model.RunProfileExecutionItemId
+        RunProfileExecutionItemId = model.RunProfileExecutionItemId,
+        ObjectMatchingRuleId = model.ObjectMatchingRuleId,
+        MatchValue = model.MatchValue
     };
 }
 
@@ -293,8 +301,23 @@ public class ScopingCriterionExplanationDto
     /// <summary>What the object held, for example "is Engineering" or "has no value".</summary>
     public string ActualDescription { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The expression the criterion compares in place of an attribute; null for an attribute criterion. Its computed
+    /// value is in Actual, compared as AttributeType.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>Each attribute an expression criterion read, with the values the object held for it; empty otherwise.</summary>
+    public List<ScopingExpressionInputExplanationDto> ExpressionInputs { get; set; } = [];
+
+    /// <summary>Why an expression criterion could not be evaluated for the object; null otherwise.</summary>
+    public string? FailureReason { get; set; }
+
     public static ScopingCriterionExplanationDto FromModel(ScopingCriterionExplanation model) => new()
     {
+        Expression = model.Expression,
+        ExpressionInputs = model.ExpressionInputs.Select(ScopingExpressionInputExplanationDto.FromModel).ToList(),
+        FailureReason = model.FailureReason,
         Path = model.Path,
         Met = model.Outcome == ScopingCriterionOutcome.Met,
         Outcome = model.Outcome,
@@ -312,6 +335,35 @@ public class ScopingCriterionExplanationDto
         ValueCount = model.ValueCount,
         Description = model.Description,
         ActualDescription = model.ActualDescription
+    };
+}
+
+/// <summary>
+/// One attribute an expression scoping criterion read, and the values the object held for it.
+/// </summary>
+public class ScopingExpressionInputExplanationDto
+{
+    /// <summary>How the expression reads the attribute, for example cs["department"].</summary>
+    public string Accessor { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The values the object held, rendered; empty when it held none or they are withheld (Masked). At most ten are
+    /// listed.
+    /// </summary>
+    public List<string> Values { get; set; } = [];
+
+    /// <summary>How many values the object held for the attribute, whether or not they are listed.</summary>
+    public int ValueCount { get; set; }
+
+    /// <summary>True when the values are withheld because the attribute may hold a credential.</summary>
+    public bool Masked { get; set; }
+
+    public static ScopingExpressionInputExplanationDto FromModel(ScopingExpressionInputExplanation model) => new()
+    {
+        Accessor = model.Accessor,
+        Values = [.. model.Values],
+        ValueCount = model.ValueCount,
+        Masked = model.Masked
     };
 }
 

@@ -4,41 +4,62 @@
 function Set-JIMMatchingRule {
     <#
     .SYNOPSIS
-        Updates an existing Object Matching Rule in JIM.
+        Changes an Object Matching Rule on a Connected System Object Type (simple mode).
 
     .DESCRIPTION
-        Updates an Object Matching Rule for a Connected System.
-        You can update the order, target Metaverse attribute, or source attributes.
+        Changes an Object Matching Rule on a Connected System Object Type. What you leave out stays as it is.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER Id
-        The unique identifier of the Matching Rule to update.
+        The ID of the rule to change.
 
     .PARAMETER Order
-        The new evaluation order for this rule (lower values are evaluated first).
+        Where the rule comes in the order JIM tries the rules, lowest first.
 
     .PARAMETER MetaverseObjectTypeId
-        The new Metaverse Object Type ID to search when evaluating this rule.
+        The ID of the Metaverse Object Type whose objects the rule searches.
 
     .PARAMETER TargetMetaverseAttributeId
-        The new Metaverse attribute ID to match against.
+        The ID of the Metaverse attribute the source is matched against.
 
     .PARAMETER SourceAttributeId
-        The new Connected System attribute ID to use as the source.
-        Note: This replaces all existing sources with a single new source.
+        Replaces the rule's source with this Connected System attribute. Cannot be used with -SourceExpression; give
+        neither to leave the source as it is.
+
+    .PARAMETER SourceExpression
+        Replaces the rule's source with an expression computing the value to match on: for example '"E" +
+        Trim(cs["employeeId"])'. It reads the Connected System Object only, through cs["attributeName"]. Its result
+        is converted to the type of the rule's Metaverse attribute, and a list of text values is matched value by
+        value. JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or one
+        the Object Type does not have, or calls a function that returns a different value each time. Cannot be used
+        with -SourceAttributeId.
 
     .PARAMETER CaseSensitive
-        Whether the matching should be case-sensitive.
-        When false (default), 'emp123' matches 'EMP123'.
-        When true, 'emp123' does NOT match 'EMP123'.
+        Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. Omit it to leave it as
+        it is.
+
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
 
     .PARAMETER PassThru
-        If specified, returns the updated Matching Rule object.
+        Returns the rule as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Matching Rule object.
+        With -PassThru, the rule as changed; otherwise nothing.
+
+        JIM.ObjectTypeMatchingRule
+        ConnectedSystemId (int): The ID of the Connected System the rule belongs to, so the rule can be piped to
+            Set-JIMMatchingRule and Remove-JIMMatchingRule.
 
     .EXAMPLE
         Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Order 0
@@ -51,6 +72,11 @@ function Set-JIMMatchingRule {
         Updates the target MV attribute and returns the updated rule.
 
     .EXAMPLE
+        Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -SourceExpression '"E" + Trim(cs["employeeId"])'
+
+        Replaces the rule's source attribute with an expression that adds the "E" prefix the Metaverse holds.
+
+    .EXAMPLE
         Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5 | Set-JIMMatchingRule -Order 2
 
         Updates the order using pipeline input.
@@ -60,8 +86,8 @@ function Set-JIMMatchingRule {
         New-JIMMatchingRule
         Remove-JIMMatchingRule
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'NoSource')]
+    [OutputType('JIM.ObjectTypeMatchingRule')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
@@ -78,11 +104,20 @@ function Set-JIMMatchingRule {
         [Parameter()]
         [int]$TargetMetaverseAttributeId,
 
-        [Parameter()]
+        [Parameter(Mandatory, ParameterSetName = 'Attribute')]
         [int]$SourceAttributeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'Expression')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+        [string]$SourceExpression,
 
         [Parameter()]
         [bool]$CaseSensitive,
+
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
 
         [switch]$PassThru
     )
@@ -108,13 +143,13 @@ function Set-JIMMatchingRule {
             $body.targetMetaverseAttributeId = $TargetMetaverseAttributeId
         }
 
-        if ($PSBoundParameters.ContainsKey('SourceAttributeId')) {
-            $body.sources = @(
-                @{
-                    order = 0
-                    connectedSystemAttributeId = $SourceAttributeId
-                }
-            )
+        # A source is an attribute or an expression, never both (#2052); the parameter sets enforce that, and
+        # giving neither leaves the rule's source as it is.
+        if ($PSCmdlet.ParameterSetName -eq 'Attribute') {
+            $body.sources = @(@{ order = 0; connectedSystemAttributeId = $SourceAttributeId })
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'Expression') {
+            $body.sources = @(@{ order = 0; expression = $SourceExpression })
         }
 
         if ($PSBoundParameters.ContainsKey('CaseSensitive')) {
@@ -130,6 +165,9 @@ function Set-JIMMatchingRule {
             Write-Verbose "Updating Matching Rule ID: $Id for Connected System ID: $ConnectedSystemId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/matching-rules/$Id" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Matching Rule ID: $Id"

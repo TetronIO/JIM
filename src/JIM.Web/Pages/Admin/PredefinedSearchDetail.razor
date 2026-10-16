@@ -15,7 +15,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span>
+    <PageInfo Title="Predefined Search" DocsPage="configuration/predefined-searches.md">
+        A Predefined Search is a saved search over one Metaverse Object Type: the criteria that choose its objects, and the attributes it shows for each.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_predefinedSearch != null)
@@ -155,7 +159,7 @@
                                Required="true"
                                Class="mt-5"
                                Variant="Variant.Outlined">
-                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type))
+                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type, CriterionContext.PredefinedSearch))
                         {
                             <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
                         }
@@ -220,11 +224,11 @@
 
         <div class="mt-4">
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Color="Color.Primary" Class="me-3"
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Class="me-3"
                            OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria</MudButton>
             </MudTooltip>
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined" Color="Color.Primary"
+                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined"
                            OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria Group</MudButton>
             </MudTooltip>
         </div>
@@ -261,7 +265,10 @@
                     <ChildContent>@criteria.GetAttributeName()</ChildContent>
                 </MudChip>
                 <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
-                <MudChip T="string">@criteria.ToString()</MudChip>
+                @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
+                {
+                    <MudChip T="string">@criteria.ToString()</MudChip>
+                }
                 <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Edit criteria")" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
                                    aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" Disabled="builtIn" />
@@ -460,6 +467,7 @@
             return;
 
         _newCriterion.MetaverseAttributeId = _newCriterionAttribute.Id;
+        CriterionValidation.ClearValues(_newCriterion);
         var editing = _editingCriterionId.HasValue;
         try
         {
@@ -501,22 +509,8 @@
     {
         if (_newCriterion == null || _newCriterionAttribute == null)
             return true;
-        if (_newCriterion.ComparisonType == SearchComparisonType.NotSet)
-            return true;
-
-        return _newCriterionAttribute.Type switch
-        {
-            AttributeDataType.Text => string.IsNullOrEmpty(_newCriterion.StringValue),
-            AttributeDataType.Guid => !_newCriterion.GuidValue.HasValue,
-            AttributeDataType.Number => !_newCriterion.IntValue.HasValue,
-            AttributeDataType.LongNumber => !_newCriterion.LongValue.HasValue,
-            AttributeDataType.Decimal => !_newCriterion.DecimalValue.HasValue,
-            AttributeDataType.DateTime => _newCriterion.ValueMode == DateCriteriaValueMode.Relative
-                ? !(_newCriterion.RelativeCount.HasValue && _newCriterion.RelativeUnit.HasValue && _newCriterion.RelativeDirection.HasValue)
-                : !_newCriterion.DateTimeValue.HasValue,
-            AttributeDataType.Boolean => !_newCriterion.BoolValue.HasValue,
-            _ => true
-        };
+        // The same rule the REST API applies (#2053).
+        return CriterionValidation.Validate(_newCriterion, _newCriterionAttribute.Type, CriterionContext.PredefinedSearch, _newCriterionAttribute.Name) != null;
     }
 
     /// <summary>

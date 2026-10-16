@@ -30,18 +30,22 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         that would fail, not one that would succeed as shown.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System that owns the object.
+        The Connected System that owns the object.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object to preview.
+        The Connected System Object to preview.
 
     .OUTPUTS
-        PSCustomObject with OutcomeTree (the raw, recursive outcome tree), Outcomes (the same
-        tree flattened by ConvertTo-JIMSyncPreviewOutcomeRows into a depth-ordered list for
-        Format-Table), Inbound (the inbound summary: would the object project or join, and
-        what attribute flows would result), ProposedExports (the Pending Exports a real
-        synchronisation would stage), Errors, Warnings, HasBlockingErrors and
-        AffectedSyncRules.
+        What synchronising the object would do, were the real synchronisation to run now, with the outcome tree
+        flattened beside it. Check HasBlockingErrors first: a preview that surfaced a blocking error describes a
+        synchronisation that would fail.
+
+        JIM.SyncPreview
+        Outcomes (object[]): The outcome tree flattened in its own display order, for Format-Table: one row per
+            outcome, with Depth, OutcomeType, Target (its description, or its id), SyncRule (its name, or its id),
+            DetailCount, DetailMessage and StagedChangeType. A Joined row made by matching also carries
+            ObjectMatchingRule (what the rule compares, or its id) and MatchedValue (the value the join would match
+            on); both are empty on every other row.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id "3934ff12-4996-42c0-a396-41e17ac47af7"
@@ -59,7 +63,7 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         Get-JIMConnectedSystemObject
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncPreview')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
@@ -80,15 +84,8 @@ function Get-JIMConnectedSystemObjectSyncPreview {
             return
         }
 
-        [PSCustomObject]@{
-            OutcomeTree       = $preview.OutcomeTree
-            Outcomes          = @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes $preview.OutcomeTree)
-            Inbound           = $preview.Inbound
-            ProposedExports   = $preview.ProposedExports
-            Errors            = $preview.Errors
-            Warnings          = $preview.Warnings
-            HasBlockingErrors = $preview.HasBlockingErrors
-            AffectedSyncRules = $preview.AffectedSyncRules
-        }
+        # The API's own object, so nothing it reports is dropped, with the outcome tree flattened beside it for
+        # Format-Table. Rebuilding it from a list of properties lost GeneratedValueProbes when the API added it.
+        $preview | Add-Member -NotePropertyName 'Outcomes' -NotePropertyValue @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes $preview.OutcomeTree) -Force -PassThru
     }
 }

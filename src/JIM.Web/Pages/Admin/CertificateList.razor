@@ -14,7 +14,7 @@
 
 <PageTitle>Trusted Certificates</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Trusted Certificates
-    <PageInfo Title="Trusted Certificates">
+    <PageInfo Title="Trusted Certificates" DocsPage="configuration/certificates.md">
         Manage trusted CA certificates used by Connectors for secure communications (LDAPS, HTTPS, etc.). Certificates can be uploaded directly or referenced from the connector-files mount.
     </PageInfo>
 </MudText>
@@ -32,7 +32,7 @@
     <ToolBarExtras>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload"
                    DropShadow="false" Class="me-2">Upload Certificate</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
+        <MudButton Variant="Variant.Outlined" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
                    DropShadow="false">Reference File Path</MudButton>
     </ToolBarExtras>
     <Columns>
@@ -152,7 +152,7 @@
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                <MudButton Variant="Variant.Outlined"
                     StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
                     OnClick="@context.OpenFilePickerAsync">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")

@@ -71,6 +71,12 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// The identifiers of every Metaverse Object of one type, for a caller that loads them in batches behind this read
+    /// (Npgsql allows one command per connection, so streaming the objects while writing is not an option).
+    /// </summary>
+    public Task<List<Guid>> GetMetaverseObjectIdsOfTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Batch-loads Metaverse Objects by ID with their Type and attribute values, TRACKED, for callers that
     /// mutate and persist the loaded graph in the same context (#1537's deletion recall). The no-tracking
     /// sibling above is unusable there: without identity resolution it materialises duplicate instances of
@@ -164,6 +170,21 @@ public interface IMetaverseRepository
     public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
+
+    /// <summary>
+    /// Retrieves Metaverse Objects by id with what names them and nothing else (#2100): their type and only their
+    /// naming attribute values (<see cref="JIM.Models.Core.ObjectNaming.MetaverseNameAttributes"/>), so naming a Group
+    /// never loads its members as <see cref="GetMetaverseObjectHeaderAsync"/> would.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The objects to read.</param>
+    /// <returns>The objects found, untracked; an id that no longer exists is absent.</returns>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// The Metaverse Object Type plural name of each given Metaverse Object that still exists, keyed by its id (#2052):
+    /// what tells whether it exists, and what a link to it needs. An id that no longer exists is absent.
+    /// </summary>
+    public Task<Dictionary<Guid, string>> GetExistingMetaverseObjectTypePluralNamesAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
     /// Gets every value a Metaverse Object holds for the given attributes (#348), uncapped, so scoping can be explained
@@ -353,18 +374,21 @@ public interface IMetaverseRepository
         string? filterAttributeValue = null);
 
     /// <summary>
-    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
-    /// This is to help the process of joining a CSO to an MVO.
+    /// Finds the distinct Metaverse Objects of a type that hold any of <paramref name="values"/> for an attribute: the
+    /// lookup behind an Object Matching Rule's import join (#2052). One query covers every value, so several values
+    /// that all belong to one Metaverse Object are one match, and values belonging to different ones are several.
     /// </summary>
-    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
-    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
-    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule);
+    /// <param name="valueType">The attribute's data type. The values are typed accordingly: <see cref="string"/>,
+    /// <see cref="int"/>, <see cref="long"/>, <see cref="decimal"/> or <see cref="Guid"/>.</param>
+    /// <param name="caseSensitive">For Text, whether a value must match case exactly.</param>
+    /// <param name="take">The most ids to return, in id order.</param>
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take);
+
+    /// <summary>
+    /// How many distinct Metaverse Objects <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> would find with no
+    /// limit (#2052).
+    /// </summary>
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive);
 
     /// <summary>
     /// Deletes a Metaverse Object from the database.
@@ -467,13 +491,15 @@ public interface IMetaverseRepository
     /// attribute it to) and the decision-time policy snapshot. MVOs already pending deletion are skipped so
     /// an earlier decision's markers are never overwritten.
     /// </summary>
-    /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
+    /// <param name="markings">Each Metaverse Object to mark, with the Run Profile Execution Item recording its
+    /// marking. The item is recorded on the object so the housekeeping deletion that follows can name the run that
+    /// scheduled it (#1811).</param>
     /// <param name="initiatedByType">The initiator type of the run that found the object had no connector remaining.</param>
     /// <param name="initiatedById">The initiator id, when the initiator is a Person.</param>
     /// <param name="initiatedByName">The initiator's display name snapshot.</param>
     /// <param name="deletionPolicySnapshotJson">The serialised decision-time MvoDeletionPolicySnapshot, or null when the policy facts could not be determined.</param>
     /// <returns>The number of MVOs updated.</returns>
-    public Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IEnumerable<Guid> mvoIds, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson);
+    public Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IReadOnlyCollection<(Guid MetaverseObjectId, Guid SchedulingItemId)> markings, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson);
 
     /// <summary>
     /// Pages through Projected Metaverse Objects that hold no joined Connected System Object at all, are not
@@ -652,6 +678,14 @@ public interface IMetaverseRepository
     /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
     /// <returns>The Deleted change record, or null when the object was not deleted or predates change tracking.</returns>
     Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId);
+
+    /// <summary>
+    /// As <see cref="GetDeletedMvoChangeAsync"/>, for several deleted objects in one read (#2100): each object's latest
+    /// deletion record, with the deleted object's type.
+    /// </summary>
+    /// <param name="deletedMetaverseObjectIds">The ids the objects had before deletion.</param>
+    /// <returns>One record per id that has one; ids with none are absent.</returns>
+    Task<List<MetaverseObjectChange>> GetDeletedMvoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedMetaverseObjectIds);
 
     /// <summary>
     /// Quantifies the Metaverse attribute values a Synchronisation Rule currently contributes (#1537):

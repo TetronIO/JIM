@@ -14,11 +14,10 @@ function Get-JIMVersion {
         Connect-JIM session.
 
     .PARAMETER Url
-        Base URL of the JIM instance, e.g. "https://jim.example.com".
-        If omitted, uses the URL from the current Connect-JIM session.
+        The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted.
 
     .OUTPUTS
-        PSCustomObject with product and version properties.
+        One object with Product and Version.
 
     .EXAMPLE
         Get-JIMVersion -Url "https://jim.example.com"
@@ -27,7 +26,7 @@ function Get-JIMVersion {
         Get-JIMVersion
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.VersionResponse')]
     param(
         [Parameter(Position = 0)]
         [string]$Url

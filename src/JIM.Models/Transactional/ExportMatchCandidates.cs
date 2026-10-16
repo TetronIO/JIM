@@ -17,7 +17,7 @@ namespace JIM.Models.Transactional;
 /// and boxed <see cref="int"/>, <see cref="long"/>, <see cref="decimal"/> and <see cref="Guid"/> values
 /// compare by their own value-type equality (for example, a boxed <c>5.0m</c> and a boxed <c>5.00m</c>
 /// compare equal, matching PostgreSQL's scale-insensitive numeric equality). Callers must key with the
-/// same type <see cref="ExportMatchingValue"/> resolved, never with a differently-typed equivalent value.
+/// same type <c>ExportMatchingValue</c> resolved, never with a differently-typed equivalent value.
 /// </para>
 /// </summary>
 public sealed class ExportMatchCandidates

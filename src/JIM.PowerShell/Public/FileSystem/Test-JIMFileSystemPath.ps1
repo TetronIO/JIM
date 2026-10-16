@@ -14,7 +14,7 @@ function Test-JIMFileSystemPath {
         The path to validate.
 
     .OUTPUTS
-        Boolean. $true if the path is within an allowed root, $false otherwise.
+        $true if the path is within an allowed root directory; otherwise $false.
 
     .EXAMPLE
         Test-JIMFileSystemPath -Path "/data/imports/users.csv"

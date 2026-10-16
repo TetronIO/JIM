@@ -33,7 +33,7 @@ public class PredefinedSearchDetailDto
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// Whether the search is currently visible to end users.
+    /// Whether end users can see and run the search.
     /// </summary>
     public bool IsEnabled { get; set; }
 

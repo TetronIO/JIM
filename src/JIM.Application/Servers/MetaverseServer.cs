@@ -343,6 +343,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
+        EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -397,6 +398,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+        EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -627,8 +629,29 @@ public partial class MetaverseServer
         if (!await Application.Repository.Metaverse.IsMetaverseAttributeNameUniqueAsync(newName, attributeId))
             throw new MetaverseAttributeNameConflictException(newName);
 
+        // An Expression reads an attribute by name, so a rename leaves every Expression naming the old one reading
+        // nothing; it is refused, never rewritten. Names ignore case in Expressions, so a case-only rename breaks none.
+        if (!string.Equals(attribute.Name, newName, StringComparison.OrdinalIgnoreCase))
+        {
+            var readers = await GetMetaverseAttributeExpressionReadersAsync(attribute.Id, attribute.Name);
+            if (readers.Count > 0)
+                throw new AttributeReadByConfigurationException(
+                    $"Metaverse Attribute '{attribute.Name}' cannot be renamed while Expressions read it by name. Change these first:", readers);
+        }
+
         attribute.Name = newName;
         await auditedUpdateAsync(attribute);
+    }
+
+    /// <summary>
+    /// Returns the Expressions that read a Metaverse Attribute by name (#2265): what a rename would leave reading
+    /// nothing, and so what refuses one. Scoping Criteria comparing the attribute directly follow a rename and are
+    /// not included.
+    /// </summary>
+    public async Task<IReadOnlyList<AttributeReader>> GetMetaverseAttributeExpressionReadersAsync(int attributeId, string attributeName)
+    {
+        var index = await Application.ConnectedSystems.GetAttributeReaderIndexAsync();
+        return index.ForMetaverseAttribute(attributeId, attributeName, expressionsOnly: true);
     }
 
     /// <summary>
@@ -762,9 +785,11 @@ public partial class MetaverseServer
 
         var valueCounts = await Application.Repository.Metaverse.GetAttributeValueObjectCountsByTypeAsync(attribute.Id);
         var references = await Application.Repository.Metaverse.GetAttributeReferencesAsync(attribute.Id);
+        var readers = (await Application.ConnectedSystems.GetAttributeReaderIndexAsync()).ForMetaverseAttribute(attribute.Id, attribute.Name);
 
         return new AttributeDeletionImpact
         {
+            Readers = readers.ToList(),
             AttributeId = attribute.Id,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
@@ -800,8 +825,10 @@ public partial class MetaverseServer
 
         var impact = await EvaluateAttributeDeletionAsync(attribute);
 
-        // Stored values are the only hard block. Refuse without making any change; the caller surfaces the counts.
-        if (impact.BlockedByValues)
+        // Stored values and configuration reading the attribute refuse the delete without making any change; the
+        // caller surfaces the counts and names each reader. A reader is never cascade-removed (#2265): a Scoping
+        // Criterion removed from under a Synchronisation Rule changes which objects the rule manages.
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return impact;
 
         Log.Debug("DeleteMetaverseAttributeWithCascadeAsync() removing {Attribute} with {ReferenceCount} reference(s)", attribute.Name, impact.References.Count);
@@ -877,9 +904,11 @@ public partial class MetaverseServer
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false);
         var objectsWithValues = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attributeId, metaverseObjectTypeId);
         var references = await Application.Repository.Metaverse.GetAttributeReferencesForObjectTypeAsync(attributeId, metaverseObjectTypeId);
+        var readers = (await Application.ConnectedSystems.GetAttributeReaderIndexAsync()).ForMetaverseAttribute(attributeId, attribute.Name, metaverseObjectTypeId);
 
         return new AttributeUnassignImpact
         {
+            Readers = readers.ToList(),
             AttributeId = attributeId,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
@@ -917,8 +946,9 @@ public partial class MetaverseServer
         if (impact.BuiltIn)
             throw new InvalidOperationException($"Cannot unassign built-in Metaverse Attribute '{impact.AttributeName}'.");
 
-        // Nothing bound to remove, or blocked by stored values: make no change and report via the impact.
-        if (!impact.WasBound || impact.BlockedByValues)
+        // Nothing bound to remove, or blocked by stored values or by configuration reading the attribute on this
+        // type: make no change and report via the impact.
+        if (!impact.WasBound || impact.BlockedByValues || impact.BlockedByReaders)
             return impact;
 
         var parent = new Activity
@@ -965,10 +995,12 @@ public partial class MetaverseServer
     }
 
     /// <summary>
-    /// Evaluates the impact of changing a Metaverse Attribute's data type or plurality without making any change.
-    /// Any stored value across the Metaverse hard-blocks the change.
+    /// Evaluates the impact of changing a Metaverse Attribute to a proposed data type and plurality without making any
+    /// change. While any Metaverse Object holds a value, only a lossless widening (same type, single-valued to
+    /// multi-valued) is allowed; <see cref="AttributeSchemaChangeImpact.BlockedByValues"/> reports any other change.
+    /// Proposing the current type and plurality is no change, and is never blocked.
     /// </summary>
-    public async Task<AttributeSchemaChangeImpact> EvaluateAttributeSchemaChangeAsync(MetaverseAttribute attribute)
+    public async Task<AttributeSchemaChangeImpact> EvaluateAttributeSchemaChangeAsync(MetaverseAttribute attribute, AttributeDataType proposedType, AttributePlurality proposedPlurality)
     {
         ArgumentNullException.ThrowIfNull(attribute);
 
@@ -978,16 +1010,22 @@ public partial class MetaverseServer
             AttributeId = attribute.Id,
             AttributeName = attribute.Name,
             BuiltIn = attribute.BuiltIn,
+            CurrentType = attribute.Type,
+            CurrentPlurality = attribute.AttributePlurality,
+            ProposedType = proposedType,
+            ProposedPlurality = proposedPlurality,
             TotalObjectsWithValues = total
         };
     }
 
     /// <summary>
-    /// Changes a custom Metaverse Attribute's data type and/or plurality through the audited path. Refused (no change)
-    /// while any Metaverse Object holds a stored value; the returned impact reports the block. Built-in attributes
-    /// cannot be changed.
+    /// Changes a custom Metaverse Attribute's data type and/or plurality through the audited path. While any Metaverse
+    /// Object holds a stored value, only a lossless widening (same type, single-valued to multi-valued) is applied;
+    /// any other change is refused with no change made, and the returned impact reports the block. Requesting the
+    /// attribute's current type and plurality is a no-op: it succeeds, writes nothing and records no Activity or change
+    /// history. Built-in attributes cannot be changed.
     /// </summary>
-    /// <returns>The evaluated impact; <see cref="AttributeSchemaChangeImpact.Applied"/> is true when the change was applied.</returns>
+    /// <returns>The evaluated impact; <see cref="AttributeSchemaChangeImpact.Applied"/> is true when the requested schema is in effect.</returns>
     public Task<AttributeSchemaChangeImpact> ChangeMetaverseAttributeSchemaAsync(int attributeId, AttributeDataType newType, AttributePlurality newPlurality, MetaverseObject? initiatedBy, string? changeReason = null) =>
         ChangeMetaverseAttributeSchemaCoreAsync(attributeId, newType, newPlurality, attribute => UpdateMetaverseAttributeAsync(attribute, initiatedBy, changeReason));
 
@@ -1005,11 +1043,26 @@ public partial class MetaverseServer
         if (attribute.BuiltIn)
             throw new InvalidOperationException($"Cannot change the type or plurality of built-in Metaverse Attribute '{attribute.Name}'.");
 
-        var impact = await EvaluateAttributeSchemaChangeAsync(attribute);
+        EnsureAttributeCapability(newType, newPlurality);
 
-        // Stored values hard-block a type/plurality change; make no change and report via the impact.
+        var impact = await EvaluateAttributeSchemaChangeAsync(attribute, newType, newPlurality);
+
+        // The requested schema is already in effect: report success without writing or auditing a change that did not
+        // happen. This follows the capability check above, so a no-op cannot wave through a multi-valued Boolean.
+        if (impact.IsUnchanged)
+        {
+            impact.Applied = true;
+            return impact;
+        }
+
+        // Stored values block every change except a lossless widening (same type, single-valued to multi-valued);
+        // make no change and report the refusal via the impact.
         if (impact.BlockedByValues)
             return impact;
+
+        if (impact.TotalObjectsWithValues > 0)
+            Log.Information("ChangeMetaverseAttributeSchemaAsync: widening Metaverse Attribute {AttributeId} to multi-valued while {ObjectCount} Metaverse Object(s) hold values",
+                attribute.Id, impact.TotalObjectsWithValues);
 
         attribute.Type = newType;
         attribute.AttributePlurality = newPlurality;
@@ -1017,6 +1070,16 @@ public partial class MetaverseServer
 
         impact.Applied = true;
         return impact;
+    }
+
+    /// <summary>
+    /// Refuses a data type and plurality pair the type cannot hold (a multi-valued Boolean), before anything is created,
+    /// changed or audited. The Metaverse schema obeys the same capability rule as the Connected System schema.
+    /// </summary>
+    private static void EnsureAttributeCapability(AttributeDataType type, AttributePlurality plurality)
+    {
+        if (!AttributeDataTypeCapabilities.IsPermitted(type, plurality))
+            throw new UnsupportedAttributePluralityException(type, plurality);
     }
 
     /// <summary>
@@ -1747,26 +1810,6 @@ public partial class MetaverseServer
     }
 
     /// <summary>
-    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
-    /// This is to help the process of joining a CSO to an MVO.
-    /// </summary>
-    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
-    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
-    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
-    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-    {
-        if (objectMatchingRule.Sources == null || objectMatchingRule.Sources.Count == 0)
-            throw new ArgumentOutOfRangeException($"{nameof(objectMatchingRule)}.Sources is null or empty. Cannot continue.");
-
-        return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
-    }
-
-    /// <summary>
     /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
     /// Supports server-side search and pagination for large multi-valued attributes.
     /// </summary>
@@ -1924,11 +1967,14 @@ public partial class MetaverseServer
                 };
                 var policySnapshotJson = snapshot.ToJson();
 
-                var groupMvoIds = group.Select(mvo => mvo.Id).ToList();
+                // Each object is marked with the item recording its marking, so the housekeeping deletion that
+                // follows can name the run that scheduled it (#1811).
+                var groupItems = group.Select(mvo => (Mvo: mvo, Item: BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson))).ToList();
                 markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
-                    groupMvoIds, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
+                    groupItems.Select(pair => (pair.Mvo.Id, pair.Item.Id)).ToList(),
+                    activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
 
-                executionItems.AddRange(group.Select(mvo => BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson)));
+                executionItems.AddRange(groupItems.Select(pair => pair.Item));
             }
 
             if (executionItems.Count > 0)

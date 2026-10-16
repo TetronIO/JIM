@@ -30,14 +30,24 @@ public class ConfigurationChangePreviewResponse
     /// <summary>Why the preview failed, when it did. Never contains attribute values.</summary>
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Delta rows evaluated so far, and the number expected; the preview's progress.</summary>
+    /// <summary>How many drill-down rows the preview has evaluated so far; its progress.</summary>
     public int ObjectsProcessed { get; set; }
 
+    /// <summary>How many drill-down rows the preview expects to evaluate.</summary>
     public int ObjectsToProcess { get; set; }
 
+    /// <summary>How far stage 1, validating the proposal itself, has got.</summary>
     public ConfigurationChangePreviewStageStatus ValidationStatus { get; set; }
+
+    /// <summary>How far stage 2, counting the objects each transition would affect, has got.</summary>
     public ConfigurationChangePreviewStageStatus ImpactCountsStatus { get; set; }
+
+    /// <summary>How far stage 3, grouping the affected objects into the summary groups, has got.</summary>
     public ConfigurationChangePreviewStageStatus SummaryStatus { get; set; }
+
+    /// <summary>
+    /// How far stage 4, keeping the drill-down rows, has got. <c>NotApplicable</c> for a preview that only counts.
+    /// </summary>
     public ConfigurationChangePreviewStageStatus DeltasStatus { get; set; }
 
     /// <summary>True when every stage that was going to run has finished successfully.</summary>
@@ -53,17 +63,18 @@ public class ConfigurationChangePreviewResponse
     public List<PreviewValidationFinding> ValidationFindings { get; set; } = [];
 
     /// <summary>
-    /// Stage 2's per-transition counts, from set-based SQL over the whole population. Distinct from the summary
-    /// groups below, which come from the evaluated delta stream; an adapter may produce one and not the other.
+    /// Stage 2's counts per transition, taken over every object the change could affect. Separate from the summary
+    /// groups, which come from evaluating each object; a preview may report one and not the other.
     /// </summary>
     public List<PreviewImpactCount> ImpactCounts { get; set; } = [];
 
     /// <summary>The summary groups, largest first. Counts here are exact even where drill-down rows were capped.</summary>
     public List<ConfigurationChangePreviewGroupResponse> Groups { get; set; } = [];
 
-    /// <summary>The affected population the adapter estimated before evaluation began.</summary>
+    /// <summary>How many objects the change was expected to touch, estimated before evaluation began.</summary>
     public int EstimatedAffectedObjects { get; set; }
 
+    /// <summary>How many drill-down rows the change was expected to produce, estimated before evaluation began.</summary>
     public long EstimatedDeltaRows { get; set; }
 
     /// <summary>
@@ -72,7 +83,7 @@ public class ConfigurationChangePreviewResponse
     /// </summary>
     public ConfigurationChangePreviewDeltaPersistence DeltaPersistence { get; set; }
 
-    /// <summary>Whether the evaluation ran in JIM.Worker. Diagnostic only; both paths produce identical results.</summary>
+    /// <summary>Whether the evaluation ran on the background worker service. Informational only; the result is the same either way.</summary>
     public bool DispatchedToWorker { get; set; }
 
     /// <summary>

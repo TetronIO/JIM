@@ -27,7 +27,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
-| `<PageInfo Title="Connector Space" Term="Term.ConnectorSpace">...</PageInfo>` | Saying what a page is for: the info button at the end of the page title | "Page descriptions" below |
+| `<PageInfo Title="Connector Space" DocsPage="configuration/connected-systems.md#the-connector-space" Term="Term.ConnectorSpace">...</PageInfo>` | Saying what a page is for, and linking the docs page that covers it: the info button at the end of the page title | "Page descriptions" below |
 | `<TermHint Term="Term.Projection" />` | Explaining a JIM term beside the label where an administrator first meets it | "Page descriptions" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
@@ -311,15 +311,17 @@ A single-sentence description needs none of this and renders unchanged. The site
 
 ## Page descriptions
 
-**What a page is for is said once, from a `<PageInfo />` info button at the end of the page title.** It is the last child of the title's `MudText`, it opens a popover on click, and it carries one to three plain sentences plus, where the page is about a glossary term (`Term="..."`), a link to that entry.
+**What a page is for is said once, from a `<PageInfo />` info button at the end of the page title.** It is the last child of the title's `MudText`, it opens a popover on click, and it carries one to three plain sentences, a **Documentation** link to the docs page that covers the page (`DocsPage="..."`) and, where the page is about a glossary term (`Term="..."`), a link to that entry.
 
 ```razor
 <MudText Typo="Typo.h3"><span>Connector Space:</span> <span class="mud-primary-text">@name</span>
-    <PageInfo Title="Connector Space" Term="Term.ConnectorSpace">
+    <PageInfo Title="Connector Space" DocsPage="configuration/connected-systems.md#the-connector-space" Term="Term.ConnectorSpace">
         The Connector Space holds this Connected System's Connected System Objects. ...
     </PageInfo>
 </MudText>
 ```
+
+- **Every routable page names its docs page, detail pages included.** `DocsPage` is the Markdown path under `docs/` with an optional heading anchor, never a URL: `DocsSite.PageUrl` turns it into the site's address, and naming the file is what lets COV-5 (`scripts/Test-DocsCoverage.ps1`, run on every pull request) fail the build when a page has none, or names a page or heading that does not exist. Where the page depends on what is shown, write an expression whose every choice is a string literal (`ConnectorDetail.razor` links each built-in Connector to its own page); COV-5 checks each literal and refuses an expression with none. A page with genuinely nothing to link (a landing page, a developer specimen, a feature not yet documented) goes in the `PortalPages` allow-list in `docs/.conformance/coverage.psd1` with its reason.
 
 - **Never describe a page with a dismissible alert under the breadcrumbs.** The Connector Space list did: it cost a band of every visit's first screen until someone closed it, reappeared on the next visit because nothing remembered the dismissal, and said much the same as the info button already in the title above it. An alert is for something the reader needs to notice now; a description is for a reader who goes looking.
 - `<TermHint />` is the same affordance for a **term** rather than a page: it sits beside a label (the "Project Users to the Metaverse?" switch, a tab's heading) and its wording comes from `TermDefinitions`, held verbatim in step with `docs/reference/glossary.md` by `GlossaryTermConsistencyTests`. A page title takes a `<PageInfo />`, whose words are the page's own.
@@ -382,13 +384,13 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - **Tab content spacing**: Whether `TabPanelsClass` needs its own top spacing depends on the first tab's content. If the tab's content starts flush (e.g. a bare `MudPaper`/`MudText` with no top margin), use `TabPanelsClass="pt-5"`. If the content already supplies its own top margin (e.g. a table with `Class="mt-3"`), use `TabPanelsClass="pa-0"` and let the content's own margin stand; do not stack both, it double-counts.
 
 ## Button emphasis
-- **At most one filled `Color.Primary` button per view** (a page as seen at once, or a dialog): its main action. Everything else is `Variant.Outlined`, or `Variant.Text` where lesser still. Lower emphasis by variant, never by switching to `Color.Secondary` or `Color.Default`. Full rule and worked examples: `engineering/DESIGN.md` > Buttons.
+- **Colour says what a button does; the variant says how much it matters.** `Color.Primary` is the view's main action and is always `Variant.Filled`: at most one per view (a page as seen at once, or a dialog), and none on a page with no main action. Every other action is `Variant.Outlined` in the default colour (pass no `Color`), or `Variant.Text` where lesser still. Never fill a default-colour button (it reads as disabled), and keep `Color.Secondary`/`Info`/`Success`/`Tertiary`/`Dark` off buttons. Full rule and worked examples: `engineering/DESIGN.md` > Buttons.
 - **Destructive:** `Variant.Outlined` + `Color.Error` on a page; `Variant.Filled` + `Color.Error` only as a dialog's confirming button.
-- **Row actions** repeated on every table row: `Variant.Text` + `Color.Primary`, `Size.Small`.
+- **Row actions** repeated on every table row: `Variant.Text` + `Color.Primary`, `Size.Small`. The one exception to the colour rule: a row action reads as a link, and links are primary.
 - **Dialog Cancel/Close:** a plain `MudButton` (text, default colour), never filled.
 - **Choosing a view or a sibling page:** `<SegmentedToggle>`, not a `MudButtonGroup` with the chosen option filled. Options with an `Href` render as links, so sibling pages keep open-in-new-tab; the pairs live in `Shared/SiblingPages.cs`.
 - Alert buttons (`<AlertButton>`) and the small filled icon buttons that act on one item in a list or table are outside the rule.
-- **`ButtonEmphasisConventionTests` enforces what one file can show:** a filled button in a colour other than Primary/Error/Warning, a filled Error/Warning button outside `<DialogActions>`, more than one filled button that can show at once in `<DialogActions>` (if/else branches count as one), a filled button in a table row template, and a filled `MudButtonGroup`. A deliberate exception opts out with `@* button-emphasis: exempt - <why> *@` directly above the button or the `<DialogActions>`. "One filled button per page" is for review, since a page is built from several components.
+- **`ButtonEmphasisConventionTests` enforces what one file can show:** a filled button in a colour other than Primary/Error/Warning, an outlined or text button in Primary (bar a text button in a table row, `MudTd` or `td` alike), an outlined or text button in Secondary/Info/Success/Tertiary/Dark, a filled Error/Warning button outside `<DialogActions>`, more than one filled button that can show at once in `<DialogActions>` (if/else branches count as one), a filled button in a table row template, and a filled `MudButtonGroup`. A deliberate exception opts out with `@* button-emphasis: exempt - <why> *@` directly above the button or the `<DialogActions>`. "One filled button per page" is for review, since a page is built from several components.
 
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
@@ -425,6 +427,7 @@ colour that clears WCAG AA in every theme. A call site passes `Variant` and `Col
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
 - **Do not pass the presentation parameters; the component's defaults are JIM's tab look.** `Elevation="0" Rounded="true" Outlined="true" ApplyEffectsToContainer="false"` are the defaults on `NavigableMudTabs` itself. MudTabs' own defaults render an unbordered, unrounded white band that reads on screen as a broken tab bar, and that is exactly what a page got by omitting them. No call site spells them out any more, so there is nothing to copy: a page that names one of the four is either opting out deliberately or restating a default. `NavigableMudTabsTests` pins the defaults and fails the build for any call site that passes `Outlined="false"` or `Rounded="false"`, so an opt-out has to be a deliberate, explained choice; `MvoDetailsTabs` is the worked example, naming only the `ApplyEffectsToContainer="true"` its tinted panel surface needs.
+- **Tabs are at least 120px wide, set inside `NavigableMudTabs` with no parameter to override it.** MudTabs' own 160px minimum made a Connected System's nine tabs overflow into a scrolling strip at a 1674px window while every label needed 156px or less; `TabBarSkeleton` draws its placeholder tabs at the same 120px.
 - Only `Class` and `TabPanelsClass` are routinely worth passing; see "Panel spacing" above for which values (`Class="mt-2"` after breadcrumbs, `TabPanelsClass="pt-5"` when the first tab's content starts flush)
 - **A one-tab bar hides itself.** Where a page's tabs are conditional (a tab that appears only when there is something to put in it), `NavigableMudTabs` drops the bar and the panel's top padding once it sees a single panel, so the content lands where it would have with no tabs at all. Nothing to do at the call site; `HideBarWhenSingleTab="false"` opts out, for instance to stop a page's height jumping as a tab appears. Panels register during their own render, so this costs a second render pass and cannot be decided earlier.
 

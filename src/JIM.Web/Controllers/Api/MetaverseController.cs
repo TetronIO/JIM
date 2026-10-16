@@ -40,6 +40,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     private readonly ILogger<MetaverseController> _logger = logger;
     private readonly JimApplication _application = application;
 
+    private const string TypeRequiredMessage =
+        "Type is required: Text, Number, LongNumber, Decimal, DateTime, Boolean, Guid, Binary or Reference.";
+
     /// <summary>
     /// List Metaverse Object Types
     /// </summary>
@@ -122,7 +125,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (existingByPluralName != null)
             return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{request.PluralName}' already exists."));
 
-        var deletionRule = request.DeletionRule ?? MetaverseObjectDeletionRule.Manual;
+        var deletionRule = request.DeletionRule ?? MetaverseObjectType.DefaultDeletionRule;
 
         // Deletion rule settings share their validation with Update; on create the request's trigger
         // list is both the requested and the effective set (there is no stored state to fall back to).
@@ -530,8 +533,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetAttributesAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested metaverse attributes (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-        var headers = attributes?.Select(MetaverseAttributeHeader.FromEntity).AsQueryable();
+        // The header projection reads each attribute's Object Type bindings; mapping the entities instead would
+        // leave them empty, because the untracked entity load does not include the navigation.
+        var headers = (await _application.Metaverse.GetMetaverseAttributeHeadersAsync())?.AsQueryable();
 
         var result = headers != null
             ? headers.ApplySortAndFilter(pagination).ToPaginatedResponse(pagination)
@@ -567,7 +571,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="request">The Attribute creation request.</param>
     /// <returns>The created Attribute details.</returns>
     /// <response code="201">Attribute created successfully.</response>
-    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="400">Invalid request or validation failed: for example, no Type, or a multi-valued Boolean (a Boolean attribute holds one value).</response>
     /// <response code="401">User not authenticated.</response>
     /// <response code="409">An attribute with the same name (compared case-insensitively) already exists.</response>
     [HttpPost("attributes", Name = "CreateAttribute")]
@@ -578,6 +582,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
     {
         _logger.LogInformation("Creating metaverse attribute: {Name}", LogSanitiser.Sanitise(request.Name));
+
+        // [Required] on a non-nullable enum never fails (an omitted Type binds to NotSet), so refuse it explicitly.
+        if (request.Type == AttributeDataType.NotSet)
+            return BadRequest(ApiErrorResponse.BadRequest(TypeRequiredMessage));
 
         // Enforce case-insensitive uniqueness (e.g. 'CostCentre' clashes with 'costCentre'). Names are stored as-is.
         if (!await _application.Metaverse.IsMetaverseAttributeNameUniqueAsync(request.Name))
@@ -607,10 +615,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         // Get the current API key for Activity attribution
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
-        else
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
+        try
+        {
+            if (apiKey != null)
+                await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
+            else
+                await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
+        }
+        catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
@@ -656,7 +671,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Attribute updated successfully.</response>
     /// <response code="400">Invalid request, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">The requested name is already used by another attribute (compared case-insensitively).</response>
+    /// <response code="409">The requested name is already used by another attribute (compared case-insensitively), or an Expression reads the attribute by its current name; the message names each one.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}", Name = "UpdateAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -692,6 +707,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                     await _application.Metaverse.RenameMetaverseAttributeAsync(id, request.Name, user, request.ChangeReason);
             }
             catch (MetaverseAttributeNameConflictException ex)
+            {
+                return Conflict(ApiErrorResponse.Conflict(ex.Message));
+            }
+            catch (AttributeReadByConfigurationException ex)
             {
                 return Conflict(ApiErrorResponse.Conflict(ex.Message));
             }
@@ -740,15 +759,19 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Change a Metaverse Attribute's data type and/or plurality
     /// </summary>
     /// <remarks>
-    /// Refused while any Metaverse Object holds a stored value for the attribute; in that case a 409 is returned with
-    /// the blocking impact (the stored-value count). Built-in attributes cannot be changed.
+    /// While any Metaverse Object holds a stored value for the attribute, the only change allowed is widening it from
+    /// single-valued to multi-valued with its data type unchanged; every stored value is kept. Any other change (a data
+    /// type change, or multi-valued to single-valued) is refused with a 409 carrying the blocking impact, and nothing is
+    /// changed. Requesting the attribute's current type and plurality is never refused: it returns 200 with the
+    /// attribute unchanged, and records no change. Built-in attributes cannot be changed. A Boolean attribute holds one value, so changing to a
+    /// multi-valued Boolean is refused with a 400.
     /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
     /// <param name="request">The new type and plurality.</param>
-    /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
-    /// <response code="400">Invalid request, or the attribute is built-in.</response>
+    /// <response code="200">Schema changed, or already as requested; returns the attribute.</response>
+    /// <response code="400">Invalid request: no Type, a multi-valued Boolean, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed. Requesting the current type and plurality never returns 409.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}/schema", Name = "ChangeAttributeSchema")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -760,6 +783,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogInformation("Changing schema of metaverse attribute: {Id}", id);
 
+        if (request.Type == AttributeDataType.NotSet)
+            return BadRequest(ApiErrorResponse.BadRequest(TypeRequiredMessage));
+
         var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
@@ -768,11 +794,21 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be changed."));
 
         var apiKey = await GetCurrentApiKeyAsync();
-        var impact = apiKey != null
-            ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
-            : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
+        AttributeSchemaChangeImpact impact;
+        try
+        {
+            impact = apiKey != null
+                ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
+                : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
+        }
+        catch (UnsupportedAttributePluralityException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
-        if (impact.BlockedByValues)
+        // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, a
+        // request for the current schema is applied as a no-op, and a refused change is never applied.
+        if (!impact.Applied)
             return Conflict(impact);
 
         var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
@@ -806,8 +842,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Delete a Metaverse Attribute
     /// </summary>
     /// <remarks>
-    /// Stored values are the only hard block: if any Metaverse Object holds a value a 409 is returned with the
-    /// per-Object-Type counts. When only configuration references exist they are cascade-removed, but only when
+    /// Stored values block the deletion, and so does any configuration that reads the attribute (a Scoping Criterion,
+    /// or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template): either returns a 409 with
+    /// the per-Object-Type counts and the readers, and nothing is changed. Readers are never removed for you. When only configuration references exist they are cascade-removed, but only when
     /// <paramref name="confirmationName"/> exactly matches the attribute's name (the server-enforced type-the-name
     /// gate); a missing or mismatched confirmation returns 400. On success the response lists what was removed.
     /// Built-in attributes cannot be deleted.
@@ -818,7 +855,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Attribute deleted; returns the impact listing any references removed.</response>
     /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values, or because configuration reads the attribute (a Scoping Criterion, or an Expression in an Attribute Flow, Object Matching Rule or Example Data Template); returns the blocking impact, whose <c>readers</c> name each reader.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
     [ProducesResponseType(typeof(AttributeDeletionImpact), StatusCodes.Status200OK)]
@@ -839,8 +876,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var impact = await _application.Metaverse.EvaluateAttributeDeletionAsync(attribute);
 
-        // Stored values are the only hard block.
-        if (impact.BlockedByValues)
+        // Stored values, and configuration reading the attribute, block the deletion.
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return Conflict(impact);
 
         // Cascade deletes require the type-the-name confirmation, enforced here so REST/PowerShell callers cannot
@@ -928,7 +965,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Unassign a Metaverse Attribute from a Metaverse Object Type
     /// </summary>
     /// <remarks>
-    /// Stored values held by Metaverse Objects of that type are the only hard block (409 with the count). When the
+    /// Stored values held by Metaverse Objects of that type, and configuration evaluating against the type that reads
+    /// the attribute, block the unassignment (409 with the count and the readers). When the
     /// unassignment would cascade type-scoped references it requires <paramref name="confirmationName"/> to exactly
     /// match the attribute's name (400 otherwise). Attribute-global references and the attribute itself are untouched.
     /// Built-in attributes cannot be unassigned.
@@ -940,7 +978,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="200">Unassigned; returns the impact listing what was removed.</response>
     /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
     /// <response code="404">Attribute not found, or it is not bound to the Object Type.</response>
-    /// <response code="409">Refused because Metaverse Objects of the type hold stored values; returns the blocking impact.</response>
+    /// <response code="409">Refused because Metaverse Objects of the type hold stored values, or because configuration evaluating against the type reads the attribute; returns the blocking impact, whose <c>readers</c> name each reader.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}/object-types/{objectTypeId:int}", Name = "UnassignAttributeFromObjectType")]
     [ProducesResponseType(typeof(AttributeUnassignImpact), StatusCodes.Status200OK)]
@@ -964,7 +1002,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (!impact.WasBound)
             return NotFound(ApiErrorResponse.NotFound($"Attribute {id} is not bound to Object Type {objectTypeId}."));
 
-        if (impact.BlockedByValues)
+        if (impact.BlockedByValues || impact.BlockedByReaders)
             return Conflict(impact);
 
         if (impact.RequiresConfirmation && !string.Equals(confirmationName, attribute.Name, StringComparison.Ordinal))
@@ -1269,7 +1307,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
     /// <param name="attributes">Optional list of Attribute names to include in the response. Use "*" for all Attributes. DisplayName is always included.</param>
-    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by, ignoring case (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paginated list of Metaverse Object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]
@@ -1424,7 +1462,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     ///   off (held until switched on) and systems where the account does not exist yet (delivered once it does).
     ///   This is the event case: the person's password changed somewhere, and the rest should hold it. By default
     ///   expiry is left to each system's own policy, since a password the person chose should not demand they
-    ///   choose another, and the call returns as soon as the change is recorded.
+    ///   choose another, and the call returns as soon as the change is recorded. "Password never expires" is left
+    ///   as each account has it, so `expiryBehaviour` `NeverExpires` is accepted with named accounts only.
     ///
     /// Either way the change is queued, one entry per Connected System, and the Password Delivery Service makes
     /// the first attempt within about a second, whatever the synchronisation engine is doing. A system that is
@@ -1455,7 +1494,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="waiter">Waits on the change's outcomes when the request asks for it.</param>
     /// <response code="200">The change was recorded and, where a wait applied, every target has settled. The body names the Connected Systems it was queued for and where each stands.</response>
     /// <response code="202">A wait applied and ran out with a target still Queued or Delivering. The body carries what is known; delivery continues.</response>
-    /// <response code="400">No password was supplied; `wait` is outside 0 to 30; `enableAccount` was supplied without named accounts; or a named account is not this person's, is in a system whose Connector cannot set passwords, shares a Connected System with another, or the list is empty.</response>
+    /// <response code="400">No password was supplied; `wait` is outside 0 to 30; `enableAccount`, or `expiryBehaviour` `NeverExpires`, was supplied without named accounts; or a named account is not this person's, is in a system whose Connector cannot set passwords, shares a Connected System with another, or the list is empty.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
     /// <response code="404">No such Metaverse Object.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -1500,12 +1539,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         var namedAccounts = request.ConnectedSystemObjectIds != null;
 
         // Refused rather than silently ignored. A propagated password reaches accounts an administrator may have
-        // disabled on purpose, so the core never enables one; a caller who asked for it would otherwise believe
-        // it happened.
+        // disabled on purpose, so the core enables none of them (it only completes an enable withheld until a
+        // new account had a password, #2039); a caller who asked for it would otherwise believe it happened.
         if (!namedAccounts && request.EnableAccount.HasValue)
         {
             return BadRequest(ApiErrorResponse.BadRequest(
-                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system never enables an account."));
+                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system enables no account, other than a new Active Directory account JIM created disabled until it had a password."));
         }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
@@ -1515,7 +1554,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // The defaults follow who chose the password. Named accounts mean somebody set it for the person, and a
         // password somebody else chose should be replaced at next sign-in. No accounts named means the person's
         // password changed and JIM is carrying it; demanding they choose another one immediately would defeat the
-        // point of propagating the one they just set.
+        // point of propagating the one they just set. Never expires without named accounts is refused by the core
+        // (#2159): such a password leaves "Password never expires" as each account has it.
         var expiryBehaviour = request.ExpiryBehaviour
             ?? (namedAccounts ? PasswordExpiryBehaviour.RequireChangeAtNextSignIn : PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
 
@@ -1541,9 +1581,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         }
         catch (ArgumentException ex)
         {
-            // The core's validation of named accounts: an empty list, an account that is not this person's or
-            // whose Connector cannot set passwords, or two accounts in one system. Nothing was recorded, and the
-            // message is written for the caller rather than about JIM's own method signature.
+            // The core's validation: an empty list, an account that is not this person's or whose Connector cannot
+            // set passwords, two accounts in one system, a disable (#2162), or Never expires without named accounts
+            // (#2159). Nothing was recorded, and the message is written for the caller rather than about JIM's own
+            // method signature.
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
 
@@ -1680,7 +1721,38 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
+        ApiDateValues.CanonicaliseDates(items);
         return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// List the causal timeline for a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns every Run Profile Execution Item about the object, newest first, each with its nearest recorded cause:
+    /// the same list the Causality Explorer shows for it. Works for a deleted object too, through the records its
+    /// deletion left. Where this deployment records no Metaverse Object changes, the timeline holds only what the
+    /// object's joined Connected System Objects recorded, and <c>metaverseObjectChangesNotRecorded</c> says so.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A page of the object's causal timeline, with the object it describes.</returns>
+    [HttpGet("objects/{id:guid}/causal-timeline", Name = "GetObjectCausalTimeline")]
+    [ProducesResponseType(typeof(CausalTimelineDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectCausalTimelineAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested causal timeline for Metaverse Object: {Id}", id);
+
+        var timeline = await _application.Activities.GetCausalTimelineAsync(
+            new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, id), pagination.Page, pagination.PageSize);
+
+        // The header covers the object live and deleted alike, so it is what decides whether the object exists.
+        if (timeline.Header == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        return Ok(CausalTimelineDto.FromModel(timeline));
     }
 
     /// <summary>

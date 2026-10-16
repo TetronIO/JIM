@@ -34,6 +34,37 @@ public class CausalitySummaryBandTests
     }
 
     [Test]
+    public async Task Render_AfterThisRunPills_RenderInTheirOwnLabelledStripAndOpenTheLineageAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var selected = 0;
+
+        var cut = context.Render<CausalitySummaryBand>(ps => ps
+            .Add(c => c.Summary, CausalitySummaryBuilder.Build(model))
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.AfterThisRunPills, new[] { new CausalityPill("Metaverse Object deleted", CausalityTone.Error) })
+            .Add(c => c.OnAfterThisRunSelected, () => selected++));
+
+        var strip = cut.Find(".after-strip");
+        Assert.That(strip.TextContent, Does.Contain("After this run").And.Contain("Metaverse Object deleted"));
+
+        strip.QuerySelector(".mud-chip")!.Click();
+
+        Assert.That(selected, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Render_NoAfterThisRunPills_RendersNoStripAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+
+        var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".after-strip"), Is.Empty);
+    }
+
+    [Test]
     public async Task Render_NewJoinerScenario_RendersTheFullSentenceTextAsync()
     {
         await using var context = CausalityBunitContext.Create();

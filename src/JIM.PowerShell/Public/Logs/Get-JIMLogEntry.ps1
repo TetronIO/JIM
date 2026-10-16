@@ -12,32 +12,32 @@ function Get-JIMLogEntry {
         log levels and service names, so callers can discover valid -Level/-Service values.
 
     .PARAMETER Service
-        Filter by service name (web, worker, scheduler). Omit for all services.
+        The service whose entries to return: web, worker, scheduler or database. Omit it for every service.
 
     .PARAMETER Date
-        The date to retrieve logs for. Omit for today (UTC).
+        The day whose entries to return. Omit it for today (UTC).
 
     .PARAMETER Level
-        Specific log levels to include (Verbose, Debug, Information, Warning, Error, Fatal).
-        Omit for all levels.
+        The log levels to include: Verbose, Debug, Information, Warning, Error or Fatal. Omit it for every
+        level.
 
     .PARAMETER Search
-        Text to search for in the log message (case-insensitive).
+        Text the message or its exception must contain, ignoring case.
 
     .PARAMETER Limit
-        Maximum number of entries to return (1-5000). Defaults to 500.
+        The most entries to return.
 
     .PARAMETER Offset
-        Number of entries to skip, for paging. Defaults to 0.
+        The number of entries to skip, for paging.
 
     .PARAMETER ListLevels
-        If specified, returns the available log level names instead of log entries.
+        Returns the log level names instead of log entries.
 
     .PARAMETER ListServices
-        If specified, returns the available service names instead of log entries.
+        Returns the service names instead of log entries.
 
     .OUTPUTS
-        PSCustomObject representing log entries, or a list of level/service names.
+        Each log entry; -ListLevels and -ListServices return each name as a string.
 
     .EXAMPLE
         Get-JIMLogEntry
@@ -58,7 +58,9 @@ function Get-JIMLogEntry {
         Get-JIMLogFile
     #>
     [CmdletBinding(DefaultParameterSetName = 'Entries')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.LogEntryDto', ParameterSetName = 'Entries')]
+    [OutputType([string], ParameterSetName = 'Levels')]
+    [OutputType([string], ParameterSetName = 'Services')]
     param(
         [Parameter(ParameterSetName = 'Entries')]
         [string]$Service,

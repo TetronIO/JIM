@@ -50,6 +50,13 @@ public class PasswordSynchronisationEvent
     public PendingPasswordChangeOrigin? Origin { get; set; }
 
     /// <summary>
+    /// How the change's own Activity completed. A change is complete as soon as it is queued; what export staging
+    /// records about an Initial Password it did not queue (#2160) completes with a warning or an error, and has no
+    /// per-system outcomes, so this is what says how that went.
+    /// </summary>
+    public ActivityStatus Status { get; set; }
+
+    /// <summary>
     /// One entry per Connected System the change reached, oldest first. Empty where the change was queued for no
     /// system, or where none has been attempted yet.
     /// </summary>
@@ -98,4 +105,10 @@ public class PasswordSynchronisationEventOutcome
         ActivityStatus.Cancelled => false,
         _ => null
     };
+
+    /// <summary>
+    /// Whether the Connected System took the password but could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159). Still a success; <see cref="Message"/> says what was applied.
+    /// </summary>
+    public bool CompletedWithWarning => Status == ActivityStatus.CompleteWithWarning;
 }

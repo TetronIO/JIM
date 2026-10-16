@@ -15,19 +15,17 @@ function Get-JIMHealth {
         checks, or omit it to use the URL from an active Connect-JIM session.
 
     .PARAMETER Url
-        Base URL of the JIM instance, e.g. "https://jim.example.com".
-        If omitted, uses the URL from the current Connect-JIM session.
+        The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted.
 
     .PARAMETER Ready
-        Check the readiness probe instead of basic health. Verifies database
-        connectivity and maintenance mode status.
+        Checks readiness instead: that the database is reachable and JIM is not in maintenance mode.
 
     .PARAMETER Live
-        Check the liveness probe instead of basic health. Confirms the process
-        is running.
+        Checks liveness instead: that the process is running.
 
     .OUTPUTS
-        PSCustomObject with status and timestamp properties.
+        One object with the probe's Status and Timestamp. A readiness check that fails is reported as an error
+        rather than returned.
 
     .EXAMPLE
         Get-JIMHealth -Url "https://jim.example.com"
@@ -39,7 +37,7 @@ function Get-JIMHealth {
         Get-JIMHealth -Live
     #>
     [CmdletBinding(DefaultParameterSetName = 'Health')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.HealthStatusResponse')]
     param(
         [Parameter(Position = 0)]
         [string]$Url,

@@ -1,5 +1,8 @@
 ---
 title: Rate Limiting
+description: "How JIM limits REST API requests per client, the responses it returns when a limit is reached, and how to tune the limits."
+type: reference
+audience: automation-author
 ---
 
 # Rate Limiting

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -42,4 +44,10 @@ public class SyncPreviewMessage
     /// attribute the failure without parsing prose (#1437).
     /// </summary>
     public string? AttributeName { get; set; }
+
+    /// <summary>
+    /// For an ambiguous match, the identities the object matched, in the shape an Activity item records them (#2052):
+    /// up to <see cref="ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/>, each carrying the total.
+    /// </summary>
+    public List<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; set; } = [];
 }

@@ -29,53 +29,57 @@ function Get-JIMPendingPasswordChange {
         Every change also carries an Origin: Explicit (an administrator's named set), Propagated (JIM carried
         it to every configured system after the person's own password change), or Provisioned (the first
         password for an account an export has just created). A Provisioned change carries SyncRuleId, the
-        Synchronisation Rule its password is generated from at each delivery attempt; SyncRuleId is $null for
-        every other origin.
+        Synchronisation Rule its password is generated from at each delivery attempt.
+
+        An Explicit or Propagated change can also be a Connected System Object's first password: it was already
+        waiting when JIM provisioned that object, or it replaced the object's Initial Password before it was
+        delivered. ProvisionedConnectedSystemObjectId names the object, and SyncRuleId the Synchronisation Rule
+        whose Initial Password settings for enabling the object and for whether its password never expires its
+        delivery applies; the change keeps its own password and expiry. Cancelling such a change leaves the object
+        without a password from JIM. Both are $null for a change that is no object's first password.
 
         No password is returned, in any form. The queued value is encrypted in the database and has no
         representation on this or any other surface.
 
     .PARAMETER ConnectedSystemId
-        Restrict to one Connected System. Accepts a Connected System from the pipeline.
+        Only changes queued for this Connected System.
 
     .PARAMETER Status
-        Restrict to one state: Pending, Delivering, Parked, Expired or Cancelled.
+        Only changes in this state.
 
     .PARAMETER FailureReason
-        Restrict to changes whose last attempt failed this way. Only meaningful for changes that have been
-        attempted; one that has never been tried has no reason.
+        Only changes whose last attempt failed this way. A change that has never been attempted has no reason.
 
     .PARAMETER MetaverseObjectId
-        Restrict to one identity's queued changes.
+        Only this Metaverse Object's queued changes.
 
     .PARAMETER Search
-        Free-text search over the identity and Connected System names.
+        Free-text search over the Metaverse Object and Connected System names.
 
     .PARAMETER SortBy
-        The column to sort by: queued (the default), identity, system, status, attempts, nextAttempt or expires.
+        The column to sort by; queued when omitted.
 
     .PARAMETER SortDirection
-        asc (the default) or desc.
+        The sort direction; ascending when omitted.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of changes to return.
 
     .PARAMETER PageSize
-        Number of items per page (1-100). Defaults to 50.
+        How many changes to return per page.
 
     .PARAMETER All
-        Retrieves every page of results. Fetches at most 1000 pages before stopping with a warning; use -Force
-        to fetch beyond the cap.
+        Returns every page. Stops after 1,000 pages with a warning unless -Force is given.
 
     .PARAMETER Force
-        Overrides the -All page ceiling. Only valid with -All.
+        Fetches beyond the -All page ceiling.
 
     .PARAMETER Summary
-        Returns the queue's counts by state instead of its rows.
+        Returns the queue's counts by state instead of its changes.
 
     .OUTPUTS
-        PSCustomObject per queued password change, or a single summary object with -Summary. Each row carries
-        Origin (Explicit, Propagated or Provisioned) and SyncRuleId (populated only for Provisioned).
+        One object per queued change, one entry per Metaverse Object per Connected System, or with -Summary one
+        object of counts. No password is returned, in any form.
 
     .EXAMPLE
         Get-JIMPendingPasswordChange -Summary
@@ -115,6 +119,13 @@ function Get-JIMPendingPasswordChange {
         them, and how many each is holding. Worth running before a change window closes: every one of these
         expires eventually, and switching the system back on is what delivers them.
 
+    .EXAMPLE
+        Get-JIMPendingPasswordChange -All |
+            Where-Object { $_.ProvisionedConnectedSystemObjectId -and $_.Origin -ne 'Provisioned' }
+
+        Lists the password changes that are also a Connected System Object's first password, which is worth
+        knowing before cancelling any of them.
+
     .LINK
         Resume-JIMPendingPasswordChange
         Stop-JIMPendingPasswordChange
@@ -122,7 +133,9 @@ function Get-JIMPendingPasswordChange {
         Set-JIMConnectedSystemPasswordSynchronisation
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PendingPasswordChangeResponse', ParameterSetName = 'List')]
+    [OutputType('JIM.PendingPasswordChangeResponse', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.PasswordQueueSummary', ParameterSetName = 'Summary')]
     param(
         [Parameter(ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
         [Parameter(ParameterSetName = 'ListAll', ValueFromPipelineByPropertyName)]

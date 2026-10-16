@@ -18,9 +18,16 @@
       schedules a grace-period Metaverse Object deletion) and a NEW same-system source rejoining the
       SAME identity (which should cancel that scheduled deletion, per #119) must leave the object alive
       with every deletion marker cleared, not just when the disconnect and rejoin happen on separate runs
+    - Matching on an expression (#2052): an identifier held in a different format joins its identity
+      (ExpressionJoin) and is claimed before provisioning (ExpressionExportMatch); two accounts matching
+      one identity are reported with both listed rather than joined or provisioned beside
+      (AmbiguousProvisioningMatch); and an expression whose result cannot be compared stops the object
+      with an error rather than projecting a duplicate (ExpressionFailure)
 
 .PARAMETER Step
-    Which test step to execute (Projection, Join, DuplicatePrevention, MultiplRules, SamePageRejoinCancellation, All)
+    Which test step to execute (Projection, Join, DuplicatePrevention, MultipleRules, JoinConflict, SamePageJoinConflict,
+    SamePageRejoinCancellation, CaseSensitivity, ExportMatchJoin, ExpressionJoin, ExpressionExportMatch,
+    AmbiguousProvisioningMatch, ExpressionFailure, All)
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -43,7 +50,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "SamePageRejoinCancellation", "CaseSensitivity", "ExportMatchJoin", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "SamePageRejoinCancellation", "CaseSensitivity", "ExportMatchJoin", "ExpressionJoin", "ExpressionExportMatch", "AmbiguousProvisioningMatch", "ExpressionFailure", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -85,6 +92,243 @@ $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 # credentials) rather than directly against the sam.ldb file; direct file writes on a live domain
 # controller are an unsupported access pattern.
 $sambaAdminUser = if (-not $isRfcDirectory) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
+
+# The directory attribute holding the employee identifier the LDAP Object Matching Rule reads (see Setup-Scenario-001.ps1).
+$ldapEmployeeIdAttrName = if ($isRfcDirectory) { 'employeeNumber' } else { 'employeeID' }
+
+function Add-Scenario005HrRow {
+    <#
+    .SYNOPSIS
+        Appends a row to the HR CSV, filling every column the file has (blank where the row gives none), and copies
+        the file to the connector volume.
+    #>
+    param([Parameter(Mandatory)][hashtable]$Row)
+
+    $hrCsvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+    $rows = @(Import-Csv $hrCsvPath)
+    $columns = $rows[0].PSObject.Properties.Name
+    $record = [ordered]@{}
+    foreach ($column in $columns) {
+        $record[$column] = if ($Row.ContainsKey($column)) { $Row[$column] } else { "" }
+    }
+    $rows = $rows + [PSCustomObject]$record
+    $rows | Export-Csv -Path $hrCsvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $hrCsvPath
+}
+
+function Reset-Scenario005HrCsv {
+    <#
+    .SYNOPSIS
+        Puts the HR CSV back to Scenario 005's baseline and runs an import and synchronisation, so the next step
+        starts from the same Connected System Objects.
+    #>
+    $hrCsvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+    Copy-Item -Path "$PSScriptRoot/data/scenario-005-hr-users.csv" -Destination $hrCsvPath -Force
+    Copy-CsvToConnectorFiles -SourcePath $hrCsvPath
+    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+}
+
+function New-OutOfBandDirectoryUser {
+    <#
+    .SYNOPSIS
+        Creates a user directly in the directory, not through JIM, at the DN the export Attribute Flow would compute
+        for the same identity (uid=<Account Name> in the user container for OpenLDAP and 389 Directory Server;
+        CN=<Display Name>,OU=<Department>,OU=Users,OU=Corp for Samba AD and Active Directory), so a correct join
+        needs no incidental rename to prove itself. Returns the DN.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SamAccountName,
+        [Parameter(Mandatory)][string]$DisplayName,
+        [Parameter(Mandatory)][string]$FirstName,
+        [Parameter(Mandatory)][string]$LastName,
+        [Parameter(Mandatory)][string]$EmployeeId,
+        # One of the department OUs Scenario 005 pre-creates for Samba AD and Active Directory.
+        [string]$Department = "Information Technology"
+    )
+
+    $email = "$SamAccountName@panoply.local"
+
+    if ($isRfcDirectory -or (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig)) {
+        if ($isRfcDirectory) {
+            $directoryLabel = "OpenLDAP"
+            $userDn = "$($DirectoryConfig.UserRdnAttr)=$SamAccountName,$($DirectoryConfig.UserContainer)"
+            $ldif = @"
+dn: $userDn
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: $SamAccountName
+cn: $DisplayName
+sn: $LastName
+givenName: $FirstName
+displayName: $DisplayName
+mail: $email
+employeeNumber: $EmployeeId
+userPassword: Password123!
+"@
+        }
+        else {
+            # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
+            # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
+            # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
+            # carries no password, so it is created disabled, which the join assertions do not depend on.
+            $directoryLabel = "Active Directory"
+            $userDn = "CN=$DisplayName,OU=$Department,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+            $ldif = @"
+dn: $userDn
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: $DisplayName
+sn: $LastName
+givenName: $FirstName
+sAMAccountName: $SamAccountName
+displayName: $DisplayName
+userPrincipalName: $email
+mail: $email
+department: $Department
+employeeID: $EmployeeId
+"@
+        }
+        $createResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
+
+        if ($createResult.Outcome -eq 'Created') {
+            Write-Host "  ✓ Created out-of-band account $SamAccountName in $directoryLabel (DN: $userDn)" -ForegroundColor Green
+        }
+        elseif ($createResult.Outcome -eq 'AlreadyExists') {
+            Write-Host "  Out-of-band account $SamAccountName already exists" -ForegroundColor Yellow
+        }
+        else {
+            throw "Failed to create out-of-band $directoryLabel account: $($createResult.Output)"
+        }
+
+        return $userDn
+    }
+
+    # Samba AD: samba-tool user create does not accept an arbitrary DN or an employeeID value, and its default CN
+    # would not match the DN the export attribute flow computes from Display Name. Use ldbadd routed through the
+    # RUNNING server (ldap://localhost with admin credentials), not against the raw sam.ldb file: direct file access
+    # on a live domain controller races with the server's own writes and index maintenance, and intermittently
+    # fails with a phantom "No such object: parent does not exist" even though the parent OU exists (observed
+    # 2026-07-23 at the Nano template). Going through the server is the supported path and eliminates the race.
+    $userDn = "CN=$DisplayName,OU=$Department,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+    $ldif = @"
+dn: $userDn
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: $DisplayName
+sn: $LastName
+givenName: $FirstName
+sAMAccountName: $SamAccountName
+displayName: $DisplayName
+userPrincipalName: $email
+mail: $email
+department: $Department
+employeeID: $EmployeeId
+
+"@
+    $ldifPath = [System.IO.Path]::GetTempFileName()
+    $containerLdifPath = "/tmp/oob-$SamAccountName.ldif"
+    try {
+        # Normalise to LF line endings: this script file is CRLF, so the here-string embeds \r\n, and samba's ldb
+        # LDIF parser (unlike OpenLDAP's) does NOT strip the \r. The DN then carries an invisible trailing \r, the
+        # parent resolves to "...DC=local\r", and the add fails with LDAP error 32 "parent does not exist" even
+        # though the parent OU is right there (root-caused 2026-07-23 after the \r visually truncated the captured
+        # error message, hiding its closing quote).
+        [System.IO.File]::WriteAllText($ldifPath, $ldif.Replace("`r`n", "`n"))
+        docker cp $ldifPath "$($DirectoryConfig.ContainerName):$containerLdifPath" 2>&1 | Out-Null
+
+        # Retry with backoff as cheap insurance against genuinely transient directory conditions, capturing the full
+        # ldb output plus a parent-OU probe per attempt so any persistent failure is diagnosable rather than a
+        # one-line mystery.
+        $maxAttempts = 5
+        $created = $false
+        $createText = ""
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $createResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" $containerLdifPath 2>&1 | ForEach-Object { "$_" }
+            $createText = $createResult -join "`n"
+
+            if ($createText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($createText))) {
+                Write-Host "  ✓ Created out-of-band account $SamAccountName in Samba AD (DN: $userDn)" -ForegroundColor Green
+                $created = $true
+                break
+            }
+            if ($createText -match "already exists") {
+                Write-Host "  Out-of-band account $SamAccountName already exists" -ForegroundColor Yellow
+                $created = $true
+                break
+            }
+
+            $parentProbe = (docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b "OU=$Department,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -s base dn 2>&1 | ForEach-Object { "$_" }) -join "`n"
+            Write-Host "  Attempt $attempt/$maxAttempts to create out-of-band account failed: $createText" -ForegroundColor Yellow
+            Write-Host "  Parent OU probe: $parentProbe" -ForegroundColor Yellow
+            if ($attempt -lt $maxAttempts) { Start-Sleep -Seconds 5 }
+        }
+        docker exec $DirectoryConfig.ContainerName rm -f $containerLdifPath 2>&1 | Out-Null
+
+        if (-not $created) {
+            throw "Failed to create out-of-band Samba AD account via ldbadd after $maxAttempts attempts: $createText"
+        }
+    }
+    finally {
+        Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
+    }
+
+    return $userDn
+}
+
+function Remove-OutOfBandDirectoryUser {
+    <#
+    .SYNOPSIS
+        Deletes a user New-OutOfBandDirectoryUser created. Removing its HR row only schedules the Metaverse Object's
+        deletion (the default deletion rule has a 7-day grace period, set in Setup-Scenario-001.ps1), so nothing
+        deprovisions the directory side during the run; the account is deleted directly instead.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SamAccountName,
+        [Parameter(Mandatory)][string]$UserDn
+    )
+
+    $deleteResult = if ($isRfcDirectory) {
+        Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $UserDn
+    }
+    else {
+        # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+        Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $SamAccountName
+    }
+
+    if ($deleteResult.Outcome -eq 'Deleted') {
+        Write-Host "  ✓ Deleted out-of-band directory account $SamAccountName" -ForegroundColor Gray
+    }
+    else {
+        Write-Host "  ⚠ Could not delete out-of-band directory account $($SamAccountName): $($deleteResult.Output)" -ForegroundColor Yellow
+    }
+}
+
+function Get-Scenario005MatchingContext {
+    <#
+    .SYNOPSIS
+        The ids the expression steps (#2052) create Object Matching Rules with: the HR and directory user Object
+        Types, the Metaverse User type, and the Metaverse attributes the rules compare with.
+    #>
+    $hrUserType = Get-JIMConnectedSystem -Id $config.CSVSystemId -ObjectTypes | Where-Object { $_.name -eq "person" } | Select-Object -First 1
+    $ldapUserType = Get-JIMConnectedSystem -Id $config.LDAPSystemId -ObjectTypes | Where-Object { $_.name -eq $DirectoryConfig.UserObjectClass } | Select-Object -First 1
+    $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+    $mvAttributes = Get-JIMMetaverseAttribute
+
+    return @{
+        HrUserTypeId = $hrUserType.id
+        LdapUserTypeId = $ldapUserType.id
+        MvUserTypeId = $mvUserType.id
+        EmployeeIdAttributeId = ($mvAttributes | Where-Object { $_.name -eq 'Employee ID' } | Select-Object -First 1).id
+        EmployeeNumberAttributeId = ($mvAttributes | Where-Object { $_.name -eq 'Employee Number' } | Select-Object -First 1).id
+    }
+}
 
 Write-TestSection "Scenario 005: Object Matching Rules"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -135,7 +379,8 @@ try {
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound")
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound",
+        "test.expr.join", "test.expr.export", "test.ambig", "test.ambig.one", "test.ambig.two", "test.expr.failure")
     $deletedCount = 0
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
@@ -1392,136 +1637,8 @@ try {
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
-
-        if ($isRfcDirectory -or (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig)) {
-            if ($isRfcDirectory) {
-                $omjDirectoryLabel = "OpenLDAP"
-                $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
-                $omjLdif = @"
-dn: $omjUserDN
-objectClass: inetOrgPerson
-objectClass: organizationalPerson
-objectClass: person
-objectClass: top
-uid: $omjSamAccountName
-cn: $omjDisplayName
-sn: $omjLastName
-givenName: $omjFirstName
-displayName: $omjDisplayName
-mail: $omjEmail
-employeeNumber: $omjEmployeeId
-userPassword: Password123!
-"@
-            }
-            else {
-                # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
-                # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
-                # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
-                # carries no password, so it is created disabled, which the join assertions do not depend on.
-                $omjDirectoryLabel = "Active Directory"
-                $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
-                $omjLdif = @"
-dn: $omjUserDN
-objectClass: top
-objectClass: person
-objectClass: organizationalPerson
-objectClass: user
-cn: $omjDisplayName
-sn: $omjLastName
-givenName: $omjFirstName
-sAMAccountName: $omjSamAccountName
-displayName: $omjDisplayName
-userPrincipalName: $omjEmail
-mail: $omjEmail
-department: $omjDepartment
-employeeID: $omjEmployeeId
-"@
-            }
-            $omjCreateResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $omjLdif -Operation add
-
-            if ($omjCreateResult.Outcome -eq 'Created') {
-                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in $omjDirectoryLabel (DN: $omjUserDN)" -ForegroundColor Green
-            }
-            elseif ($omjCreateResult.Outcome -eq 'AlreadyExists') {
-                Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
-            }
-            else {
-                throw "Failed to create out-of-band $omjDirectoryLabel account: $($omjCreateResult.Output)"
-            }
-        }
-        else {
-            # Samba AD: samba-tool user create does not accept an arbitrary DN or an employeeID value, and
-            # its default CN would not match the DN the export attribute flow computes from Display Name.
-            # Use ldbadd routed through the RUNNING server (ldap://localhost with admin credentials), not
-            # against the raw sam.ldb file: direct file access on a live domain controller races with the
-            # server's own writes and index maintenance, and intermittently fails with a phantom
-            # "No such object: parent does not exist" even though the parent OU exists (observed 2026-07-23
-            # at the Nano template). Going through the server is the supported path and eliminates the race.
-            $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
-            $omjLdif = @"
-dn: $omjUserDN
-objectClass: top
-objectClass: person
-objectClass: organizationalPerson
-objectClass: user
-cn: $omjDisplayName
-sn: $omjLastName
-givenName: $omjFirstName
-sAMAccountName: $omjSamAccountName
-displayName: $omjDisplayName
-userPrincipalName: $omjEmail
-mail: $omjEmail
-department: $omjDepartment
-employeeID: $omjEmployeeId
-
-"@
-            $omjLdifPath = [System.IO.Path]::GetTempFileName()
-            try {
-                # Normalise to LF line endings: this script file is CRLF, so the here-string embeds
-                # \r\n, and samba's ldb LDIF parser (unlike OpenLDAP's) does NOT strip the \r. The
-                # DN then carries an invisible trailing \r, the parent resolves to "...DC=local\r",
-                # and the add fails with LDAP error 32 "parent does not exist" even though the
-                # parent OU is right there (root-caused 2026-07-23 after the \r visually truncated
-                # the captured error message, hiding its closing quote).
-                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif.Replace("`r`n", "`n"))
-                docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
-
-                # Retry with backoff as cheap insurance against genuinely transient directory
-                # conditions, capturing the full ldb output plus a parent-OU probe per attempt so
-                # any persistent failure is diagnosable rather than a one-line mystery.
-                $omjMaxAttempts = 5
-                $omjCreated = $false
-                $omjCreateText = ""
-                for ($omjAttempt = 1; $omjAttempt -le $omjMaxAttempts; $omjAttempt++) {
-                    $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" /tmp/omj-user.ldif 2>&1 | ForEach-Object { "$_" }
-                    $omjCreateText = $omjCreateResult -join "`n"
-
-                    if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
-                        Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
-                        $omjCreated = $true
-                        break
-                    }
-                    if ($omjCreateText -match "already exists") {
-                        Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
-                        $omjCreated = $true
-                        break
-                    }
-
-                    $omjParentProbe = (docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b "OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -s base dn 2>&1 | ForEach-Object { "$_" }) -join "`n"
-                    Write-Host "  Attempt $omjAttempt/$omjMaxAttempts to create out-of-band account failed: $omjCreateText" -ForegroundColor Yellow
-                    Write-Host "  Parent OU probe: $omjParentProbe" -ForegroundColor Yellow
-                    if ($omjAttempt -lt $omjMaxAttempts) { Start-Sleep -Seconds 5 }
-                }
-                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
-
-                if (-not $omjCreated) {
-                    throw "Failed to create out-of-band Samba AD account via ldbadd after $omjMaxAttempts attempts: $omjCreateText"
-                }
-            }
-            finally {
-                Remove-Item $omjLdifPath -Force -ErrorAction SilentlyContinue
-            }
-        }
+        $omjUserDN = New-OutOfBandDirectoryUser -SamAccountName $omjSamAccountName -DisplayName $omjDisplayName `
+            -FirstName $omjFirstName -LastName $omjLastName -EmployeeId $omjEmployeeId -Department $omjDepartment
 
         # Step: full import from LDAP and confirm the CSO exists but is genuinely unjoined - this proves the
         # account really was created out-of-band, not via JIM (otherwise the "join" assertion below would be
@@ -1631,26 +1748,295 @@ employeeID: $omjEmployeeId
         $omjCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
-        if ($isRfcDirectory) {
-            $omjDeleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $omjUserDN
-            if ($omjDeleteResult.Outcome -eq 'Deleted') {
-                Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
-            }
-            else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
-            }
-        }
-        else {
-            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
-            $omjDeleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $omjSamAccountName
-            if ($omjDeleteResult.Outcome -eq 'Deleted') {
-                Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
-            }
-            else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
-            }
-        }
+        Remove-OutOfBandDirectoryUser -SamAccountName $omjSamAccountName -UserDn $omjUserDN
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
+    }
+
+    # Tests 8 to 11: Object Matching Rules that match on an expression (#2052). Each adds the rule it needs and
+    # removes it again, so the steps run in any order and leave Setup-Scenario-001.ps1's attribute rules as the only
+    # ones in place afterwards.
+
+    # Test 8: Expression Join
+    # The HR feed holds an employee number without the "E" prefix the Metaverse carries. An expression rule computes
+    # the prefixed value, so the account joins its existing identity instead of projecting a second one.
+    if ($Step -eq "ExpressionJoin" -or $Step -eq "All") {
+        Write-TestSection "Test 8: Expression Join"
+        Write-Host "Testing: an HR record holding '7001' joins the identity whose Employee ID is 'E7001' through an expression rule" -ForegroundColor Gray
+
+        $exContext = Get-Scenario005MatchingContext
+        $exRule = $null
+        try {
+            # Arrange: an identity with Employee ID E7001, from a first HR record.
+            Add-Scenario005HrRow -Row @{
+                hrId = "00009050-0000-0000-0000-000000000000"; employeeId = "E7001"; firstName = "Test"; lastName = "Expression Join"
+                email = "test.expr.join@panoply.local"; department = "Information Technology"; title = "Engineer"; company = "Panoply"
+                samAccountName = "test.expr.join"; displayName = "Test Expression Join"; status = "Active"
+                userPrincipalName = "test.expr.join@panoply.local"; employeeType = "Employee"
+            }
+            $exImport1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $exImport1.activityId -Name "CSV Import (ExpressionJoin - arrange)"
+            $exSync1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $exSync1.activityId -Name "Full Sync (ExpressionJoin - arrange)"
+
+            $exOriginal = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Expression Join" -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+            if (-not $exOriginal) {
+                throw "The arrange step did not project an identity for 'Test Expression Join'"
+            }
+
+            $exRule = New-JIMMatchingRule -ConnectedSystemId $config.CSVSystemId -ObjectTypeId $exContext.HrUserTypeId `
+                -MetaverseObjectTypeId $exContext.MvUserTypeId -SourceExpression '"E" + Trim(cs["employeeId"])' `
+                -TargetMetaverseAttributeId $exContext.EmployeeIdAttributeId -PassThru
+            Write-Host "  ✓ Added expression rule: ""E"" + Trim(cs[""employeeId""]) equals Employee ID" -ForegroundColor Green
+
+            # Act: the first record leaves and a second arrives for the same person, holding the number unprefixed.
+            $hrCsvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+            Get-Content $hrCsvPath | Where-Object { $_ -notmatch "00009050-0000-0000-0000-000000000000" } | Set-Content $hrCsvPath
+            Add-Scenario005HrRow -Row @{
+                hrId = "00009051-0000-0000-0000-000000000000"; employeeId = "7001"; firstName = "Test"; lastName = "Expression Join"
+                email = "test.expr.join@panoply.local"; department = "Information Technology"; title = "Engineer"; company = "Panoply"
+                samAccountName = "test.expr.join"; displayName = "Test Expression Join"; status = "Active"
+                userPrincipalName = "test.expr.join@panoply.local"; employeeType = "Employee"
+            }
+            $exImport2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $exImport2.activityId -Name "CSV Import (ExpressionJoin)"
+
+            # Before synchronising, Sync Preview names the value the join would be made on (#2052).
+            $exUnjoined = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.CSVSystemId -Search "Test Expression Join" -JoinType NotJoined -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+            $exPreviewValue = if ($exUnjoined) {
+                "$((Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId $config.CSVSystemId -Id $exUnjoined.id).inbound.wouldJoinMatchedValue)"
+            } else { "" }
+
+            $exSync2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $exSync2.activityId -Name "Full Sync (ExpressionJoin)"
+
+            # Assert: still one identity, the original one, now joined by the second record.
+            $exIdentities = @(@(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Expression Join" -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Join" })
+            $exJoined = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.CSVSystemId -Search "Test Expression Join" -JoinType Joined -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+
+            # The run's Activity item records the rule and the value the join was made on (#2052).
+            $exJoinItem = @(Get-JIMActivity -Id $exSync2.activityId -ExecutionItems) |
+                Where-Object { "$($_.objectChangeType)" -eq "Joined" -and $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+            $exJoinDetail = if ($exJoinItem) { Get-JIMActivityExecutionItem -Id $exJoinItem.id } else { $null }
+            $exJoinRecorded = $exJoinDetail -and "$($exJoinDetail.joinMatchedValue)" -eq "E7001" -and
+                "$($exJoinDetail.joinObjectMatchingRuleDescriptionSnapshot)".Contains('Trim(cs["employeeId"])')
+
+            if ($exIdentities.Count -eq 1 -and $exIdentities[0].id -eq $exOriginal.id -and $exJoined -and $exPreviewValue -eq "E7001" -and $exJoinRecorded) {
+                Write-Host "  ✓ The record holding '7001' joined the identity holding 'E7001'; no second identity was projected" -ForegroundColor Green
+                Write-Host "  ✓ Sync Preview and the Activity item both name the value 'E7001' and the expression rule" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "ExpressionJoin"; Success = $true }
+            }
+            else {
+                $exError = "Expected the original identity to be joined (found $($exIdentities.Count)), the preview to name 'E7001' (got '$exPreviewValue') " +
+                    "and the Activity item to record the value and rule (value '$($exJoinDetail.joinMatchedValue)', rule '$($exJoinDetail.joinObjectMatchingRuleDescriptionSnapshot)')"
+                Write-Host "  ✗ $exError" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExpressionJoin"; Success = $false; Error = $exError }
+            }
+        }
+        finally {
+            if ($exRule) {
+                Remove-JIMMatchingRule -ConnectedSystemId $config.CSVSystemId -Id $exRule.id -Force
+            }
+            Reset-Scenario005HrCsv
+            Write-Host "  ✓ Removed the expression rule and reset the HR CSV" -ForegroundColor Gray
+        }
+    }
+
+    # Test 9: Expression Export Match
+    # The outbound direction of the same idea: the directory already holds an account for the identity, recording
+    # its number without the prefix. An expression rule on the directory's Object Type computes the prefixed value
+    # for each unjoined account, so provisioning joins the existing account instead of creating a duplicate.
+    if ($Step -eq "ExpressionExportMatch" -or $Step -eq "All") {
+        Write-TestSection "Test 9: Expression Export Match"
+        Write-Host "Testing: provisioning joins an existing directory account holding '7002' through an expression rule, for an identity holding 'E7002'" -ForegroundColor Gray
+
+        $eemContext = Get-Scenario005MatchingContext
+        $eemRule = $null
+        $eemSam = "test.expr.export"
+        $eemDisplayName = "Test Expression Export"
+        $eemUserDn = $null
+        try {
+            $eemUserDn = New-OutOfBandDirectoryUser -SamAccountName $eemSam -DisplayName $eemDisplayName -FirstName "Test" `
+                -LastName "Expression Export" -EmployeeId "7002"
+
+            $eemRule = New-JIMMatchingRule -ConnectedSystemId $config.LDAPSystemId -ObjectTypeId $eemContext.LdapUserTypeId `
+                -MetaverseObjectTypeId $eemContext.MvUserTypeId -SourceExpression "`"E`" + Trim(cs[`"$ldapEmployeeIdAttrName`"])" `
+                -TargetMetaverseAttributeId $eemContext.EmployeeIdAttributeId -PassThru
+            Write-Host "  ✓ Added expression rule on the directory: ""E"" + Trim(cs[""$ldapEmployeeIdAttrName""]) equals Employee ID" -ForegroundColor Green
+
+            $eemLdapImport1 = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $eemLdapImport1.activityId -Name "LDAP Import (ExpressionExportMatch - arrange)"
+
+            # Act: the identity arrives from HR with the prefixed number, and is evaluated for provisioning.
+            Add-Scenario005HrRow -Row @{
+                hrId = "00009052-0000-0000-0000-000000000000"; employeeId = "E7002"; firstName = "Test"; lastName = "Expression Export"
+                email = "$eemSam@panoply.local"; department = "Information Technology"; title = "Engineer"; company = "Panoply"
+                samAccountName = $eemSam; displayName = $eemDisplayName; status = "Active"
+                userPrincipalName = "$eemSam@panoply.local"; employeeType = "Employee"
+            }
+            $eemImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $eemImport.activityId -Name "CSV Import (ExpressionExportMatch)"
+            $eemSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $eemSync.activityId -Name "Full Sync (ExpressionExportMatch)"
+            $eemExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $eemExport.activityId -Name "LDAP Export (ExpressionExportMatch)"
+            $eemLdapImport2 = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $eemLdapImport2.activityId -Name "LDAP Import (ExpressionExportMatch - confirm)"
+
+            # Assert: the existing account was joined, not a new one provisioned beside it.
+            $eemCsos = @(@(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Search $eemDisplayName -PageSize 10) |
+                Where-Object { $_.displayName -eq $eemDisplayName })
+            if ($eemCsos.Count -eq 1 -and "$($eemCsos[0].joinType)" -eq 'Joined') {
+                Write-Host "  ✓ The existing directory account was joined through the expression rule (JoinType=Joined, no duplicate)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "ExpressionExportMatch"; Success = $true }
+            }
+            else {
+                $eemJoinTypes = ($eemCsos | ForEach-Object { "$($_.joinType)" }) -join ', '
+                Write-Host "  ✗ Found $($eemCsos.Count) directory object(s) for '$eemDisplayName' with JoinType(s) [$eemJoinTypes] (expected one, Joined)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExpressionExportMatch"; Success = $false; Error = "Expected one Joined directory object; found $($eemCsos.Count) [$eemJoinTypes]" }
+            }
+        }
+        finally {
+            if ($eemRule) {
+                Remove-JIMMatchingRule -ConnectedSystemId $config.LDAPSystemId -Id $eemRule.id -Force
+            }
+            Reset-Scenario005HrCsv
+            if ($eemUserDn) {
+                Remove-OutOfBandDirectoryUser -SamAccountName $eemSam -UserDn $eemUserDn
+            }
+            Write-Host "  ✓ Removed the expression rule, the HR record and the directory account" -ForegroundColor Gray
+        }
+    }
+
+    # Test 10: Ambiguous Provisioning Match
+    # Two existing directory accounts carry the identity's employee number. JIM must not pick one of them, nor
+    # provision a third: the identity is reported, with both accounts listed, for the administrator to resolve.
+    if ($Step -eq "AmbiguousProvisioningMatch" -or $Step -eq "All") {
+        Write-TestSection "Test 10: Ambiguous Provisioning Match"
+        Write-Host "Testing: two directory accounts matching one identity are reported, not joined or provisioned beside" -ForegroundColor Gray
+
+        $apmEmployeeId = "APM001"
+        $apmAccounts = @(
+            @{ Sam = "test.ambig.one"; DisplayName = "Test Ambiguous One"; Dn = $null }
+            @{ Sam = "test.ambig.two"; DisplayName = "Test Ambiguous Two"; Dn = $null }
+        )
+        try {
+            foreach ($apmAccount in $apmAccounts) {
+                $apmAccount.Dn = New-OutOfBandDirectoryUser -SamAccountName $apmAccount.Sam -DisplayName $apmAccount.DisplayName `
+                    -FirstName "Test" -LastName $apmAccount.DisplayName.Replace("Test ", "") -EmployeeId $apmEmployeeId
+            }
+            $apmLdapImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $apmLdapImport.activityId -Name "LDAP Import (AmbiguousProvisioningMatch - arrange)"
+
+            Add-Scenario005HrRow -Row @{
+                hrId = "00009053-0000-0000-0000-000000000000"; employeeId = $apmEmployeeId; firstName = "Test"; lastName = "Ambiguous"
+                email = "test.ambig@panoply.local"; department = "Information Technology"; title = "Engineer"; company = "Panoply"
+                samAccountName = "test.ambig"; displayName = "Test Ambiguous"; status = "Active"
+                userPrincipalName = "test.ambig@panoply.local"; employeeType = "Employee"
+            }
+            $apmImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $apmImport.activityId -Name "CSV Import (AmbiguousProvisioningMatch)"
+            # Not asserted as a success: the ambiguity is reported as an error on this run, by design.
+            $apmSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+
+            $apmItems = @(Get-JIMActivity -Id $apmSync.activityId -ExecutionItems)
+            $apmErrors = @($apmItems | Where-Object { "$($_.errorType)" -eq "AmbiguousProvisioningMatch" })
+            $apmExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            $apmDirectoryCount = Get-LDAPUserCount -DirectoryConfig $DirectoryConfig -Filter "($ldapEmployeeIdAttrName=$apmEmployeeId)"
+
+            if ($apmErrors.Count -ge 1) {
+                $apmDetail = Get-JIMActivityExecutionItem -Id $apmErrors[0].id
+                $apmCandidates = @($apmDetail.MatchCandidates)
+                $apmCandidateNames = ($apmCandidates | ForEach-Object { $_.DisplayNameSnapshot }) -join ', '
+                Write-Host "  Reported: $($apmDetail.ErrorMessage)" -ForegroundColor Gray
+
+                if ($apmCandidates.Count -eq 2 -and $apmDirectoryCount -eq 2) {
+                    Write-Host "  ✓ AmbiguousProvisioningMatch reported with both accounts listed ($apmCandidateNames); no third account provisioned" -ForegroundColor Green
+                    $testResults.Steps += @{ Name = "AmbiguousProvisioningMatch"; Success = $true }
+                }
+                else {
+                    Write-Host "  ✗ Listed $($apmCandidates.Count) candidate(s) [$apmCandidateNames] and the directory holds $apmDirectoryCount account(s) (expected 2 and 2)" -ForegroundColor Red
+                    $testResults.Steps += @{ Name = "AmbiguousProvisioningMatch"; Success = $false; Error = "Expected 2 candidates and 2 accounts; found $($apmCandidates.Count) and $apmDirectoryCount" }
+                }
+            }
+            else {
+                $apmTypes = ($apmItems | Where-Object { $_.errorType -and "$($_.errorType)" -ne 'NotSet' } | ForEach-Object { "$($_.errorType)" }) -join ', '
+                Write-Host "  ✗ No AmbiguousProvisioningMatch was reported (errors: [$apmTypes]; directory accounts: $apmDirectoryCount)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "AmbiguousProvisioningMatch"; Success = $false; Error = "No AmbiguousProvisioningMatch reported; errors [$apmTypes], $apmDirectoryCount accounts" }
+            }
+            Write-Host "  Export after the ambiguity: $($apmExport.activityId)" -ForegroundColor DarkGray
+        }
+        finally {
+            Reset-Scenario005HrCsv
+            foreach ($apmAccount in $apmAccounts | Where-Object { $_.Dn }) {
+                Remove-OutOfBandDirectoryUser -SamAccountName $apmAccount.Sam -UserDn $apmAccount.Dn
+            }
+            Write-Host "  ✓ Removed the HR record and both directory accounts" -ForegroundColor Gray
+        }
+    }
+
+    # Test 11: Expression Failure
+    # A rule whose expression produces a value that cannot become the Metaverse attribute's type cannot be worked
+    # out. The object must stop with an error naming the rule, never project a duplicate identity because the rule
+    # quietly matched nothing.
+    if ($Step -eq "ExpressionFailure" -or $Step -eq "All") {
+        Write-TestSection "Test 11: Expression Failure"
+        Write-Host "Testing: an expression whose result cannot become a Number stops the object with ObjectMatchingRuleFailed, and nothing projects" -ForegroundColor Gray
+
+        $efContext = Get-Scenario005MatchingContext
+        $efRule = $null
+        try {
+            # "E" + the employee number is text; Employee Number is a Number, so every value this rule computes fails
+            # to convert. The rule saves (nothing about the expression is wrong until it meets a value).
+            $efRule = New-JIMMatchingRule -ConnectedSystemId $config.CSVSystemId -ObjectTypeId $efContext.HrUserTypeId `
+                -MetaverseObjectTypeId $efContext.MvUserTypeId -SourceExpression '"E" + Trim(cs["employeeId"])' `
+                -TargetMetaverseAttributeId $efContext.EmployeeNumberAttributeId -PassThru
+
+            Add-Scenario005HrRow -Row @{
+                hrId = "00009054-0000-0000-0000-000000000000"; employeeId = "EF001"; firstName = "Test"; lastName = "Expression Failure"
+                email = "test.expr.failure@panoply.local"; department = "Information Technology"; title = "Engineer"; company = "Panoply"
+                samAccountName = "test.expr.failure"; displayName = "Test Expression Failure"; status = "Active"
+                userPrincipalName = "test.expr.failure@panoply.local"; employeeType = "Employee"
+            }
+            $efImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $efImport.activityId -Name "CSV Import (ExpressionFailure)"
+            # Not asserted as a success: the failure is reported as an error on this run, by design.
+            $efSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+
+            $efItems = @(Get-JIMActivity -Id $efSync.activityId -ExecutionItems)
+            $efErrors = @($efItems | Where-Object { "$($_.errorType)" -eq "ObjectMatchingRuleFailed" })
+            $efIdentities = @(@(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Expression Failure" -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Failure" })
+
+            # The item list carries no error message (#2032); the item's own detail does, and it must name the rule
+            # and its expression, or an administrator has nowhere to start.
+            $efMessage = if ($efErrors.Count -ge 1) { "$((Get-JIMActivityExecutionItem -Id $efErrors[0].id).errorMessage)" } else { "" }
+            # Literal Contains, not -like: the expression's brackets would read as a wildcard character class.
+            $efNamesRule = $efMessage.Contains("'Employee Number'") -and $efMessage.Contains('"E" + Trim(cs["employeeId"])')
+
+            if ($efErrors.Count -ge 1 -and $efIdentities.Count -eq 0 -and $efNamesRule) {
+                Write-Host "  ✓ ObjectMatchingRuleFailed reported, naming the rule and its expression, and no identity projected: $efMessage" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "ExpressionFailure"; Success = $true }
+            }
+            elseif ($efErrors.Count -ge 1 -and $efIdentities.Count -eq 0) {
+                Write-Host "  ✗ ObjectMatchingRuleFailed reported, but its message does not name the rule and its expression: $efMessage" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExpressionFailure"; Success = $false; Error = "The error does not name the rule and its expression: $efMessage" }
+            }
+            else {
+                Write-Host "  ✗ $($efErrors.Count) ObjectMatchingRuleFailed error(s) and $($efIdentities.Count) projected identity(ies) (expected at least 1 and 0)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExpressionFailure"; Success = $false; Error = "Expected ObjectMatchingRuleFailed and no projection; found $($efErrors.Count) error(s), $($efIdentities.Count) identity(ies)" }
+            }
+        }
+        finally {
+            if ($efRule) {
+                Remove-JIMMatchingRule -ConnectedSystemId $config.CSVSystemId -Id $efRule.id -Force
+            }
+            Reset-Scenario005HrCsv
+            Write-Host "  ✓ Removed the expression rule and reset the HR CSV" -ForegroundColor Gray
+        }
     }
 
     # Summary

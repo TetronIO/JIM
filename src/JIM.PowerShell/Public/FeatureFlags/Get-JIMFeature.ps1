@@ -13,15 +13,14 @@ function Get-JIMFeature {
         -IncludeInDevelopment is specified.
 
     .PARAMETER Name
-        The flag's key, e.g. "Features.SomeInDevelopmentFeature". Filters to a single flag.
+        The key of the one flag to return, such as "Features.SomeInDevelopmentFeature".
 
     .PARAMETER IncludeInDevelopment
-        Also return In Development flags. Intended for development and the integration harness;
+        Also returns In Development flags. Intended for development and the integration harness;
         enabling one outside Development still requires -AllowInDevelopment on Enable-JIMFeature.
 
     .OUTPUTS
-        PSCustomObject representing feature flag(s), with Key, DisplayName, Description, Tier,
-        TrackingIssueNumber, Enabled, LastUpdated and LastUpdatedByName.
+        Each feature flag.
 
     .EXAMPLE
         Get-JIMFeature
@@ -43,7 +42,7 @@ function Get-JIMFeature {
         Disable-JIMFeature
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.FeatureFlagDto')]
     param(
         [Parameter(Position = 0)]
         [string]$Name,

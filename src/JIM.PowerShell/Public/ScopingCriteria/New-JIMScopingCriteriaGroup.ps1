@@ -4,34 +4,47 @@
 function New-JIMScopingCriteriaGroup {
     <#
     .SYNOPSIS
-        Creates a new scoping criteria group for a Synchronisation Rule.
+        Creates a scoping criteria group on a Synchronisation Rule.
 
     .DESCRIPTION
-        Creates a new scoping criteria group on an export Synchronisation Rule.
-        Groups can be created at the root level or nested within an existing group.
-        The group type determines how criteria within it are evaluated:
-        - All: All criteria must match (AND logic)
-        - Any: At least one criterion must match (OR logic)
+        Creates a scoping criteria group on a Synchronisation Rule, at the top level or inside another group. A
+        top-level group is an alternative to the rule's other top-level groups: an object is in scope when any one
+        of them is met.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Synchronisation Rule.
+        The ID of the Synchronisation Rule.
 
     .PARAMETER ParentGroupId
-        Optional. The ID of an existing group to nest this group within.
-        If not specified, creates a root-level group.
+        The ID of the group to create this one inside. Without it, the group is created at the top level.
 
     .PARAMETER Type
-        The logical operator for this group: 'All' (AND) or 'Any' (OR).
-        Defaults to 'All'.
+        How the group combines what it contains: All is met when every criterion and child group in it is met, Any
+        when at least one is.
 
     .PARAMETER Position
-        Optional position/order for this group. Defaults to 0.
+        Where the group sits among the groups beside it, used to order them. It does not change which objects are in
+        scope.
+
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
 
     .PARAMETER PassThru
-        If specified, returns the created group object.
+        Returns the group created.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created scoping criteria group.
+        With -PassThru, the group created; otherwise nothing.
+
+        JIM.ScopingCriteriaGroup
+        SyncRuleId (int): The ID of the Synchronisation Rule the group belongs to, so the group can be piped to the
+            other scoping criteria cmdlets.
 
     .EXAMPLE
         New-JIMScopingCriteriaGroup -SyncRuleId 5 -Type All
@@ -49,7 +62,7 @@ function New-JIMScopingCriteriaGroup {
         Remove-JIMScopingCriteriaGroup
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScopingCriteriaGroup')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
@@ -63,6 +76,10 @@ function New-JIMScopingCriteriaGroup {
 
         [Parameter()]
         [int]$Position = 0,
+
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
 
         [switch]$PassThru
     )
@@ -96,6 +113,9 @@ function New-JIMScopingCriteriaGroup {
             Write-Verbose "Creating scoping criteria group for Synchronisation Rule $SyncRuleId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint $endpoint -Method 'POST' -Body $body
 
                 Write-Verbose "Created scoping criteria group ID: $($result.id)"

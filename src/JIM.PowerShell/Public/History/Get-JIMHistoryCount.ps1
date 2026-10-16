@@ -12,16 +12,13 @@ function Get-JIMHistoryCount {
         or clearing its connector space.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ConnectedSystemName
-        The name of the Connected System. Must be an exact match.
+        The name of the Connected System; it must match exactly.
 
     .OUTPUTS
-        PSCustomObject containing:
-        - connectedSystemId: The connected system ID
-        - connectedSystemName: The connected system name
-        - changeRecordCount: Number of CSO change records
+        One object giving how many Connected System Object change records the Connected System holds.
 
     .EXAMPLE
         Get-JIMHistoryCount -ConnectedSystemId 1
@@ -45,7 +42,7 @@ function Get-JIMHistoryCount {
         Invoke-JIMHistoryCleanup
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.HistoryCountResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]

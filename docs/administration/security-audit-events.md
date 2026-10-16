@@ -1,5 +1,8 @@
 ---
 title: Security Audit Events
+description: The sign-in and API key authentication events JIM records in its Activity log, how long it keeps them, and how to send them to a SIEM.
+type: reference
+audience: security-assessor
 ---
 
 # Security Audit Events
@@ -14,7 +17,7 @@ JIM records authentication activity, interactive sign-in success and failure, an
 | Interactive sign-in failed | **Anonymous** | Aggregated (see below) |
 | API key authentication failed | **Anonymous** | Aggregated (see below) |
 | Access token authentication failed | **Anonymous** | Aggregated (see below) |
-| API key authentication succeeded | *n/a* | Not written as an Activity; API key lifecycle (create, update, disable, delete) is already audited via [configuration change history](../configuration/activities.md#configuration-change-history), and each successful call updates the key's last-used timestamp |
+| API key authentication succeeded | *n/a* | Not written as an Activity; API key lifecycle (create, update, disable, delete) is already audited via [Configuration Change History](../configuration/activities.md#configuration-change-history), and each successful call updates the key's last-used timestamp |
 
 Every security audit event carries `Authentication` as its Activity target type, and a client IP address where one was available. Filter the [Activity list](../configuration/activities.md#filtering-the-activity-list) to the **Security** category, or the `Authentication` type, to see these events on their own.
 
@@ -56,7 +59,7 @@ Security audit events are queryable through the same [Activities REST API](../..
 
 **Polling pattern:**
 
-```
+```http
 GET /api/v1/activities?targetType=Authentication&sortBy=created&sortDirection=desc
 ```
 
@@ -68,7 +71,7 @@ Each returned Activity for a failure carries its aggregation window start, first
 
 ## See also
 
-- [Activities](../configuration/activities.md) -- the general Activity system this feature is built on
-- [Rate Limiting](../api/rate-limiting.md) -- throttles API requests once they are authenticated; it does not limit failed attempts
-- [Security Headers](security-headers.md) -- the other application-layer control from the same security assessment
-- [Service Settings](../configuration/service-settings.md) -- how to change the retention period
+- [Activities](../configuration/activities.md): the general Activity system this feature is built on
+- [Rate Limiting](../api/rate-limiting.md): throttles API requests once they are authenticated; it does not limit failed attempts
+- [Security Headers](security-headers.md): the other application-layer control from the same security assessment
+- [Service Settings](../configuration/service-settings.md): how to change the retention period

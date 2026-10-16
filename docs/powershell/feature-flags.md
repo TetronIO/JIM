@@ -1,5 +1,8 @@
 ---
 title: Feature Flags
+description: "The cmdlets that list JIM's preview features and switch them on or off."
+type: reference
+audience: automation-author
 ---
 
 # Feature Flags
@@ -15,6 +18,7 @@ Cmdlets for viewing and toggling JIM's [Preview features](../administration/prev
 
 Retrieves feature flags. Returns every Preview-tier flag by default; specify `-IncludeInDevelopment` to also return In Development flags, and `-Name` to filter to a single flag by key.
 
+<!-- BEGIN GENERATED: Get-JIMFeature -->
 ### Syntax
 
 ```powershell
@@ -25,23 +29,24 @@ Get-JIMFeature [[-Name] <string>] [-IncludeInDevelopment]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | No, Position 0 | | The flag's key, e.g. `"Features.SomeInDevelopmentFeature"`. Filters to a single flag. |
-| `IncludeInDevelopment` | `switch` | No | `$false` | Also return In Development flags. |
+| `Name` | `string` | No |  | The key of the one flag to return, such as "Features.SomeInDevelopmentFeature". Can be given by position, as the first argument. |
+| `IncludeInDevelopment` | `switch` | No |  | Also returns In Development flags. Intended for development and the integration harness; enabling one outside Development still requires `-AllowInDevelopment` on `Enable-JIMFeature`. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances with the following properties:
+Each feature flag.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Key` | `string` | The flag's key |
-| `DisplayName` | `string` | Human-readable name |
-| `Description` | `string` | What the flag controls |
-| `Tier` | `string` | `"Preview"` or `"InDevelopment"` |
-| `TrackingIssueNumber` | `int` | The GitHub issue tracking the flag's own removal |
-| `Enabled` | `bool` | Whether the flag is currently on |
-| `LastUpdated` | `datetime` | When the flag was last changed, or `$null` if never changed |
-| `LastUpdatedByName` | `string` | Who last changed the flag, or `$null` if never changed |
+| `Key` | `string` | The flag's key, e.g. "Features.SomeInDevelopmentFeature". |
+| `DisplayName` | `string` | Human-readable display name. |
+| `Description` | `string` | What the flag controls. |
+| `Tier` | `string` | The flag's tier: "Preview" (visible to administrators) or "InDevelopment" (developers only). |
+| `TrackingIssueNumber` | `int` | The GitHub issue tracking removal of this flag once the feature it gates ships. |
+| `Enabled` | `bool` | Whether the flag is currently enabled. |
+| `LastUpdated` | `datetime` | When the flag was last changed, or empty if never changed from its seeded default. |
+| `LastUpdatedByName` | `string` | The display name of the principal that last changed the flag, or empty if never changed. |
+<!-- END GENERATED: Get-JIMFeature -->
 
 ### Examples
 
@@ -67,6 +72,7 @@ Get-JIMFeature -IncludeInDevelopment | Where-Object { $_.Enabled }
 
 Switches a feature flag on. Enabling an In Development flag requires `-AllowInDevelopment`; without it, the server refuses the request. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
+<!-- BEGIN GENERATED: Enable-JIMFeature -->
 ### Syntax
 
 ```powershell
@@ -77,13 +83,16 @@ Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru] [-WhatIf] [
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes, Position 0 | | The flag's key to enable. Accepts pipeline input by property name (aliased to `Key`, so `Get-JIMFeature` output pipes straight in). |
-| `AllowInDevelopment` | `switch` | No | `$false` | Required to enable an In Development flag. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated feature flag object. |
+| `Name` | `string` | Yes |  | The key of the flag to enable, such as "Features.SomeInDevelopmentFeature". A flag piped from `Get-JIMFeature` binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name, `Name` or `Key`. |
+| `AllowInDevelopment` | `switch` | No |  | Required to enable an In Development flag; the integration harness uses it in scenario setup. A Preview-tier flag needs no such acknowledgement. |
+| `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated feature flag object (same shape as `Get-JIMFeature`). Otherwise, no output.
+With `-PassThru`, the feature flag as updated; otherwise nothing.
+
+Properties as under [Get-JIMFeature](#get-jimfeature).
+<!-- END GENERATED: Enable-JIMFeature -->
 
 ### Examples
 
@@ -102,7 +111,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature" -PassThru
 ### Notes
 
 - Attempting to enable an In Development flag without `-AllowInDevelopment` produces a non-terminating error naming the flag.
-- Each successful change creates an audit activity, in the same [configuration change history](../configuration/activities.md#configuration-change-history) as any other Service Setting change.
+- Each successful change creates an audit activity, in the same [Configuration Change History](../configuration/activities.md#configuration-change-history) as any other Service Setting change.
 
 ---
 
@@ -110,6 +119,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature" -PassThru
 
 Switches a feature flag off. Disabling never requires acknowledgement, whatever the flag's tier. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
+<!-- BEGIN GENERATED: Disable-JIMFeature -->
 ### Syntax
 
 ```powershell
@@ -120,12 +130,15 @@ Disable-JIMFeature [-Name] <string> [-PassThru] [-WhatIf] [-Confirm]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes, Position 0 | | The flag's key to disable. Accepts pipeline input by property name (aliased to `Key`). |
-| `PassThru` | `switch` | No | `$false` | Returns the updated feature flag object. |
+| `Name` | `string` | Yes |  | The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from `Get-JIMFeature` binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name, `Name` or `Key`. |
+| `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated feature flag object. Otherwise, no output.
+With `-PassThru`, the feature flag as updated; otherwise nothing.
+
+Properties as under [Get-JIMFeature](#get-jimfeature).
+<!-- END GENERATED: Disable-JIMFeature -->
 
 ### Examples
 
@@ -145,6 +158,6 @@ Get-JIMFeature -IncludeInDevelopment | Disable-JIMFeature
 
 ## See also
 
-- [Preview Features](../administration/preview-features.md) -- what a Preview feature is, and where to turn one on in the portal
-- [Service Settings](service-settings.md) -- the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys
-- [Activities](activities.md) -- viewing audit activities created by flag changes
+- [Preview Features](../administration/preview-features.md): what a Preview feature is, and where to turn one on in the portal
+- [Service Settings](service-settings.md): the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys
+- [Activities](activities.md): viewing audit activities created by flag changes

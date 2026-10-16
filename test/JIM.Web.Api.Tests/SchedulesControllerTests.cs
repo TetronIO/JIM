@@ -10,10 +10,13 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
+using JIM.Models.Security;
 using JIM.Models.Utility;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -51,10 +54,12 @@ public class SchedulesControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SchedulesController(_mockLogger.Object, _application);
 
-        // Set up a default HTTP context with a user
+        // Set up a default HTTP context with a signed-in user, carrying the Metaverse Object id claim the
+        // authentication pipeline attaches to every authorised caller.
         var claims = new List<Claim>
         {
             new("sub", Guid.NewGuid().ToString()),
+            new(Constants.BuiltInClaims.MetaverseObjectId, Guid.NewGuid().ToString()),
             new("name", "Test User")
         };
         var identity = new ClaimsIdentity(claims, "Test");
@@ -413,6 +418,76 @@ public class SchedulesControllerTests
     }
 
     [Test]
+    public async Task CreateAsync_CalledWithAnApiKey_RecordsTheKeyAsTheCreatorAsync()
+    {
+        // The claims the API key handler really issues: nothing else marks a request as made with a key. Every call
+        // with a key used to be recorded as a person, whose link then led to a Metaverse Object that does not exist.
+        var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "Integration key", KeyPrefix = "jim_ak_test" };
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey), "ApiKey"))
+            }
+        };
+        var created = await CreateCapturingScheduleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created.CreatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
+            Assert.That(created.CreatedById, Is.EqualTo(apiKey.Id));
+            Assert.That(created.CreatedByName, Is.EqualTo("Integration key"));
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CalledBySignedInUser_RecordsTheirMetaverseObjectAsync()
+    {
+        // The identity provider's subject is not a Metaverse Object id; the one authorisation was granted to is.
+        var metaverseObjectId = Guid.NewGuid();
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
+                {
+                    new("sub", Guid.NewGuid().ToString()),
+                    new(Constants.BuiltInClaims.MetaverseObjectId, metaverseObjectId.ToString()),
+                    new("name", "Jay Example")
+                }, "Test"))
+            }
+        };
+        var created = await CreateCapturingScheduleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created.CreatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(created.CreatedById, Is.EqualTo(metaverseObjectId));
+            Assert.That(created.CreatedByName, Is.EqualTo("Jay Example"));
+        }
+    }
+
+    private async Task<Schedule> CreateCapturingScheduleAsync()
+    {
+        Schedule? created = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => created = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => new Schedule { Id = id, Name = "New Schedule", Steps = new List<ScheduleStep>() });
+
+        await _controller.CreateAsync(new CreateScheduleRequest
+        {
+            Name = "New Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            Steps = new List<ScheduleStepRequest>()
+        });
+
+        Assert.That(created, Is.Not.Null);
+        return created!;
+    }
+
+    [Test]
     public async Task CreateAsync_WithCronTriggerAndNoCronExpression_ReturnsBadRequestAsync()
     {
         var request = new CreateScheduleRequest
@@ -598,6 +673,156 @@ public class SchedulesControllerTests
         Assert.That(capturedSchedule.Steps.Count, Is.EqualTo(1));
         Assert.That(capturedSchedule.Steps[0].ConnectedSystemId, Is.EqualTo(1));
         Assert.That(capturedSchedule.Steps[0].RunProfileId, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Schedule patterns through the API
+
+    // A Cron trigger's timing can be given as a pattern, as the portal's editor and New-JIMSchedule describe it. The API
+    // used to drop every pattern field and demand a raw cron expression, so New-JIMSchedule's own documented examples
+    // were refused.
+
+    [Test]
+    public async Task CreateAsync_CronWithSpecificTimesPattern_StoresThePatternAndBuildsItsExpressionAsync()
+    {
+        Schedule? created = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => created = s).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(() => created);
+        var request = new CreateScheduleRequest
+        {
+            Name = "Full Synchronisation Schedule",
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "0",
+            RunTimes = "01:00",
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        var result = await _controller.CreateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created!.CronExpression, Is.EqualTo("0 1 * * 0"));
+            Assert.That(created.PatternType, Is.EqualTo(SchedulePatternType.SpecificTimes));
+            Assert.That(created.DaysOfWeek, Is.EqualTo("0"));
+            Assert.That(created.RunTimes, Is.EqualTo("01:00"));
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CronWithIntervalPattern_StoresThePatternAndBuildsItsExpressionAsync()
+    {
+        Schedule? created = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => created = s).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(() => created);
+        var request = new CreateScheduleRequest
+        {
+            Name = "Delta Synchronisation Schedule",
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.Interval,
+            DaysOfWeek = "1,2,3,4,5,6",
+            IntervalValue = 1,
+            IntervalUnit = ScheduleIntervalUnit.Hours,
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        await _controller.CreateAsync(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created!.CronExpression, Is.EqualTo("0 */1 * * 1,2,3,4,5,6"));
+            Assert.That(created.PatternType, Is.EqualTo(SchedulePatternType.Interval));
+            Assert.That(created.IntervalValue, Is.EqualTo(1));
+            Assert.That(created.IntervalUnit, Is.EqualTo(ScheduleIntervalUnit.Hours));
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CronWithAPatternNoExpressionCanHold_ReturnsBadRequestSayingWhyAsync()
+    {
+        var request = new CreateScheduleRequest
+        {
+            Name = "Twice daily",
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.SpecificTimes,
+            RunTimes = "06:00,18:30",
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        var result = await _controller.CreateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((result as BadRequestObjectResult)!.Value as ApiErrorResponse)!.Message, Does.Contain("same minute"));
+    }
+
+    [Test]
+    public async Task CreateAsync_CronWithCustomPattern_StoresTheExpressionVerbatimAsync()
+    {
+        Schedule? created = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => created = s).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(() => created);
+        var request = new CreateScheduleRequest
+        {
+            Name = "Custom",
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.Custom,
+            CronExpression = "0 */4 * * 1-5",
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        await _controller.CreateAsync(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created!.CronExpression, Is.EqualTo("0 */4 * * 1-5"));
+            Assert.That(created.PatternType, Is.EqualTo(SchedulePatternType.Custom));
+        }
+    }
+
+    [Test]
+    public async Task UpdateAsync_RetimedWithTheStoredExpressionStillAttached_BuildsTheExpressionFromThePatternAsync()
+    {
+        // Set-JIMSchedule sends the stored Schedule back with only the changed fields replaced, so a retimed Schedule
+        // arrives carrying its old expression beside its new run times. The pattern is what the caller changed.
+        var id = Guid.NewGuid();
+        var existing = new Schedule
+        {
+            Id = id, Name = "Weekday Import", TriggerType = ScheduleTriggerType.Cron, CronExpression = "0 6 * * 1,2,3,4,5",
+            PatternType = SchedulePatternType.SpecificTimes, DaysOfWeek = "1,2,3,4,5", RunTimes = "06:00", Steps = new List<ScheduleStep>()
+        };
+        Schedule? updated = null;
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existing);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => updated = s).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep>());
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id)).ReturnsAsync(existing);
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Weekday Import",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 6 * * 1,2,3,4,5",
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "1,2,3,4,5",
+            RunTimes = "08:00",
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.CronExpression, Is.EqualTo("0 8 * * 1,2,3,4,5"));
+            Assert.That(updated.RunTimes, Is.EqualTo("08:00"));
+        }
     }
 
     #endregion

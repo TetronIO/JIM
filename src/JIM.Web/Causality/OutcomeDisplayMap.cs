@@ -293,7 +293,14 @@ public static class OutcomeDisplayMap
         // PublishedWithChanges (a document icon with a revision mark) reads as "this value was revised",
         // distinct from Archive's "put away" and Fingerprint's "newly issued".
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] =
-            new OutcomeDisplay("Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges)
+            new OutcomeDisplay("Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges),
+
+        // Generated Value Forms (#2023). Warning on Waiting, like ValuesPreserved: nothing failed, but an object is
+        // still without its value, which an administrator should read. Info on a passed-over candidate: JIM did its job.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] =
+            new OutcomeDisplay("Value held back", CausalityTone.Warning, Icons.Material.Filled.HourglassTop),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] =
+            new OutcomeDisplay("Candidate passed over", CausalityTone.Info, Icons.Material.Filled.SkipNext)
     };
 
     /// <summary>
@@ -404,8 +411,9 @@ public static class OutcomeDisplayMap
             // update anywhere else in this map carries (AttributeFlow, DriftCorrection, ExportUpdateStaged).
             CausalEdgeType.ExportRejectionCausedGeneratedValueRevision =>
                 new OutcomeDisplay("Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
-            // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
-            // confirmation is not itself an object operation, and an unknown edge is never guessed.
+            // ExportCausedImportConfirmation, MetaverseObjectDeletionScheduleCausedDeletion and any seam this map
+            // does not know fall through here: a confirmation is not itself an object operation, a scheduled
+            // deletion is a state change (as its MvoDeletionScheduled event is), and an unknown edge is never guessed.
             _ => null
         };
     }

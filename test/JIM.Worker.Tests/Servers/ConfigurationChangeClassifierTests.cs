@@ -251,6 +251,81 @@ public class ConfigurationChangeClassifierTests
 
     #endregion
 
+    #region Run Profile settings (#1618, #2049, SPEC-1082 D10)
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public void Classify_AllowObjectTypeChangesSwitched_IsSyncAffecting(bool before, bool after)
+    {
+        // Switched on, the Full Import retires the held object and imports a new one of the new Object Type; switched
+        // off, it refuses the change again. Either way the run's outcome changes, but nothing is deleted by saving it:
+        // the retired object is disconnected by a later synchronisation, under Deletion Rules classified on their own.
+        var beforeProfile = FullImportRunProfile();
+        beforeProfile.AllowObjectTypeChanges = before;
+        var afterProfile = FullImportRunProfile();
+        afterProfile.AllowObjectTypeChanges = after;
+
+        Assert.That(ClassifyChange(SystemWith(beforeProfile), SystemWith(afterProfile)),
+            Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public void Classify_VerificationModeSwitched_IsCosmetic(bool before, bool after)
+    {
+        // Verification Mode changes how a Full Import reads (no content-hash skips) and what it reports, not what it
+        // imports, so it must not raise the "Full Synchronisation needed" indicator.
+        var beforeProfile = FullImportRunProfile();
+        beforeProfile.VerifyImportContentHashes = before;
+        var afterProfile = FullImportRunProfile();
+        afterProfile.VerifyImportContentHashes = after;
+
+        Assert.That(ClassifyChange(SystemWith(beforeProfile), SystemWith(afterProfile)),
+            Is.EqualTo(ConfigurationChangeClass.Cosmetic));
+    }
+
+    [TestCase(500, null)]
+    [TestCase(null, 500)]
+    [TestCase(500, 5000)]
+    public void Classify_DetectedDeletionLimitChanged_IsSyncAffecting(int? before, int? after)
+    {
+        // Relaxing the limit lets a Full Import mark objects deleted that it would otherwise have left alone, the
+        // same shape as relaxing Partition Validation Mode; tightening it can stop deletion detection altogether.
+        var beforeProfile = FullImportRunProfile();
+        beforeProfile.MaxDetectedDeletions = before;
+        var afterProfile = FullImportRunProfile();
+        afterProfile.MaxDetectedDeletions = after;
+
+        Assert.That(ClassifyChange(SystemWith(beforeProfile), SystemWith(afterProfile)),
+            Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    [Test]
+    public void Classify_ExportLimitsChanged_IsSyncAffecting()
+    {
+        var beforeProfile = ExportRunProfile();
+        var afterProfile = ExportRunProfile();
+        afterProfile.MaxCreates = 5;
+        afterProfile.MaxUpdates = 0;
+        afterProfile.MaxDeletes = 100;
+
+        Assert.That(ClassifyChange(SystemWith(beforeProfile), SystemWith(afterProfile)),
+            Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    [Test]
+    public void Classify_DetectedDeletionPercentLimitRemoved_IsSyncAffecting()
+    {
+        var beforeProfile = FullImportRunProfile();
+        beforeProfile.MaxDetectedDeletionsPercent = 10;
+        var afterProfile = FullImportRunProfile();
+
+        Assert.That(ClassifyChange(SystemWith(beforeProfile), SystemWith(afterProfile)),
+            Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    #endregion
+
     #region Helpers
 
     private ConfigurationChangeClass ClassifyChange(SyncRule before, SyncRule after)
@@ -258,6 +333,27 @@ public class ConfigurationChangeClassifierTests
         var diff = _diffs.Diff(_snapshots.CreateSnapshot(before, HashKey), _snapshots.CreateSnapshot(after, HashKey));
         return ConfigurationChangeClassifier.Classify(diff);
     }
+
+    private ConfigurationChangeClass ClassifyChange(ConnectedSystem before, ConnectedSystem after)
+    {
+        var diff = _diffs.Diff(_snapshots.CreateSnapshot(before, HashKey), _snapshots.CreateSnapshot(after, HashKey));
+        return ConfigurationChangeClassifier.Classify(diff);
+    }
+
+    private static ConnectedSystemRunProfile FullImportRunProfile() => new()
+    {
+        Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = 100
+    };
+
+    private static ConnectedSystemRunProfile ExportRunProfile() => new()
+    {
+        Id = 51, Name = "Export", RunType = ConnectedSystemRunType.Export, PageSize = 100
+    };
+
+    private static ConnectedSystem SystemWith(ConnectedSystemRunProfile runProfile) => new()
+    {
+        Id = 3, Name = "Contoso AD", ConnectorDefinitionId = 4, RunProfiles = [runProfile]
+    };
 
     private static SyncRule SyncRule(string name) => new()
     {

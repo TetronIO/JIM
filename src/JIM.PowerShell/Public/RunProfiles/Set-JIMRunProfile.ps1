@@ -11,75 +11,64 @@ function Set-JIMRunProfile {
         Only the parameters provided will be updated.
 
     .PARAMETER ConnectedSystemId
-        The ID of the Connected System the Run Profile belongs to.
+        The Connected System the Run Profile belongs to.
 
     .PARAMETER ConnectedSystemName
         The name of the Connected System the Run Profile belongs to. Must be an exact match.
 
     .PARAMETER RunProfileId
-        The unique identifier of the Run Profile to update.
+        The Run Profile to update.
 
     .PARAMETER InputObject
-        Run Profile object to update (from pipeline).
+        The Run Profile to update, as Get-JIMRunProfile returns it.
 
     .PARAMETER Name
-        The new name for the Run Profile.
+        The new name.
 
     .PARAMETER PageSize
-        The new page size for the Run Profile.
+        How many items to process in one batch.
 
     .PARAMETER PartitionId
-        The partition ID to set (for connectors that support partitions).
+        The partition the Run Profile targets, for a Connector with partitions.
 
     .PARAMETER FilePath
-        The file path to set (for file-based connectors).
+        The file to read or write, for a file-based Connector.
 
     .PARAMETER VerifyImportContentHashes
-        When specified, sets whether Verification Mode is enabled. Pass $true to enable, $false to
-        disable. Omit to leave the current state unchanged. Only valid on a Full Import Run
-        Profile; the API rejects $true otherwise. When enabled, the Full Import performs no
-        content-hash skips and instead compares each object's stored import content hash against
-        the freshly computed incoming hash, raising a diagnostic error for any disagreement.
+        Whether Verification Mode is enabled: $true to enable it, $false to disable it. Only a Full Import Run
+        Profile accepts $true.
+
+    .PARAMETER AllowObjectTypeChanges
+        Whether this Full Import carries out an Object Type change rather than refusing it: $true to allow it,
+        $false to go back to refusing it. Only a Full Import Run Profile accepts $true.
 
     .PARAMETER MaxCreates
-        Run Profile Safeguards: sets the most creates that may be pending for a single Export run
-        to attempt any of them. If more are pending than this when a run starts, JIM attempts NONE
-        of them; there is no partial attempt. Only valid on an Export Run Profile; the API rejects
-        it otherwise. Pass a number to set the limit, 0 to refuse creates outright, or $null to
-        clear the limit (no limit). Omit the parameter entirely to leave the current value
-        unchanged. Setting any one of -MaxCreates, -MaxUpdates, -MaxDeletes, -MaxDetectedDeletions
-        or -MaxDetectedDeletionsPercent fetches the Run Profile's other four current values and
-        sends all five together, so the ones you did not pass are preserved exactly.
+        A Safeguard: the most creates that may be pending for an Export run to attempt any of them. 0 refuses
+        creates outright, and $null clears the limit. Only valid on an Export Run Profile. The Safeguards you do not
+        give keep their values.
 
     .PARAMETER MaxUpdates
-        Run Profile Safeguards: sets the most updates that may be pending for a single Export run
-        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
+        A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same
+        rules as -MaxCreates.
 
     .PARAMETER MaxDeletes
-        Run Profile Safeguards: sets the most deletes that may be pending for a single Export run
-        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
+        A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same
+        rules as -MaxCreates.
 
     .PARAMETER MaxDetectedDeletions
-        Run Profile Safeguards: sets the most Connected System Objects a single Full Import run
-        may newly mark as deleted. If more would be newly marked than this, JIM marks NONE of
-        them; there is no partial marking. Only valid on a Full Import Run Profile; the API
-        rejects it otherwise. Pass a number to set the limit, 0 to refuse to mark anything as
-        deleted, or $null to clear the limit (no limit). Omit the parameter entirely to leave the
-        current value unchanged. Setting any one of -MaxCreates, -MaxUpdates, -MaxDeletes,
-        -MaxDetectedDeletions or -MaxDetectedDeletionsPercent fetches the Run Profile's other four
-        current values and sends all five together, so the ones you did not pass are preserved
-        exactly.
+        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. 0 refuses to
+        mark any, and $null clears the limit. Only valid on a Full Import Run Profile. The Safeguards you do not
+        give keep their values.
 
     .PARAMETER MaxDetectedDeletionsPercent
-        Run Profile Safeguards: sets the most Connected System Objects a single Full Import run
-        may newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the
-        run's scope when it starts. Same all-or-nothing semantics as -MaxDetectedDeletions.
+        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to
+        100) of those in the run's scope when it starts, under the same rules as -MaxDetectedDeletions.
 
     .PARAMETER PassThru
-        If specified, returns the updated Run Profile object.
+        Returns the updated Run Profile.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Run Profile object.
+        With -PassThru, the updated Run Profile; otherwise nothing.
 
     .EXAMPLE
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Name "Updated Name"
@@ -112,6 +101,19 @@ function Set-JIMRunProfile {
         Disables Verification Mode, returning the Run Profile to normal content-hash-skip behaviour.
 
     .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 3 -AllowObjectTypeChanges $true
+
+        Lets Full Import Run Profile 3 carry out the Object Type changes it would otherwise
+        refuse. If that Run Profile runs on a Schedule, set it back to $false once the change has
+        been imported, so later runs refuse again.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 3 -AllowObjectTypeChanges $false
+
+        Returns the Full Import to refusing Object Type changes, keeping each existing Connected
+        System Object and reporting the change as an error instead.
+
+    .EXAMPLE
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 
         Clears the delete limit, leaving Max creates and Max updates exactly as they were.
@@ -135,7 +137,7 @@ function Set-JIMRunProfile {
         Start-JIMRunProfile
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RunProfileDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
@@ -166,6 +168,9 @@ function Set-JIMRunProfile {
 
         [Parameter()]
         [bool]$VerifyImportContentHashes,
+
+        [Parameter()]
+        [bool]$AllowObjectTypeChanges,
 
         [Parameter()]
         [Nullable[int]]$MaxCreates,
@@ -249,6 +254,12 @@ function Set-JIMRunProfile {
         # express this (mirrors Set-JIMPredefinedSearch -IsEnabled).
         if ($PSBoundParameters.ContainsKey('VerifyImportContentHashes')) {
             $body.verifyImportContentHashes = $VerifyImportContentHashes
+        }
+
+        # As above: -AllowObjectTypeChanges $false is sent (turns it off); an unbound parameter is
+        # omitted, which the API reads as "leave unchanged".
+        if ($PSBoundParameters.ContainsKey('AllowObjectTypeChanges')) {
+            $body.allowObjectTypeChanges = $AllowObjectTypeChanges
         }
 
         # Run Profile Safeguards: the update contract replaces all five members together, so

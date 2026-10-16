@@ -51,6 +51,14 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal object? ConnectivityTestResult { get; init; } = 1;
 
     /// <summary>
+    /// Whether this dialect compares text exactly where a column states no collation. Settable so a test can
+    /// stand in for Oracle Database, which does.
+    /// </summary>
+    internal bool TextComparesExactlyByDefaultOverride { get; init; }
+
+    public override bool TextComparesExactlyByDefault => TextComparesExactlyByDefaultOverride;
+
+    /// <summary>
     /// The command text every command created through this provider was given, in order, so a test can
     /// assert that the Connector ran the dialect's own connectivity query rather than one of its own.
     /// </summary>
@@ -445,7 +453,8 @@ internal sealed record FakeCatalogueColumn(
     int? Precision = null,
     int? Scale = null,
     int? MaxLength = null,
-    bool IsNullable = true);
+    bool IsNullable = true,
+    bool? CaseExact = null);
 
 /// <summary>
 /// A foreign key column as a schema catalogue would report it.
@@ -1093,14 +1102,25 @@ internal sealed class FakeDbCommand : DbCommand
             .Select(group => group
                 .OrderBy(join => join.Key, StringComparer.Ordinal)
                 .Select(join => (Ordinal: dataTable.IndexOf(join.Value), Value: BoundValue(join.Key)))
-                .ToList());
+                .ToList())
+            .ToList();
 
-        var wanted = anchorTuples
-            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => CompareValues(row[part.Ordinal], part.Value) == 0)))
+        // A row satisfying several of the OR'd predicates is still one row, as it is from a real database.
+        var wanted = dataTable.Rows
+            .Where(row => anchorTuples.Any(tuple => tuple.All(part => JoinMatches(row[part.Ordinal], part.Value))))
             .ToList();
 
         return FakeDbDataReader.ForRows(dataTable.Columns, wanted);
     }
+
+    /// <summary>
+    /// Whether a join or anchor predicate holds, comparing text the way the stand-in's collation does: without regard
+    /// to case unless it is case-sensitive.
+    /// </summary>
+    private bool JoinMatches(object? rowValue, object? boundValue) =>
+        rowValue is string rowText && boundValue is string boundText
+            ? string.Equals(rowText, boundText, _provider.CaseSensitiveCollation ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
+            : CompareValues(rowValue, boundValue) == 0;
 
     /// <summary>
     /// The columns the command orders by, which for a keyset page are exactly its anchor columns.
@@ -1484,7 +1504,8 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
             SqlCatalogueColumns.NumericPrecision,
             SqlCatalogueColumns.NumericScale,
             SqlCatalogueColumns.IsNullable,
-            SqlCatalogueColumns.OrdinalPosition
+            SqlCatalogueColumns.OrdinalPosition,
+            SqlCatalogueColumns.CaseExact
         ],
             columns.Select(column => new object?[]
             {
@@ -1494,7 +1515,8 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
                 column.Precision,
                 column.Scale,
                 column.IsNullable ? "YES" : "NO",
-                ++ordinal
+                ++ordinal,
+                column.CaseExact switch { true => "YES", false => "NO", null => null }
             }).ToList());
     }
 

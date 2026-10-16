@@ -1,20 +1,23 @@
 ---
 title: Deploying with Ansible
+description: Deploy JIM across RHEL servers with Red Hat's podman system role, from the same files and settings the installer uses.
+type: how-to
+audience: implementer
 ---
 
-# Deploying JIM with Ansible
+# Deploying with Ansible
 
 To deploy JIM across RHEL servers with Ansible, use Red Hat's podman system role: `redhat.rhel_system_roles.podman`, from the RHEL System Roles, or its upstream `fedora.linux_system_roles.podman`. The role installs Podman's Quadlet units, stores Podman secrets, opens firewalld ports and, for a rootless account, enables lingering, which is everything [the installer](deployment.md#what-the-installer-does) does on Podman. JIM ships no role or collection of its own: the playbook below deploys the same files as the installer, rootful, as the installer does by default. [Rootless](#rootless) shows what changes to run JIM rootless, as an account named `jim`.
 
 Read [Running JIM on Podman](podman.md) first: it explains the files, and the choice between rootful and rootless.
 
-## Before You Start
+## Before you begin
 
 - **Ansible** with the RHEL System Roles (`dnf install rhel-system-roles`), or `ansible-galaxy collection install fedora.linux_system_roles`.
 - **JIM's Podman files** from the [release](https://github.com/TetronIO/JIM/releases) you are deploying, in the playbook's `files/` folder: `jim.yaml`, `jim-database.yaml` (for the bundled PostgreSQL), `jim.network`, and `jim-config.yaml` with your settings filled in (see the [Configuration Reference](configuration.md#podman)).
 - **JIM's certificate** for its name, as `files/tls.crt`, followed by any intermediate CA certificates, and its unencrypted private key.
 - **The secrets in Ansible Vault**: the database password, your identity provider's client secret, and the certificate's private key. For the bundled PostgreSQL, choose a strong database password: the database is created with it on first start.
-- **For an air-gapped server**, JIM's images loaded into root's Podman (rootless, the `jim` account's) before the play, from the release bundle's `docker-images` folder (see [Installing by Hand](podman.md#installing-by-hand), step 3). The role otherwise downloads them.
+- **For an air-gapped server**, JIM's images loaded into root's Podman (rootless, the `jim` account's) before the play, from the release bundle's `docker-images` folder (see [Installing on Podman by Hand](podman-by-hand.md), step 3). The role otherwise downloads them.
 
 ## The Playbook
 
@@ -166,10 +169,20 @@ To run JIM rootless, as an account named `jim`, add the account to the play's `v
 
 For a port other than 443, change the port threshold too.
 
-## After the Play
+## Run the play
 
-- **Wait for JIM**, which prepares its database on first start: it is ready when `sudo podman healthcheck run jim-web` succeeds (rootless, see [Rootless commands](podman.md#rootless-commands)).
-- **Register JIM's redirect URIs** at your identity provider and **distribute your certificate authority**, as the [Deployment Guide](deployment.md#after-installing) describes.
+1. Put JIM's files and certificate in the playbook's `files/` folder, and the secrets in Ansible Vault, as [Before you begin](#before-you-begin) lists.
+2. Save the playbook above, with your servers in the inventory group `jim_servers`.
+3. Run it, giving the vault password: `ansible-playbook -i <inventory> <playbook>.yml --ask-vault-pass`.
+
+## Check it worked
+
+1. Wait for JIM, which prepares its database on first start. It is ready when `sudo podman healthcheck run jim-web` succeeds on each server (rootless, see [Rootless commands](podman.md#rootless-commands)).
+2. Register JIM's redirect URIs at your identity provider, as the [Deployment Guide](deployment.md#after-installing) describes, then open JIM in a browser and sign in.
+
+## Next steps
+
+- **Distribute your certificate authority**, as the [Deployment Guide](deployment.md#after-installing) describes.
 - **Operate JIM** as on any Podman installation (see [Operating JIM](podman.md#operating-jim)).
 
 To change a setting, renew the certificate or change the client secret, update it and run the play again: the role restarts the services that use it. To upgrade, replace `jim.yaml` (and `jim-database.yaml`) with the new release's copies and run the play again; the Worker applies any database changes as JIM starts, as on any installation (see [Upgrading](upgrading.md)).

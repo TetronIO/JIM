@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -163,8 +162,9 @@ public static class CausalityTableModelBuilder
             // is an object-level fact, and Row() below leaves Current and WouldBe null for all of them.
             // The Outcome column's label already says what happened ("Identity created", "Left scope",
             // "Deprovisioned", ...); only MvoDeletionScheduled loses information by going silent on
-            // Current/WouldBe, since its schedule/grace reasoning lived nowhere else, so that one case
-            // alone carries it forward as an OutcomeDetail line instead.
+            // Current/WouldBe, since its schedule/grace reasoning lived nowhere else, so it carries that
+            // forward as an OutcomeDetail line instead. A Joined made by matching is the one other row with
+            // an OutcomeDetail, for a fact no column holds: what the join matched on (#2052).
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Scope, null, ownVia, ownSyncRuleId),
 
@@ -176,8 +176,10 @@ public static class CausalityTableModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Projection, null, ownVia, ownSyncRuleId),
 
+            // The Object Matching Rule and value a join made by matching rests on (#2052) say why this Identity and not
+            // another, which nothing else on the row does.
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Join, null, ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Join, null, ownVia, ownSyncRuleId, causalityEvent.JoinMatchDetail),
 
             // A rejoin cancels the object's scheduled deletion: it is a Join, not a Projection, since
             // the Identity already existed.
@@ -363,7 +365,7 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static string? SourceHref(CausalityModel model) =>
         model.Context.CsoId is { } csoId && csoId != Guid.Empty && model.Context.CsoConnectedSystemId is { } systemId
-            ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            ? model.Context.Links.ConnectedSystemObjectHref(systemId, csoId)
             : null;
 
     /// <summary>

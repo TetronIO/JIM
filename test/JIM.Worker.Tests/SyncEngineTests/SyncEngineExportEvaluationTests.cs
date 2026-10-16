@@ -384,7 +384,7 @@ public class SyncEngineExportEvaluationTests
         // The working set is what lets the worker report every provisioning cancellation an evaluation run made
         // (real run or per-MVO fallback alike) as a ProvisioningCancelled outcome once the run finishes.
         var workingSet = new ExportEvaluationWorkingSet();
-        var cancellation = new CancelledProvisioning(Guid.NewGuid(), ConnectedSystemId: 3, Guid.NewGuid());
+        var cancellation = new CancelledProvisioning(Guid.NewGuid(), ConnectedSystemId: 3, Guid.NewGuid(), ConnectedSystemObjectTypeId: 30);
 
         workingSet.RecordCancelledProvisioning(cancellation);
 

@@ -1,0 +1,85 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Where they point" (#959): every unresolved reference across a Connected System, grouped into the next steps that
+   would resolve them, each with the values and objects it addresses. Shown above the Connector Space while it is
+   filtered to the objects holding unresolved references, so a list of a thousand objects reads as the two or three
+   changes behind them. Judged against the Connected System's current Container Scope, like one object's section. *@
+
+@if (_summary is { TotalCount: > 0 } summary)
+{
+    <MudPaper Outlined="true" Class="@PaperClass" data-testid="jim-unresolved-references-where-they-point">
+        <div class="jim-unresolved-references-head">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="@ToneColour" />
+                <MudText Typo="Typo.h6">Where They Point</MudText>
+                <MudChip T="string" Variant="Variant.Text" Color="@ToneColour" Class="ma-0">@summary.TotalCount.ToString("N0")</MudChip>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Unresolved Reference Handling: <strong>@summary.UnresolvedReferenceHandling</strong>
+                </MudText>
+                <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">Change</MudLink>
+            </MudStack>
+        </div>
+
+        <div class="pa-4">
+            <MudText Typo="Typo.body1">
+                @UnresolvedReferenceDisplay.ReferencesOnObjectsText(summary.TotalCount, summary.ObjectCount) could not be resolved.
+                Below are the changes that would resolve them, each likely cause judged against the current Container Scope.
+            </MudText>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Next steps</MudText>
+            <UnresolvedReferenceNextSteps Fixes="@summary.Fixes"
+                                          ConnectedSystemId="@ConnectedSystemId"
+                                          ConnectedSystemName="@ConnectedSystemName"
+                                          ShowObjectCounts="true" />
+        </div>
+    </MudPaper>
+}
+
+@code {
+    /// <summary>The Connected System whose unresolved references are summarised.</summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>The Connected System's name, for the group of steps that lie in it.</summary>
+    [Parameter, EditorRequired]
+    public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>The call site's spacing classes.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private ConnectedSystemUnresolvedReferenceSummary? _summary;
+    private int? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The read covers the whole Connected System, so it is made once per system rather than on every render.
+        if (_loadedFor == ConnectedSystemId)
+            return;
+
+        _loadedFor = ConnectedSystemId;
+        using var jim = JimFactory.Create();
+        _summary = await jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(ConnectedSystemId);
+    }
+
+    private UnresolvedReferenceTone Tone => _summary == null
+        ? UnresolvedReferenceTone.None
+        : UnresolvedReferenceDisplay.SignpostTone(_summary.UnresolvedReferenceHandling);
+
+    private Color ToneColour => Tone == UnresolvedReferenceTone.Warning ? Color.Warning : Color.Default;
+
+    private string PaperClass => string.Join(' ', new[]
+    {
+        "jim-unresolved-references",
+        Tone == UnresolvedReferenceTone.Warning ? "jim-unresolved-references-warning" : null,
+        Class
+    }.Where(c => !string.IsNullOrEmpty(c)));
+}

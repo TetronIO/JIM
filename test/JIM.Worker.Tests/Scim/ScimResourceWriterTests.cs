@@ -3,6 +3,7 @@
 
 using System.Text.Json.Nodes;
 using JIM.Scim;
+using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 
@@ -299,6 +300,44 @@ public class ScimResourceWriterTests
         {
             Assert.That(resource["members"]!.AsArray(), Has.Count.EqualTo(1));
             Assert.That(resource.ToJsonString(), Does.Contain("bob").And.Not.Contain("alice"));
+        }
+    }
+
+    [Test]
+    public void ApplyChanges_AddingOneValueOfAMultiValuedExtensionStringAndRemovingAnother_KeepsEveryOtherValue()
+    {
+        // The whole-resource equivalent of the value-filtered PATCH removal (#2181): one value goes, the rest stay.
+        const string urn = "urn:example:params:scim:schemas:extension:custom:2.0:User";
+        var schema = ScimAttributeMapper.FlattenSchema(new ScimSchema
+        {
+            Id = urn,
+            Name = "Custom",
+            Attributes = [new ScimSchemaAttribute { Name = "badges", Type = ScimAttributeTypes.String, MultiValued = true }]
+        }, "custom");
+        var resource = Resource($$"""{ "id": "alice", "{{urn}}": { "badges": [ "gold", "silver" ] } }""");
+
+        ScimResourceWriter.ApplyChanges(resource,
+        [
+            new ScimAttributeChange("custom.badges", ScimPatchOperations.Add, "platinum"),
+            new ScimAttributeChange("custom.badges", ScimPatchOperations.Remove, "gold")
+        ], schema);
+
+        Assert.That(resource[urn]!["badges"]!.ToJsonString(), Is.EqualTo("""["silver","platinum"]"""));
+    }
+
+    [Test]
+    public void ApplyChanges_RemovingAMultiValuedAttributeNamingNoValue_TakesEveryValue()
+    {
+        // A removal naming no value is how a clear reaches the provider (#2182), and RFC 7644 section 3.5.2.2 reads a
+        // path-only remove of a multi-valued attribute as removing all of it. Matched against no value, nothing went.
+        var resource = Resource("""{ "id": "engineers", "displayName": "Engineers", "members": [ { "value": "alice" }, { "value": "bob" } ] }""");
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("members", ScimPatchOperations.Remove, null)], GroupSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resource.ContainsKey("members"), Is.False);
+            Assert.That(resource["displayName"]!.GetValue<string>(), Is.EqualTo("Engineers"));
         }
     }
 

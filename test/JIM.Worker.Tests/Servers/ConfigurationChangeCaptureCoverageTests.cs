@@ -47,6 +47,8 @@ public class ConfigurationChangeCaptureCoverageTests
         _completedActivity = null;
 
         _repo = new Mock<IRepository>();
+
+        _repo.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _activityRepo = new Mock<IActivityRepository>();
         _settingsRepo = new Mock<IServiceSettingsRepository>();
         _csRepo = new Mock<IConnectedSystemRepository>();
@@ -142,7 +144,7 @@ public class ConfigurationChangeCaptureCoverageTests
 
         await _jim.ConnectedSystems.BulkUpdateAttributesAsync(
             connectedSystem, objectType,
-            new Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> { [9] = (true, null, null) },
+            new Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> { [9] = (true, null, null, null) },
             NewUser());
 
         AssertCapturedConnectedSystemVersion();

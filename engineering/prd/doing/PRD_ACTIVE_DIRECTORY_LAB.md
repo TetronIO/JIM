@@ -160,7 +160,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 | `engineering/RELEASE_PROCESS.md` | The `jim-ad-lab` gate |
 | `engineering/COMPLIANCE_MAPPING.md` | The #518 entry moves from Planned to Implemented for the Active Directory leg |
 | `docs/connectors/jim-ldap-connector.md` | "Verified against Windows Server 2025 by JIM's integration lab" once true; any stated limitation the lab produces (NTLM, AD LDS) |
-| `docs/developer/testing.md` | How to run the probes and the lab |
+| `engineering/developer/testing.md` | How to run the probes and the lab |
 
 ## Dependencies
 

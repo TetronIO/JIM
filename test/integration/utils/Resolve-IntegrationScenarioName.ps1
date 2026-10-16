@@ -111,26 +111,50 @@ function Get-IntegrationScenarioSetupScript {
 function Get-IntegrationScenarioSetupParameters {
     <#
     .SYNOPSIS
-        The switches a scenario passes to its setup script on top of the defaults, as a new hashtable to splat.
-        The one place that says how a scenario configures its setup, so the scenario's own run and -SetupOnly
-        (which runs the setup script and stops, leaving the environment for a demonstration) configure the same
-        thing.
+        The switches a scenario passes to its setup script on top of the defaults, for the directory it runs
+        against, as a new hashtable to splat. The one place that says how a scenario configures its setup, so the
+        scenario's own run and -SetupOnly (which runs the setup script and stops, leaving the environment for a
+        demonstration) configure the same thing.
     .DESCRIPTION
         Scenario 001 runs with generated and derived identifiers: Account Name generated from the HR names
         (Unique Value Generation, #242), Email and User Principal Name derived from it (Metaverse-Derived
         Attribute Flows, #1750). The switches belong here rather than as Setup-Scenario-001.ps1's defaults,
         because the scenarios that compose that setup as their substrate rely on its sourced identifiers.
+
+        On the Active Directory and Samba AD labs Scenario 001 also gives its provisioning Synchronisation Rule an
+        Initial Password (-InitialPassword). Real Active Directory refuses to create an enabled account that has no
+        password (0000052D, #2039), and the scenario's userAccountControl Attribute Flow asks for an enabled one.
+        With an Initial Password JIM creates the account disabled and the password's delivery enables it, so the
+        flow stays in place and Tests 2d and 2e still disable and enable accounts from HR data. Samba AD accepts an
+        enabled account with no password, but runs with one too: it is where an Initial Password once enabled an
+        account the flow creates disabled (#2064), and Test 1 asserts the HR data's Archived joiner stays disabled.
+        OpenLDAP and 389 Directory Server have no userAccountControl, so those labs run without one.
+    .PARAMETER DirectoryType
+        The directory the scenario runs against, as Get-DirectoryConfig names it in the DirectoryType key of the
+        configuration it returns (SambaAD, OpenLDAP, DirectoryServer389 or ActiveDirectory). Empty or null for a
+        configuration that names none, which is treated as not Active Directory.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)]
         [AllowNull()]
-        [Nullable[int]]$ScenarioNumber
+        [Nullable[int]]$ScenarioNumber,
+
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$DirectoryType
     )
 
     switch ($ScenarioNumber) {
-        1 { return @{ GenerateAccountName = $true; DeriveFromAccountName = $true } }
+        1 {
+            $parameters = @{ GenerateAccountName = $true; DeriveFromAccountName = $true }
+            if ($DirectoryType -in @('ActiveDirectory', 'SambaAD')) {
+                $parameters.InitialPassword = $true
+            }
+            return $parameters
+        }
         default { return @{} }
     }
 }

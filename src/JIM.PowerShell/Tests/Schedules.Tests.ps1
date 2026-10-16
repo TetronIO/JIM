@@ -335,6 +335,45 @@ Describe 'New-JIMSchedule' {
         }
     }
 
+    Context 'Pattern sent to the API' {
+
+        # PowerShell reads a one-element array by its element, so @(0) (Sunday alone) is false in an if: a Sunday-only
+        # Schedule used to go out with no days, which the API reads as every day.
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ id = [guid]::NewGuid(); name = $Body.name }
+                }
+            }
+        }
+
+        It 'Sends Sunday alone as day 0' {
+            InModuleScope JIM {
+                New-JIMSchedule -Name 'Weekly' -TriggerType Cron -PatternType SpecificTimes -DaysOfWeek @(0) -RunTimes @('01:00') -Confirm:$false
+
+                $script:capturedBody.daysOfWeek | Should -BeExactly '0'
+                $script:capturedBody.runTimes | Should -BeExactly '01:00'
+            }
+        }
+
+        It 'Sends an interval and its window as given' {
+            InModuleScope JIM {
+                New-JIMSchedule -Name 'Hourly' -TriggerType Cron -PatternType Interval -DaysOfWeek @(1, 2, 3, 4, 5) -IntervalValue 2 `
+                    -IntervalUnit Hours -IntervalWindowStart '08:00' -IntervalWindowEnd '18:00' -Confirm:$false
+
+                $script:capturedBody.daysOfWeek | Should -BeExactly '1,2,3,4,5'
+                $script:capturedBody.intervalValue | Should -Be 2
+                $script:capturedBody.intervalUnit | Should -BeExactly 'Hours'
+                $script:capturedBody.intervalWindowStart | Should -BeExactly '08:00'
+                $script:capturedBody.intervalWindowEnd | Should -BeExactly '18:00'
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -758,6 +797,34 @@ Describe 'Start-JIMSchedule' {
 
                 $result.status | Should -Be 'CompleteWithError'
                 Should -Invoke Start-Sleep -Times 0 -Exactly
+            }
+        }
+
+        It 'Returns the execution as it stood at the last poll when the timeout is reached' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $executionId = [guid]::NewGuid()
+                $script:getCount = 0
+
+                Mock Start-Sleep { }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ executionId = $executionId }
+                    }
+
+                    # The first GET is the execution just queued; every poll after it finds the run under way.
+                    $script:getCount++
+                    if ($script:getCount -eq 1) {
+                        return [PSCustomObject]@{ id = $executionId; status = 'Queued'; currentStepIndex = 0; totalSteps = 3 }
+                    }
+                    [PSCustomObject]@{ id = $executionId; status = 'InProgress'; currentStepIndex = 1; totalSteps = 3 }
+                }
+
+                # A zero timeout expires at the first poll, after it has seen the run under way.
+                $result = Start-JIMSchedule -Id ([guid]::NewGuid()) -Wait -Timeout ([TimeSpan]::Zero) -Confirm:$false -WarningAction SilentlyContinue
+
+                $result.status | Should -Be 'InProgress'
+                $result.currentStepIndex | Should -Be 1
             }
         }
     }

@@ -803,8 +803,12 @@ public class Worker : BackgroundService
                                             afterUtc = await taskJim.Scheduler.GetTemporalScopeReconciliationWatermarkAsync(newWorkerTask.ScheduleExecutionId.Value);
 
                                         var reconciliationResult = await taskJim.ScopeReconciliation.ReconcileAsync(afterUtc, DateTime.UtcNow);
-                                        newWorkerTask.Activity.Message = null;
-                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        // The cost of any full pass, and any object left undecided (#2054); null otherwise.
+                                        newWorkerTask.Activity.Message = reconciliationResult.Describe();
+                                        if (reconciliationResult.UndecidableObjects > 0)
+                                            await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
+                                        else
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
 
                                         Log.Information("ExecuteAsync: Temporal Scope Reconciliation completed in {ExecutionTime}: {RulesEvaluated} rule(s), {InboundFlagged} inbound + {OutboundFlagged} outbound object(s) flagged for scope review.",
                                             newWorkerTask.Activity.ExecutionTime, reconciliationResult.RulesEvaluated, reconciliationResult.InboundFlagged, reconciliationResult.OutboundFlagged);
@@ -1093,13 +1097,9 @@ public class Worker : BackgroundService
                 .GroupBy(sr => sr.ConnectedSystemId)
                 .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
 
-            // Connected System id to CSO type name, so the causality panel can name a staged export's target
-            // "type: name" instead of the bare name or id, matching the sync engine's own lookup.
-            var csoTypeNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                .SelectMany(rules => rules)
-                .Where(sr => sr.ConnectedSystemObjectType != null)
-                .GroupBy(sr => sr.ConnectedSystemId)
-                .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+            // Target object type names, so the causality panel can name a staged export's target "type: name"
+            // instead of the bare name or id, matching the sync engine's own naming.
+            var typeNames = ExportTargetTypeNames.From(exportEvaluationCache);
 
             foreach (var mvo in mvosToDelete)
             {
@@ -1143,9 +1143,10 @@ public class Worker : BackgroundService
                     // deleted: the deciding run ended in a previous Activity, and only the snapshot rode across
                     // on the object. Cohorts group on the code it carries, never on the reason sentence.
                     var policySnapshot = MvoDeletionPolicySnapshot.FromJson(mvo.DeletionPolicySnapshotJson);
+                    ActivityRunProfileExecutionItemSyncOutcome? mvoDeletedOutcome = null;
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
-                        var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
+                        mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
                             targetEntityDescription: mvo.NameOrId);
@@ -1163,9 +1164,9 @@ public class Worker : BackgroundService
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
+                                typeNames.ForPendingExport(deletePendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id),
                                 deprovisioningRule?.Id, deprovisioningRule?.Name);
-                            deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
+                            deletePendingExport.RecordStager(deletionItem.Id);
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
 
@@ -1178,7 +1179,8 @@ public class Worker : BackgroundService
                                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
+                                    cancellation.ConnectedSystemId,
+                                    typeNames.Resolve(cancellation.ConnectedSystemId, objectTypeId: cancellation.ConnectedSystemObjectTypeId)));
                         }
 
                         // Accounts left in place: a Disconnect Deprovisioning Action broke the join and queued
@@ -1190,7 +1192,8 @@ public class Worker : BackgroundService
                                 targetEntityId: disconnection.ConnectedSystemObjectId,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    disconnection.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId)),
+                                    disconnection.ConnectedSystemId,
+                                    typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId)),
                                 syncRuleId: disconnection.SyncRuleId,
                                 syncRuleName: disconnection.SyncRuleName);
                         }
@@ -1205,17 +1208,29 @@ public class Worker : BackgroundService
                         deletionCauses[mvo.Id] = deprovisionCause;
                         foreach (var pendingExport in reportableDeleteExports)
                         {
+                            mvoWorkingSet.TryGetDeprovisioningRule(pendingExport.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
                             var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                                 activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                                typeNames.ForPendingExport(pendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id));
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
-                            pendingExport.QueuedByRunProfileExecutionItemId = deprovisionItem.Id;
+                            pendingExport.RecordStager(deprovisionItem.Id);
                             queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
                             executionItems.Add(deprovisionItem);
                         }
+                    }
+
+                    // The run that scheduled this deletion sits in another Activity, days or weeks ago; the object
+                    // carried its item across, and this edge is the only thing connecting the two (#1811). Objects
+                    // scheduled before the item was recorded carry none, and their deletion simply has no such cause.
+                    if (mvo.DeletionScheduledByRunProfileExecutionItemId.HasValue)
+                    {
+                        var schedulingCause = BuildDeletionCause(mvo, policySnapshot, rpei: null, outcome: null,
+                            rpeiId: mvo.DeletionScheduledByRunProfileExecutionItemId);
+                        deletionItem.CausalEdges.Add(schedulingCause.ToEdge(
+                            CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion, mvoDeletedOutcome));
                     }
 
                     executionItems.Add(deletionItem);
@@ -1251,6 +1266,9 @@ public class Worker : BackgroundService
                     deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
 
+                // A referencing object whose export scope could not be decided received no recall: its error.
+                executionItems.AddRange(recallResult.ScopingFailureExecutionItems());
+
                 // Fold the staged recall exports into Activity reporting: one execution item per staged
                 // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
                 // Which deleted objects each referencing object lost, from the recall context captured before
@@ -1277,7 +1295,7 @@ public class Worker : BackgroundService
                         objectTypeSnapshot: null,
                         csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                         activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                        csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                        typeNames.ForPendingExport(pendingExport));
 
                     if (pendingExport.SourceMetaverseObjectId.HasValue
                         && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
@@ -1287,7 +1305,7 @@ public class Worker : BackgroundService
                             recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
                     }
 
-                    pendingExport.QueuedByRunProfileExecutionItemId = recallItem.Id;
+                    pendingExport.RecordStager(recallItem.Id);
                     queueingStamps.Add((pendingExport.Id, recallItem.Id));
                     executionItems.Add(recallItem);
                 }
@@ -1318,7 +1336,9 @@ public class Worker : BackgroundService
 
     /// <summary>
     /// Describes a housekeeping deletion as the cause of whatever it goes on to trigger (#1223), so a removal
-    /// recorded against a different object can still name the object whose deletion caused it.
+    /// recorded against a different object can still name the object whose deletion caused it. Also describes the
+    /// scheduling of the deletion as the cause of the deletion itself (#1811), which carries the same object, reason
+    /// and triggering system and differs only in the item it points at.
     /// </summary>
     /// <param name="mvo">The Metaverse Object being deleted. Read for its name and the triggering system
     /// recorded on it when the deletion was scheduled.</param>
@@ -1328,15 +1348,19 @@ public class Worker : BackgroundService
     /// without a reason: an unattributed cause is still far better than none.</param>
     /// <param name="rpei">The execution item recording the deletion, where one carries a deletion outcome.</param>
     /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where outcome tracking recorded one.</param>
+    /// <param name="rpeiId">The id of an item persisted in an earlier run, for a cause known only by id: the item
+    /// that scheduled the deletion, when the cause is the scheduling rather than the deletion itself (#1811).</param>
     private static CausalCause BuildDeletionCause(
         MetaverseObject mvo,
         MvoDeletionPolicySnapshot? policySnapshot,
         ActivityRunProfileExecutionItem? rpei,
-        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+        ActivityRunProfileExecutionItemSyncOutcome? outcome,
+        Guid? rpeiId = null)
     {
         return new CausalCause
         {
             RunProfileExecutionItem = rpei,
+            RunProfileExecutionItemId = rpeiId,
             SyncOutcome = outcome,
             MetaverseObjectId = mvo.Id,
             // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
@@ -1530,42 +1554,33 @@ public class Worker : BackgroundService
             // Query the database for precise RPEI error counts.
             // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
             // precise has-errors/all-errors detection for all processor types uniformly.
-            var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
-            objectLevelErrorCount = totalWithErrors;
+            var counts = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
+            objectLevelErrorCount = counts.TotalWithErrors;
 
-            var hasItems = totalRpeis > 0;
-            var hasErrors = totalWithErrors > 0;
-            var hasUnhandledErrors = totalUnhandledErrors > 0;
-            var allErrors = hasItems && totalWithErrors == totalRpeis;
-
-            if (allErrors)
+            // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the Activity, not as
+            // RPEIs, and still complete it with a warning.
+            switch (ActivityOutcomeEvaluator.Evaluate(counts, hasWarningMessage: !string.IsNullOrEmpty(activity.WarningMessage),
+                        activity.ConnectedSystemRunType, activity.ObjectsProcessed))
             {
-                await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
-            }
-            else if (hasUnhandledErrors)
-            {
-                // UnhandledError RPEIs indicate code/logic bugs, not data issues.
-                // These must escalate to CompleteWithError to ensure visibility and investigation.
-                await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{totalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
-                Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, totalUnhandledErrors);
-            }
-            else if (hasErrors)
-            {
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
-            }
-            else if (!string.IsNullOrEmpty(activity.WarningMessage))
-            {
-                // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the
-                // Activity, not as RPEIs. The activity should still complete with warning status.
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warning (connector warning: {WarningMessage})", activity.Id, activity.WarningMessage);
-            }
-            else
-            {
-                await jim.Activities.CompleteActivityAsync(activity);
-                Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                case ActivityStatus.FailedWithError:
+                    await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
+                    break;
+                case ActivityStatus.CompleteWithError:
+                    // UnhandledError RPEIs indicate code/logic bugs, not data issues.
+                    // These must escalate to CompleteWithError to ensure visibility and investigation.
+                    await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{counts.TotalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
+                    Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, counts.TotalUnhandledErrors);
+                    break;
+                case ActivityStatus.CompleteWithWarning:
+                    await jim.Activities.CompleteActivityWithWarningAsync(activity);
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings ({ErrorCount} item error(s), {RefusedObjectTypeChanges} refused Object Type change(s), warning message: {WarningMessage})",
+                        activity.Id, counts.TotalWithErrors, counts.TotalObjectTypeChangeRefusals, activity.WarningMessage);
+                    break;
+                default:
+                    await jim.Activities.CompleteActivityAsync(activity);
+                    Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                    break;
             }
         }
         catch (Exception ex)

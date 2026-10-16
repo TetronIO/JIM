@@ -36,6 +36,46 @@ public class CausalityCauseWordingTests
         };
     }
 
+    // ─── Nearest cause, as plain text (#2100) ───
+
+    [Test]
+    public void NearestCauseText_OneCohort_IsItsSentence()
+    {
+        var cohort = ReferenceRemovalCohort(1);
+        cohort.Members[0] = new CausalChainMember { DisplayName = "Tina Adams" };
+        var nearest = new CausalNearestCauses { Cohorts = [cohort], TotalCohortCount = 1 };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"), Is.EqualTo(
+            "Tina Adams was deleted, so they were removed from Project Diamond's Static Members"));
+    }
+
+    [Test]
+    public void NearestCauseText_SeveralCohorts_SaysHowManyMoreTheFirstStandsFor()
+    {
+        var nearest = new CausalNearestCauses { Cohorts = [ReferenceRemovalCohort(10)], TotalCohortCount = 3 };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"), Is.EqualTo(
+            "10 Users were deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"));
+    }
+
+    [Test]
+    public void NearestCauseText_NoCausesBecauseTheyWereNotRetained_SaysSoRatherThanThatThereWereNone()
+    {
+        var nearest = new CausalNearestCauses { Resolution = CausalChainResolution.CauseNotRetained };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"),
+            Is.EqualTo("What caused this is no longer retained"));
+    }
+
+    [Test]
+    public void NearestCauseText_NoCausesRecorded_SaysNoneWereRecorded()
+    {
+        var nearest = new CausalNearestCauses { Resolution = CausalChainResolution.NoFurtherCauses };
+
+        Assert.That(CausalityCauseWording.NearestCauseText(nearest, "Project Diamond"),
+            Is.EqualTo("No earlier causes recorded"));
+    }
+
     [Test]
     public void Sentence_ReferenceRemovalCohortOfMany_CountsTheCausesAndNamesTheRelationship()
     {
@@ -130,6 +170,34 @@ public class CausalityCauseWordingTests
 
         Assert.That(Read(sentence), Is.EqualTo(
             "Tina Adams was deleted, so this deprovisioning was queued"));
+    }
+
+    [Test]
+    public void Sentence_DeletionSchedule_ReadsAsThisRunCarryingOutTheScheduledDeletion()
+    {
+        // A grace-period deletion (#1811): the cause is the run that scheduled it, the effect this housekeeping run.
+        var cohort = new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Yellowstone APAC",
+            ObjectTypeName = "User",
+            ObjectTypePluralName = "Users",
+            Members = [new CausalChainMember { DisplayName = "Tina Adams" }]
+        };
+
+        var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Read(sentence), Is.EqualTo(
+                "Tina Adams was scheduled for deletion, and this run deleted it once the grace period ended"));
+            Assert.That(CausalityCauseWording.Reason(cohort), Is.Not.Null,
+                "the Deletion Rule that scheduled it is attributed exactly as on the deletion's other edges");
+            Assert.That(CausalityCauseWording.ShowConnectedSystemChip(cohort), Is.True,
+                "the triggering system is the reason's subject, so it keeps its chip");
+        }
     }
 
     [Test]
@@ -270,6 +338,59 @@ public class CausalityCauseWordingTests
             ConnectedSystemName = "Glitterband EMEA",
             Members = [new CausalChainMember { DisplayName = displayName }]
         };
+    }
+
+    /// <summary>
+    /// An export carrying changes from two synchronisations of one object (#2100): a cohort of two runs, not of two
+    /// objects. The sentence names the object once and says how many runs staged the change.
+    /// </summary>
+    private static CausalChainCohort QueueingCohortStagedTwice(CausalReasonCode reasonCode)
+    {
+        var mvoId = Guid.NewGuid();
+        return new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ReasonCode = reasonCode,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "Glitterband EMEA",
+            ObjectTypeName = "User",
+            ObjectTypePluralName = "Users",
+            Members =
+            [
+                new CausalChainMember { DisplayName = "Sam Scott (S8-198)", MetaverseObjectId = mvoId, RunProfileExecutionItemId = Guid.NewGuid() },
+                new CausalChainMember { DisplayName = "Sam Scott (S8-198)", MetaverseObjectId = mvoId, RunProfileExecutionItemId = Guid.NewGuid() }
+            ]
+        };
+    }
+
+    [Test]
+    public void Sentence_QueueingCohortStagedByTwoRuns_NamesTheObjectOnceAndCountsTheRuns()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohortStagedTwice(CausalReasonCode.ExportUpdateStaged), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Sam Scott (S8-198)'s Metaverse Object changed in 2 synchronisations, so this run applied the changes to the Connected System Object"));
+    }
+
+    [Test]
+    public void Sentence_QueueingCohortStagedByTwoRunsBeforeReasonsWereRecorded_CountsTheRuns()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohortStagedTwice(CausalReasonCode.NotSet), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "2 synchronisations of Sam Scott (S8-198) staged this change, and this run exported it"));
+    }
+
+    [Test]
+    public void MembersLabel_QueueingCohortStagedByTwoRuns_CountsTheRunsNotTheObjects()
+    {
+        var cohort = QueueingCohortStagedTwice(CausalReasonCode.ExportUpdateStaged);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CausalityCauseWording.MembersLabel(cohort), Is.EqualTo("Show the 2 synchronisations"));
+            Assert.That(CausalityCauseWording.HideMembersLabel(cohort), Is.EqualTo("Hide the 2 synchronisations"));
+        }
     }
 
     /// <summary>

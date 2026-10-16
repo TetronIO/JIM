@@ -17,7 +17,7 @@ function Remove-JIMSchedule {
         An optional reason for the deletion, recorded against the change history.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -42,6 +42,7 @@ function Remove-JIMSchedule {
         New-JIMSchedule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]
@@ -71,7 +72,7 @@ function Remove-JIMSchedule {
             # Continue with ID if we can't get the name
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($scheduleName, "Remove Schedule")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $scheduleName -Action "Remove Schedule" -Force:$Force) {
             Write-Verbose "Removing Schedule: $Id ($scheduleName)"
 
             # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.

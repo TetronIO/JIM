@@ -29,7 +29,10 @@
                          SingularName="Value"
                          PluralName="Values">
         <Columns>
-            <TemplateColumn Title="Display Name" Sortable="false">
+            @* Display Name is the fill column and the others keep to one line: two unbounded Distinguished Names in an
+               auto-layout table (an unresolved value here, a Secondary ID there) squeezed the Type column to a letter
+               a line, and a virtualised row must stay one line (JIM.Web/CLAUDE.md, "One line per row"). *@
+            <TemplateColumn Title="Display Name" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                 <HeaderTemplate>
                     <MudText Typo="Typo.button">Display Name</MudText>
                 </HeaderTemplate>
@@ -43,9 +46,11 @@
                     }
                     else if (context.Item.UnresolvedReferenceValue != null)
                     {
-                        <span class="jim-attr-unresolved">
-                            <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
-                            <span class="mud-text-secondary jim-text-code">@context.Item.UnresolvedReferenceValue</span>
+                        @* One line: the value gives way, and its likely cause (#959) is on the icon's hover, since a
+                           chip beside the value left the value no room in a table this narrow. *@
+                        <span class="jim-attr-unresolved jim-one-line-list">
+                            <UnresolvedReferenceIcon Diagnosis="@UnresolvedReferenceCauses?.For(context.Item)" />
+                            <span class="jim-one-line-list-value mud-text-secondary jim-text-code" title="@context.Item.UnresolvedReferenceValue">@context.Item.UnresolvedReferenceValue</span>
                         </span>
                     }
                     else
@@ -54,7 +59,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Type" Sortable="false">
+            <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <MudText Typo="Typo.button">Type</MudText>
                 </HeaderTemplate>
@@ -68,7 +73,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Secondary ID" Sortable="false">
+            <TemplateColumn Title="Secondary ID" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <MudText Typo="Typo.button">Secondary ID</MudText>
                 </HeaderTemplate>
@@ -80,9 +85,10 @@
                     }
                     @if (secondaryId != null)
                     {
-                        <span class="mud-text-secondary jim-text-code">
-                            @secondaryId.ToStringNoName()
-                        </span>
+                        var secondaryIdText = secondaryId.ToStringNoName();
+                        <div class="jim-column-cap" style="--jim-column-cap: 12rem">
+                            <span class="jim-one-line mud-text-secondary jim-text-code" title="@secondaryIdText">@secondaryIdText</span>
+                        </div>
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -172,6 +178,10 @@ else
     [Parameter]
     public bool IsReferenceAttribute { get; set; }
 
+    /// <summary>The page's diagnoses, for the likely cause beside each unresolved reference (#959); absent elsewhere.</summary>
+    [CascadingParameter]
+    public UnresolvedReferenceCauses? UnresolvedReferenceCauses { get; set; }
+
     /// <summary>
     /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
     /// parameter (it orders by value id, which is the total order its offset and count are addressed against), so
@@ -206,6 +216,10 @@ else
         var result = await jim.ConnectedSystems.GetAttributeValuesRangeAsync(
             ConnectedSystemObjectId, AttributeName, request.StartIndex, request.Count,
             request.SearchText, request.IncludeTotalCount);
+
+        // Diagnosed before the window is handed over, so its unresolved values draw with their cause chips (#959).
+        if (UnresolvedReferenceCauses != null)
+            await UnresolvedReferenceCauses.DiagnoseAsync(jim, result.Results);
 
         return new VirtualisedWindow<ConnectedSystemObjectAttributeValue>(result.Results, result.TotalResults);
     }

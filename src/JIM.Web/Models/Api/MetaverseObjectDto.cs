@@ -7,59 +7,116 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Utilities;
 
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of a MetaverseObject for detail views.
+/// A Metaverse Object in full: its attribute values, where each came from, and the Connected System Objects joined
+/// to it.
 /// </summary>
 public class MetaverseObjectDto
 {
+    /// <summary>
+    /// The unique identifier of the Metaverse Object.
+    /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// When the Metaverse Object was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// When the Metaverse Object last changed (UTC).
+    /// </summary>
     public DateTime? LastUpdated { get; set; }
 
     /// <summary>
-    /// The kind of principal behind the earliest recorded change (User, ApiKey or System), with
-    /// <see cref="CreatedById"/> and <see cref="CreatedByName"/>; null when no change history is recorded.
+    /// The kind of principal behind the earliest recorded change (User, ApiKey or System), with CreatedById and
+    /// CreatedByName; null when no change history is recorded, as when change tracking is off or the history has
+    /// been purged.
     /// </summary>
     public ActivityInitiatorType? CreatedByType { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the principal behind the earliest recorded change; null when no change history is
+    /// recorded.
+    /// </summary>
     public Guid? CreatedById { get; set; }
 
     /// <summary>The name of the principal behind the earliest recorded change, as it was then.</summary>
     public string? CreatedByName { get; set; }
 
     /// <summary>
-    /// The kind of principal behind the latest recorded change, with <see cref="LastUpdatedById"/> and
-    /// <see cref="LastUpdatedByName"/>; null when no change history is recorded.
+    /// The kind of principal behind the latest recorded change (User, ApiKey or System), with LastUpdatedById and
+    /// LastUpdatedByName; null when no change history is recorded.
     /// </summary>
     public ActivityInitiatorType? LastUpdatedByType { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the principal behind the latest recorded change; null when no change history is
+    /// recorded.
+    /// </summary>
     public Guid? LastUpdatedById { get; set; }
 
     /// <summary>The name of the principal behind the latest recorded change, as it was then.</summary>
     public string? LastUpdatedByName { get; set; }
 
+    /// <summary>
+    /// The Metaverse Object's display name; null when it has none.
+    /// </summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// Whether the Metaverse Object is in use (Normal) or has been marked Obsolete.
+    /// </summary>
     public MetaverseObjectStatus Status { get; set; }
+
+    /// <summary>
+    /// How the Metaverse Object came to exist: Projected from a Connected System Object, or Internal, created in
+    /// JIM itself. JIM never deletes an Internal object automatically.
+    /// </summary>
     public MetaverseObjectOrigin Origin { get; set; }
+
+    /// <summary>
+    /// When the last Connected System Object was disconnected from the Metaverse Object (UTC); null while one is
+    /// still joined.
+    /// </summary>
     public DateTime? LastConnectorDisconnectedDate { get; set; }
+
+    /// <summary>
+    /// Whether the Metaverse Object is due to be deleted under its Object Type's deletion rule.
+    /// </summary>
     public bool IsPendingDeletion { get; set; }
+
+    /// <summary>
+    /// When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); null when it is not
+    /// pending deletion.
+    /// </summary>
     public DateTime? DeletionEligibleDate { get; set; }
 
     /// <summary>
-    /// The Connected System whose disconnection triggered a pending deletion, or null when the object is
-    /// not pending deletion, was marked by the #1605 state-convergent zero-join pass (no single system
-    /// triggered it), or predates trigger attribution.
+    /// The Connected System whose disconnection made the Metaverse Object pending deletion. Null when it is not
+    /// pending deletion, when no single system triggered it (its last connection went without one), or when the
+    /// deletion was scheduled before JIM recorded the trigger.
     /// </summary>
     public string? DeletionTriggeredBySystemName { get; set; }
 
-    public MetaverseObjectTypeDto Type { get; set; } = null!;
-    public List<MetaverseObjectAttributeValueDto> AttributeValues { get; set; } = new();
     /// <summary>
-    /// Every Connected System Object joined to this Metaverse Object, with the same derived join data the
-    /// portal's Connections tab shows (#1519).
+    /// The Metaverse Object Type, with its Id and Name.
+    /// </summary>
+    public MetaverseObjectTypeDto Type { get; set; } = null!;
+
+    /// <summary>
+    /// Every value the Metaverse Object holds, one entry per value, each with the attribute it belongs to and the
+    /// Connected System and Synchronisation Rule that contributed it.
+    /// </summary>
+    public List<MetaverseObjectAttributeValueDto> AttributeValues { get; set; } = new();
+
+    /// <summary>
+    /// Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its
+    /// connection, as the portal's Connections tab shows them.
     /// </summary>
     public List<MetaverseObjectConnectionDto> ConnectedSystemObjects { get; set; } = new();
 
@@ -119,11 +176,18 @@ public class MetaverseObjectDto
 }
 
 /// <summary>
-/// Lightweight API representation of a MetaverseObjectType.
+/// A Metaverse Object Type, by ID and name.
 /// </summary>
 public class MetaverseObjectTypeDto
 {
+    /// <summary>
+    /// The unique identifier of the Object Type.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The Object Type's name.
+    /// </summary>
     public string Name { get; set; } = null!;
 
     public static MetaverseObjectTypeDto FromEntity(MetaverseObjectType entity)
@@ -191,7 +255,7 @@ public class MetaverseObjectAttributeValueDto
             AttributeType = entity.Attribute?.Type ?? AttributeDataType.NotSet,
             AttributePlurality = entity.Attribute?.AttributePlurality ?? AttributePlurality.SingleValued,
             StringValue = entity.StringValue,
-            DateTimeValue = entity.DateTimeValue,
+            DateTimeValue = entity.DateTimeValue.HasValue ? DateTimeAttributeValue.ToCanonical(entity.DateTimeValue.Value) : null,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,
@@ -298,7 +362,7 @@ public class MetaverseObjectConnectionDto
 }
 
 /// <summary>
-/// API representation of a MetaverseObject pending deletion.
+/// A Metaverse Object pending deletion.
 /// </summary>
 public class PendingDeletionDto
 {
@@ -308,48 +372,61 @@ public class PendingDeletionDto
     /// <summary>The display name of the Metaverse Object.</summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>The object type (id and name). Nested to match the single-object response shape.</summary>
+    /// <summary>
+    /// The Metaverse Object Type, with its Id and Name.
+    /// </summary>
+    /// <remarks>
+    /// Nested to match the single-object response shape.
+    /// </remarks>
     public MetaverseObjectTypeDto Type { get; set; } = null!;
 
-    /// <summary>When the last connector was disconnected from this MVO.</summary>
+    /// <summary>
+    /// When the last Connected System Object was disconnected from the Metaverse Object (UTC).
+    /// </summary>
     public DateTime LastConnectorDisconnectedDate { get; set; }
 
-    /// <summary>The date when this MVO becomes eligible for deletion (after grace period expires).</summary>
+    /// <summary>
+    /// When the Metaverse Object becomes due for deletion, once its grace period ends (UTC).
+    /// </summary>
     public DateTime? DeletionEligibleDate { get; set; }
 
-    /// <summary>Number of days remaining until deletion (negative if overdue).</summary>
+    /// <summary>
+    /// How many days remain until the Metaverse Object is due for deletion; negative once it is overdue.
+    /// </summary>
     public int? DaysUntilDeletion { get; set; }
 
-    /// <summary>The grace period configured for this object type.</summary>
+    /// <summary>
+    /// The grace period its Object Type sets.
+    /// </summary>
     public TimeSpan? GracePeriod { get; set; }
 
-    /// <summary>Number of Connected System Objects still linked to this MVO.</summary>
+    /// <summary>
+    /// How many Connected System Objects are still joined to the Metaverse Object.
+    /// </summary>
     public int ConnectedSystemObjectCount { get; set; }
 
     /// <summary>
-    /// The deletion status: Deprovisioning (has remaining connectors), AwaitingGracePeriod (fully disconnected, waiting),
-    /// or ReadyForDeletion (grace period expired, no connectors).
+    /// Where the deletion stands: Deprovisioning while Connected System Objects remain joined, AwaitingGracePeriod
+    /// once none remain but the grace period is still running, and ReadyForDeletion once it has ended.
     /// </summary>
     public string Status { get; set; } = null!;
 
     /// <summary>
-    /// The Connected System whose disconnection triggered the scheduled deletion (#119).
-    /// Null for deletions scheduled before trigger recording existed.
+    /// The unique identifier of the Connected System whose disconnection scheduled the deletion; null when no
+    /// single system triggered it, or when it was scheduled before JIM recorded the trigger.
     /// </summary>
     public int? DeletionTriggeredBySystemId { get; set; }
 
     /// <summary>
-    /// The display name of the triggering Connected System, captured when the deletion was scheduled
-    /// so it survives deletion of the system itself (#119).
+    /// That Connected System's name, captured when the deletion was scheduled so it survives the system's own
+    /// deletion.
     /// </summary>
     public string? DeletionTriggeredBySystemName { get; set; }
 
     /// <summary>
-    /// Why the rule decided to mark this object for deletion (#1605), read back from the decision-time
-    /// policy snapshot. <see cref="CausalReasonCode.NoConnectorRemainsStateConvergence"/> means the object
-    /// was found by the state-convergent zero-join pass rather than a specific system's disconnection, so a
-    /// null <see cref="DeletionTriggeredBySystemName"/> is honest, not a missing fact. <see cref="CausalReasonCode.NotSet"/>
-    /// when the snapshot is absent or predates reason-code capture.
+    /// Why the deletion rule marked the Metaverse Object for deletion. NoConnectorRemainsStateConvergence means JIM
+    /// found it with nothing joined rather than through one system's disconnection, which is why
+    /// DeletionTriggeredBySystemName is null; NotSet when the deletion was scheduled before JIM recorded a reason.
     /// </summary>
     public CausalReasonCode ReasonCode { get; set; } = CausalReasonCode.NotSet;
 
@@ -402,19 +479,27 @@ public class PendingDeletionDto
 }
 
 /// <summary>
-/// Summary statistics for pending deletions.
+/// How many Metaverse Objects are pending deletion, and where their deletions stand.
 /// </summary>
 public class PendingDeletionSummary
 {
-    /// <summary>Total count of MVOs pending deletion.</summary>
+    /// <summary>
+    /// How many Metaverse Objects are pending deletion.
+    /// </summary>
     public int TotalCount { get; set; }
 
-    /// <summary>Count of MVOs still connected to other systems, awaiting cascade deletion.</summary>
+    /// <summary>
+    /// How many still have Connected System Objects joined, awaiting deprovisioning.
+    /// </summary>
     public int DeprovisioningCount { get; set; }
 
-    /// <summary>Count of MVOs fully disconnected but waiting for grace period to expire.</summary>
+    /// <summary>
+    /// How many have nothing joined but are still within their grace period.
+    /// </summary>
     public int AwaitingGracePeriodCount { get; set; }
 
-    /// <summary>Count of MVOs eligible for deletion (grace period expired, no connectors).</summary>
+    /// <summary>
+    /// How many are due for deletion: their grace period has ended and nothing is joined.
+    /// </summary>
     public int ReadyForDeletionCount { get; set; }
 }

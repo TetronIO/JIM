@@ -26,28 +26,6 @@ internal static class LdapConnectorUtilities
         return string.IsNullOrEmpty(value) ? null : value;
     }
 
-    internal static bool? GetEntryAttributeBooleanValue(SearchResultEntry entry, string attributeName)
-    {
-        if (entry == null) return null;
-        if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count != 1) return null;
-
-        var value = entry.Attributes[attributeName][0];
-
-        // LDAP returns Boolean values as strings ("TRUE"/"FALSE")
-        if (value is string stringValue)
-        {
-            return stringValue.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (value is bool boolValue)
-        {
-            return boolValue;
-        }
-
-        return null;
-    }
-
     /// <summary>
     /// Returns all values of an LDAP SearchResultEntry attribute, cast to Guid.
     /// </summary>
@@ -133,127 +111,6 @@ internal static class LdapConnectorUtilities
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
         return IdentifierParser.FromMicrosoftBytes((byte[])entry.Attributes[attributeName][0]);
-    }
-
-    
-    internal static DateTime? GetEntryAttributeDateTimeValue(SearchResultEntry entry, string attributeName)
-    {
-        if (entry == null) return null;
-        if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count != 1) return null;
-
-        var value = entry.Attributes[attributeName][0];
-
-        // LDAP returns DateTime values as strings in GeneralizedTime format (RFC 4517)
-        // Format: yyyyMMddHHmmss[.fraction][Z|±hhmm]
-        if (value is string stringValue)
-        {
-            var result = ParseLdapGeneralizedTime(stringValue);
-            if (result.HasValue)
-                return result;
-
-            // Fallback: try standard ISO 8601 parsing
-            if (DateTime.TryParse(stringValue, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedDate))
-            {
-                return parsedDate;
-            }
-            return null;
-        }
-
-        if (value is DateTime dateValue)
-        {
-            return dateValue;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Parses LDAP GeneralizedTime format (RFC 4517).
-    /// Supports: yyyyMMddHHmmss[.fraction][Z|±hhmm|±hh]
-    /// Examples: "20231215143000Z", "20231215143000.123456Z", "20231215143000+0530", "20231215143000-05"
-    /// </summary>
-    private static DateTime? ParseLdapGeneralizedTime(string value)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length < 14)
-            return null;
-
-        // Extract the base datetime part (yyyyMMddHHmmss)
-        var basePart = value[..14];
-        var remaining = value[14..];
-
-        if (!DateTime.TryParseExact(basePart, "yyyyMMddHHmmss",
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var dateTime))
-        {
-            return null;
-        }
-
-        // Handle fractional seconds and timezone
-        var fractionTicks = 0L;
-        var offset = TimeSpan.Zero;
-        var isUtc = false;
-
-        if (remaining.Length > 0)
-        {
-            // Handle fractional seconds (starts with '.')
-            if (remaining[0] == '.')
-            {
-                var fractionEnd = 1;
-                while (fractionEnd < remaining.Length && char.IsDigit(remaining[fractionEnd]))
-                    fractionEnd++;
-
-                var fractionStr = remaining[1..fractionEnd];
-                // Pad or truncate to 7 digits for .NET ticks precision
-                fractionStr = fractionStr.PadRight(7, '0')[..7];
-                if (long.TryParse(fractionStr, out fractionTicks))
-                {
-                    // fractionTicks is in 100-nanosecond units
-                }
-                remaining = remaining[fractionEnd..];
-            }
-
-            // Handle timezone: Z, +hhmm, -hhmm, +hh, -hh
-            if (remaining.Length > 0)
-            {
-                if (remaining == "Z")
-                {
-                    isUtc = true;
-                }
-                else if (remaining[0] == '+' || remaining[0] == '-')
-                {
-                    var sign = remaining[0] == '+' ? 1 : -1;
-                    var tzPart = remaining[1..];
-
-                    int hours = 0, minutes = 0;
-                    if (tzPart.Length >= 2 && int.TryParse(tzPart[..2], out hours))
-                    {
-                        if (tzPart.Length >= 4 && int.TryParse(tzPart[2..4], out minutes))
-                        {
-                            // Format: ±hhmm
-                        }
-                        // Format: ±hh (minutes remain 0)
-                        offset = new TimeSpan(sign * hours, sign * minutes, 0);
-                        isUtc = true; // Has explicit timezone
-                    }
-                }
-            }
-        }
-
-        // Add fractional ticks
-        dateTime = dateTime.AddTicks(fractionTicks);
-
-        // Convert to UTC
-        if (isUtc)
-        {
-            // Subtract offset to get UTC (if +0530, subtract 5:30 to get UTC)
-            dateTime = dateTime - offset;
-            return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
-        }
-
-        // No timezone specified - assume UTC (most LDAP servers use UTC)
-        return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
     }
 
     internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)
@@ -350,82 +207,6 @@ internal static class LdapConnectorUtilities
             if (obj.Length > 1) hash = (hash * 31) + obj[^1];
             return hash;
         }
-    }
-
-    internal static List<int>? GetEntryAttributeIntValues(SearchResultEntry entry, string attributeName)
-    {
-        if (entry == null) return null;
-        if (!entry.Attributes.Contains(attributeName)) return null;
-        return GetAttributeIntValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
-    }
-
-    /// <inheritdoc cref="GetAttributeStringValues"/>
-    internal static List<int>? GetAttributeIntValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
-    {
-        if (attribute == null || attribute.Count == 0) return null;
-
-        // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
-        var result = new List<int>();
-        foreach (string value in attribute.GetValues(typeof(string)))
-        {
-            if (int.TryParse(value, out var intValue))
-            {
-                result.Add(intValue);
-            }
-        }
-
-        if (result.Count == 0)
-            return null;
-
-        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
-        var uniqueValues = result.Distinct().ToList();
-        if (uniqueValues.Count < result.Count)
-        {
-            var duplicateCount = result.Count - uniqueValues.Count;
-            Log.Warning("GetEntryAttributeIntValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
-                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), result.Count, uniqueValues.Count);
-        }
-
-        return uniqueValues;
-    }
-
-    internal static List<long>? GetEntryAttributeLongValues(SearchResultEntry entry, string attributeName)
-    {
-        if (entry == null) return null;
-        if (!entry.Attributes.Contains(attributeName)) return null;
-        return GetAttributeLongValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
-    }
-
-    /// <inheritdoc cref="GetAttributeStringValues"/>
-    internal static List<long>? GetAttributeLongValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
-    {
-        if (attribute == null || attribute.Count == 0) return null;
-
-        // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
-        var result = new List<long>();
-        foreach (string value in attribute.GetValues(typeof(string)))
-        {
-            if (long.TryParse(value, out var longValue))
-            {
-                result.Add(longValue);
-            }
-        }
-
-        if (result.Count == 0)
-            return null;
-
-        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
-        var uniqueValues = result.Distinct().ToList();
-        if (uniqueValues.Count < result.Count)
-        {
-            var duplicateCount = result.Count - uniqueValues.Count;
-            Log.Warning("GetEntryAttributeLongValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
-                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), result.Count, uniqueValues.Count);
-        }
-
-        return uniqueValues;
     }
 
     internal static int? GetEntryAttributeIntValue(SearchResultEntry entry, string attributeName)
@@ -671,6 +452,27 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Escapes an attribute value for use in a relative distinguished name (RFC 4514 section 2.4): the characters
+    /// <c>" + , ; &lt; &gt; \ =</c> anywhere, a leading space or <c>#</c>, and a trailing space.
+    /// </summary>
+    internal static string EscapeRdnValue(string value)
+    {
+        var escaped = new StringBuilder(value.Length + 8);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+            var needsEscape = character is '"' or '+' or ',' or ';' or '<' or '>' or '\\' or '=' ||
+                              (i == 0 && character is ' ' or '#') ||
+                              (i == value.Length - 1 && character == ' ');
+            if (needsEscape)
+                escaped.Append('\\');
+            escaped.Append(character);
+        }
+
+        return escaped.ToString();
+    }
+
+    /// <summary>
     /// Whether a distinguished name is within the scope the supplied Containers describe: the Container with the
     /// final say over it admits it rather than carving it out. An empty collection means the caller has no
     /// Container-level opinion to apply, and every name is admitted.
@@ -791,14 +593,22 @@ internal static class LdapConnectorUtilities
         return AttributeWritability.Writable;
     }
 
+    /// <summary>
+    /// Whether an Active Directory attribute syntax compares values exactly (#2051). AD has no per-attribute
+    /// matching rule; case-sensitivity is a property of the syntax. String(Case Sensitive) (omSyntax 27,
+    /// attributeSyntax 2.5.5.3) and the IA5 and Printable strings (omSyntax 22 and 19, 2.5.5.5) are case-exact.
+    /// Unicode, Teletex and every other string syntax ignore case.
+    /// </summary>
+    internal static bool IsAdSyntaxCaseExact(int omSyntax) => omSyntax is 27 or 22 or 19;
+
     internal static AttributeDataType GetLdapAttributeDataType(int omSyntax)
     {
         // map the directory omSyntax to an attribute data type
         // https://social.technet.microsoft.com/wiki/contents/articles/52570.active-directory-syntaxes-of-attributes.aspx
         return omSyntax switch
         {
-            1 or 10 => AttributeDataType.Boolean,
-            2 => AttributeDataType.Number,  // Integer (32-bit)
+            1 => AttributeDataType.Boolean,
+            2 or 10 => AttributeDataType.Number,  // 2 = Integer, 10 = Enumeration (sAMAccountType, instanceType); both 32-bit integers
             65 => AttributeDataType.LongNumber,  // Large Integer (64-bit) - accountExpires, pwdLastSet, lastLogon, etc.
             3 or 4 or 66 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours), 66 = Object(Replica-Link) (nTSecurityDescriptor)
             6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,

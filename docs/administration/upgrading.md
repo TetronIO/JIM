@@ -1,15 +1,17 @@
 ---
 title: Upgrading
+description: Upgrade JIM to a newer release, connected, air-gapped or on Podman, verify it, and roll back if you must.
+type: how-to
+audience: operator
+validated: v0.16.0
 ---
 
 # Upgrading
 
 Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` container images with a newer release. Your data stays where it is: the database and the encryption key volume are not modified by the image swap itself, and any pending database upgrades are applied automatically when the new worker starts.
 
-This page covers connected and air-gapped upgrades, what happens during the upgrade window, and how to roll back.
-
 !!! danger "Take a backup first, and make sure it includes the encryption keys"
-    A JIM backup is **two artefacts**: the PostgreSQL database *and* the encryption key set (`jim-keys-volume`, or the path in `JIM_ENCRYPTION_KEY_PATH`). A database backup taken without its matching keys is not a recoverable backup; every stored secret (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) becomes permanently undecryptable when it is restored. If an upgrade goes wrong and you fall back to your pre-upgrade backup, you need both halves. See [Backup & Disaster Recovery](backup-recovery.md).
+    A JIM backup is **two artefacts**: the PostgreSQL database *and* the encryption key set (`jim-keys-volume`, or the path in `JIM_ENCRYPTION_KEY_PATH`). Restored without its matching keys, a database cannot decrypt any secret it stores, such as a Connected System's credentials. If an upgrade goes wrong and you fall back to your pre-upgrade backup, you need both halves; see [Backup & Disaster Recovery](backup-recovery.md).
 
 ## 📋 Before you upgrade {#before-you-upgrade}
 
@@ -20,7 +22,7 @@ This page covers connected and air-gapped upgrades, what happens during the upgr
 - [ ] **Let in-flight work finish.** With Schedules disabled, wait for any running Activities to complete before stopping the services. See [Pausing work first](#pausing-work) for what happens if you do not.
 - [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can introduce configuration variables. See the [Configuration Reference](configuration.md).
-- [ ] **Upgrading from v0.15 or earlier on Docker: put JIM's certificate in place first.** From v0.16.0, `docker-compose.production.yml` serves HTTPS itself, on host port 443 by default, and needs the certificate and its key at `tls/tls.crt` and `tls/tls.key` beside the compose files (see [The Certificate](deployment.md#the-certificate)). Until both exist, `docker compose up` stops with an error naming the missing file and JIM does not start; your data is untouched, so putting the files in place and running it again completes the upgrade. If a reverse proxy on the same host terminates TLS for JIM, use [Plain HTTP for a Proxy on the Same Host](deployment.md#plain-http-for-a-proxy-on-the-same-host) instead, which needs no certificate.
+- [ ] **Upgrading from v0.15 or earlier on Docker: put JIM's certificate in place first.** From v0.16.0, `docker-compose.production.yml` serves HTTPS itself, on host port 443 by default, and needs the certificate and its key at `tls/tls.crt` and `tls/tls.key` beside the compose files (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)). Until both exist, `docker compose up` stops with an error naming the missing file and JIM does not start; your data is untouched, so putting the files in place and running it again completes the upgrade. If a reverse proxy on the same host terminates TLS for JIM, use [Plain HTTP for a Proxy on the Same Host](tls-and-reverse-proxy.md#plain-http-for-a-proxy-on-the-same-host) instead, which needs no certificate.
 
 ### Pausing work first {#pausing-work}
 
@@ -34,17 +36,17 @@ Do this from **Configuration > Schedules** in the administration UI, or from Pow
 # Record what is currently enabled, then disable it
 $wasEnabled = Get-JIMSchedule | Where-Object { $_.IsEnabled }
 $wasEnabled | Select-Object Id, Name | Export-Csv ./schedules-enabled-before-upgrade.csv -NoTypeInformation
-$wasEnabled | Disable-JIMSchedule -ChangeReason "Paused for upgrade to 0.14.0"
+$wasEnabled | Disable-JIMSchedule -ChangeReason "Paused for upgrade"
 ```
 
 !!! warning "Record the list, do not re-enable everything afterwards"
-    Some Schedules are likely to have been deliberately disabled long before the upgrade. If you skip the record and simply enable everything at the end, you will switch those back on and they will start synchronising. Keep the list.
+    Some Schedules are likely to have been deliberately disabled long before the upgrade. If you skip the record and enable everything at the end, you will switch those back on and they will start synchronising. Keep the list.
 
 **2. Let running Activities finish.** With no new runs starting, wait for in-flight work to drain. Check **Activities** in the administration UI and wait until nothing is In Progress. Large imports or synchronisation runs can take a while; this wait is the main reason to schedule an upgrade window rather than upgrading on demand.
 
 If you do stop the worker part-way through a Run Profile execution anyway, the work is not silently lost, but the run does not resume where it left off. On restart the worker detects the abandoned task, fails its Activity with an explanatory error, and removes the task from the queue. The failed Activity is a record of the interruption, not a sign of data corruption: JIM's synchronisation state lives in the database, so the next run continues from the current state.
 
-Draining properly therefore avoids noise in your Activity history and a needlessly long first run afterwards, but an interrupted upgrade does not put your data at risk.
+Draining first avoids noise in your Activity history and a long first run afterwards; an interrupted upgrade does not put your data at risk.
 
 ## ⬆️ Upgrading with the installer {#with-the-installer}
 
@@ -75,7 +77,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
 5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
 
-Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was. Then carry on at [Verifying the upgrade](#verifying).
+Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and an earlier upgrade's `.previous` files intact. Then carry on at [Check it worked](#verifying).
 
 ## 🔄 Upgrading a connected deployment
 
@@ -109,11 +111,11 @@ The same upgrade by hand. On Podman, see [Upgrading on Podman](#upgrading-on-pod
       --profile with-db up -d
     ```
 
-6. **Verify**, per [Verifying the upgrade](#verifying) below.
+6. **Verify**, per [Check it worked](#verifying) below.
 
 ## 📦 Upgrading an air-gapped deployment
 
-The same upgrade as [the installer's](#with-the-installer), by hand. The procedure mirrors a first-time air-gapped deployment, minus the initial configuration steps.
+The same upgrade as [the installer's](#with-the-installer), by hand.
 
 1. **Check, transfer and verify the new release bundle** via your approved process. Check the download first, where you downloaded it with its checksum file (see [Checking the Download](deployment.md#checking-the-download)), then extract and verify it on the JIM server:
 
@@ -157,7 +159,7 @@ The same upgrade as [the installer's](#with-the-installer), by hand. The procedu
 
     `--pull never` makes Docker report an image the bundle did not load, rather than try the internet.
 
-6. **Verify**, per [Verifying the upgrade](#verifying) below.
+6. **Verify**, per [Check it worked](#verifying) below.
 
 ## 🦭 Upgrading on Podman {#upgrading-on-podman}
 
@@ -211,7 +213,7 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
     systemctl start jim.service
     ```
 
-5. **Verify**, per [Verifying the upgrade](#verifying) below.
+5. **Verify**, per [Check it worked](#verifying) below.
 
 To roll back on Podman, stop JIM, restore the pre-upgrade backup (see [Rolling back](#rolling-back)), put `jim.yaml.previous` and `jim-database.yaml.previous` back in place of the new files, and start JIM again.
 
@@ -220,7 +222,7 @@ To roll back on Podman, stop JIM, restore the pre-upgrade backup (see [Rolling b
 Understanding the startup sequence explains why the web interface is briefly unavailable after an upgrade:
 
 - **The worker leads.** `jim.worker` is the first service to initialise. It applies any database upgrades automatically.
-- **Built-in configuration catches up.** Immediately after the database upgrade, the worker brings your instance's built-in configuration into line with what the release ships, creating anything it does not already hold: Metaverse Object Types and Attributes, Predefined Searches, Connectors, Example Data Sets, built-in Schedules and Roles, and Service Settings. Anything already present is left exactly as it is, including settings you have changed, so the pass records nothing on an instance that is already up to date. Where it does create something, it appears in the change history as a **System Initialisation** Activity with each new object beneath it. This takes well under a second on a converged instance.
+- **Built-in configuration catches up.** The worker then adds any built-in configuration the release ships that your instance lacks, such as a new Service Setting or built-in Schedule, and leaves everything already present as it is, including settings you have changed. Anything it adds appears in the change history under a **System Initialisation** Activity.
 - **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll the application's readiness state and do not begin serving until the database upgrade has completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
 - **Readiness is externally observable.** `GET /api/v1/health/ready` returns `503 Service Unavailable` with `"status": "not_ready"` throughout, then `200 OK` with `"status": "ready"` once JIM is serving.
 
@@ -229,7 +231,7 @@ How long this takes depends on what the release changes in the database. Most up
 !!! warning "If the database upgrade fails"
     The worker logs the full error and JIM stays unready, so the web interface never opens up. Fix the underlying cause (a permissions problem on the database user is the usual culprit) and restart the services. Do not restore a backup unless the upgrade has left the schema in a state you cannot move forwards from.
 
-## ✅ Verifying the upgrade {#verifying}
+## Check it worked {#verifying}
 
 1. **All services are healthy:**
 
@@ -261,7 +263,7 @@ How long this takes depends on what the release changes in the database. Most up
 
     ```powershell
     Import-Csv ./schedules-enabled-before-upgrade.csv |
-        Enable-JIMSchedule -ChangeReason "Re-enabled after upgrade to 0.14.0"
+        Enable-JIMSchedule -ChangeReason "Re-enabled after upgrade"
     ```
 
     Or re-enable them individually from **Configuration > Schedules** in the administration UI.
@@ -269,11 +271,11 @@ How long this takes depends on what the release changes in the database. Most up
 6. **Scheduled work resumes.** Confirm the Scheduler is picking up the re-enabled Schedules, that each shows a sensible next run time, and that the next expected run actually fires.
 
 !!! danger "An upgrade is not finished until the Schedules are back on"
-    Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises. Drift accumulates unnoticed until someone reports stale data days later. Make re-enabling them an explicit, checked-off step, not something you intend to do later.
+    Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises until someone reports stale data days later. Make re-enabling them an explicit, checked-off step.
 
 ## 🧩 Upgrading the PowerShell module
 
-The JIM PowerShell module versions in step with the product. Upgrade it wherever it is installed so that automation matches the API it is calling. Some releases need it: from 0.17.0, API keys are sent as bearer tokens, and a 0.16.x or earlier module's API key connections are refused by a 0.17.0 server.
+The JIM PowerShell module versions in step with the product. Upgrade it wherever it is installed so that automation matches the API it is calling.
 
 ```powershell
 # Connected environments
@@ -324,15 +326,13 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
     docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' jim.web
     ```
 
-5. **Verify** as you would after an upgrade, per [Verifying the upgrade](#verifying), and re-enable your Schedules.
-
-6. **Roll the PowerShell module back too**, wherever automation uses it, to the version matching the release you restored. A newer module can send requests an older JIM does not understand: rolling back from 0.17.0 to 0.16.x, a 0.17.0 module's API key connections are refused.
+5. **Verify** as you would after an upgrade, per [Check it worked](#verifying), and re-enable your Schedules.
 
 !!! danger "Do not run an older JIM against an upgraded database"
     Starting the previous version without restoring the database leaves the older application reading a schema built for the newer one. Always restore the backup first, and only by the restore procedure: restoring over the upgraded database (`pg_restore --clean`) leaves part of what the newer release added in place, and the older JIM starts on that mixture without complaint. If `pg_restore` reported an error, do not start the previous version; resolve the error and restore again. If you have no usable pre-upgrade backup, do not roll back at all: stay on the new version and resolve the problem there, because an older JIM against a newer schema fails in subtle ways rather than refusing to start.
 
 !!! tip "Roll back promptly, or not at all"
-    A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring the pre-upgrade backup rolls the connector space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
+    A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring the pre-upgrade backup rolls the Connector Space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
 
 ## ✅ Upgrade checklist
 
@@ -351,7 +351,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 
 ## Related
 
-- [Backup & Disaster Recovery](backup-recovery.md) -- what to back up, how, and how to restore it.
-- [Deployment Guide](deployment.md) -- volumes, compose profiles, production readiness checklist.
-- [Configuration Reference](configuration.md) -- environment variables, including `JIM_VERSION`.
-- [Troubleshooting](troubleshooting.md) -- diagnosing startup and connectivity problems.
+- [Backup & Disaster Recovery](backup-recovery.md): what to back up, how, and how to restore it.
+- [Deployment Guide](deployment.md): volumes, compose profiles, production readiness checklist.
+- [Configuration Reference](configuration.md): environment variables, including `JIM_VERSION`.
+- [Troubleshooting](troubleshooting.md): diagnosing startup and connectivity problems.

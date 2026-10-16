@@ -17,7 +17,9 @@
     <ExpressionEditor @ref="_baseExpressionEditor" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
         Label="Base expression" Disabled="IsNumberTarget"
         Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
-        Class="mt-5" HelperText="@BaseExpressionHelperText" />
+        Class="mt-5" HelperText="@BaseExpressionHelperText"
+        MetaverseAttributeNames="MetaverseAttributeNames" ConnectedSystemAttributeNames="ConnectedSystemAttributeNames"
+        SyntaxCheck="BaseExpressionCheck" />
 
     @* The host's tools for the base expression (the Insert attribute menu and the derived flow analysis, #1750), handed
        this editor's own insert-at-caret so they never reach into it. *@
@@ -28,7 +30,10 @@
 
     @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
-        <ExpressionTester Expression="@BaseSource.Expression" SampleValuesChanged="OnSampleValuesChanged" />
+        @* Tested as the Attribute Flow it is (#2055): typed inputs, value processing and Missing Input Behaviour, stopping
+           at the base, as a Synchronisation does. *@
+        <ExpressionTester Expression="@BaseSource.Expression" SyncRule="StagedSyncRule" Mapping="Mapping" Source="BaseSource"
+            SampleValuesChanged="OnSampleValuesChanged" />
     }
 
     <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Uniqueness token</MudText>
@@ -190,7 +195,7 @@
     <GeneratedValuePreviewPanel Mapping="Mapping" BaseSource="BaseSource" TargetType="TargetType" TargetName="@TargetName"
         Direction="Direction" SyncRuleId="SyncRuleId" ConnectedSystemId="ConnectedSystemId"
         MetaverseObjectTypeId="MetaverseObjectTypeId" TargetMetaverseAttributeId="TargetMetaverseAttributeId"
-        SampleValues="_sampleValues" />
+        SampleValues="_sampleValues" BuiltValues="_builtValues" />
 
     @* ─── When JIM generates this value (read-only) ─── *@
     <MudPaper Outlined="true" Class="pa-3 mt-5">
@@ -259,6 +264,13 @@
 
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
     <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" />
+
+    @* ─── Values built from it (Generated Value Forms, #2014, mock screen 2): only a value held in the Metaverse has any ─── *@
+    @if (Mapping.ResolveTargetMetaverseAttributeId().HasValue && StagedSyncRule != null)
+    {
+        <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? "this value")"
+                                        CollisionRemediation="generation.CollisionRemediation" />
+    }
 
     @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
     <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" />
@@ -333,6 +345,33 @@
     public EventCallback OnChanged { get; set; }
 
     /// <summary>
+    /// The Synchronisation Rule as it is being edited, against which the "Values built from ..." table is worked out
+    /// (Generated Value Forms, #2014): a value built from this one can be on this rule, not yet saved. Null leaves the
+    /// table out.
+    /// </summary>
+    [Parameter]
+    public SyncRule? StagedSyncRule { get; set; }
+
+    /// <summary>
+    /// The attribute names the base expression's editor suggests inside <c>mv["</c> (#2053).
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? MetaverseAttributeNames { get; set; }
+
+    /// <summary>
+    /// The attribute names the base expression's editor suggests inside <c>cs["</c> (#2053).
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? ConnectedSystemAttributeNames { get; set; }
+
+    /// <summary>
+    /// Why the base expression as typed cannot be saved, shown beneath it (#2055 Phase 3): the host passes the same check
+    /// the save runs, so the base is held to what any other Attribute Flow expression is. Null shows nothing.
+    /// </summary>
+    [Parameter]
+    public Func<string?, string?>? BaseExpressionCheck { get; set; }
+
+    /// <summary>
     /// Rendered directly under the base expression (not for a Number target, which has none), given a function that
     /// inserts text at the base expression's caret: the host's Insert attribute menu and derived flow analysis.
     /// </summary>
@@ -350,6 +389,12 @@
     /// <summary>Discards a load overtaken by a newer one.</summary>
     private int _participantsLoad;
 
+    /// <summary>The "Values built from ..." rows, for the target as it now stands; null while loading.</summary>
+    private IReadOnlyList<GeneratedValueBuiltValueDescription>? _builtValues;
+
+    /// <summary>Discards a built values load overtaken by a newer one.</summary>
+    private int _builtValuesLoad;
+
     protected override async Task OnParametersSetAsync()
     {
         var target = (Mapping.ResolveTargetMetaverseAttributeId(), Mapping.ResolveTargetConnectedSystemAttributeId());
@@ -357,7 +402,33 @@
             return;
 
         _participantsTarget = target;
-        await LoadParticipantsAsync();
+        await Task.WhenAll(LoadParticipantsAsync(), LoadBuiltValuesAsync());
+    }
+
+    /// <summary>
+    /// Reads every value built from this generated value (#2014), against <see cref="StagedSyncRule"/> as it is being
+    /// edited and every other rule as saved. Nothing is read for an export generated value, which is held on its own
+    /// Connected System Object and so has nothing built from it.
+    /// </summary>
+    private async Task LoadBuiltValuesAsync()
+    {
+        var load = ++_builtValuesLoad;
+        if (StagedSyncRule == null || !Mapping.ResolveTargetMetaverseAttributeId().HasValue)
+        {
+            _builtValues = [];
+            return;
+        }
+
+        _builtValues = null;
+        List<GeneratedValueBuiltValueDescription> builtValues;
+        using (var jim = JimFactory.Create())
+            builtValues = await jim.ConnectedSystems.DescribeValuesBuiltFromGeneratedValueAsync(StagedSyncRule, Mapping);
+
+        if (load != _builtValuesLoad)
+            return;
+
+        _builtValues = builtValues;
+        StateHasChanged();
     }
 
     /// <summary>

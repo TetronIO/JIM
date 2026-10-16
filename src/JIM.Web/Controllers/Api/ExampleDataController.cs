@@ -5,12 +5,15 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Servers;
+using JIM.Application.Expressions;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Exceptions;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Utilities;
@@ -251,7 +254,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Creating Data Generation Template: {Name}", LogSanitiser.Sanitise(request.Name));
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template creation");
@@ -291,7 +294,9 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Created Data Generation Template {Id} ({Name})", template.Id, LogSanitiser.Sanitise(template.Name));
 
         var created = await _application.ExampleData.GetTemplateAsync(template.Id);
-        return CreatedAtRoute("GetExampleDataTemplate", new { id = template.Id }, created == null ? null : ExampleDataTemplateDto.FromEntity(created));
+        var createdDto = created == null ? null : ExampleDataTemplateDto.FromEntity(created);
+        createdDto?.Warnings.AddRange(template.SaveWarnings);
+        return CreatedAtRoute("GetExampleDataTemplate", new { id = template.Id }, createdDto);
     }
 
     /// <summary>
@@ -319,7 +324,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Updating Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template update");
@@ -376,7 +381,9 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Updated Data Generation Template {Id}", id);
 
         var updated = await _application.ExampleData.GetTemplateAsync(id) ?? template;
-        return Ok(ExampleDataTemplateDto.FromEntity(updated));
+        var updatedDto = ExampleDataTemplateDto.FromEntity(updated);
+        updatedDto.Warnings.AddRange(template.SaveWarnings);
+        return Ok(updatedDto);
     }
 
     /// <summary>
@@ -398,7 +405,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Deleting Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
         {
             _logger.LogWarning("Could not identify the initiating principal for Data Generation Template deletion");
@@ -416,6 +423,91 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Deleted Data Generation Template {Id}", id);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Test an Example Data Template attribute's expression
+    /// </summary>
+    /// <remarks>
+    /// Evaluates the template attribute's expression, or the one given in its place, against sample values for the
+    /// attributes it reads, by the same evaluation generating objects runs. Each sample is read as the type of the
+    /// template attribute that generates it on the same object, and <c>outcome</c> says whether the attribute would be
+    /// generated as a value, without one, or whether generation would fail. Nothing is generated.
+    /// </remarks>
+    /// <param name="templateId">The template the attribute belongs to.</param>
+    /// <param name="request">The template attribute, the expression to test in place of its own, and the sample values.</param>
+    /// <response code="200">The expression was evaluated, or the sample values could not be used (<c>isValid</c> false).</response>
+    /// <response code="400">The template attribute has no expression, and none was given.</response>
+    /// <response code="401">Authentication required.</response>
+    /// <response code="404">The template or template attribute was not found.</response>
+    [HttpPost("templates/{templateId:int}/test-expression", Name = "TestExampleDataExpression")]
+    [ProducesResponseType(typeof(TestExampleDataExpressionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TestExpressionAsync(int templateId, [FromBody] TestExampleDataExpressionRequest request)
+    {
+        _logger.LogDebug("Testing the expression of template attribute {AttributeId} on Example Data Template {TemplateId}",
+            request.TemplateAttributeId, templateId);
+
+        var template = await _application.ExampleData.GetTemplateAsync(templateId);
+        if (template == null)
+            return NotFound(ApiErrorResponse.NotFound($"Example Data Template with ID {templateId} not found."));
+
+        var found = template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes.Select(attribute => (ObjectType: objectType, Attribute: attribute)))
+            .FirstOrDefault(pair => pair.Attribute.Id == request.TemplateAttributeId);
+        if (found.Attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Template attribute with ID {request.TemplateAttributeId} not found on Example Data Template {templateId}."));
+
+        var attributeName = found.Attribute.MetaverseAttribute?.Name;
+        if (attributeName == null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Template attribute {request.TemplateAttributeId} generates no Metaverse attribute, so it has no expression to test."));
+
+        var expression = string.IsNullOrWhiteSpace(request.Expression) ? found.Attribute.Expression : request.Expression;
+        if (string.IsNullOrWhiteSpace(expression))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Template attribute {request.TemplateAttributeId} ('{attributeName}') has no expression; give one to test in its place."));
+
+        var samples = TestExpressionSampleValues.ToAttributeSamples(request.Attributes).ToList();
+        var tested = _application.ExampleData.TestAttributeExpression(found.ObjectType, found.Attribute, expression, samples);
+
+        var response = new TestExampleDataExpressionResponse
+        {
+            Attribute = attributeName,
+            Expression = expression,
+            InputErrors = tested.InputErrors,
+            InputsNotGenerated = tested.InputsNotGenerated,
+            Inputs = tested.Inputs
+                .Select(input => new AttributeSampleDto
+                {
+                    Attribute = input.AttributeName,
+                    Type = input.Type,
+                    Plurality = input.Plurality,
+                    ValueLines = samples
+                        .Where(sample => string.Equals(sample.AttributeName, input.AttributeName, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(sample => sample.Values)
+                        .Select(ExpressionText.Describe)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        if (tested.Evaluation is not { } evaluation)
+        {
+            response.IsValid = false;
+            response.ErrorMessage = string.Join(" ", tested.InputErrors);
+            return Ok(response);
+        }
+
+        var description = ExampleDataServer.DescribeExpressionOutcome(evaluation, attributeName);
+        response.IsValid = evaluation.Outcome != ExampleDataExpressionOutcome.Error;
+        response.Outcome = evaluation.Outcome;
+        response.ErrorReason = evaluation.ErrorReason;
+        response.Value = evaluation.Value;
+        response.OutcomeDescription = description;
+        response.ErrorMessage = evaluation.Outcome == ExampleDataExpressionOutcome.Error ? description : null;
+        return Ok(response);
     }
 
     /// <summary>
@@ -638,7 +730,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         var metaverseObjectTypes = new Dictionary<int, MetaverseObjectType>();
         var metaverseAttributes = new Dictionary<int, MetaverseAttribute>();
-        var connectedSystemAttributes = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         var exampleDataSets = new Dictionary<int, ExampleDataSet>();
 
         var objectTypes = new List<ExampleDataObjectType>();
@@ -656,7 +747,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
 
             foreach (var attributeRequest in request.Attributes)
             {
-                var (attribute, error) = await BuildTemplateAttributeAsync(attributeRequest, metaverseObjectTypes, metaverseAttributes, connectedSystemAttributes, exampleDataSets);
+                var (attribute, error) = await BuildTemplateAttributeAsync(attributeRequest, metaverseObjectTypes, metaverseAttributes, exampleDataSets);
                 if (error != null)
                     return (null, error);
 
@@ -677,7 +768,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         ExampleDataTemplateAttributeRequest request,
         Dictionary<int, MetaverseObjectType> metaverseObjectTypes,
         Dictionary<int, MetaverseAttribute> metaverseAttributes,
-        Dictionary<int, ConnectedSystemObjectTypeAttribute> connectedSystemAttributes,
         Dictionary<int, ExampleDataSet> exampleDataSets)
     {
         var attribute = new ExampleDataTemplateAttribute
@@ -706,16 +796,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
                 return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {metaverseAttributeId} not found.")));
 
             attribute.MetaverseAttribute = metaverseAttribute;
-        }
-
-        if (request.ConnectedSystemObjectTypeAttributeId.HasValue)
-        {
-            var connectedSystemAttributeId = request.ConnectedSystemObjectTypeAttributeId.Value;
-            var connectedSystemAttribute = await ResolveConnectedSystemAttributeAsync(connectedSystemAttributeId, connectedSystemAttributes);
-            if (connectedSystemAttribute == null)
-                return (null, NotFound(ApiErrorResponse.NotFound($"Connected System Object Type attribute with ID {connectedSystemAttributeId} not found.")));
-
-            attribute.ConnectedSystemObjectTypeAttribute = connectedSystemAttribute;
         }
 
         foreach (var dataSetRequest in request.ExampleDataSets ?? [])
@@ -775,14 +855,22 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (metaverseAttribute == null)
             return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {request.MetaverseAttributeId} not found.")));
 
-        if (!Enum.TryParse<ComparisonType>(request.ComparisonType, ignoreCase: true, out var comparisonType) || !Enum.IsDefined(comparisonType))
+        // The operator catalogue's names, shared with scoping and Predefined Searches (#2053).
+        if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, ignoreCase: true, out var comparisonType) ||
+            !SearchComparisonOperators.All.Contains(comparisonType))
             return (null, BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'.")));
+
+        var error = CriterionValidation.ValidateText(comparisonType, request.StringValue, metaverseAttribute.Type,
+            CriterionContext.ExampleData, metaverseAttribute.Name, caseSensitive: true, out _);
+        if (error != null)
+            return (null, BadRequest(ApiErrorResponse.BadRequest($"The attribute dependency on '{metaverseAttribute.Name}' is not valid: {error}")));
 
         return (new ExampleDataTemplateAttributeDependency
         {
             MetaverseAttribute = metaverseAttribute,
             ComparisonType = comparisonType,
-            StringValue = request.StringValue
+            // An operator that takes no value stores none.
+            StringValue = SearchComparisonOperators.TakesValue(comparisonType) ? request.StringValue ?? string.Empty : string.Empty
         }, null);
     }
 
@@ -808,18 +896,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
             cache[id] = metaverseAttribute;
 
         return metaverseAttribute;
-    }
-
-    private async Task<ConnectedSystemObjectTypeAttribute?> ResolveConnectedSystemAttributeAsync(int id, Dictionary<int, ConnectedSystemObjectTypeAttribute> cache)
-    {
-        if (cache.TryGetValue(id, out var cached))
-            return cached;
-
-        var connectedSystemAttribute = await _application.ConnectedSystems.GetAttributeAsync(id);
-        if (connectedSystemAttribute != null)
-            cache[id] = connectedSystemAttribute;
-
-        return connectedSystemAttribute;
     }
 
     private async Task<ExampleDataSet?> ResolveExampleDataSetAsync(int id, Dictionary<int, ExampleDataSet> cache)

@@ -7,7 +7,7 @@ namespace JIM.Models.Transactional;
 /// A read-only view of a generated Sequence mapping's counter, as the portal, REST and PowerShell surfaces show
 /// it before an administrator saves a change (Unique Value Generation, #242, Phase 3). Allocates nothing: the
 /// next number shown here is exactly what the real allocator would hand out next, computed the same way
-/// (<see cref="Application.UniqueValues.SequenceAllocator"/>'s seeding rule), but without reserving it.
+/// (<c>SequenceAllocator</c>'s seeding rule), but without reserving it.
 /// </summary>
 public class GeneratedValueSequenceState
 {

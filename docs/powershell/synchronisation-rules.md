@@ -1,62 +1,73 @@
 ---
 title: Synchronisation Rules
+description: "The cmdlets that list, create, change and delete Synchronisation Rules, and what deleting one does to the values it contributed."
+type: reference
+audience: automation-author
 ---
 
 # Synchronisation Rules
 
-Synchronisation Rules define how data flows between Connected Systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of Synchronisation Rule configuration.
+Synchronisation Rules decide how values flow between a Connected System and the Metaverse. The cmdlets on this page list, create, change and delete them. A rule's [Attribute Flows](attribute-mappings.md), [scoping criteria](scoping-criteria.md), [Object Matching Rules](object-matching-rules.md) and [initial password](initial-password.md) have pages of their own. What each setting does is covered in [Synchronisation Rules](../configuration/synchronisation-rules.md).
 
 ---
-
-### Synchronisation Rule CRUD
-
-Create, retrieve, update, and delete Synchronisation Rules.
-
----
-
 ## Get-JIMSyncRule
 
-Retrieves one or more Synchronisation Rules. When called without parameters, returns all Synchronisation Rules. Use the parameter sets to filter by ID, Connected System ID, or Connected System name, and the `-Direction`, `-ActionType` and `-Status` filters to narrow the list further.
+Gets Synchronisation Rules: every rule by default, one by ID, or those matching the filters. The filters are the ones on the portal's Synchronisation Rules page: they combine with AND, and the values given to one filter combine with OR.
 
-The filters combine with AND, and each of `-Direction`, `-ActionType` and `-Status` accepts several values, which combine with OR. `-Name` narrows whatever the other filters left, so removing it returns those results. These are the same filters offered on the Synchronisation Rules page of the JIM portal.
-
+<!-- BEGIN GENERATED: Get-JIMSyncRule -->
 ### Syntax
 
 ```powershell
-# List all Synchronisation Rules (default), optionally with a piped Connected System
-Get-JIMSyncRule [-InputObject <PSCustomObject>] [-Name <string>] [-Direction <string[]>]
-    [-ActionType <string[]>] [-Status <string[]>]
+# List (default)
+Get-JIMSyncRule [-ConnectedSystemId <int>] [-InputObject <PSCustomObject>] [-Name <string>] [-Direction <string[]>] [-ActionType <string[]>] [-Status <string[]>]
 
-# By Synchronisation Rule ID
+# ById
 Get-JIMSyncRule -Id <int>
 
-# By Connected System ID
-Get-JIMSyncRule -ConnectedSystemId <int> [-Name <string>] [-Direction <string[]>]
-    [-ActionType <string[]>] [-Status <string[]>]
+# ByConnectedSystemId
+Get-JIMSyncRule [-ConnectedSystemId <int>] [-Name <string>] [-Direction <string[]>] [-ActionType <string[]>] [-Status <string[]>]
 
-# By Connected System name
-Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>] [-Direction <string[]>]
-    [-ActionType <string[]>] [-Status <string[]>]
+# ByConnectedSystemName
+Get-JIMSyncRule [-ConnectedSystemName <string>] [-Name <string>] [-Direction <string[]>] [-ActionType <string[]>] [-Status <string[]>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of a specific Synchronisation Rule to retrieve |
-| `ConnectedSystemId` | `int` | No | | Filter Synchronisation Rules by Connected System ID. Accepts pipeline input. |
-| `ConnectedSystemName` | `string` | No | | Filter Synchronisation Rules by Connected System name. Must be an exact match. |
-| `InputObject` | `PSCustomObject` | No | | A Connected System object from the pipeline (for example from `Get-JIMConnectedSystem`). Its `Id` filters the rules, equivalent to `-ConnectedSystemId`. |
-| `Name` | `string` | No | | Filter Synchronisation Rules by name. Supports wildcards (e.g., `"Inbound*"`). |
-| `Direction` | `string[]` | No | | Filter by direction: `Import` (inbound) or `Export` (outbound). |
-| `ActionType` | `string[]` | No | | Filter by the action the rule performs: `Projects`, `Provisions`, or `FlowOnly`. |
-| `Status` | `string[]` | No | | Filter by state: `Enabled` or `Disabled`. |
-
-`ActionType` values map to what a rule creates: `Projects` for Import rules that project new Metaverse Objects, `Provisions` for Export rules that provision new Connected System Objects, and `FlowOnly` for rules that create no objects and only flow attribute values.
+| `Id` | `int` | Yes (ById) |  | The ID of the Synchronisation Rule to get. |
+| `ConnectedSystemId` | `int` | No (List, ByConnectedSystemId) |  | Returns only the rules for the Connected System with this ID. Accepts pipeline input by property name. |
+| `ConnectedSystemName` | `string` | No (ByConnectedSystemName) |  | Returns only the rules for the Connected System with this name, matched exactly. |
+| `InputObject` | `PSCustomObject` | No (List) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline: returns only its rules, as `-ConnectedSystemId` would. Accepts pipeline input. |
+| `Name` | `string` | No (List, ByConnectedSystemId, ByConnectedSystemName) |  | Returns only the rules whose name matches. Supports wildcards. |
+| `Direction` | `string[]` | No (List, ByConnectedSystemId, ByConnectedSystemName) |  | Returns only the rules of these directions: Import for rules that flow values into the Metaverse, Export for rules that flow them out. One of `Import` or `Export`. |
+| `ActionType` | `string[]` | No (List, ByConnectedSystemId, ByConnectedSystemName) |  | Returns only the rules that do one of these: Projects for import rules that create Metaverse Objects, Provisions for export rules that create Connected System Objects, and FlowOnly for rules that create nothing and only flow values. One of `Projects`, `Provisions` or `FlowOnly`. |
+| `Status` | `string[]` | No (List, ByConnectedSystemId, ByConnectedSystemName) |  | Returns only the rules that are Enabled or Disabled. One of `Enabled` or `Disabled`. |
 
 ### Output
 
-Returns one or more Synchronisation Rule objects containing the rule configuration, direction, projection/provisioning settings, and enabled state.
+The matching rules, or with `-Id`, the one rule.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The ID of the Synchronisation Rule. |
+| `Name` | `string` | The name of the Synchronisation Rule. |
+| `Description` | `string` | What the Synchronisation Rule is for, for administrators; empty when none is set. |
+| `Created` | `datetime` | When the Synchronisation Rule was created (UTC). |
+| `ConnectedSystemId` | `int` | The ID of the Connected System the rule synchronises with. |
+| `ConnectedSystemName` | `string` | The name of that Connected System. |
+| `ConnectedSystemObjectTypeId` | `int` | The ID of the Connected System Object Type the rule applies to. |
+| `ConnectedSystemObjectTypeName` | `string` | The name of that Connected System Object Type. |
+| `MetaverseObjectTypeId` | `int` | The ID of the Metaverse Object Type the rule applies to. |
+| `MetaverseObjectTypeName` | `string` | The name of that Metaverse Object Type. |
+| `Direction` | `string` | Import for a rule that flows values from the Connected System into the Metaverse, Export for one that flows them out to it. One of `NotSet`, `Import` or `Export`. |
+| `ProvisionToConnectedSystem` | `bool` | Whether an export rule creates a Connected System Object for each Metaverse Object in its scope that has none; empty when it has not been set. |
+| `ProjectToMetaverse` | `bool` | Whether an import rule creates a Metaverse Object for each Connected System Object in its scope that matches none; empty when it has not been set. |
+| `Enabled` | `bool` | Whether the rule takes part in synchronisation; a disabled rule is skipped. |
+| `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
+| `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
+| `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+<!-- END GENERATED: Get-JIMSyncRule -->
 
 ### Examples
 
@@ -101,49 +112,64 @@ Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status E
 
 ## New-JIMSyncRule
 
-Creates a new Synchronisation Rule for a Connected System. The rule defines how objects flow between the Connected System and the metaverse.
+Creates a Synchronisation Rule between a Connected System Object Type and a Metaverse Object Type. Add its [Attribute Flows](attribute-mappings.md#new-jimsyncrulemapping), [scoping criteria](scoping-criteria.md) and [Object Matching Rules](object-matching-rules.md) afterwards.
 
+<!-- BEGIN GENERATED: New-JIMSyncRule -->
 ### Syntax
 
 ```powershell
-# By Connected System ID (default)
-New-JIMSyncRule -Name <string> -ConnectedSystemId <int>
-    -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
-    -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>]
-    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
+# ById (default)
+New-JIMSyncRule [-Name] <string> -ConnectedSystemId <int> -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int> -Direction <string> [-Description <string>] [-ProjectToMetaverse] [-ProvisionToConnectedSystem] [-Enabled <bool>] [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By Connected System name
-New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
-    -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
-    -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>]
-    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
+# ByName
+New-JIMSyncRule [-Name] <string> -ConnectedSystemName <string> -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int> -Direction <string> [-Description <string>] [-ProjectToMetaverse] [-ProvisionToConnectedSystem] [-Enabled <bool>] [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes (Position 0) | | Display name for the Synchronisation Rule |
-| `ConnectedSystemId` | `int` | Yes (ById set) | | The ID of the Connected System this rule belongs to |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | The name of the Connected System this rule belongs to |
-| `ConnectedSystemObjectTypeId` | `int` | Yes | | The object type ID on the Connected System side |
-| `MetaverseObjectTypeId` | `int` | Yes | | The object type ID on the metaverse side |
-| `Direction` | `string` | Yes | | Data flow direction. Valid values: `Import`, `Export` |
-| `Description` | `string` | No | | Optional description of what the Synchronisation Rule is for. Maximum 1000 characters. |
-| `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new Metaverse Objects. Only applicable when Direction is `Import`. |
-| `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new Connected System Objects. Only applicable when Direction is `Export`. |
-| `Enabled` | `bool` | No | `$true` | Whether the Synchronisation Rule is active |
-| `OutboundDeprovisionAction` | `string` | No | `Disconnect` | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
-| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
-| `PassThru` | `switch` | No | `$false` | Returns the created Synchronisation Rule object |
+| `Name` | `string` | Yes |  | The name of the Synchronisation Rule. Can be given by position, as the first argument. |
+| `Description` | `string` | No |  | What the Synchronisation Rule is for, for administrators. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The ID of the Connected System the rule synchronises with. |
+| `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System the rule synchronises with, matched exactly. |
+| `ConnectedSystemObjectTypeId` | `int` | Yes |  | The ID of the Connected System Object Type the rule applies to. |
+| `MetaverseObjectTypeId` | `int` | Yes |  | The ID of the Metaverse Object Type the rule applies to. |
+| `Direction` | `string` | Yes |  | Import to flow values from the Connected System into the Metaverse, Export to flow them out to it. One of `Import` or `Export`. |
+| `ProjectToMetaverse` | `switch` | No |  | On an import rule, creates a Metaverse Object for each Connected System Object in scope that matches none. |
+| `ProvisionToConnectedSystem` | `switch` | No |  | On an export rule, creates a Connected System Object for each Metaverse Object in scope that has none. |
+| `Enabled` | `bool` | No | `$true` | Whether the rule takes part in synchronisation. |
+| `OutboundDeprovisionAction` | `string` | No |  | On an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Disconnect when omitted. One of `Disconnect` or `Delete`. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Synchronisation Rule's change history. |
+| `PassThru` | `switch` | No |  | Returns the rule created. |
 
 ### Output
 
-With `-PassThru`, returns the created Synchronisation Rule object, including `DeletionSourceWarning`. Without it, returns nothing. Either way, when the new rule projects into a Metaverse Object Type deleted `WhenAuthoritativeSourceDisconnected` from a Connected System that is not one of the type's authoritative sources, that warning is written with `Write-Warning`; the rule is created regardless. See [projecting systems that are not authoritative sources](../configuration/metaverse.md#authoritative-source-trigger-modes).
+With `-PassThru`, the rule created; otherwise nothing. A deletion source warning is written to the warning stream either way.
 
-**ShouldProcess impact level:** Medium.
+| Property | Type | Description |
+|----------|------|-------------|
+| `Warnings` | `string[]` | Non-blocking warnings the save raised about the rule's Attribute Flows and Scoping Criteria, for example that an Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is evaluated, or that a Scoping Criterion the save left as it was is no longer valid. The save went ahead regardless. Always present; empty when there are none. |
+| `DependentDerivedFlows` | `object[]` | The Metaverse-Derived Attribute Flows the save left with a missing input (for example by disabling the rule holding the last enabled contributor of an attribute they read). The save went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
+| `DeletionSourceWarning` | `string` | Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative Source Disconnected, from a Connected System that is not one of its authoritative sources: objects only this system holds will never be deleted, and those it shares with an authoritative source are deleted when that source disconnects. Empty when there is nothing to warn about, including for a rule that already projected. |
+| `Id` | `int` | The ID of the Synchronisation Rule. |
+| `Name` | `string` | The name of the Synchronisation Rule. |
+| `Description` | `string` | What the Synchronisation Rule is for, for administrators; empty when none is set. |
+| `Created` | `datetime` | When the Synchronisation Rule was created (UTC). |
+| `ConnectedSystemId` | `int` | The ID of the Connected System the rule synchronises with. |
+| `ConnectedSystemName` | `string` | The name of that Connected System. |
+| `ConnectedSystemObjectTypeId` | `int` | The ID of the Connected System Object Type the rule applies to. |
+| `ConnectedSystemObjectTypeName` | `string` | The name of that Connected System Object Type. |
+| `MetaverseObjectTypeId` | `int` | The ID of the Metaverse Object Type the rule applies to. |
+| `MetaverseObjectTypeName` | `string` | The name of that Metaverse Object Type. |
+| `Direction` | `string` | Import for a rule that flows values from the Connected System into the Metaverse, Export for one that flows them out to it. One of `NotSet`, `Import` or `Export`. |
+| `ProvisionToConnectedSystem` | `bool` | Whether an export rule creates a Connected System Object for each Metaverse Object in its scope that has none; empty when it has not been set. |
+| `ProjectToMetaverse` | `bool` | Whether an import rule creates a Metaverse Object for each Connected System Object in its scope that matches none; empty when it has not been set. |
+| `Enabled` | `bool` | Whether the rule takes part in synchronisation; a disabled rule is skipped. |
+| `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
+| `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
+| `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+<!-- END GENERATED: New-JIMSyncRule -->
 
 ### Examples
 
@@ -190,54 +216,52 @@ New-JIMSyncRule -Name "HR Import (Draft)" `
 
 ## Set-JIMSyncRule
 
-Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled state, and changing projection/provisioning settings.
+Changes a Synchronisation Rule: its name and description, whether it is enabled, and how it projects, provisions and deprovisions. What you leave out stays as it is. Changes that leave a [Metaverse-Derived Attribute Flow](attribute-mappings.md#derived-attribute-flow-warnings) with a missing input, or that leave objects a Metaverse Object Type's deletion rule will never delete, go ahead with a warning rather than being refused.
 
+<!-- BEGIN GENERATED: Set-JIMSyncRule -->
 ### Syntax
 
 ```powershell
-# By ID (default)
-Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>]
-    [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
-    [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
+# ById (default)
+Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
-# Enable shortcut
-Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
+# Disable
+Set-JIMSyncRule -Id <int> -Disable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
-# Disable shortcut
-Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
+# Enable
+Set-JIMSyncRule -Id <int> -Enable [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 
-# By input object
-Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>]
-    [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
-    [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
+# ByInputObject
+Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>] [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-SaveAnyway] [-AcceptNewResult] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById, Enable, Disable sets) | | The ID of the Synchronisation Rule to modify. Accepts pipeline input. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
-| `Name` | `string` | No | | New display name for the Synchronisation Rule |
-| `Description` | `string` | No | | New description of what the Synchronisation Rule is for. Pass `$null` (or an empty string) to clear it. Maximum 1000 characters. |
-| `Enable` | `switch` | Yes (Enable set) | | Enables the Synchronisation Rule |
-| `Disable` | `switch` | Yes (Disable set) | | Disables the Synchronisation Rule |
-| `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new Metaverse Objects |
-| `ProvisionToConnectedSystem` | `bool` | No | | Controls whether the rule provisions new Connected System Objects |
-| `InboundOutOfScopeAction` | `string` | No | | Import rules: action when a CSO falls out of the rule's scope. `Disconnect` breaks the CSO to MVO join; `RemainJoined` keeps the join and stops further Attribute Flow |
-| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
-| `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
-| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
-| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
+| `Id` | `int` | Yes (ById, Disable, Enable) |  | The ID of the Synchronisation Rule to change. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Synchronisation Rule from `Get-JIMSyncRule`, through the pipeline. Accepts pipeline input. |
+| `Name` | `string` | No |  | The new name of the Synchronisation Rule. |
+| `Description` | `string` | No |  | What the Synchronisation Rule is for, for administrators. `$null` or an empty string clears it. |
+| `Enable` | `switch` | Yes (Enable) |  | Enables the rule, so it takes part in synchronisation. |
+| `Disable` | `switch` | Yes (Disable) |  | Disables the rule, so synchronisation skips it. |
+| `ProjectToMetaverse` | `bool` | No |  | On an import rule, whether it creates a Metaverse Object for each Connected System Object in scope that matches none. |
+| `ProvisionToConnectedSystem` | `bool` | No |  | On an export rule, whether it creates a Connected System Object for each Metaverse Object in scope that has none. |
+| `InboundOutOfScopeAction` | `string` | No |  | On an import rule, what happens when a Connected System Object leaves the rule's scope. Disconnect breaks the join; whether the values it contributed are recalled as well depends on the Connected System Object Type's settings and the Metaverse Object Type's deletion settings. RemainJoined keeps the join and stops the values flowing. One of `Disconnect` or `RemainJoined`. |
+| `OutboundDeprovisionAction` | `string` | No |  | On an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. One of `Disconnect` or `Delete`. |
+| `EnforceState` | `bool` | No |  | On an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. |
+| `ChangeReason` | `string` | No |  | An optional reason for the change, recorded against this Synchronisation Rule's change history. |
+| `PreviewActivityId` | `guid` | No |  | The Configuration Change Preview this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable rather than a claim. |
+| `SaveAnyway` | `switch` | No |  | Saves even though the change stops configuration test cases passing. Without it, or `-AcceptNewResult`, such a change is refused, nothing is saved, and the error names each case. Configuration History records the cases saved past, by name. |
+| `AcceptNewResult` | `switch` | No |  | Takes what the configuration now gives as what each configuration test case that stopped passing expects, rewriting those cases, and saves. A case whose new result cannot be expected (it needs review, could not run, or its Scope cannot be determined) still refuses the change unless `-SaveAnyway` is given too. |
+| `PassThru` | `switch` | No |  | Returns the rule as changed. |
 
 ### Output
 
-With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings`, `DependentDerivedFlows` and `DeletionSourceWarning`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`, and then `DeletionSourceWarning` when the update took the rule into projecting (enabling it, or switching projection on) from a Connected System that is not an authoritative source of a type deleted `WhenAuthoritativeSourceDisconnected`. Re-saving a rule that already projected does not repeat it.
+With `-PassThru`, the rule as changed; otherwise nothing. Its warnings are written to the warning stream either way.
 
-**ShouldProcess impact level:** Medium.
+Properties as under [New-JIMSyncRule](#new-jimsyncrule).
+<!-- END GENERATED: Set-JIMSyncRule -->
 
 ### Examples
 
@@ -282,45 +306,51 @@ Set-JIMSyncRule -Id 12 -Disable -ChangeReason "Pausing during HR cutover (CHG009
 
 ## Remove-JIMSyncRule
 
-Deletes a Synchronisation Rule and all associated configuration, including attribute mappings, scoping criteria, and matching rules.
+Deletes a Synchronisation Rule, with its Attribute Flows, scoping criteria and Object Matching Rules.
 
+When the rule still contributes Metaverse attribute values, the deletion recalls them by default: the rule is disabled at once, a queued task withdraws its values and re-elects the other contributors, and the rule is deleted as the task's last step. The command then returns the Activity doing it. `-KeepContributedValues` deletes the rule at once and leaves the values in place instead. A rule that contributes nothing is deleted at once either way. The confirmation states how many values the rule contributes, so you can choose before anything changes.
+
+<!-- BEGIN GENERATED: Remove-JIMSyncRule -->
 ### Syntax
 
 ```powershell
-# By ID (default)
-Remove-JIMSyncRule -Id <int> [-KeepContributedValues] [-Wait] [-Timeout <int>] [-Force] [-ChangeReason <string>] [-PassThru]
+# ById (default)
+Remove-JIMSyncRule -Id <int> [-ChangeReason <string>] [-KeepContributedValues] [-Force] [-Wait] [-Timeout <int>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By input object
-Remove-JIMSyncRule -InputObject <PSCustomObject> [-KeepContributedValues] [-Wait] [-Timeout <int>] [-Force] [-ChangeReason <string>] [-PassThru]
+# ByInputObject
+Remove-JIMSyncRule -InputObject <PSCustomObject> [-ChangeReason <string>] [-KeepContributedValues] [-Force] [-Wait] [-Timeout <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of the Synchronisation Rule to delete. Accepts pipeline input. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
-| `KeepContributedValues` | `switch` | No | `$false` | Keeps the Metaverse attribute values the rule contributed instead of recalling them. The kept values lose their provenance, so nothing can ever recall them. Omit to recall (the default): the rule is disabled immediately and the recall runs as a queued background operation, with the rule deleted as its final step. |
-| `Wait` | `switch` | No | `$false` | Waits for a queued contributed-values recall to finish before returning, so the rule really has gone when the cmdlet does. Without it, the rule can still be read back (disabled) until the recall lands. No effect when the deletion completes immediately. |
-| `Timeout` | `int` | No | | Maximum seconds to wait when `-Wait` is supplied. Omit to wait indefinitely. A recall still running at the timeout is reported as an error; it continues on the server regardless. |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt (and the impact lookup that would populate it) |
-| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with the deletion and shown in the configuration change history. Maximum 2000 characters. |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted Synchronisation Rule object before removal |
+| `Id` | `int` | Yes (ById) |  | The ID of the Synchronisation Rule to delete. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Synchronisation Rule from `Get-JIMSyncRule`, through the pipeline. Accepts pipeline input. |
+| `ChangeReason` | `string` | No |  | An optional reason for the deletion, recorded against the change history. |
+| `KeepContributedValues` | `switch` | No |  | Keeps the Metaverse attribute values the rule contributed, instead of recalling them, and deletes the rule at once. The kept values have no provenance, so nothing can ever recall them, and the other contributors to those attributes are not re-elected. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt, and the count of contributed values it states. |
+| `Wait` | `switch` | No |  | Waits for a queued recall to finish, so the rule has gone when the command returns. Without it, the command returns once the recall is queued, and the rule can still be read, disabled, until the recall finishes. Has no effect when the rule is deleted at once. |
+| `Timeout` | `int` | No |  | How many seconds `-Wait` waits before reporting an error; the recall carries on regardless. Without it, `-Wait` waits until the recall finishes. At least 1. |
+| `PassThru` | `switch` | No |  | Returns the rule as it stood before the deletion. |
 
 ### Output
 
-When the deletion queues a contributed-values recall, returns a tracking object:
+When the deletion recalls the values the rule contributed, what is being recalled and the Activity doing it. Nothing when the rule is deleted at once. With `-PassThru`, the rule as it stood before the deletion as well.
+
+**When the deletion recalls the values the rule contributed**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `RecallActivityId` | `guid` | The recall Activity's id; monitor it with `Get-JIMActivity` |
-| `AffectedValueCount` | `int` | Metaverse attribute values the rule contributed at decision time |
-| `AffectedObjectCount` | `int` | Distinct Metaverse Objects holding at least one of those values |
-| `DependentDerivedFlows` | `object[]` | Attribute Flows deriving Metaverse attributes that the deletion leaves with a missing input; see [derived flow warnings](#derived-attribute-flow-warnings) |
+| `RecallActivityId` | `guid` | The ID of the Activity recalling the values. The Synchronisation Rule is deleted as its last step. |
+| `AffectedValueCount` | `int` | How many Metaverse attribute values the Synchronisation Rule contributed when the deletion was asked for. |
+| `AffectedObjectCount` | `int` | How many Metaverse Objects held at least one of those values. |
+| `DependentDerivedFlows` | `object[]` | The Metaverse-Derived Attribute Flows on other Synchronisation Rules that the deletion leaves with a missing input, because an attribute they read lost its last enabled contributor. The rule is disabled at once, so they are affected from now. The deletion goes ahead regardless. Always present. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
 
-When the deletion completes immediately (keep chosen, or nothing contributed), returns nothing. Either way, `DependentDerivedFlows` is written as [derived flow warnings](#derived-attribute-flow-warnings). With `-PassThru`, the Synchronisation Rule object as it stood before deletion is also returned.
-
-**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
+**With `-PassThru`**: properties as under [Get-JIMSyncRule](#get-jimsyncrule).
+<!-- END GENERATED: Remove-JIMSyncRule -->
 
 ### Examples
 
@@ -328,7 +358,7 @@ When the deletion completes immediately (keep chosen, or nothing contributed), r
 Remove-JIMSyncRule -Id 5
 ```
 
-```powershell title="Force delete without confirmation"
+```powershell title="Delete without confirmation"
 Remove-JIMSyncRule -Id 5 -Force
 ```
 
@@ -346,7 +376,7 @@ Remove-JIMSyncRule -Id 5 -Force
 Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 3 -MappingId @(7, 9)
 ```
 
-A rule whose recall is queued drops to the bottom of every attribute priority order it contributes to, so the
+A rule whose recall is queued drops to the bottom of every Attribute Priority order it contributes to, so the
 reorder need not wait for the recall and may leave the deleted rule's mapping out.
 
 ```powershell title="Delete a rule KEEPING the values it contributed"
@@ -355,1497 +385,24 @@ Remove-JIMSyncRule -Id 5 -KeepContributedValues
 
 Keeping severs the values' provenance: nothing records that the rule contributed them, so no future synchronisation can recall them. Only choose this when the values should outlive the rule.
 
-```powershell title="Pipeline: remove all disabled Synchronisation Rules for a Connected System"
-Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
-    Where-Object { -not $_.Enabled } |
+```powershell title="Delete every disabled Synchronisation Rule for a Connected System"
+Get-JIMSyncRule -ConnectedSystemName "Legacy HR" -Status Disabled |
     Remove-JIMSyncRule -Force
 ```
 
----
+This deletes every rule the filter returns. Run it with `-WhatIf` in place of `-Force` first to see which.
 
-### Derived Attribute Flow warnings
-
-Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
-
-```text
-WARNING: This change left 2 Attribute Flow(s) deriving Metaverse attributes with a missing input. The change went ahead; each flow's Missing Input Behaviour now decides what it contributes.
-WARNING: Email (Synchronisation Rule 'Directory Import', Connected System 'Directory', mapping 2) reads Account Name, which no longer has an enabled contributor.
-WARNING: Display Name (Synchronisation Rule 'Directory Import', Connected System 'Directory', mapping 3) reads Account Name through Email, which no longer has an enabled contributor.
-```
-
-Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`; each missing input has `MetaverseAttributeName` (the attribute that lost its last contributor), `Indirect`, and `Via` (the derived attributes in between, empty when read directly). Collect the warnings with `-WarningVariable` to act on them in a script.
+Deleting a rule can leave a Metaverse-Derived Attribute Flow on another rule with a missing input; each one is written to the warning stream, as [Derived Attribute Flow warnings](attribute-mappings.md#derived-attribute-flow-warnings) describes.
 
 ---
-
-### Attribute Mappings
-
-Configure how attributes flow between Connected System Objects and Metaverse Objects within a Synchronisation Rule. Mappings can use direct attribute-to-Attribute Flows or expression-based transformations.
-
----
-
-## Get-JIMSyncRuleMapping
-
-Retrieves Attribute Flow mappings for a Synchronisation Rule. Returns all mappings for the rule, or a specific mapping by ID.
-
-### Syntax
-
-```powershell
-# All mappings for a Synchronisation Rule
-Get-JIMSyncRuleMapping -SyncRuleId <int>
-
-# Specific mapping
-Get-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. Alias: `Id`. |
-| `MappingId` | `int` | No | | The ID of a specific mapping to retrieve |
-
-### Output
-
-Returns one or more mapping objects representing Attribute Flow Rules. Each mapping includes the source attribute(s) or expression, the target attribute, and the flow direction.
-
-`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes)), and is `$null` on every other mapping:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `Derived.Step` | `int` | The step the flow is evaluated at, from 2 (step 1 is the ordinary Attribute Flow); `$null` when the flow is on, or depends on, a loop |
-| `Derived.StepCount` | `int` | How many steps the Metaverse Object Type's evaluation has |
-| `Derived.MetaverseInputs` | `string[]` | The Metaverse attributes the Expression reads, as written |
-
-`Generation` is present on a [generated mapping](../configuration/synchronisation-rules.md#generated-values), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/synchronisation-rules.md#checking-availability-in-target-systems):
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)) |
-| `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
-| `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
-| `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
-
-Each entry in `Generation.Participants` has:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `ConnectedSystemId` | `int` | The Connected System the value is exported to |
-| `ConnectedSystemName` | `string` | Its name |
-| `ConnectorName` | `string` | Its Connector's name |
-| `ConnectedSystemObjectTypeAttributeId` | `int` | The attribute the value is exported as |
-| `AttributeName` | `string` | That attribute's name |
-| `IsExcluded` | `bool` | Whether the Connected System is excluded |
-| `CanBeExcluded` | `bool` | Whether it can be: only where the value is exported to it unchanged from an import generated mapping |
-| `Check` | `string` | `JimRecordsAndProbe` (JIM's records of the system, and a probe of the system itself), `JimRecordsOnly` or `NotChecked` |
-| `Reason` | `string` | Why the check is less than `JimRecordsAndProbe`: `ConnectorCannotProbe`, `AttributeNotProbed`, `NotTextValue`, `ExportedThroughExpression`, `CombinedWithOtherSources` or `Excluded`; `None` when it is not |
-| `ReportsCollisions` | `bool` | Whether the Connected System's Connector reports a value as already in use, so Collision Remediation can act on a rejection there; elsewhere a collision is an ordinary export error |
-
-`Warnings` and `DependentDerivedFlows` are always empty on a read; they describe a save.
-
-### Examples
-
-```powershell title="List all mappings for a Synchronisation Rule"
-Get-JIMSyncRuleMapping -SyncRuleId 5
-```
-
-```powershell title="Get a specific mapping"
-Get-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12
-```
-
-```powershell title="Pipeline from Get-JIMSyncRule"
-Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
-```
-
-```powershell title="See where a generated value is checked for availability, and how"
-(Get-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12).Generation.Participants |
-    Select-Object ConnectedSystemName, AttributeName, Check, Reason
-```
-
----
-
-## New-JIMSyncRuleMapping
-
-Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
-
-### Syntax
-
-```powershell
-# Import: direct Attribute Flow (CS -> MV)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -SourceConnectedSystemAttributeId <int[]>
-    -TargetMetaverseAttributeId <int>
-
-# Import: expression-based flow (CS -> MV)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -Expression <string>
-    -TargetMetaverseAttributeId <int>
-
-# Export: direct Attribute Flow (MV -> CS)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -SourceMetaverseAttributeId <int[]>
-    -TargetConnectedSystemAttributeId <int>
-
-# Export: expression-based flow (MV -> CS)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -Expression <string>
-    -TargetConnectedSystemAttributeId <int>
-
-# Import: generated (Unique Value Generation, #242)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -TargetMetaverseAttributeId <int>
-    -Generate
-    [-Expression <string>]
-    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
-    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
-    [-RandomFormat <string>] [-RandomLength <int>]
-    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
-    [-CollisionRemediation <bool>] [-ExcludeConnectedSystemId <int[]>]
-
-# Export: generated (Unique Value Generation, #242)
-New-JIMSyncRuleMapping -SyncRuleId <int>
-    -TargetConnectedSystemAttributeId <int>
-    -Generate
-    [-Expression <string>]
-    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
-    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
-    [-RandomFormat <string>] [-RandomLength <int>]
-    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
-    [-CollisionRemediation <bool>]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. Alias: `Id`. |
-| `TargetMetaverseAttributeId` | `int` | Yes (Import sets) | | The metaverse attribute to write to (import direction) |
-| `TargetConnectedSystemAttributeId` | `int` | Yes (Export sets) | | The Connected System attribute to write to (export direction) |
-| `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more Connected System attribute IDs to read from |
-| `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
-| `Expression` | `string` | Yes (ImportExpression, ExportExpression sets); optional (ImportGenerated, ExportGenerated sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. For a generated mapping this is the base value the uniqueness token is appended to; a Sequence or Random mapping can omit it entirely. |
-| `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
-| `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
-| `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this a "Generated Value" mapping: the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
-| `TokenKind` | `string` | No | `OnlyIfTaken` | Which uniqueness token to append: `OnlyIfTaken` (try the base value; suffix only if taken; needs `-Expression`), `Sequence` (always append the next counter number, never reused) or `Random` (always append a cryptographic random token). |
-| `SuffixStyle` | `string` | No | `Number` | `OnlyIfTaken` only: `Number` or `Letter` for the collision suffix. |
-| `SuffixStart` | `int` | No | `1` | `OnlyIfTaken` only: the first suffix value tried once the bare base value is taken. |
-| `SequenceStart` | `long` | No | `1` | `Sequence` only: the lowest number this flow will ever issue. If it stands above the target attribute's counter, the save moves the counter forward and warns naming the old and new positions. |
-| `SequenceIncrement` | `int` | No | `1` | `Sequence` only: how much the counter advances per issued number. |
-| `FixedWidth` | `int` | No | (none) | `Sequence` only: zero-pads the number to this many digits. |
-| `OnWidthExceeded` | `string` | No | `StopAndReport` | `Sequence` only, with `-FixedWidth`: `StopAndReport` stops the object with an error; `AllowLonger` lets the number grow past the width. |
-| `RandomFormat` | `string` | No | `Guid` | `Random` only: `Guid`, `Hex` or `Digits`. `-RandomLength` is required for `Hex` and `Digits`, and must be omitted for `Guid`. |
-| `RandomLength` | `int` | No | (none) | `Random` only: the token length in characters. |
-| `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
-| `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit. |
-| `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
-| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
-| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
-
-### Output
-
-Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings, `Generation.Exclusions` and `Generation.Participants` (see [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping)); `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is also written with `Write-Warning`.
-
-**ShouldProcess impact level:** Medium.
-
-### Notes
-
-- When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
-- Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
-- `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242).** `-Generate` and `-CollisionRemediation` apply to import and export generated mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only.
-- Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
-
-### Examples
-
-```powershell title="Direct import: map CS 'givenName' to MV 'firstName'"
-New-JIMSyncRuleMapping -SyncRuleId 5 `
-    -SourceConnectedSystemAttributeId 10 `
-    -TargetMetaverseAttributeId 3
-```
-
-```powershell title="Expression import: concatenate CS attributes into MV 'displayName'"
-New-JIMSyncRuleMapping -SyncRuleId 5 `
-    -Expression 'cs["givenName"] + " " + cs["sn"]' `
-    -TargetMetaverseAttributeId 7
-```
-
-```powershell title="Expression export: refuse to build a Distinguished Name from a missing value"
-New-JIMSyncRuleMapping -SyncRuleId 8 `
-    -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=company,DC=local"' `
-    -TargetConnectedSystemAttributeId 30 `
-    -MissingInputBehaviour FailObject
-```
-
-```powershell title="Direct export: map MV 'email' to CS 'mail'"
-New-JIMSyncRuleMapping -SyncRuleId 8 `
-    -SourceMetaverseAttributeId 15 `
-    -TargetConnectedSystemAttributeId 22
-```
-
-```powershell title="Multiple source attributes for import"
-New-JIMSyncRuleMapping -SyncRuleId 5 `
-    -SourceConnectedSystemAttributeId 10, 11 `
-    -TargetMetaverseAttributeId 7
-```
-
-```powershell title="Generated import: try 'first.last' bare, suffix only on collision"
-New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 `
-    -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -Generate
-```
-
-```powershell title="Generated import: a zero-padded Employee Number Sequence with no base expression"
-New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 `
-    -Generate -TokenKind Sequence -SequenceStart 100000 -FixedWidth 6
-```
-
-```powershell title="Generated export: a random hexadecimal token with no base expression"
-New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
-    -Generate -TokenKind Random -RandomFormat Hex -RandomLength 12
-```
-
----
-
-## Set-JIMSyncRuleMapping
-
-Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
-
-!!! note "Generated-mapping parameters"
-    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **Generated Value**; create one with `New-JIMSyncRuleMapping -Generate`.
-
-### Syntax
-
-```powershell
-# By IDs
-Set-JIMSyncRuleMapping -SyncRuleId <int>
-    -MappingId <int>
-    [-Expression <string>]
-    [-MissingInputBehaviour <string>]
-    [-NullIsValue <bool>]
-    [-InboundValueProcessing <string>]
-    [-CaseNormalisation <string>]
-    [-InitialExportOnly <bool>]
-    [-Enabled <bool>]
-    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
-    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
-    [-RandomFormat <string>] [-RandomLength <int>]
-    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
-    [-CollisionRemediation <bool>] [-ExcludeConnectedSystemId <int[]>]
-    [-PassThru]
-
-# From the pipeline
-Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <int> [-MissingInputBehaviour <string>]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to |
-| `MappingId` | `int` | Yes (ById set) | | The ID of the mapping to update. Accepts pipeline input by property name. Alias: `Id` |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A mapping object from the pipeline |
-| `Expression` | `string` | No | | Replaces the mapping's expression. Expression mappings only |
-| `MissingInputBehaviour` | `string` | No | | `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. Expression mappings only. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) |
-| `NullIsValue` | `bool` | No | | Whether a contribution of no value is authoritative. Import mappings only |
-| `InboundValueProcessing` | `string` | No | | Comma-separated flag names, e.g. `'TreatWhitespaceAsNoValue, TrimWhitespace'`. Import mappings only |
-| `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
-| `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
-| `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
-| `TokenKind` | `string` | No | | Changes which uniqueness token a generated mapping appends: `OnlyIfTaken`, `Sequence` or `Random`. Generated mappings only |
-| `SuffixStyle` | `string` | No | | `Number` or `Letter`. `OnlyIfTaken` mappings only |
-| `SuffixStart` | `int` | No | | The first suffix value tried once the base value is taken. `OnlyIfTaken` mappings only |
-| `SequenceStart` | `long` | No | | Raising it above the target attribute's counter moves the counter forward at save time and warns naming the old and new positions; a lower or equal value has no effect. `Sequence` mappings only |
-| `SequenceIncrement` | `int` | No | | How much the counter advances per issued number. `Sequence` mappings only |
-| `FixedWidth` | `int` | No | | Zero-pads the number to this many digits. Supply `0` to clear the padding; omit to leave it unchanged. `Sequence` mappings only |
-| `OnWidthExceeded` | `string` | No | | `StopAndReport` or `AllowLonger`. `Sequence` mappings only |
-| `RandomFormat` | `string` | No | | `Guid`, `Hex` or `Digits`. `Random` mappings only |
-| `RandomLength` | `int` | No | | The token length in characters. `Random` mappings only |
-| `Separator` | `string` | No | | The characters between the base value and the token. Supply `''` or `$null` to clear it; omit to leave it unchanged |
-| `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit |
-| `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
-| `CollisionRemediation` | `bool` | No | | Whether JIM corrects a value a target rejects as already in use. Changing it releases this Attribute Flow's values [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Generated mappings only |
-| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
-| `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
-
-### Output
-
-Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings, `Generation.Exclusions` and `Generation.Participants` (see [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping)); `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied. `Derived` is as for `Get-JIMSyncRuleMapping`. `DependentDerivedFlows` names the Attribute Flows deriving Metaverse attributes that the update left with a missing input (for example by disabling the mapping), written as [derived flow warnings](#derived-attribute-flow-warnings).
-
-**ShouldProcess impact level:** Medium.
-
-### Notes
-
-- What a mapping **targets**, and whether its source is an attribute or an expression, cannot be changed here. Those revalidate against attribute types and plurality, and for an import mapping they reopen its place in the [Attribute Priority](../concepts/attribute-priority.md) order, so they remain a `Remove-JIMSyncRuleMapping` followed by a `New-JIMSyncRuleMapping`.
-- A setting that does not apply to the mapping is refused rather than ignored: `-NullIsValue` on an export mapping, `-InitialExportOnly` on an import mapping, or any expression setting on a direct Attribute Flow all return an error. The same applies to a generation setting on a mapping that is not currently a generated mapping; converting a mapping to or from generated is not supported here either (delete and create).
-- A call naming no setting is refused too, rather than reported as a successful update.
-- Attribute Priority is ordered through its own endpoint and is not settable here.
-
-### Examples
-
-```powershell title="Refuse to export a Distinguished Name built around a missing value"
-Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
-```
-
-```powershell title="Rewrite an import mapping's expression"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
-```
-
-```powershell title="Disable one Attribute Flow without touching the Synchronisation Rule"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false
-```
-
-```powershell title="Report every expression mapping on a Rule that meets a missing input"
-Get-JIMSyncRuleMapping -SyncRuleId 1 |
-    Where-Object { $_.sourceType -eq 'ExpressionMapping' } |
-    Set-JIMSyncRuleMapping -SyncRuleId 1 -MissingInputBehaviour FailMapping
-```
-
-```powershell title="Raise a generated Sequence mapping's Sequence Start"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -SequenceStart 500000
-```
-
-```powershell title="Clear a generated Sequence mapping's fixed width"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
-```
-
-```powershell title="Leave two Connected Systems out of a generated value's availability checks"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4, 7
-```
-
-```powershell title="Check every Connected System again (clear the exclusions)"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @()
-```
-
-```powershell title="Switch Collision Remediation off, so a rejected value is reported as an export error instead"
-Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -CollisionRemediation $false
-```
-
----
-
-## Get-JIMGeneratedValueSequence
-
-Gets a generated Sequence mapping's counter state (Unique Value Generation, #242): the next number it
-would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
-this. Only meaningful for a generated mapping whose token kind is Sequence; every other mapping returns a
-"not found" error.
-
-### Syntax
-
-```powershell
-Get-JIMGeneratedValueSequence -SyncRuleId <int> -MappingId <int>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to. Accepts pipeline input. Alias: `Id` |
-| `MappingId` | `int` | Yes | | The ID of the mapping |
-
-### Output
-
-One object describing the counter:
-
-| Property | Description |
-|----------|--------------|
-| `AttributeName` | The target attribute the counter belongs to |
-| `NextNumber` | The next number this flow would issue |
-| `NextNumberFormatted` | That number formatted with the mapping's Fixed Width, if any |
-| `NextNumberWidthExceeded` | `true` when the next number no longer fits the configured Fixed Width |
-| `AssignedCount` | How many numbers this flow has issued so far |
-| `IsSeeded` | Whether the counter has been seeded from existing values yet |
-
-### Examples
-
-```powershell title="Check an Employee Number mapping's next number before raising its Sequence Start"
-Get-JIMGeneratedValueSequence -SyncRuleId 1 -MappingId 12
-```
-
-```powershell title="Pipe a Synchronisation Rule straight in"
-Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
-```
-
----
-
-## Restart-JIMGeneratedValues
-
-"Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
-attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
-"back" is the common case, but a lower configured start is honoured too), and forgets the attribute's
-[retired values](../configuration/synchronisation-rules.md#retired-values) so they can be issued again.
-For every other token kind (`OnlyIfTaken`, `Random`) this is a documented no-op that still succeeds.
-
-**It changes nothing else.** No existing generated value on any object is changed, nothing is exported,
-and no synchronisation runs as a result of this command. To see what it would forget first, run
-`Get-JIMRetiredGeneratedValue` for the attribute (see [Metaverse cmdlets](metaverse.md#get-jimretiredgeneratedvalue)).
-
-### Syntax
-
-```powershell
-Restart-JIMGeneratedValues -SyncRuleId <int> -MappingId <int> [-Confirm] [-WhatIf]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to. Accepts pipeline input. Alias: `Id` |
-| `MappingId` | `int` | Yes | | The ID of the mapping |
-
-### Output
-
-One object describing what moved:
-
-| Property | Description |
-|----------|--------------|
-| `RetiredValuesForgotten` | How many retired values were forgotten and can be issued again |
-| `CounterFrom` | The counter's position before this call, for a Sequence mapping; `$null` otherwise |
-| `CounterTo` | The counter's position after this call (the mapping's Sequence Start); `$null` otherwise |
-
-**ShouldProcess impact level:** High. This command prompts for confirmation by default.
-
-### Examples
-
-```powershell title="Start a generated Sequence mapping again"
-Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12
-```
-
-```powershell title="Do the same without prompting, for use in a script"
-Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
-```
-
----
-
-## Generated value decisions
-
-When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
-
-### Get-JIMGeneratedValueDecision
-
-Lists the generated values held for a decision, newest first, or reads one by id, or summarises them.
-
-#### Syntax
-
-```powershell
-# List (default)
-Get-JIMGeneratedValueDecision [-ConnectedSystemId <int>] [-SyncRuleId <int>] [-Status <string>]
-    [-MetaverseObjectId <guid>] [-Page <int>] [-PageSize <int>]
-
-# Every page
-Get-JIMGeneratedValueDecision -All [-ConnectedSystemId <int>] [-SyncRuleId <int>] [-Status <string>]
-    [-MetaverseObjectId <guid>] [-PageSize <int>] [-Force]
-
-# One value
-Get-JIMGeneratedValueDecision -Id <guid>
-
-# Counts
-Get-JIMGeneratedValueDecision -Summary [-ConnectedSystemId <int>] [-SyncRuleId <int>]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | No | | Values involving one Connected System: it rejected the value, it anchors the value, or the value is exported to and checked in it |
-| `SyncRuleId` | `int` | No | | Values generated by one Synchronisation Rule's Attribute Flows |
-| `Status` | `string` | No | | `NeedsDecision` or `RenameAllowed`; omit for both |
-| `MetaverseObjectId` | `guid` | No | | One Metaverse Object's values, including those on the accounts joined to it |
-| `Id` | `guid` | Yes (ById set) | | One value by id, whatever its state |
-| `Summary` | `switch` | Yes (Summary set) | | Returns the counts instead of the rows |
-| `Page` | `int` | No | `1` | Page number |
-| `PageSize` | `int` | No | `50` | Items per page (1-100) |
-| `All` | `switch` | Yes (ListAll set) | | Retrieves every page, up to 1000 pages |
-| `Force` | `switch` | No | | Overrides the `-All` page ceiling |
-
-#### Output
-
-The list and `-Id` forms return the same shape, one object per value:
-
-| Property | Description |
-|----------|-------------|
-| `Id` | The value's id: what `Approve-JIMGeneratedValueRename` and `Reset-JIMGeneratedValueDecision` take |
-| `Status` | `NeedsDecision`, `RenameAllowed`, or (only from `-Id`) `Released`: nothing is waiting on a decision for it |
-| `Reason` | `AnchoredElsewhere` (another Connected System has already accepted it; correcting it renames that account), `CannotTell` (a Connected System's connector space was cleared and has not been fully imported since), `RemediationLimitReached` (corrected `RemediationCount` times and still rejected) or `NoValueAvailable` (no other value could be generated) |
-| `MetaverseObjectId`, `MetaverseObjectDisplayName`, `MetaverseObjectTypeName` | The Metaverse Object the value belongs to (or, for a value generated on an export Synchronisation Rule, the one its account is joined to) |
-| `ConnectedSystemObjectId`, `ConnectedSystemObjectConnectedSystemId` | For a value generated on an export Synchronisation Rule: the account it belongs to, and its Connected System; `$null` otherwise |
-| `AttributeName`, `Value` | The attribute and the value the target rejected, which is still the value JIM holds |
-| `RemediationCount` | How many times Collision Remediation has already corrected the value |
-| `RejectedByConnectedSystemId`, `RejectedByConnectedSystemName` | The Connected System that rejected it |
-| `AnchoredByConnectedSystemId`, `AnchoredByConnectedSystemName` | The Connected System that anchors it, or cannot tell whether it does |
-| `Since` | When the value began waiting on a decision (UTC) |
-| `RenameAllowedAt`, `RenameAllowedBy` | When and by whom the rename was allowed; only while `Status` is `RenameAllowed` |
-| `SyncRuleId`, `SyncRuleName`, `SyncRuleMappingId` | The Synchronisation Rule and Attribute Flow that generated the value |
-
-With `-Summary`, one object: `NeedsDecisionCount`, `RenameAllowedCount`, `CorrectedRecentlyCount` (values Collision Remediation corrected since `CorrectedSince`, seven days ago, counted once each from their most recent correction) and `CorrectedSince`.
-
-#### Examples
-
-```powershell title="How much needs attention"
-Get-JIMGeneratedValueDecision -Summary
-```
-
-```powershell title="Why each held value is held"
-Get-JIMGeneratedValueDecision -Status NeedsDecision |
-    Select-Object MetaverseObjectDisplayName, AttributeName, Value, Reason, RejectedByConnectedSystemName, AnchoredByConnectedSystemName
-```
-
-```powershell title="Every held value involving one Connected System"
-Get-JIMGeneratedValueDecision -ConnectedSystemId 3 -All
-```
-
-### Approve-JIMGeneratedValueRename
-
-Allows the rename. At the next export that meets the rejection, JIM chooses the next free value and applies it everywhere the value is used, renaming the account in the Connected System that already holds the current value. The new value is decided then, after JIM checks every system again, not now. The held export is released so that export happens.
-
-#### Syntax
-
-```powershell
-Approve-JIMGeneratedValueRename [-Id] <guid> [-Force] [-WhatIf] [-Confirm]
-
-Get-JIMGeneratedValueDecision ... | Approve-JIMGeneratedValueRename [-Force] [-WhatIf] [-Confirm]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes (ById set) | | The value's id |
-| `InputObject` | `PSCustomObject` | Yes (InputObject set) | | A held value from `Get-JIMGeneratedValueDecision`, through the pipeline; the confirmation then names the value and its object |
-| `Force` | `switch` | No | | Skips the confirmation |
-
-#### Output
-
-The value as it now stands, in `Get-JIMGeneratedValueDecision`'s shape, with `Status` `RenameAllowed`. A value not waiting on a decision (already released, or its rename already allowed) is an error, and nothing changes.
-
-**ShouldProcess impact level:** High, because it renames a live account. This command prompts for confirmation by default.
-
-#### Examples
-
-```powershell title="Allow the rename of one value"
-Approve-JIMGeneratedValueRename -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f
-```
-
-```powershell title="See which accounts would be renamed for every value held from one Synchronisation Rule, without allowing anything"
-Get-JIMGeneratedValueDecision -SyncRuleId 2 -Status NeedsDecision -All | Approve-JIMGeneratedValueRename -WhatIf
-```
-
-Run the second example without `-WhatIf` only after reviewing what it lists: every value it names renames a live account.
-
-### Reset-JIMGeneratedValueDecision
-
-Tries again: releases the held exports so the next export run tries the same values, for when the clash has been resolved in the target. A value the target rejects again is held for a decision again. Values whose rename has been allowed are left as they are. A pipeline is collected and sent as one request; each value released is recorded as its own Activity.
-
-#### Syntax
-
-```powershell
-Reset-JIMGeneratedValueDecision [-Id <guid[]>] [-ConnectedSystemId <int>] [-SyncRuleId <int>]
-    [-MetaverseObjectId <guid>] [-AllDecisions] [-Force] [-WhatIf] [-Confirm]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `guid[]` | No | | The values to try again. Accepts held values from `Get-JIMGeneratedValueDecision` through the pipeline. Combines with the other criteria |
-| `ConnectedSystemId` | `int` | No | | Every held value involving one Connected System |
-| `SyncRuleId` | `int` | No | | Every held value generated by one Synchronisation Rule's Attribute Flows |
-| `MetaverseObjectId` | `guid` | No | | Every held value of one Metaverse Object |
-| `AllDecisions` | `switch` | No | | Every value needing a decision. Required when nothing else narrows the request |
-| `Force` | `switch` | No | | Skips the confirmation |
-
-#### Output
-
-One object with `AffectedCount`: how many values were released. Zero is a valid outcome.
-
-**ShouldProcess impact level:** Medium.
-
-#### Examples
-
-```powershell title="Try again every value held from one Synchronisation Rule"
-Reset-JIMGeneratedValueDecision -SyncRuleId 2
-```
-
-```powershell title="Try again every value involving one Connected System that needs a decision, in one request"
-Get-JIMGeneratedValueDecision -Status NeedsDecision -ConnectedSystemId 3 | Reset-JIMGeneratedValueDecision -Force
-```
-
----
-
-## Remove-JIMSyncRuleMapping
-
-Deletes an Attribute Flow mapping from a Synchronisation Rule.
-
-### Syntax
-
-```powershell
-# By IDs
-Remove-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int> [-KeepContributedValues] [-Force]
-
-# By input object
-Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-KeepContributedValues] [-Force]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `MappingId` | `int` | Yes (by ID) | | The ID of the mapping to delete. Accepts pipeline input. Alias: `Id`. |
-| `InputObject` | `PSCustomObject` | Yes (by object) | | A mapping object from `Get-JIMSyncRuleMapping`. Accepts pipeline input. |
-| `KeepContributedValues` | `switch` | No | `$false` | Keeps the Metaverse attribute values the mapping contributed instead of recalling them; their provenance is severed before the mapping is deleted, so nothing can ever recall them. Omit to recall (the default): the values are withdrawn at the next Full Synchronisation of the contributing Connected System, with any other contributing Attribute Flow taking over. |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt (and the impact lookup that would populate it) |
-
-### Output
-
-None. Attribute Flows deriving Metaverse attributes that the deletion leaves with a missing input are written as [derived flow warnings](#derived-attribute-flow-warnings).
-
-**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified. When the mapping contributed values, the confirmation states how many values, on how many Metaverse Objects, will be recalled or kept.
-
-### Examples
-
-```powershell title="Delete a specific mapping"
-Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12
-```
-
-```powershell title="Delete a mapping KEEPING the values it contributed"
-Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12 -KeepContributedValues
-```
-
-```powershell title="Force delete without confirmation"
-Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12 -Force
-```
-
-```powershell title="Pipeline: remove all mappings for a Synchronisation Rule"
-Get-JIMSyncRuleMapping -SyncRuleId 5 |
-    Remove-JIMSyncRuleMapping -SyncRuleId 5 -Force
-```
-
----
-
-### Scoping Criteria
-
-Scoping criteria control which objects a Synchronisation Rule processes. Criteria are organised into groups that evaluate as `All` (AND) or `Any` (OR), and groups can be nested for complex logic.
-
----
-
-## Get-JIMScopingCriteria
-
-Retrieves scoping criteria groups and their nested criteria for a Synchronisation Rule.
-
-### Syntax
-
-```powershell
-# All groups for a Synchronisation Rule
-Get-JIMScopingCriteria -SyncRuleId <int>
-
-# Specific group
-Get-JIMScopingCriteria -SyncRuleId <int> -GroupId <int>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. Alias: `Id`. |
-| `GroupId` | `int` | No | | The ID of a specific scoping criteria group to retrieve |
-
-### Output
-
-Returns one or more scoping criteria group objects. Each group contains its type (`All` or `Any`), position, and nested criteria or child groups.
-
-### Examples
-
-```powershell title="List all scoping criteria for a Synchronisation Rule"
-Get-JIMScopingCriteria -SyncRuleId 5
-```
-
-```powershell title="Get a specific group"
-Get-JIMScopingCriteria -SyncRuleId 5 -GroupId 2
-```
-
-```powershell title="Pipeline from Get-JIMSyncRule"
-Get-JIMSyncRule -Id 5 | Get-JIMScopingCriteria
-```
-
----
-
-## New-JIMScopingCriteriaGroup
-
-Creates a new scoping criteria group on a Synchronisation Rule. Groups evaluate their contents using either `All` (AND) or `Any` (OR) logic. Groups can be nested within other groups to build complex scoping expressions.
-
-### Syntax
-
-```powershell
-New-JIMScopingCriteriaGroup -SyncRuleId <int>
-    [-ParentGroupId <int>] [-Type <string>] [-Position <int>] [-PassThru]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. |
-| `ParentGroupId` | `int` | No | | The ID of a parent group to nest this group within |
-| `Type` | `string` | No | `All` | Evaluation logic for the group. Valid values: `All` (AND), `Any` (OR). |
-| `Position` | `int` | No | `0` | Display order position within the parent context |
-| `PassThru` | `switch` | No | `$false` | Returns the created group object |
-
-### Output
-
-With `-PassThru`, returns the created scoping criteria group object. Without it, returns nothing.
-
-**ShouldProcess impact level:** Medium.
-
-### Examples
-
-```powershell title="Create a top-level AND group"
-New-JIMScopingCriteriaGroup -SyncRuleId 5 -Type All -PassThru
-```
-
-```powershell title="Create a nested OR group inside an existing group"
-New-JIMScopingCriteriaGroup -SyncRuleId 5 -ParentGroupId 2 -Type Any
-```
-
-```powershell title="Create an AND group at a specific position"
-New-JIMScopingCriteriaGroup -SyncRuleId 5 -Type All -Position 1
-```
-
----
-
-## Set-JIMScopingCriteriaGroup
-
-Modifies an existing scoping criteria group; for example, changing the evaluation type or position.
-
-### Syntax
-
-```powershell
-Set-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int>
-    [-Type <string>] [-Position <int>] [-PassThru]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. |
-| `GroupId` | `int` | Yes | | The ID of the group to modify. Accepts pipeline input. Alias: `Id`. |
-| `Type` | `string` | No | | Evaluation logic. Valid values: `All` (AND), `Any` (OR). |
-| `Position` | `int` | No | | Display order position |
-| `PassThru` | `switch` | No | `$false` | Returns the updated group object |
-
-### Output
-
-With `-PassThru`, returns the updated scoping criteria group object. Without it, returns nothing.
-
-**ShouldProcess impact level:** Medium.
-
-### Examples
-
-```powershell title="Change a group from AND to OR"
-Set-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 2 -Type Any
-```
-
-```powershell title="Reorder a group"
-Set-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 2 -Position 3
-```
-
----
-
-## Remove-JIMScopingCriteriaGroup
-
-Deletes a scoping criteria group and all of its nested criteria and child groups.
-
-### Syntax
-
-```powershell
-Remove-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. |
-| `GroupId` | `int` | Yes | | The ID of the group to delete. Accepts pipeline input. Alias: `Id`. |
-
-### Output
-
-None.
-
-**ShouldProcess impact level:** High. Prompts for confirmation.
-
-### Notes
-
-- Deleting a group also deletes all nested criteria and child groups within it. This operation is not reversible.
-
-### Examples
-
-```powershell title="Delete a scoping criteria group"
-Remove-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 2
-```
-
----
-
-## New-JIMScopingCriterion
-
-Adds an individual scoping criterion to a group. Each criterion compares an attribute value against a specified constant. Import rules use Connected System attributes; export rules use metaverse attributes.
-
-### Syntax
-
-```powershell
-# By metaverse attribute ID
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
-    -MetaverseAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
-    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
-
-# By metaverse attribute name
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
-    -MetaverseAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
-    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
-
-# By Connected System attribute ID
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
-    -ConnectedSystemAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
-    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
-
-# By Connected System attribute name
-New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
-    -ConnectedSystemAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
-    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `GroupId` | `int` | Yes | | The ID of the scoping criteria group to add this criterion to |
-| `MetaverseAttributeId` | `int` | Yes (ByMvId set) | | The metaverse attribute ID to evaluate (export rules only) |
-| `MetaverseAttributeName` | `string` | Yes (ByMvName set) | | The metaverse attribute name to evaluate; auto-resolves to ID (export rules only) |
-| `ConnectedSystemAttributeId` | `int` | Yes (ByCsId set) | | The Connected System attribute ID to evaluate (import rules only) |
-| `ConnectedSystemAttributeName` | `string` | Yes (ByCsName set) | | The Connected System attribute name to evaluate; auto-resolves to ID (import rules only) |
-| `ComparisonType` | `string` | Yes | | The comparison operator. Valid values: `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`. |
-| `StringValue` | `string` | No | | String value to compare against |
-| `IntValue` | `int` | No | | Integer value to compare against (`Number` attributes) |
-| `LongValue` | `long` | No | | 64-bit integer value to compare against (`LongNumber` attributes) |
-| `DecimalValue` | `decimal` | No | | Decimal value to compare against (`Decimal` attributes) |
-| `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
-| `BoolValue` | `bool` | No | | Boolean value to compare against |
-| `GuidValue` | `guid` | No | | GUID value to compare against |
-| `CaseSensitive` | `bool` | No | `$false` | If `$true`, string comparisons are case-sensitive. Only meaningful with `StringValue`. |
-| `ValueMode` | `string` | No | `Absolute` | For Date/Time attributes: `Absolute` (use `DateTimeValue`) or `Relative` (compare against a date relative to now). |
-| `RelativeCount` | `int` | No | | Relative offset count, zero or positive (with `ValueMode Relative`). |
-| `RelativeUnit` | `string` | No | | Relative offset unit: `Hours`, `Days`, `Weeks`, `Months`, `Years` (with `ValueMode Relative`). |
-| `RelativeDirection` | `string` | No | | Relative offset direction: `Ago` or `FromNow` (with `ValueMode Relative`). |
-| `PassThru` | `switch` | No | `$false` | Returns the created criterion object |
-
-### Output
-
-With `-PassThru`, returns the created scoping criterion object. Without it, returns nothing.
-
-**ShouldProcess impact level:** Medium.
-
-### Notes
-
-- Export rules only support metaverse attributes. Import rules only support Connected System attributes.
-- Exactly one comparison value parameter should be provided; the correct parameter depends on the attribute's data type.
-- For a Date/Time attribute, set `-ValueMode Relative` with `-RelativeCount`/`-RelativeUnit`/`-RelativeDirection` to compare against a date resolved relative to now (re-evaluated each run); this is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters).
-- On a multi-valued attribute the criterion tests every value: a positive operator is met when any value matches, a `Not...` operator when none does. See [multi-valued attributes](../configuration/synchronisation-rules.md#multi-valued-attributes-in-scope).
-
-### Examples
-
-```powershell title="Import scope: only process users where objectClass equals 'user'"
-New-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 `
-    -ConnectedSystemAttributeName "objectClass" `
-    -ComparisonType Equals `
-    -StringValue "user"
-```
-
-```powershell title="Import scope: employee ID greater than 1000"
-New-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 `
-    -ConnectedSystemAttributeId 14 `
-    -ComparisonType GreaterThan `
-    -IntValue 1000
-```
-
-```powershell title="Export scope: only export active metaverse persons"
-New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
-    -MetaverseAttributeName "accountEnabled" `
-    -ComparisonType Equals `
-    -BoolValue $true
-```
-
-```powershell title="Import scope: department starts with 'Engineering'"
-New-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 `
-    -ConnectedSystemAttributeName "department" `
-    -ComparisonType StartsWith `
-    -StringValue "Engineering"
-```
-
-```powershell title="Export scope: modified after a specific date"
-New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
-    -MetaverseAttributeId 20 `
-    -ComparisonType GreaterThanOrEquals `
-    -DateTimeValue "2025-01-01T00:00:00Z"
-```
-
-```powershell title="Export scope: terminated within the last year (relative date)"
-New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
-    -MetaverseAttributeName "Employee End Date" `
-    -ComparisonType GreaterThanOrEquals `
-    -ValueMode Relative -RelativeCount 364 -RelativeUnit Days -RelativeDirection Ago
-```
-
----
-
-## Set-JIMScopingCriterion
-
-Updates an existing scoping criterion (a full replacement of its attribute, operator and value). Takes the same parameters as `New-JIMScopingCriterion` plus `-CriterionId`, including the relative-date parameters for Date/Time attributes.
-
-### Syntax
-
-```powershell
-Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
-    (-MetaverseAttributeId <int> | -MetaverseAttributeName <string> | -ConnectedSystemAttributeId <int> | -ConnectedSystemAttributeName <string>)
-    -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
-    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>]
-    [-PassThru]
-```
-
-### Examples
-
-```powershell title="Change a criterion to a relative date (on or before 7 days from now)"
-Set-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 -CriterionId 12 `
-    -MetaverseAttributeName "AccountExpiry" `
-    -ComparisonType LessThanOrEquals `
-    -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
-```
-
-**ShouldProcess impact level:** Medium.
-
----
-
-## Remove-JIMScopingCriterion
-
-Deletes a single scoping criterion from a group.
-
-### Syntax
-
-```powershell
-Remove-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `GroupId` | `int` | Yes | | The ID of the scoping criteria group |
-| `CriterionId` | `int` | Yes | | The ID of the criterion to delete. Alias: `Id`. |
-
-### Output
-
-None.
-
-**ShouldProcess impact level:** High. Prompts for confirmation.
-
-### Examples
-
-```powershell title="Delete a scoping criterion"
-Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 -CriterionId 7
-```
-
----
-
-### Object Matching Rules
-
-Matching rules determine how JIM links Connected System Objects to Metaverse Objects during synchronisation. JIM supports two matching modes:
-
-- **Per-object-type (simple):** matching rules are defined at the Connected System level and apply to all Synchronisation Rules for a given object type. This is the default mode.
-- **Per-Synchronisation-Rule (advanced):** each Synchronisation Rule has its own independent matching rules, allowing different Synchronisation Rules to use different join criteria.
-
-Use [Switch-JIMMatchingMode](#switch-jimmatchingmode) to change between modes. The current mode determines which set of cmdlets to use.
-
----
-
-## Switch-JIMMatchingMode
-
-Switches a Connected System between per-object-type (simple) and per-Synchronisation-Rule (advanced) matching modes. Existing matching rules are migrated automatically during the switch.
-
-### Syntax
-
-```powershell
-Switch-JIMMatchingMode -ConnectedSystemId <int> -Mode <string> [-PassThru]
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System. Accepts pipeline input. |
-| `Mode` | `string` | Yes | | Target matching mode. Valid values: `ConnectedSystem` (simple, per-object-type), `SyncRule` (advanced, per-Synchronisation-Rule). |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
-
-### Output
-
-With `-PassThru`, returns the Connected System Object reflecting the new mode. Without it, returns nothing.
-
-**ShouldProcess impact level:** High. Prompts for confirmation.
-
-### Notes
-
-- `ConnectedSystem` mode defines matching rules at the object type level; all Synchronisation Rules for that object type share the same matching configuration.
-- `SyncRule` mode defines matching rules on each Synchronisation Rule independently, providing fine-grained control.
-- When switching modes, existing rules are migrated automatically. Review the migrated rules after switching to confirm they are correct.
-- The switch warns about anything it strands, on the PowerShell warning stream. Switching to `SyncRule` mode retains the per-object-type rules unconsulted (they resume effect on a switch back) and copies nothing onto export Synchronisation Rules, so export matching stops for them until rules are added. Switching to `ConnectedSystem` mode discards the Synchronisation Rules' own rules where the object type already has rules of its own.
-
-### Examples
-
-```powershell title="Switch to advanced per-Synchronisation-Rule matching"
-Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode SyncRule
-```
-
-```powershell title="Switch back to simple per-object-type matching"
-Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode ConnectedSystem
-```
-
----
-
-## Per-Object-Type Matching Rules
-
-These cmdlets manage matching rules in simple (per-object-type) mode, where rules are defined at the Connected System level.
-
-### Get-JIMMatchingRule
-
-Retrieves matching rules for a Connected System.
-
-#### Syntax
-
-```powershell
-# By object type
-Get-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
-
-# By rule ID
-Get-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System. Accepts pipeline input. |
-| `ObjectTypeId` | `int` | Yes (ByObjectType set) | | The object type ID to retrieve matching rules for |
-| `Id` | `int` | Yes (ById set) | | The ID of a specific matching rule to retrieve |
-
-#### Output
-
-Returns one or more matching rule objects containing source/target attribute mappings, order, and case sensitivity settings.
-
-#### Examples
-
-```powershell title="List matching rules for a Connected System Object Type"
-Get-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3
-```
-
-```powershell title="Get a specific matching rule"
-Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
-```
-
----
-
-### New-JIMMatchingRule
-
-Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute, matched against the rule's target metaverse attribute.
-
-The Connected System must be in simple matching mode: JIM refuses to create a per-object-type rule on a system in advanced matching mode, because the synchronisation engine would never consult it. Switch the mode first with [Switch-JIMMatchingMode](#switch-jimmatchingmode), or use [New-JIMSyncRuleMatchingRule](#new-jimsyncrulematchingrule) instead.
-
-#### Syntax
-
-```powershell
-New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
-    -MetaverseObjectTypeId <int> -SourceAttributeId <int>
-    -TargetMetaverseAttributeId <int> [-Order <int>]
-    [-CaseSensitive <bool>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
-| `ObjectTypeId` | `int` | Yes | | The Connected System Object Type ID |
-| `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type ID to match against |
-| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
-| `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
-| `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
-| `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
-| `PassThru` | `switch` | No | `$false` | Returns the created matching rule object |
-
-#### Examples
-
-```powershell title="Match CS employeeId to MV employeeId"
-New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
-    -MetaverseObjectTypeId 1 `
-    -SourceAttributeId 10 `
-    -TargetMetaverseAttributeId 5 `
-    -PassThru
-```
-
-```powershell title="Case-sensitive match on email"
-New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
-    -MetaverseObjectTypeId 1 `
-    -SourceAttributeId 12 `
-    -TargetMetaverseAttributeId 8 `
-    -CaseSensitive $true
-```
-
----
-
-### Set-JIMMatchingRule
-
-Modifies an existing per-object-type matching rule. Setting a source attribute replaces all existing source attributes on the rule.
-
-#### Syntax
-
-```powershell
-Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
-    [-Order <int>] [-MetaverseObjectTypeId <int>]
-    [-TargetMetaverseAttributeId <int>] [-SourceAttributeId <int>]
-    [-CaseSensitive <bool>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
-| `Id` | `int` | Yes | | The ID of the matching rule to modify |
-| `Order` | `int` | No | | New evaluation order |
-| `MetaverseObjectTypeId` | `int` | No | | New Metaverse Object Type ID |
-| `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
-| `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
-| `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
-
-#### Notes
-
-- Setting `SourceAttributeId` replaces all existing source attributes on the rule.
-
-#### Examples
-
-```powershell title="Change the evaluation order"
-Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Order 2
-```
-
-```powershell title="Enable case-sensitive matching"
-Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -CaseSensitive $true
-```
-
----
-
-### Remove-JIMMatchingRule
-
-Deletes a per-object-type matching rule.
-
-#### Syntax
-
-```powershell
-Remove-JIMMatchingRule -ConnectedSystemId <int> -Id <int> [-Force]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
-| `Id` | `int` | Yes | | The ID of the matching rule to delete |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-
-#### Output
-
-None.
-
-**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
-
-#### Examples
-
-```powershell title="Delete a matching rule"
-Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5
-```
-
-```powershell title="Force delete without confirmation"
-Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Force
-```
-
----
-
-## Per-Synchronisation-Rule Matching Rules
-
-These cmdlets manage matching rules in advanced (per-Synchronisation-Rule) mode, where each Synchronisation Rule defines its own matching configuration independently.
-
-### Get-JIMSyncRuleMatchingRule
-
-Retrieves matching rules for a specific Synchronisation Rule.
-
-#### Syntax
-
-```powershell
-# All matching rules for a Synchronisation Rule
-Get-JIMSyncRuleMatchingRule -SyncRuleId <int>
-
-# Specific matching rule
-Get-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule. Accepts pipeline input. |
-| `Id` | `int` | No | | The ID of a specific matching rule to retrieve |
-
-#### Output
-
-Returns one or more matching rule objects.
-
-#### Examples
-
-```powershell title="List matching rules for a Synchronisation Rule"
-Get-JIMSyncRuleMatchingRule -SyncRuleId 5
-```
-
-```powershell title="Get a specific matching rule"
-Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
-```
-
----
-
-### New-JIMSyncRuleMatchingRule
-
-Creates a new matching rule on a specific Synchronisation Rule. The Metaverse Object Type is derived automatically from the Synchronisation Rule configuration.
-
-#### Syntax
-
-```powershell
-New-JIMSyncRuleMatchingRule -SyncRuleId <int>
-    -SourceAttributeId <int> -TargetMetaverseAttributeId <int>
-    [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
-| `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
-| `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
-| `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
-| `PassThru` | `switch` | No | `$false` | Returns the created matching rule object |
-
-#### Notes
-
-- The Metaverse Object Type is derived from the Synchronisation Rule, so you do not need to specify it explicitly.
-- The Connected System must be in advanced matching mode: JIM refuses to create a per-Synchronisation-Rule rule on a system in simple matching mode, because the synchronisation engine would never consult it. Switch the mode first with [Switch-JIMMatchingMode](#switch-jimmatchingmode), or use [New-JIMMatchingRule](#new-jimmatchingrule) instead.
-
-#### Examples
-
-```powershell title="Match CS employeeId to MV employeeId on a Synchronisation Rule"
-New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
-    -SourceAttributeId 10 `
-    -TargetMetaverseAttributeId 5 `
-    -PassThru
-```
-
-```powershell title="Case-sensitive email match"
-New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
-    -SourceAttributeId 12 `
-    -TargetMetaverseAttributeId 8 `
-    -CaseSensitive $true
-```
-
----
-
-### Set-JIMSyncRuleMatchingRule
-
-Modifies an existing per-Synchronisation-Rule matching rule.
-
-#### Syntax
-
-```powershell
-Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
-    [-Order <int>] [-TargetMetaverseAttributeId <int>]
-    [-SourceAttributeId <int>]
-    [-CaseSensitive <bool>] [-PassThru]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `Id` | `int` | Yes | | The ID of the matching rule to modify |
-| `Order` | `int` | No | | New evaluation order |
-| `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
-| `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
-| `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
-
-#### Examples
-
-```powershell title="Change evaluation order"
-Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Order 1
-```
-
-```powershell title="Update target attribute and enable case sensitivity"
-Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 `
-    -TargetMetaverseAttributeId 9 `
-    -CaseSensitive $true
-```
-
----
-
-### Remove-JIMSyncRuleMatchingRule
-
-Deletes a per-Synchronisation-Rule matching rule.
-
-#### Syntax
-
-```powershell
-Remove-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> [-Force]
-```
-
-#### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `Id` | `int` | Yes | | The ID of the matching rule to delete |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-
-#### Output
-
-None.
-
-**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
-
-#### Examples
-
-```powershell title="Delete a Synchronisation Rule matching rule"
-Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
-```
-
-```powershell title="Force delete without confirmation"
-Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
-```
-
----
-
-## Initial Password
-
-### Get-JIMSyncRuleInitialPassword
-
-Gets whether JIM sets an initial password on the Connected System Objects a Synchronisation Rule provisions, how it
-generates one, and which Connected System Objects are waiting on a person.
-
-No password value is ever returned. A generated password is produced at the moment it is set and stored nowhere;
-where the rule uses one password for every Connected System Object, that password is stored encrypted and is write-only, so all
-that comes back is that one is set and when it last changed.
-
-#### Syntax
-
-```powershell
-Get-JIMSyncRuleInitialPassword -Id <int>
-Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
-```
-
-#### Output
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `enabled` | `bool` | Whether JIM sets an initial password on the Connected System Objects this rule provisions |
-| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every Connected System Object) |
-| `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
-| `expiryBehaviour` | `string` | What happens to the password once it is set |
-| `enableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set |
-| `staticPasswordSet` | `bool` | Whether one password is stored for every Connected System Object this rule provisions |
-| `staticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
-| `parkedAccountCount` | `int` | Connected System Objects waiting on a change to these settings |
-| `expiredAccountCount` | `int` | Connected System Objects never given an initial password within its time to live |
-| `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
-
-Each entry in `parkedReasons` carries `targetMessage` (what the target said, unaltered), `failureReason`,
-`accountCount` and `firstSeenAt`.
-
-The two counts are never summed. Correcting these settings and saving releases the parked Connected System Objects,
-and does nothing at all for the expired ones; those need a password set by other means.
-
-#### Examples
-
-```powershell title="See what a target objected to"
-(Get-JIMSyncRuleInitialPassword -Id 5).parkedReasons |
-    Format-Table accountCount, targetMessage -AutoSize
-```
-
-```powershell title="Find every rule with initial password work waiting"
-Get-JIMSyncRule -All | ForEach-Object {
-    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
-    if ($p.parkedAccountCount -or $p.expiredAccountCount) {
-        [PSCustomObject]@{ Rule = $_.name; Parked = $p.parkedAccountCount; Expired = $p.expiredAccountCount }
-    }
-}
-```
-
-```powershell title="Find shared initial passwords nobody has changed for 90 days"
-Get-JIMSyncRule -All | ForEach-Object {
-    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
-    if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
-        [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
-    }
-}
-```
-
-### Set-JIMSyncRuleInitialPassword
-
-Replaces the configuration above. Saving a change that alters what would be delivered releases every Connected System Object
-parked against the rule, and the Password Delivery Service attempts them again within seconds, with no export run
-needed; saving a change that would deliver the same password in the same way releases nothing.
-
-Only what you supply changes, with one exception: the generator settings travel as a set, so supplying any one of
-them sends the whole policy.
-
-#### One password for every Connected System Object
-
-`-Source Static` with `-StaticPassword` sets one password you choose on every Connected System Object the rule
-provisions, so you can tell a new starter what it is. **This option is not recommended**: every Connected System
-Object the rule provisions shares that password until each person changes it. See
-[Passwords](../concepts/passwords.md#one-password-for-every-connected-system-object) before using it.
-
-`-StaticPassword` takes a `SecureString`, so the password does not sit in your session's command history in clear
-text. It is write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
-is what makes changing another setting safe.
-
-```powershell title="Set one password for every Connected System Object this rule provisions"
-$password = Read-Host -AsSecureString "Initial password for every new Connected System Object"
-Set-JIMSyncRuleInitialPassword -Id 5 -Enable -Source Static -StaticPassword $password
-```
-
-```powershell title="Rotate the shared password after a leaver"
-$password = Read-Host -AsSecureString "New shared initial password"
-Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
-```
 
 ## See also
 
 - [Synchronisation Rules](../configuration/synchronisation-rules.md): direction, scoping, object matching, projection, and attribute mappings
+- [Attribute Mappings](attribute-mappings.md): the Attribute Flows on a Synchronisation Rule
+- [Scoping Criteria](scoping-criteria.md): decide which objects a Synchronisation Rule processes
+- [Object Matching Rules](object-matching-rules.md): match the objects a Synchronisation Rule processes to Metaverse Objects
+- [Initial Password](initial-password.md): the password a Synchronisation Rule sets on the Connected System Objects it provisions
+- [Generated Values](generated-values.md): the values a generated Attribute Flow issues, and the decisions they can wait on
 - [Connected Systems](connected-systems.md): PowerShell cmdlets for managing Connected Systems
-- [Metaverse](metaverse.md): PowerShell cmdlets for managing the metaverse
+- [Metaverse](metaverse.md): find and read the Metaverse Objects the rules synchronise

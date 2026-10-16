@@ -1,16 +1,19 @@
 ---
 title: Running on Podman
+description: How JIM runs on Podman under systemd, rootful or rootless, and how to operate it, open its firewall and keep SELinux content.
+type: concept
+audience: administrator
 ---
 
-# Running JIM on Podman
+# Running on Podman
 
 JIM runs on Podman as well as Docker, from the same images, with the same settings and the same hardening. Podman is the container engine Red Hat ships and supports on RHEL 8, 9 and 10, so this is the way to run JIM where Docker is not permitted. Podman needs no extra software: no Docker engine, no compose tool.
 
-The [installer](deployment.md#what-the-installer-does) sets everything on this page up for you. Read on to understand what it sets up, to operate JIM day to day, or to install by hand.
+The [installer](deployment.md#what-the-installer-does) sets everything on this page up for you. Read on to understand what it sets up, or to operate JIM day to day. To install without the installer, see [Installing on Podman by Hand](podman-by-hand.md).
 
 ## Requirements
 
-- **Podman 4.4 or later, with systemd.** RHEL 9 and 10 ship Podman 5. systemd starts JIM at boot through Podman's Quadlet, which arrived in Podman 4.4. Without systemd JIM still runs, but does not start by itself after a reboot (see [Without systemd](#without-systemd)).
+- **Podman 4.4 or later, with systemd.** RHEL 9 and 10 ship Podman 5. systemd starts JIM at boot through Podman's Quadlet, which arrived in Podman 4.4. Without systemd JIM still runs, but does not start by itself after a reboot (see [Without systemd](podman-by-hand.md#without-systemd)).
 - Everything else in the [Deployment Guide's prerequisites](deployment.md#prerequisites): hardware, OpenSSL, an OIDC identity provider.
 
 ## How JIM Runs on Podman
@@ -75,7 +78,7 @@ sudo podman logs jim-worker
 sudo podman healthcheck run jim-web && echo "JIM is ready"
 ```
 
-Restarting `jim.service` restarts the web, worker and scheduler together; `jim-database.service` runs the bundled PostgreSQL separately. Both start at boot. The installer's copy, `/opt/jim/setup.sh`, looks after the certificate as it does on Docker (see [Renewing the Certificate](deployment.md#renewing-the-certificate)); on Podman, installing a new certificate restarts the whole JIM pod, so do it outside a synchronisation run.
+Restarting `jim.service` restarts the web, worker and scheduler together; `jim-database.service` runs the bundled PostgreSQL separately. Both start at boot. The installer's copy, `/opt/jim/setup.sh`, looks after the certificate as it does on Docker (see [Renewing the Certificate](tls-and-reverse-proxy.md#renewing-the-certificate)); on Podman, installing a new certificate restarts the whole JIM pod, so do it outside a synchronisation run.
 
 ### Rootless commands {#rootless-commands}
 
@@ -97,7 +100,7 @@ jim-podman ps
 jim-podman logs -f jim-web
 ```
 
-Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `jim-systemctl`. Use `jim-systemctl` rather than `systemctl --user -M jim@`, which fails on a minimal RHEL-family host that lacks the `systemd-container` package (see [Troubleshooting](troubleshooting.md#rootless-systemctl-fails)).
+Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `jim-systemctl`. Use `jim-systemctl` rather than `systemctl --user -M jim@`, which fails on a minimal RHEL-family host that lacks the `systemd-container` package (see [Troubleshooting](troubleshooting-podman.md#rootless-systemctl-fails)).
 
 As the `jim` account, Podman cannot open your files by name, so give it its input and output through your shell's redirections (`<`, `>` and `|`), as this documentation does, rather than as a path. Podman 4's `podman volume export` is the trap: it opens `/dev/stdout` by name even when given no path, so piped or redirected to a file of yours, its archive comes out empty.
 
@@ -124,7 +127,7 @@ None of these checks starts until its service has finished starting, however lon
     ```
 
     The `+=` keeps any interfaces the host already tells NetworkManager to leave alone, and the reload applies the setting without restarting NetworkManager. Do not delete the "Wired connection" profiles it made: they go away with their interfaces, and a server's own network card can use a profile with the same kind of name. A rootless JIM needs neither: NetworkManager cannot see its network.
-- **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
+- **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](tls-and-reverse-proxy.md#apache-httpd-example)).
 - **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
 
     - It allows the container no network at all, so JIM cannot reach its database or identity provider.
@@ -147,93 +150,9 @@ None of these checks starts until its service has finished starting, however lon
 !!! note "With Docker on the same server"
     Docker's firewall rules drop traffic forwarded to other container engines, so other machines cannot reach a rootful Podman JIM, the default, on a server that also runs Docker. Run JIM on one engine per server.
 
-## Installing by Hand {#installing-by-hand}
-
-If your organisation's policy requires every step by hand, these steps do what the installer does. They use the files from a release: those attached to the [release](https://github.com/TetronIO/JIM/releases), or the `podman/` folder of the release bundle, which keeps the three units in `podman/quadlet/`. Run them as root, from the folder holding the files.
-
-1. **Put the files in place.** Leave out `jim-database.kube` if you use your own PostgreSQL server.
-
-    ```bash
-    mkdir -p /opt/jim/tls /etc/containers/systemd && chmod 700 /opt/jim/tls
-    cp jim.yaml jim-database.yaml jim-config.yaml /opt/jim/
-    cp jim.network jim.kube jim-database.kube /etc/containers/systemd/
-    ```
-
-    The units expect the pod files in `/opt/jim`; if you put them elsewhere, change `Yaml=` and `ConfigMap=` in each `.kube` file. To use a port other than 443, change `PublishPort=` in `jim.kube`.
-
-2. **Fill in `/opt/jim/jim-config.yaml`**: the identity provider settings, and for your own PostgreSQL server its name in `JIM_DB_HOSTNAME`. For the bundled PostgreSQL on a host with more than 4 GB of memory, size it as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
-
-3. **Load the images**, from the release bundle's `docker-images` folder, or download them:
-
-    ```bash
-    for f in docker-images/*.tar; do podman load < "$f"; done
-    # or, connected:
-    for image in $(awk '$1 == "image:" { print $2 }' /opt/jim/jim.yaml /opt/jim/jim-database.yaml); do podman pull "$image"; done
-    ```
-
-4. **Store the secrets.** Fill in a copy of `jim-secrets.yaml` (for the bundled PostgreSQL, choose a strong password: the database is created with it on first start), store it, and delete the copy. Then put JIM's certificate and key in `/opt/jim/tls` as `tls.crt` and `tls.key` (see [The Certificate](deployment.md#the-certificate)) and store them too:
-
-    ```bash
-    podman kube play - < jim-secrets.yaml && shred -u jim-secrets.yaml
-
-    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.crt: %s\n  tls.key: %s\n' \
-      "$(base64 -w0 /opt/jim/tls/tls.crt)" "$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
-    ```
-
-5. **Prepare the host's network.** On RHEL and its derivatives, open the port in firewalld, keep JIM's network through a firewalld reload, and keep NetworkManager off Podman's interfaces; on Ubuntu 24.04, add the AppArmor rules JIM's containers need instead (see [Firewall, SELinux, AppArmor and NetworkManager](#firewall-selinux-and-apparmor)):
-
-    ```bash
-    firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https
-    systemctl enable --now netavark-firewalld-reload.service
-    printf '[keyfile]\nunmanaged-devices+=interface-name:veth*;interface-name:podman*\n' > /etc/NetworkManager/conf.d/90-jim-podman.conf
-    nmcli general reload conf
-    ```
-
-6. **Start JIM**, then wait until `podman healthcheck run jim-web` succeeds:
-
-    ```bash
-    systemctl daemon-reload
-    systemctl start jim-database.service jim.service
-    ```
-
-### Rootless, by hand
-
-For a rootless installation, first create the account, enable lingering for it, and let it use port 443. Check `/etc/subuid` and `/etc/subgid` each give the account a range; current distributions add one when the account is created.
-
-```bash
-useradd --create-home --comment "JIM (Junctional Identity Manager)" --shell /sbin/nologin jim
-grep '^jim:' /etc/subuid /etc/subgid
-loginctl enable-linger jim
-echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system
-```
-
-Define the `jim-systemctl` and `jim-podman` functions from [Rootless commands](#rootless-commands) in the same shell, then follow the steps above, with three differences:
-
-- In step 1, put the units in the account's folder instead of `/etc/containers/systemd/`:
-
-    ```bash
-    sudo -u jim mkdir -p /home/jim/.config/containers/systemd
-    cp jim.network jim.kube jim-database.kube /home/jim/.config/containers/systemd/
-    chown jim: /home/jim/.config/containers/systemd/*
-    ```
-
-- Run each `podman` command as `jim-podman`.
-- Run each `systemctl` command as `jim-systemctl`.
-
-## Without systemd {#without-systemd}
-
-On a host without systemd, or with a Podman older than 4.4, run the pods directly. JIM runs, but does not start by itself after a reboot, so this is best effort rather than supported:
-
-```bash
-podman network create --ignore jim
-podman kube play --replace --network jim --configmap /opt/jim/jim-config.yaml /opt/jim/jim-database.yaml
-podman kube play --replace --network jim --configmap /opt/jim/jim-config.yaml --publish 443:8443 /opt/jim/jim.yaml
-```
-
-The installer does this for you on such a host.
-
 ## Related
 
 - [Deployment Guide](deployment.md): installing, certificates, reverse proxies.
+- [Installing on Podman by Hand](podman-by-hand.md): what the installer does, step by step.
 - [Deploying with Ansible](deploying-with-ansible.md): the same files, deployed by Red Hat's podman system role.
 - [Upgrading](upgrading.md), [Backup & Disaster Recovery](backup-recovery.md) and [Troubleshooting](troubleshooting.md): each covers Podman alongside Docker.

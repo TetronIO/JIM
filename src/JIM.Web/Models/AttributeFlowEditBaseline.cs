@@ -46,6 +46,7 @@ public sealed class AttributeFlowEditBaseline
             Enabled = mapping.Enabled,
             Priority = mapping.Priority,
             NullIsValue = mapping.NullIsValue,
+            KeepUnique = mapping.KeepUnique,
             Generation = mapping.Generation,
             TargetMetaverseAttribute = mapping.TargetMetaverseAttribute,
             TargetMetaverseAttributeId = mapping.TargetMetaverseAttributeId,

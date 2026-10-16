@@ -47,7 +47,7 @@
                         @offer.ObjectType.Name
                     </MudChip>
                 }
-                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
                            Disabled="_saving" OnClick="OpenDialogAsync" data-testid="jim-aux-add">
                     Add auxiliary class
                 </MudButton>
@@ -76,7 +76,7 @@
                     }
                     @if (DiscoveryInProgress)
                     {
-                        <MudButton Variant="Variant.Text" Color="Color.Primary" Disabled="_cancellingDiscovery"
+                        <MudButton Variant="Variant.Text" Disabled="_cancellingDiscovery"
                                    OnClick="HandleCancelDiscoveryAsync">
                             Cancel
                         </MudButton>

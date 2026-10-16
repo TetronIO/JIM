@@ -95,14 +95,18 @@ public enum ObjectMatchingRuleMode
 
 /// <summary>
 /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object is
-/// treated, per Connected System. Applies only to import-side reference resolution; export-side (Pending Export)
-/// unresolved reference handling is unaffected.
+/// treated, per Connected System. Governs import-side reference resolution, and since #1398 the export references
+/// that cannot be written because the referenced object has no Connected System Object in the target system. On
+/// import, under every mode, the affected object's Run Profile Execution Item records how many references it was
+/// left with (<c>UnresolvedReferenceCount</c>, #959); the mode decides only whether that is also reported as an error
+/// or an Activity warning.
 /// </summary>
 public enum UnresolvedReferenceHandling
 {
     /// <summary>
-    /// Default: the affected object's Run Profile Execution Item is marked with an unresolved reference error, and
-    /// the Activity completes with a warning or failed status accordingly.
+    /// Default: the affected object's Run Profile Execution Item is marked with an unresolved reference error, unless
+    /// another error already holds the item's error slot, and the Activity completes with a warning or failed status
+    /// accordingly.
     /// </summary>
     Error = 0,
     /// <summary>
@@ -111,10 +115,69 @@ public enum UnresolvedReferenceHandling
     /// </summary>
     Warn = 1,
     /// <summary>
-    /// The Run Profile Execution Item is not marked as errored and no Activity warning is raised. Unresolved
-    /// references are recorded only in the logs.
+    /// The Run Profile Execution Item is not marked as errored and no Activity warning is raised. The item's count
+    /// and the logs are the only record on the run.
     /// </summary>
     Ignore = 2
+}
+
+/// <summary>
+/// Why an imported reference value most likely could not be resolved to a Connected System Object (#959). Worked out
+/// when someone looks, from the Connected System's current Container Scope, and never stored: widening the scope
+/// changes the answer straight away. Not persisted, so the order carries no meaning beyond readability.
+/// </summary>
+public enum UnresolvedReferenceCause
+{
+    /// <summary>
+    /// Nothing with this value has been imported, and the Connected System has no Container Scope to say why: a
+    /// Connector without partitions and containers, or one that cannot say what its containers hold.
+    /// </summary>
+    NotFound = 0,
+
+    /// <summary>
+    /// The value falls within Container Scope, yet nothing with it has been imported: the object may not exist any
+    /// more, its Object Type may not be imported, or it arrived after the last Full Import.
+    /// </summary>
+    NotFoundInScope = 1,
+
+    /// <summary>
+    /// The value falls within a Container that no selection covers.
+    /// </summary>
+    ContainerNotInScope = 2,
+
+    /// <summary>
+    /// The value falls within a Container that Container Scope excludes (#1255).
+    /// </summary>
+    ContainerExcluded = 3,
+
+    /// <summary>
+    /// The value falls within a partition of the Connected System that is not selected.
+    /// </summary>
+    PartitionNotSelected = 4,
+
+    /// <summary>
+    /// The value falls within none of the Connected System's partitions: it names an object in a directory JIM is
+    /// not connected to through this Connected System.
+    /// </summary>
+    OutsideConnectedSystem = 5,
+
+    /// <summary>
+    /// The value matches objects of more than one Object Type, and the attribute does not declare which it references
+    /// (#1285).
+    /// </summary>
+    AmbiguousObjectType = 6
+}
+
+/// <summary>
+/// Where the fix for an unresolved reference lies (#959): in JIM's own configuration, or in the Connected System.
+/// </summary>
+public enum UnresolvedReferenceFixLocation
+{
+    /// <summary>A JIM configuration change resolves it: Container Scope, a partition, or the schema.</summary>
+    Jim = 0,
+
+    /// <summary>The Connected System's own data is the place to look: JIM is configured to see the object, or cannot be.</summary>
+    SourceSystem = 1
 }
 
 public enum ConnectedSystemObjectJoinType
@@ -219,6 +282,22 @@ public enum ConnectedSystemImportObjectError
 }
 
 /// <summary>
+/// Who found that a value an import read could not be imported (#2153).
+/// </summary>
+public enum ImportAttributeValueErrorSource
+{
+    /// <summary>
+    /// The Connector could not read the value as its attribute's type.
+    /// </summary>
+    Connector = 0,
+    /// <summary>
+    /// JIM could not hold the value as the Connector read it, such as two dates less than a microsecond apart, or both
+    /// true and false for a true or false attribute.
+    /// </summary>
+    Jim = 1
+}
+
+/// <summary>
 /// Defines the type of Run Profile operation to execute against a Connected System.
 /// </summary>
 public enum ConnectedSystemRunType
@@ -315,7 +394,15 @@ public enum ConnectedSystemExportErrorType
     /// classify it from their own server-specific result codes; where a connector cannot classify, the
     /// rejection is reported as <see cref="General"/> instead.
     /// </summary>
-    UniqueValueAlreadyInUse
+    UniqueValueAlreadyInUse,
+
+    /// <summary>
+    /// Active Directory refused to create or enable a user account because the account has no password
+    /// (<c>0000052D</c>, ERROR_PASSWORD_RESTRICTIONS, #2039). Enabling an account needs a password to exist first,
+    /// so this is configuration to act on: give the provisioning Synchronisation Rule an Initial Password, or create
+    /// the account disabled.
+    /// </summary>
+    PasswordRequiredToEnableAccount
 }
 
 /// <summary>

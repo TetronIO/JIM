@@ -17,10 +17,10 @@ function Disable-JIMSchedule {
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated Schedule object.
+        Returns the updated Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Schedule object.
+        With -PassThru, the updated Schedule in full; otherwise nothing.
 
     .EXAMPLE
         Disable-JIMSchedule -Id "12345678-1234-1234-1234-123456789012"
@@ -43,7 +43,7 @@ function Disable-JIMSchedule {
         Start-JIMSchedule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]

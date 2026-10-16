@@ -97,6 +97,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         foreach (var change in Changes(stored, proposal))
         {
             findings.AddRange(ValidateObjectTypeSelection(change));
+            findings.AddRange(ValidateObjectTypeOverlap(change, stored, proposal));
             findings.AddRange(ValidateAttributeSelection(change, stored, syncRules));
             findings.AddRange(ValidateObsoletionToggle(change));
         }
@@ -398,6 +399,113 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
     }
 
     /// <summary>
+    /// Warnings for the objects a selection change moves from one Object Type to another, rather than bringing into
+    /// scope or taking out of it (#2049).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Where two selected Object Types overlap, an entry carrying both classes imports as whichever takes it from the
+    /// other (<see cref="ConnectedSystemObjectTypeTagExtensions.TakesEntriesFrom"/>, the rule the LDAP Connector
+    /// resolves entries by). Selecting or deselecting one of them can therefore move objects JIM already holds under
+    /// one Object Type to the other. The import refuses that by default: it reports an Object Type Changed error and
+    /// keeps the held object as it is, protected from deletion detection, until a Full Import with Allow Object Type
+    /// Changes enabled retires it and imports the object under its new type. So the plain "brings into scope" and
+    /// "becomes obsolete" findings beside these are not the whole story for the objects carrying both.
+    /// </para>
+    /// <para>
+    /// Only Object Types selected now are weighed as the other side, because only they hold imported objects to move;
+    /// whether one stays selected is read as the proposal says, or as stored where the proposal does not mention it,
+    /// so a partial payload is not read as deselecting it. Where the schema does not rank the two (two auxiliary
+    /// classes, or Object Types discovered before JIM recorded class kinds or inheritance) the order each entry lists
+    /// its classes in decides, which the preview cannot know, so it says nothing rather than warn on every pair. Only
+    /// the LDAP Connector records either, and it is also the only Connector that vouches an External ID names one
+    /// object across every Object Type, which is what the import's refusal rests on.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<PreviewValidationFinding> ValidateObjectTypeOverlap(SchemaChange change,
+        StoredSchema stored, ConnectedSystemSchemaProposal proposal)
+    {
+        if (!change.SelectionChanged || stored.ObjectType(change.ObjectTypeId) is not { } changed)
+            return [];
+
+        return stored.ObjectTypes
+            .Where(other => other.Id != changed.Id && other.Selected)
+            .OrderBy(other => other.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(other => ObjectTypeOverlapFinding(change, changed, other,
+                otherSelectedAfter: proposal.For(other.Id)?.Selected ?? other.Selected))
+            .OfType<PreviewValidationFinding>()
+            .ToList();
+    }
+
+    /// <summary>
+    /// The overlap finding for one selected Object Type beside the one whose selection changes, or null when no
+    /// object carrying both classes moves between them.
+    /// </summary>
+    private static PreviewValidationFinding? ObjectTypeOverlapFinding(SchemaChange change,
+        ConnectedSystemObjectType changed, ConnectedSystemObjectType other, bool otherSelectedAfter)
+    {
+        var changedName = change.ObjectTypeName;
+        var otherName = other.Name;
+
+        if (!change.ProposedSelected)
+        {
+            // Deselecting the type that took the entries: they fall to the other, which stays selected. Where the
+            // other is leaving too, nothing returns the entries, and they are obsoleted as the deselection warning
+            // says.
+            if (!otherSelectedAfter || !changed.TakesEntriesFrom(other))
+                return null;
+
+            return OverlapWarning(
+                $"Deselecting {changedName} does not take its objects that also carry {otherName} out of management: " +
+                $"with {changedName} deselected, those entries resolve to {otherName}, so the import returns them as " +
+                $"{otherName} objects rather than as the {changedName} objects JIM holds. By default each import refuses " +
+                $"them, reports each as an Object Type Changed error and keeps it as {changedName} rather than " +
+                "obsoleting it, so the number of objects described as becoming obsolete overstates what happens to " +
+                "them. If the intent is to stop managing those objects, scope them out by container or partition " +
+                $"instead, because deselecting {changedName} changes their Object Type rather than removing them. If " +
+                $"they should become {otherName} objects, run a Full Import with Allow Object Type Changes enabled on " +
+                $"its Run Profile: JIM retires the {changedName} objects and imports them as new {otherName} objects, " +
+                $"in scope of the Synchronisation Rules for {otherName}.");
+        }
+
+        if (otherSelectedAfter)
+        {
+            // Selecting a type that takes the entries the other holds today.
+            if (!changed.TakesEntriesFrom(other))
+                return null;
+
+            return OverlapWarning(
+                $"Selecting {changedName} changes the Object Type of {otherName} objects that also carry " +
+                $"{changedName}: with both selected, those entries resolve to {changedName}, so the import returns " +
+                $"them as {changedName} objects rather than as the {otherName} objects JIM holds. By default each " +
+                $"import refuses them, reports each as an Object Type Changed error and keeps it as {otherName}. " +
+                MoveInstruction(from: otherName, to: changedName));
+        }
+
+        // Selecting one type while deselecting the other: before, only the other could hold the entries carrying
+        // both; after, only this one can. They move whichever of the two ranks higher, so either ranking says they
+        // overlap.
+        if (!changed.TakesEntriesFrom(other) && !other.TakesEntriesFrom(changed))
+            return null;
+
+        return OverlapWarning(
+            $"Selecting {changedName} while deselecting {otherName} changes the Object Type of {otherName} objects " +
+            $"that also carry {changedName}: those entries now resolve to {changedName}, so the import returns them as " +
+            $"{changedName} objects rather than as the {otherName} objects JIM holds. By default each import refuses " +
+            $"them, reports each as an Object Type Changed error and keeps it as {otherName} rather than obsoleting " +
+            $"it, so the number of {otherName} objects described as becoming obsolete overstates what happens to " +
+            "them. " + MoveInstruction(from: otherName, to: changedName));
+    }
+
+    private static string MoveInstruction(string from, string to) =>
+        "To move them, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the " +
+        $"{from} objects and imports them as new {to} objects, so a Synchronisation Rule for {to} needs to be ready to " +
+        "join them to the same Metaverse Objects.";
+
+    private static PreviewValidationFinding OverlapWarning(string message) =>
+        new(PreviewValidationSeverity.Warning, message, nameof(ConnectedSystemObjectType.Selected));
+
+    /// <summary>
     /// Blocking for every Object Type the proposal would leave deselected while an enabled Synchronisation Rule is
     /// still bound to it (#1474), in the same words the save refuses it with.
     /// </summary>
@@ -533,9 +641,11 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             Attribute(objectTypeId, attributeId) is { } attribute &&
             (attribute.IsExternalId || attribute.IsSecondaryExternalId);
 
+        public ConnectedSystemObjectType? ObjectType(int objectTypeId) =>
+            ObjectTypes.FirstOrDefault(objectType => objectType.Id == objectTypeId);
+
         private ConnectedSystemObjectTypeAttribute? Attribute(int objectTypeId, int attributeId) =>
-            ObjectTypes.FirstOrDefault(objectType => objectType.Id == objectTypeId)?
-                .Attributes.FirstOrDefault(attribute => attribute.Id == attributeId);
+            ObjectType(objectTypeId)?.Attributes.FirstOrDefault(attribute => attribute.Id == attributeId);
     }
 
     private async Task<StoredSchema> StoredSchemaAsync(PreviewContext context)

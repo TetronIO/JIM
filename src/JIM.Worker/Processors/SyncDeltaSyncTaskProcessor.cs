@@ -55,6 +55,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
             // Unique Value Generation (#242, release 3): report each Connected System that could not be probed for a
             // value this run issued, as an Activity warning, and close every probe connection the run opened.
+            ReportGeneratedValuesWaiting();
             await CloseUniquenessProbeSessionAsync();
         }
     }

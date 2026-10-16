@@ -1,9 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -356,6 +360,400 @@ public partial class ConnectedSystemServer
                 Log.Information("ReleaseNeedsDecisionIfGenerationChangedAsync: the generation configuration of flow {GenerationId} changed, so " +
                     "{Count} generated value(s) waiting on a decision were released for the next export to try again", generation.Id, released);
         }
+    }
+
+    /// <summary>
+    /// Why the "Keep unique" switch was refused on a mapping it can never apply to.
+    /// </summary>
+    internal const string KeepUniqueNotApplicableMessage =
+        "Keep unique applies only to an Attribute Flow that builds its value with an Expression (a value built from a generated value), " +
+        "not to a direct flow or to a generated value itself.";
+
+    /// <summary>
+    /// Whether <paramref name="mapping"/> can carry the "Keep unique" switch (Generated Value Forms, #2023): an expression
+    /// mapping that is not itself generated. Whether it is built from a generated value right now depends on the other
+    /// mappings, which may be saved in any order, so the switch is accepted on any such mapping and simply has no effect
+    /// until it is.
+    /// </summary>
+    internal static bool CanKeepUnique(SyncRuleMapping mapping) =>
+        mapping.Generation == null && mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression));
+
+    /// <summary>
+    /// The values built from generated values among the Synchronisation Rules of one Metaverse Object Type (Generated
+    /// Value Forms, #2023): its import rules and every export rule for the type, as saved, or with
+    /// <paramref name="stagedRule"/> in place of its saved self (the portal describes a rule being edited).
+    /// </summary>
+    internal async Task<GeneratedValueBuiltValues> GetGeneratedValueBuiltValuesAsync(int metaverseObjectTypeId, SyncRule? stagedRule = null,
+        IReadOnlyList<SyncRule>? allExportRules = null)
+    {
+        var importRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId) ?? [];
+        var exportRules = (allExportRules ?? await Application.Repository.ConnectedSystems.GetExportSyncRulesWithAttributeFlowsAsync() ?? [])
+            .Where(rule => rule.MetaverseObjectTypeId == metaverseObjectTypeId);
+        List<SyncRule> rules = [.. importRules, .. exportRules];
+        if (stagedRule != null)
+        {
+            if (stagedRule.Id > 0)
+                rules.RemoveAll(rule => rule.Id == stagedRule.Id);
+            rules.Add(stagedRule);
+        }
+
+        // The rule queries do not load the type, and mv["..."] names are resolved against its attributes.
+        var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true)
+            ?? stagedRule?.MetaverseObjectType;
+        List<MetaverseObjectType> types = metaverseObjectType == null ? [] : [metaverseObjectType];
+
+        DerivedFlowGraph? graph = null;
+        try
+        {
+            graph = DerivedFlowGraphFactory.Create(rules, types);
+        }
+        catch (DerivedFlowCycleException)
+        {
+            // A cycle is refused at save time; one that predates that check simply means nothing is followed through a
+            // derivation until it is broken.
+        }
+
+        return GeneratedValueBuiltValues.Create(rules, graph, types);
+    }
+
+    /// <summary>
+    /// What each expression Attribute Flow among <paramref name="mappings"/> (one Synchronisation Rule's) is built from,
+    /// keyed by mapping id (Generated Value Forms, #2023): the REST mapping DTO's <c>builtFromGeneratedValue</c>. A mapping
+    /// built from no generated value has no entry.
+    /// </summary>
+    public async Task<Dictionary<int, GeneratedValueBuiltValueDescription>> GetBuiltFromGeneratedValuesAsync(SyncRule rule, IReadOnlyCollection<SyncRuleMapping> mappings)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(mappings);
+
+        if (!mappings.Any(CanKeepUnique))
+            return [];
+
+        var context = await LoadBuiltValueContextAsync(rule.MetaverseObjectTypeId, stagedRule: null);
+        var described = new Dictionary<int, GeneratedValueBuiltValueDescription>();
+        foreach (var mapping in mappings.Where(CanKeepUnique))
+        {
+            mapping.SyncRule ??= rule;
+            var value = context.BuiltValues.BuiltValueOf(mapping);
+            if (value != null)
+                described[mapping.Id] = context.Describe(value);
+        }
+
+        return described;
+    }
+
+    /// <summary>
+    /// The values built from each import-mode generated Attribute Flow among <paramref name="mappings"/> (one
+    /// Synchronisation Rule's), keyed by the generated mapping's id (Generated Value Forms, #2023): the REST mapping DTO's
+    /// <c>generation.builtValues</c>. Ordered by Synchronisation Rule, then value name.
+    /// </summary>
+    public async Task<Dictionary<int, List<GeneratedValueBuiltValueDescription>>> GetValuesBuiltFromGeneratedValuesAsync(SyncRule rule, IReadOnlyCollection<SyncRuleMapping> mappings)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(mappings);
+
+        var generated = mappings.Where(m => m.Generation != null && m.ResolveTargetMetaverseAttributeId().HasValue).ToList();
+        if (generated.Count == 0)
+            return [];
+
+        var context = await LoadBuiltValueContextAsync(rule.MetaverseObjectTypeId, stagedRule: null);
+        return generated.ToDictionary(mapping => mapping.Id, mapping =>
+        {
+            mapping.SyncRule ??= rule;
+            return context.DescribeAll(context.BuiltValues.BuiltFrom(mapping));
+        });
+    }
+
+    /// <summary>
+    /// What an Attribute Flow being edited is built from (Generated Value Forms, #2023): the portal's "Built from generated
+    /// value" block. <paramref name="stagedRule"/> is the Synchronisation Rule as it is being edited, holding
+    /// <paramref name="proposed"/>; every other rule is read as saved. Null when it is built from no generated value.
+    /// </summary>
+    public async Task<GeneratedValueBuiltValueDescription?> DescribeBuiltFromGeneratedValueAsync(SyncRule stagedRule, SyncRuleMapping proposed)
+    {
+        ArgumentNullException.ThrowIfNull(stagedRule);
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        if (!CanKeepUnique(proposed))
+            return null;
+
+        var context = await LoadBuiltValueContextAsync(stagedRule.MetaverseObjectTypeId, StagedWith(stagedRule, proposed));
+        proposed.SyncRule ??= stagedRule;
+        var value = context.BuiltValues.BuiltValueOf(proposed);
+        return value == null ? null : context.Describe(value);
+    }
+
+    /// <summary>
+    /// The values built from a generated Attribute Flow being edited (Generated Value Forms, #2023): the portal's "Values
+    /// built from ..." table. <paramref name="stagedRule"/> is the Synchronisation Rule as it is being edited.
+    /// </summary>
+    public async Task<List<GeneratedValueBuiltValueDescription>> DescribeValuesBuiltFromGeneratedValueAsync(SyncRule stagedRule, SyncRuleMapping generatedMapping)
+    {
+        ArgumentNullException.ThrowIfNull(stagedRule);
+        ArgumentNullException.ThrowIfNull(generatedMapping);
+
+        if (generatedMapping.Generation == null || !generatedMapping.ResolveTargetMetaverseAttributeId().HasValue)
+            return [];
+
+        var context = await LoadBuiltValueContextAsync(stagedRule.MetaverseObjectTypeId, StagedWith(stagedRule, generatedMapping));
+        generatedMapping.SyncRule ??= stagedRule;
+        return context.DescribeAll(context.BuiltValues.BuiltFrom(generatedMapping));
+    }
+
+    /// <summary>
+    /// <paramref name="stagedRule"/> with <paramref name="mapping"/> among its Attribute Flows: the portal edits a flow in
+    /// a dialog before it is added to the rule it belongs to.
+    /// </summary>
+    private static SyncRule StagedWith(SyncRule stagedRule, SyncRuleMapping mapping)
+    {
+        if (stagedRule.AttributeFlowRules.Contains(mapping))
+            return stagedRule;
+
+        var copy = new SyncRule
+        {
+            Id = stagedRule.Id,
+            Name = stagedRule.Name,
+            Direction = stagedRule.Direction,
+            Enabled = stagedRule.Enabled,
+            ConnectedSystemId = stagedRule.ConnectedSystemId,
+            ConnectedSystem = stagedRule.ConnectedSystem,
+            MetaverseObjectTypeId = stagedRule.MetaverseObjectTypeId,
+            MetaverseObjectType = stagedRule.MetaverseObjectType
+        };
+        copy.AttributeFlowRules.AddRange(stagedRule.AttributeFlowRules.Where(m => m.Id == 0 || m.Id != mapping.Id));
+        copy.AttributeFlowRules.Add(mapping);
+        return copy;
+    }
+
+    /// <summary>
+    /// The values built from generated values for one Metaverse Object Type, with the names needed to describe them.
+    /// </summary>
+    private async Task<BuiltValueContext> LoadBuiltValueContextAsync(int metaverseObjectTypeId, SyncRule? stagedRule)
+    {
+        var exportRules = await Application.Repository.ConnectedSystems.GetExportSyncRulesWithAttributeFlowsAsync() ?? [];
+        var builtValues = await GetGeneratedValueBuiltValuesAsync(metaverseObjectTypeId, stagedRule, exportRules);
+        var systemNames = await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync() ?? [];
+        var attributeNames = exportRules
+            .SelectMany(r => r.AttributeFlowRules)
+            .Where(m => m.TargetConnectedSystemAttribute != null)
+            .Select(m => m.TargetConnectedSystemAttribute!)
+            .DistinctBy(a => a.Id)
+            .ToDictionary(a => a.Id, a => a.Name);
+        if (stagedRule != null)
+            foreach (var attribute in stagedRule.AttributeFlowRules.Select(m => m.TargetConnectedSystemAttribute).OfType<ConnectedSystemObjectTypeAttribute>())
+                attributeNames.TryAdd(attribute.Id, attribute.Name);
+
+        // The export rules the run checks values built from a generated value against (Generated Value Forms, #2023), with
+        // an export rule being edited in place of its saved self, and the attributes their Connectors would probe.
+        List<SyncRule> formExportRules = stagedRule is { Direction: SyncRuleDirection.Export }
+            ? [.. exportRules.Where(rule => stagedRule.Id <= 0 || rule.Id != stagedRule.Id), stagedRule]
+            : exportRules;
+        var probeable = await GetProbeableExportTargetsAsync(formExportRules);
+
+        return new BuiltValueContext(builtValues, systemNames, attributeNames, formExportRules, probeable);
+    }
+
+    /// <summary>
+    /// The (Connected System, attribute) pairs among <paramref name="exportRules"/>' targets whose Connector would probe the
+    /// attribute (Generated Value Forms, #2023), asking each Connector as <see cref="DescribeGeneratedValueParticipantsAsync"/>
+    /// does, without connecting to anything.
+    /// </summary>
+    private async Task<HashSet<(int ConnectedSystemId, int AttributeId)>> GetProbeableExportTargetsAsync(IReadOnlyList<SyncRule> exportRules)
+    {
+        var targets = exportRules
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Select(mapping => mapping.TargetConnectedSystemAttribute)
+                .OfType<ConnectedSystemObjectTypeAttribute>()
+                .Select(attribute => (rule.ConnectedSystemId, Attribute: attribute)))
+            .ToList();
+        if (targets.Count == 0)
+            return [];
+
+        var connectedSystems = await Application.Repository.ConnectedSystems.GetConnectedSystemsWithConnectorDefinitionsAsync() ?? [];
+        var probes = new Dictionary<string, IConnectorUniquenessProbe?>(StringComparer.Ordinal);
+        var created = new List<IConnector>();
+        try
+        {
+            var probeBySystem = connectedSystems.ToDictionary(cs => cs.Id, cs => GetUniquenessProbe(cs.ConnectorDefinition, probes, created));
+            return targets
+                .Where(target => probeBySystem.GetValueOrDefault(target.ConnectedSystemId)?.CanProbeAttribute(target.Attribute.Name) == true)
+                .Select(target => (target.ConnectedSystemId, target.Attribute.Id))
+                .ToHashSet();
+        }
+        finally
+        {
+            foreach (var connector in created.OfType<IDisposable>())
+                connector.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The values built from generated values for one Metaverse Object Type, and the names to describe them with.
+    /// </summary>
+    private sealed record BuiltValueContext(
+        GeneratedValueBuiltValues BuiltValues,
+        IReadOnlyDictionary<int, string> SystemNames,
+        IReadOnlyDictionary<int, string> AttributeNames,
+        IReadOnlyList<SyncRule> FormExportRules,
+        IReadOnlySet<(int ConnectedSystemId, int AttributeId)> Probeable)
+    {
+        /// <summary>
+        /// The values checked before each generated value is issued, by generated mapping, worked out once each by the
+        /// run's own rule (<see cref="GeneratedValueParticipation.DescribeForms"/>).
+        /// </summary>
+        private readonly Dictionary<SyncRuleMapping, List<GeneratedValueForm>> _forms = new(ReferenceEqualityComparer.Instance);
+
+        public List<GeneratedValueBuiltValueDescription> DescribeAll(IEnumerable<GeneratedValueBuiltValue> values) =>
+            values
+                .Select(Describe)
+                .OrderBy(d => d.SyncRuleName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(d => d.MetaverseAttributeName ?? d.ConnectedSystemAttributeName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        public GeneratedValueBuiltValueDescription Describe(GeneratedValueBuiltValue value) => new()
+        {
+            SyncRuleMappingId = value.Mapping.Id,
+            SyncRuleId = value.SyncRule.Id,
+            SyncRuleName = value.SyncRule.Name,
+            GeneratedSyncRuleMappingId = value.GeneratedMapping.Id,
+            GeneratedAttributeName = value.BuiltFromAttributeNames.FirstOrDefault() ?? string.Empty,
+            BuiltFromAttributeNames = value.BuiltFromAttributeNames,
+            MetaverseAttributeName = value.MetaverseAttributeName,
+            ConnectedSystemAttributeName = value.MetaverseAttributeId.HasValue
+                ? null
+                : value.Mapping.TargetConnectedSystemAttribute?.Name ?? AttributeName(value.Mapping.ResolveTargetConnectedSystemAttributeId()),
+            Via = value.Via,
+            Kind = value.Kind,
+            KeepUnique = value.KeepUnique,
+            CollisionRemediation = value.GeneratedMapping.Generation?.CollisionRemediation ?? true,
+            ExportedTo = value.ExportedTo
+                .Select(t => new GeneratedValueBuiltValueTarget
+                {
+                    ConnectedSystemId = t.ConnectedSystemId,
+                    ConnectedSystemName = SystemName(t.ConnectedSystemId),
+                    AttributeId = t.AttributeId,
+                    AttributeName = AttributeName(t.AttributeId)
+                })
+                .OrderBy(t => t.ConnectedSystemName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(t => t.AttributeName, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            CheckedBeforeIssuing = FormOf(value) != null,
+            ProbedIn = (FormOf(value)?.ProbeTargets ?? [])
+                .Where(target => Probeable.Contains((target.ConnectedSystemId, target.ConnectedSystemObjectTypeAttributeId)))
+                .Select(target => SystemName(target.ConnectedSystemId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            MoveToSyncRuleName = MoveToSyncRuleName(value),
+            Expression = value.Mapping.Sources.Count == 1 ? value.Mapping.Sources[0].Expression : null
+        };
+
+        /// <summary>
+        /// The form <paramref name="value"/> is checked as before its generated value is issued, or null when it is not.
+        /// </summary>
+        private GeneratedValueForm? FormOf(GeneratedValueBuiltValue value)
+        {
+            if (!_forms.TryGetValue(value.GeneratedMapping, out var forms))
+            {
+                forms = GeneratedValueParticipation.DescribeForms(value.GeneratedMapping, BuiltValues, FormExportRules);
+                _forms[value.GeneratedMapping] = forms;
+            }
+
+            return forms.FirstOrDefault(form => ReferenceEquals(form.BuiltValue.Mapping, value.Mapping)
+                || (value.Mapping.Id > 0 && form.BuiltValue.Mapping.Id == value.Mapping.Id));
+        }
+
+        /// <summary>
+        /// The generated flow's own Synchronisation Rule, when <paramref name="value"/> is a Derived Attribute Flow on
+        /// another rule that reads the generated value directly and nothing but Metaverse attributes: moved there, it
+        /// would be checked before issuing (PRD requirement 9). Null for anything else, including a value built through
+        /// another value, where moving this one flow alone would not be enough.
+        /// </summary>
+        private static string? MoveToSyncRuleName(GeneratedValueBuiltValue value)
+        {
+            if (value.Kind != GeneratedValueBuiltValueKind.BuiltOnAnotherRule || !value.MetaverseAttributeId.HasValue || value.Via.Count > 0)
+                return null;
+
+            var readsOnlyMetaverse = value.Mapping.Sources.All(source => !string.IsNullOrWhiteSpace(source.Expression)
+                && ExpressionInputResolver.ResolveCached(source.Expression).All(input => input.Source == ExpressionInputSource.Metaverse));
+            return readsOnlyMetaverse ? value.GeneratedMapping.SyncRule?.Name : null;
+        }
+
+        private string SystemName(int connectedSystemId) =>
+            SystemNames.TryGetValue(connectedSystemId, out var name) ? name : $"Connected System {connectedSystemId}";
+
+        private string AttributeName(int? attributeId) =>
+            attributeId.HasValue && AttributeNames.TryGetValue(attributeId.Value, out var name) ? name : $"Attribute {attributeId}";
+    }
+
+    /// <summary>
+    /// The stored "Keep unique" switch of every saved expression mapping among <paramref name="mappings"/>, read before a
+    /// save can flush, so <see cref="ReleaseNeedsDecisionIfKeepUniqueChangedAsync(IEnumerable{SyncRuleMapping}, IReadOnlyDictionary{int, bool})"/>
+    /// can tell what the save changed. No repository call when none could carry the switch.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, bool>> ReadStoredKeepUniqueAsync(IEnumerable<SyncRuleMapping> mappings)
+    {
+        var ids = mappings.Where(m => m.Id > 0 && CanKeepUnique(m)).Select(m => m.Id).Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, bool>();
+
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingKeepUniqueAsync(ids) ?? [];
+    }
+
+    /// <summary>
+    /// Releases the Needs Decision of the generated values whose built values' "Keep unique" switch the save changed
+    /// (Generated Value Forms, #2023): the change is the administrator's answer (a refusal of the value is no longer
+    /// corrected, or now is), so the waiting assignments return to Committed for the next export run to try again, as a
+    /// change to the generated flow's own configuration does.
+    /// </summary>
+    private async Task ReleaseNeedsDecisionIfKeepUniqueChangedAsync(IEnumerable<SyncRuleMapping> mappings, IReadOnlyDictionary<int, bool> previous)
+    {
+        var changed = mappings.Where(m => previous.TryGetValue(m.Id, out var stored) && stored != m.KeepUnique).ToList();
+        foreach (var mapping in changed)
+            await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
+    }
+
+    /// <summary>
+    /// Releases the Needs Decision of the generated value <paramref name="mapping"/>'s value is built from, after its
+    /// "Keep unique" switch changed.
+    /// </summary>
+    private async Task ReleaseNeedsDecisionIfKeepUniqueChangedAsync(SyncRuleMapping mapping)
+    {
+        var typeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        if (!typeId.HasValue)
+            return;
+
+        var builtValues = await GetGeneratedValueBuiltValuesAsync(typeId.Value);
+        foreach (var generation in builtValues.GeneratedValuesBuilding(mapping).Select(m => m.Generation).OfType<SyncRuleMappingGeneration>())
+        {
+            var released = await Application.UniqueValues.ReleaseNeedsDecisionForMappingAsync(generation.Id);
+            if (released > 0)
+                Log.Information("ReleaseNeedsDecisionIfKeepUniqueChangedAsync: the Keep unique switch of mapping {MappingId}, built from flow {GenerationId}, " +
+                    "changed, so {Count} generated value(s) waiting on a decision were released for the next export to try again", mapping.Id, generation.Id, released);
+        }
+    }
+
+    /// <summary>
+    /// Refuses a "Keep unique" switch turned off on a mapping it can never apply to (a direct flow, or a generated value
+    /// itself), so an administrator is never left believing a value was opted out when nothing was.
+    /// </summary>
+    /// <exception cref="ArgumentException">The switch is off on a mapping that cannot carry it.</exception>
+    private static void ValidateKeepUnique(SyncRuleMapping mapping)
+    {
+        if (!mapping.KeepUnique && !CanKeepUnique(mapping))
+        {
+            var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+            throw new ArgumentException($"{targetName}: {KeepUniqueNotApplicableMessage}");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="ValidateKeepUnique(SyncRuleMapping)"/> for every mapping of a whole-rule save.
+    /// </summary>
+    private static void ValidateKeepUnique(SyncRule syncRule)
+    {
+        foreach (var mapping in syncRule.AttributeFlowRules)
+            ValidateKeepUnique(mapping);
     }
 
     /// <summary>

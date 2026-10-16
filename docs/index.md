@@ -1,6 +1,9 @@
 ---
 title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
+type: landing
+audience: evaluator
+validated: v0.16.0
 template: home.html
 hide:
   - navigation
@@ -19,7 +22,7 @@ hide:
 
     ---
 
-    Central metaverse architecture for identity correlation across all Connected Systems. Bidirectional sync of Users, Groups, and custom object types.
+    A central Metaverse correlates each person and group across every Connected System. Users, Groups and your own Metaverse Object Types synchronise in both directions.
 
 -   :material-server-network:{ .lg .middle } **[Multi-Directory LDAP](connectors/jim-ldap-connector.md)**
 
@@ -55,7 +58,7 @@ hide:
 
     ---
 
-    Fully functional without internet connectivity. No cloud dependencies -- designed for sensitive and high-assurance environments.
+    Fully functional without internet connectivity. No cloud dependencies; designed for sensitive and high-assurance environments.
 
 -   :material-puzzle:{ .lg .middle } **[Extensible Connectors](connectors/index.md)**
 
@@ -67,7 +70,7 @@ hide:
 
     ---
 
-    Deterministic precedence when multiple Connected Systems contribute the same Metaverse attribute, with "Null is a value" assertion, next-contributor hand-over, and per-value provenance.
+    Deterministic precedence when multiple Connected Systems contribute the same Metaverse Attribute, with "Null is a value" assertion, next-contributor hand-over, and per-value provenance.
 
 -   :material-history:{ .lg .middle } **[Configuration Change History](configuration/activities.md#configuration-change-history)**
 
@@ -145,7 +148,7 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
     ---
 
-    Understand the metaverse, Connected Systems, Synchronisation Rules, and more.
+    Understand the Metaverse, Connected Systems, Synchronisation Rules, and more.
 
 -   :material-cog:{ .lg .middle } **[Administration](administration/index.md)**
 
@@ -161,16 +164,16 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 </div>
 
-## State of Development
+## Scale and Assurance
 
-JIM is working towards its **v1.0 milestone: Identity Lifecycle Complete**. The core identity lifecycle is fully functional today:
+JIM covers the whole identity lifecycle:
 
-- **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files)
-- **Sync** to reconcile identities in the central metaverse
-- **Export** changes to target systems with Pending Export management
-- **Schedule** automated synchronisation using cron or interval-based triggers
+- **Import** identities from source systems: LDAP directories, SQL databases, SCIM 2.0 services and CSV files.
+- **Synchronise** them through the central Metaverse.
+- **Export** changes to target systems, each one held as a Pending Export until it is confirmed.
+- **Schedule** all of it, by cron expression or interval.
 
-The platform has been hardened for production, with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming in v1.0 and beyond.
+Its pipelines run in bounded memory, and are validated at 500,000 users synchronised across two directories, with groups of up to 495,000 members. Its security is assessed against the OWASP Top 10:2025, and its supply chain is hardened. The [Product Roadmap](reference/roadmap.md) sets out the milestones to v1.0, Identity Lifecycle Complete, and after it.
 
 ## 💬 Community & Support
 
@@ -183,8 +186,8 @@ JIM is built in the open. [GitHub Discussions](https://github.com/TetronIO/JIM/d
 
 ## Licensing
 
-JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial licence for use in production scenarios. [Full details can be found here](https://junctional.io/license).
+JIM is source-available: it is free to use outside production, and production use needs a commercial licence. The [licence terms](https://junctional.io/license) give the details.
 
 ## More Information
 
-Please visit [https://junctional.io](https://junctional.io) for more information.
+For more about JIM, visit [junctional.io](https://junctional.io).

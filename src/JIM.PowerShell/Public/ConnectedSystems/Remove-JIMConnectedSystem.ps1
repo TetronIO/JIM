@@ -41,47 +41,51 @@ function Remove-JIMConnectedSystem {
         deletion's Activity records that the preview informed it.
 
     .PARAMETER Id
-        The unique identifier of the Connected System to delete.
+        The ID of the Connected System to delete.
 
     .PARAMETER InputObject
-        A Connected System object to delete. Accepts pipeline input.
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER DeleteImmediately
         Deletes the Connected System immediately instead of deprovisioning through synchronisation.
-        WARNING: contributed attribute values are KEPT with no provenance, so nothing can ever recall
+        The values the Connected System contributed are kept with no provenance, so nothing can ever recall
         them; surviving contributors are not re-elected and downstream systems are not corrected. On a
         system whose deprovisioning run failed partway, this finishes the deletion immediately,
         abandoning the remaining deprovisioning work.
 
     .PARAMETER PassThru
-        If specified, returns the deletion result object for deletions that complete immediately.
-        (Queued deletions always return a tracking object, with or without -PassThru.)
+        Returns the outcome of a deletion that completes at once. A deletion that queues returns its tracking object
+        either way.
 
     .PARAMETER Force
-        Suppresses confirmation prompts (and skips the deletion-preview lookup the confirmation uses).
+        Suppresses the confirmation prompt, and the deletion preview it states.
 
     .PARAMETER ChangeReason
-        Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone.
+        Why the Connected System was deleted, recorded on the deletion's Activity and in its change history.
 
     .PARAMETER PreviewActivityId
-        The deletion preview this deletion was made after reading, as returned by
-        New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion. Recorded on the deletion's
+        The ID of the deletion preview this deletion was made after reading: the Activity that
+        New-JIMConfigurationChangePreview -Deletion returns for this Connected System. Recorded on the deletion's
         Activity so "previewed, then deleted" is auditable rather than a claim. JIM refuses the deletion,
         deleting nothing, when the id is not a deletion preview of this same Connected System. A preview
         that a later run or configuration change has overtaken is still recorded, and the deletion's
         Activity says it was out of date and what overtook it; the cmdlet writes a warning saying so.
 
     .OUTPUTS
-        When the deletion queues (always the case for the default deprovisioning mode), a PSCustomObject
-        tracking the queued work:
-        - ActivityId: the deletion Activity's id (a GUID); monitor it with Get-JIMActivity
-        - WorkerTaskId: the queued Worker Task's id (a GUID)
-        - Outcome: QueuedAsBackgroundJob, or QueuedAfterSync when a running synchronisation delays it
-        - ConnectedSystemObjectCount, ContributedValueCount, ContributedValueObjectCount: headline counts
-          from the deletion preview, or null when it was not retrieved (-Force skips the lookup)
+        Depends on how the deletion runs. One that runs in the background, as every deletion that deprovisions does,
+        returns an object to follow it by. One that completes at once returns nothing, or its outcome with -PassThru.
 
-        When an immediate deletion completes synchronously, nothing is returned unless -PassThru is
-        specified, in which case the deletion result (Outcome, ActivityId) is returned.
+        JIM.ConnectedSystemDeletionQueued: When the deletion queues
+        ActivityId (guid): The ID of the deletion's Activity; follow it with Get-JIMActivity.
+        WorkerTaskId (guid): The ID of the worker task carrying out the deletion.
+        Outcome (string): QueuedAsBackgroundJob, or QueuedAfterSync when a running synchronisation delays it.
+        ConnectedSystemObjectCount (int): How many Connected System Objects the deletion removes, from the deletion
+            preview; empty with -Force, which skips the preview.
+        ContributedValueCount (int): How many Metaverse attribute values the Connected System contributed; empty
+            with -Force.
+        ContributedValueObjectCount (int): How many Metaverse Objects hold those values; empty with -Force.
+
+        JIM.ConnectedSystemDeletionResult: With -PassThru, when the deletion completes at once
 
     .EXAMPLE
         Remove-JIMConnectedSystem -Id 1
@@ -138,7 +142,8 @@ function Remove-JIMConnectedSystem {
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemDeletionQueued')]
+    [OutputType('JIM.ConnectedSystemDeletionResult')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -208,7 +213,7 @@ function Remove-JIMConnectedSystem {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($systemName, $confirmAction)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $systemName -Action $confirmAction -Force:$Force) {
             Write-Verbose "Deleting Connected System: $systemName (ID: $systemId)"
 
             try {

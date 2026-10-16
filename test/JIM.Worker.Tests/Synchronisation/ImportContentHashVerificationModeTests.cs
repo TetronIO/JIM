@@ -165,6 +165,25 @@ public class ImportContentHashVerificationModeTests
     }
 
     /// <summary>
+    /// The Activity message counts the compared, unchanged object as unchanged, not updated (#2129): Verification Mode
+    /// compares every object in full, so none is skipped by its content hash, but finding one unchanged is no update.
+    /// </summary>
+    [Test]
+    public async Task VerificationMode_UnchangedObject_ReportsItUnchangedAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        await RunFullImportAsync(connector, verify: false);
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        var activity2 = await RunFullImportAsync(connector2, verify: true);
+
+        Assert.That(activity2.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+    }
+
+    /// <summary>
     /// (2) Dangerous disagreement: seed a stored hash that matches the incoming hash but then
     /// corrupt the stored attribute value directly (bypassing the normal write path, simulating a
     /// hypothetical calculator/diff divergence) so the honest diff still finds a change.
@@ -201,6 +220,104 @@ public class ImportContentHashVerificationModeTests
         // mutating the old attribute-value instance in place.
         var currentDisplayName = cso.AttributeValues.Single(av => av.Attribute?.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString());
         Assert.That(currentDisplayName.StringValue, Is.EqualTo("Jane Smith"));
+    }
+
+    /// <summary>
+    /// The date a source holds to the 100ns, as the import object carries it; PostgreSQL keeps it to the microsecond.
+    /// </summary>
+    private static readonly DateTime StartDateWithSubMicrosecondPart = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234567);
+
+    private static ConnectedSystemImportObject CreateImportObjectWithStartDate(Guid hrId, DateTime startDate)
+    {
+        var importObject = CreateImportObject(hrId, "Jane Smith");
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = MockSourceSystemAttributeNames.START_DATE.ToString(), DateTimeValues = { startDate } });
+        return importObject;
+    }
+
+    /// <summary>
+    /// What the database hands back for the stored date: the microsecond, read as Kind Local under Npgsql's legacy
+    /// timestamp behaviour. The in-memory repository keeps the 100ns value, so the test puts the database's form in.
+    /// </summary>
+    private void StoreStartDateAsTheDatabaseReturnsIt()
+    {
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        var startDate = cso.AttributeValues.Single(av => av.Attribute?.Name == MockSourceSystemAttributeNames.START_DATE.ToString());
+        var floored = new DateTime(StartDateWithSubMicrosecondPart.Ticks - StartDateWithSubMicrosecondPart.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
+        startDate.DateTimeValue = floored.ToLocalTime();
+    }
+
+    /// <summary>
+    /// The false alarm (#2153): a source date with a sub-microsecond part was hashed raw, so the stored hash matched the
+    /// incoming one, while the diff compared the raw import with the microsecond the database kept and found a change.
+    /// Verification Mode reported a DANGEROUS DISAGREEMENT that was neither.
+    /// </summary>
+    [Test]
+    public async Task VerificationMode_UnchangedDateWithSubMicrosecondPart_RaisesNoDisagreementAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObjectWithStartDate(hrId, StartDateWithSubMicrosecondPart));
+        await RunFullImportAsync(connector, verify: false);
+        StoreStartDateAsTheDatabaseReturnsIt();
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObjectWithStartDate(hrId, StartDateWithSubMicrosecondPart));
+        var activity2 = await RunFullImportAsync(connector2, verify: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity2.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed), Is.False,
+                "an unchanged date must not raise a Verification Mode disagreement");
+            Assert.That(activity2.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+        }
+    }
+
+    /// <summary>
+    /// A second Full Import of unchanged data stages no change (#2153), including a value whose source precision is finer
+    /// than the microsecond JIM holds. The stored hash is cleared so the object takes the honest diff, as it does on the
+    /// first import after an upgrade or after any Synchronisation Rule change.
+    /// </summary>
+    [Test]
+    public async Task FullImport_UnchangedDateWithSubMicrosecondPart_StagesNoChangeAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObjectWithStartDate(hrId, StartDateWithSubMicrosecondPart));
+        await RunFullImportAsync(connector, verify: false);
+        StoreStartDateAsTheDatabaseReturnsIt();
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        cso.ImportStateHash = null;
+        var storedStartDate = cso.AttributeValues.Single(av => av.Attribute?.Name == MockSourceSystemAttributeNames.START_DATE.ToString());
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObjectWithStartDate(hrId, StartDateWithSubMicrosecondPart));
+        var activity2 = await RunFullImportAsync(connector2, verify: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity2.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+            Assert.That(cso.AttributeValues, Does.Contain(storedStartDate), "the stored date must not be replaced");
+        }
+    }
+
+    /// <summary>
+    /// A date is stored as JIM holds it (#2153): UTC, to the microsecond, whatever precision and Kind the Connector
+    /// supplied.
+    /// </summary>
+    [Test]
+    public async Task FullImport_NewObjectWithSubMicrosecondDate_StoresTheCanonicalDateAsync()
+    {
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObjectWithStartDate(Guid.NewGuid(), DateTime.SpecifyKind(StartDateWithSubMicrosecondPart, DateTimeKind.Unspecified)));
+        await RunFullImportAsync(connector, verify: false);
+
+        var stored = SyncRepo.ConnectedSystemObjects.Values.Single().AttributeValues
+            .Single(av => av.Attribute?.Name == MockSourceSystemAttributeNames.START_DATE.ToString()).DateTimeValue;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.Value.Ticks, Is.EqualTo(StartDateWithSubMicrosecondPart.Ticks - 7));
+            Assert.That(stored!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+        }
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 ﻿@page "/admin/connected-systems/connectors/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Connectors
 @using JIM.Models.Activities
 @using JIM.Models.Interfaces;
 @using JIM.Models.Staging;
@@ -12,7 +13,18 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connector: @_connector?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span>
+    @* A built-in Connector links to its own page; any other, to the Connectors overview. Each page is a literal
+       so the docs coverage check (COV-5) can confirm it exists. *@
+    <PageInfo Title="Connector"
+              DocsPage="@(_connector?.Name == ConnectorConstants.LdapConnectorName ? "connectors/jim-ldap-connector.md"
+                        : _connector?.Name == ConnectorConstants.FileConnectorName ? "connectors/jim-file-connector.md"
+                        : _connector?.Name == ConnectorConstants.ScimClientConnectorName ? "connectors/jim-scim-connector.md"
+                        : _connector?.Name == ConnectorConstants.SqlConnectorName ? "connectors/jim-sql-connector.md"
+                        : "connectors/index.md")">
+        A Connector is how JIM talks to one kind of system, such as a directory or a database. This page shows what it is and what it can do.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_connector != null)

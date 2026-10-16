@@ -14,10 +14,12 @@ public class PasswordSetOptions
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; } = PasswordExpiryBehaviour.RequireChangeAtNextSignIn;
 
     /// <summary>
-    /// Whether the Connector should enable the account as part of applying the password.
+    /// Whether the Connector should enable the account (true), disable it (false), or leave its enabled state alone
+    /// (null) as part of applying the password.
     /// <para>
     /// Null leaves the account's enabled state untouched, which is the right choice for a password reset on an
-    /// account that is already in the state the administrator wants.
+    /// account that is already in the state the administrator wants, and for an account whose enabled state an
+    /// Attribute Flow sets (#2064): the engine decides which, and the Connector applies the answer.
     /// </para>
     /// <para>
     /// True is for provisioning. Active Directory will not enable an account that does not already hold a
@@ -27,4 +29,19 @@ public class PasswordSetOptions
     /// </para>
     /// </summary>
     public bool? EnableAccount { get; set; }
+
+    /// <summary>
+    /// Whether the Connector should leave the account's "Password never expires" flag exactly as the account has it,
+    /// rather than set it for <see cref="PasswordExpiryBehaviour.NeverExpires"/> and clear it for the other two
+    /// behaviours. False by default, so a caller that names only an expiry behaviour gets that behaviour applied whole.
+    /// <para>
+    /// True where something else owns the flag (#2159): an Attribute Flow that writes the attribute holding it (on Active
+    /// Directory, userAccountControl), or the account itself for a propagated password, which never changes it. The
+    /// engine decides which; the Connector applies the answer. "Must change at next sign-in" belongs to the password
+    /// rather than to the flag, so it is still applied for <see cref="PasswordExpiryBehaviour.RequireChangeAtNextSignIn"/>.
+    /// Where the flag left set means that cannot take effect, the Connector says so on its result
+    /// (<see cref="PasswordSetResult.ExpiryBehaviourWarning"/>). A Connector whose targets have no such flag ignores it.
+    /// </para>
+    /// </summary>
+    public bool LeavePasswordNeverExpiresAsIs { get; set; }
 }

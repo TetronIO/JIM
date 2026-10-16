@@ -16,70 +16,73 @@ function New-JIMPredefinedSearchCriterion {
         - Boolean, Guid: Equals, NotEquals
 
     .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+        The ID of the Predefined Search.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group to add the criterion to.
+        The ID of the criteria group to add the criterion to.
 
     .PARAMETER MetaverseAttributeId
-        The unique identifier of the Metaverse attribute to evaluate.
+        The ID of the Metaverse Attribute to compare.
 
     .PARAMETER MetaverseAttributeName
-        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate.
+        The name of the Metaverse Attribute to compare, instead of its ID.
 
     .PARAMETER ComparisonType
-        The comparison operator.
+        The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith,
+        NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime
+        take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid
+        take Equals and NotEquals. Every type also takes HasValue and HasNoValue, which test whether the attribute
+        holds a value at all and take no value.
 
     .PARAMETER StringValue
-        The string value to compare against (for Text attributes).
+        The value to compare a Text attribute with.
 
     .PARAMETER IntValue
-        The integer value to compare against (for Number attributes).
+        The value to compare a Number attribute with.
 
     .PARAMETER LongValue
-        The 64-bit integer value to compare against (for LongNumber attributes).
+        The value to compare a LongNumber attribute with.
 
     .PARAMETER DecimalValue
-        The decimal value to compare against (for Decimal attributes). For high-precision values use
-        PowerShell's decimal literal suffix (for example 123.456789012345678d) or a quoted string,
-        because a bare numeric literal is parsed as a double first and can lose precision.
+        The value to compare a Decimal attribute with. For a high-precision value use PowerShell's decimal suffix
+        (123.456789012345678d) or a quoted string, because a bare number is read as a double first and can lose
+        precision.
 
     .PARAMETER DateTimeValue
-        The date/time value to compare against (for DateTime attributes). Interpreted as UTC.
+        The value to compare a DateTime attribute with, read as UTC.
 
     .PARAMETER BoolValue
-        The boolean value to compare against (for Boolean attributes).
+        The value to compare a Boolean attribute with.
 
     .PARAMETER GuidValue
-        The GUID value to compare against (for Guid attributes).
+        The value to compare a Guid attribute with.
 
     .PARAMETER CaseSensitive
-        When provided as $false, text comparisons ignore case differences. When omitted the server
-        default (true) applies. Only meaningful for Text attribute comparisons.
+        Whether a Text comparison respects case. $false ignores case; it does when omitted.
 
     .PARAMETER ValueMode
-        For DateTime attributes, 'Absolute' (compare against -DateTimeValue, the default) or 'Relative'
-        (compare against a date resolved relative to now). Relative requires -RelativeCount, -RelativeUnit
-        and -RelativeDirection, and is mutually exclusive with -DateTimeValue.
+        For a DateTime attribute: Absolute compares with -DateTimeValue, and is the default; Relative compares with
+        a date worked out from now, given by -RelativeCount, -RelativeUnit and -RelativeDirection, and cannot be
+        combined with -DateTimeValue.
 
     .PARAMETER RelativeCount
-        The relative offset count (zero or positive).
+        How many units from now, for a Relative comparison; zero or more.
 
     .PARAMETER RelativeUnit
-        The relative offset unit: Hours, Days, Weeks, Months or Years.
+        The unit of -RelativeCount.
 
     .PARAMETER RelativeDirection
-        The relative offset direction: Ago (past) or FromNow (future).
+        Whether the date is in the past (Ago) or the future (FromNow).
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
-        Search's configuration change history.
+        Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the created criterion object.
+        Returns the created criterion.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created criterion.
+        With -PassThru, the created criterion, with a GroupId property added naming its group; otherwise nothing.
 
     .EXAMPLE
         New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
@@ -97,7 +100,7 @@ function New-JIMPredefinedSearchCriterion {
         Remove-JIMPredefinedSearchCriterion
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchCriteriaDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$PredefinedSearchId,
@@ -113,7 +116,8 @@ function New-JIMPredefinedSearchCriterion {
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
-                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals')]
+                     'Contains', 'NotContains', 'LessThan', 'LessThanOrEquals', 'GreaterThan', 'GreaterThanOrEquals',
+                     'HasValue', 'HasNoValue')]
         [string]$ComparisonType,
 
         [Parameter()]

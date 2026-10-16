@@ -12,26 +12,27 @@ function New-JIMApiKey {
         cannot be retrieved again.
 
     .PARAMETER Name
-        The name for the API Key.
+        The name the API Key is shown by.
 
     .PARAMETER Description
-        Optional description for the API Key.
+        Optional description of what the API Key is for.
 
     .PARAMETER RoleIds
-        Array of Role IDs to assign to this API Key.
+        The IDs of the Roles the API Key has.
 
     .PARAMETER ExpiresAt
-        Optional expiry date for the API Key.
+        When the API Key expires. Omit it for a key that does not expire.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the API Key's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the created API Key object (including the full key value).
+        Returns the API Key created, including the key itself.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created API Key object with the full key.
+        With -PassThru, the API Key created, with the key itself in Key; otherwise nothing. This is the only
+        time JIM returns the key, so store it securely: without -PassThru it cannot be retrieved.
 
     .EXAMPLE
         New-JIMApiKey -Name "CI/CD Pipeline" -PassThru
@@ -55,7 +56,7 @@ function New-JIMApiKey {
         Get-JIMRole
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ApiKeyCreateResponseDto')]
     param(
         [Parameter(Mandatory)]
         [string]$Name,

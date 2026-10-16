@@ -4,45 +4,68 @@
 function Get-JIMConnectedSystemObject {
     <#
     .SYNOPSIS
-        Gets a Connected System Object from JIM.
+        Gets the Connected System Objects in a Connected System's Connector Space.
 
     .DESCRIPTION
-        Retrieves a Connected System Object (CSO) by ID, with capped multi-valued attribute
-        values. For attributes with more than 10 values, use the -AttributeName parameter
-        to page through all values.
+        Gets a Connected System's Connected System Objects: a page of them, every one with -All, one by ID, or how
+        many there are with -Count. Filters narrow the list.
+
+        An object read by ID carries at most 10 values of each multi-valued attribute. -AttributeName pages through
+        the rest of one attribute's values.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System that owns the object.
+        The ID of the Connected System.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Connected System Object to retrieve.
+        The ID of the Connected System Object to get.
 
     .PARAMETER AttributeName
-        When specified with -Id, retrieves paginated attribute values for the named
-        attribute. Use this to page through large multi-valued attributes (e.g. member)
-        that are capped in the detail response.
+        With -Id, gets the values of this attribute a page at a time, for a multi-valued attribute such as member
+        whose values the object read by ID cuts short.
 
     .PARAMETER Search
-        Optional search text to filter attribute values.
+        Returns only the objects, or with -AttributeName the values, that match this text.
 
     .PARAMETER Page
-        Page number for pagination (attribute values only). Defaults to 1.
+        The page to get.
 
     .PARAMETER PageSize
-        Number of items per page (attribute values only). Defaults to 50.
+        How many objects or values a page holds.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages (of attribute values, or of
-        Connected System Object headers). Fetches at most 1000 pages before stopping
-        with a warning; use -Force to fetch beyond the cap. When used on a large result
-        set, a warning is emitted so a long-running sequential fetch is not a surprise.
+        Fetches every page instead of one. Stops after 1000 pages with a warning; -Force fetches the rest.
 
     .PARAMETER Force
-        Override the -All page ceiling (1000 pages) and fetch every page regardless of
-        how large the result set is. Only valid with -All.
+        With -All, fetches every page, past the 1000-page limit.
+
+    .PARAMETER Count
+        Returns how many Connected System Objects there are, rather than the objects.
+
+    .PARAMETER ObjectTypeId
+        Returns or counts only the objects of the Object Type with this ID.
+
+    .PARAMETER PartitionId
+        With -Count, counts only the objects in the partition with this ID.
+
+    .PARAMETER Status
+        Returns only the objects with this status.
+
+    .PARAMETER JoinType
+        Returns only the objects joined this way.
+
+    .PARAMETER SortBy
+        Sorts the list by ExternalId, SecondaryExternalId, DisplayName, Type, DateJoined, Status or JoinType. Newest
+        first when omitted.
+
+    .PARAMETER Ascending
+        Sorts in ascending order rather than descending.
+
+    .PARAMETER HasUnresolvedReference
+        Returns only the objects holding a reference value JIM could not resolve to another Connected System Object.
+        Get-JIMConnectedSystemObjectUnresolvedReference says why, for one object.
 
     .OUTPUTS
-        PSCustomObject representing the Connected System Object or attribute values.
+        The objects, the one object, its values of -AttributeName, or with -Count how many objects there are.
 
     .EXAMPLE
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id "3934ff12-4996-42c0-a396-41e17ac47af7"
@@ -90,6 +113,13 @@ function Get-JIMConnectedSystemObject {
         Gets Obsolete objects matching "smith" in Connected System 1.
 
     .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -HasUnresolvedReference -All |
+            Sort-Object UnresolvedReferenceCount -Descending |
+            Select-Object DisplayName, TypeName, UnresolvedReferenceCount -First 10
+
+        Lists the ten objects in Connected System 1 holding the most unresolved references.
+
+    .EXAMPLE
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All
 
         Gets every Connected System Object header for Connected System 1 (auto-paginates).
@@ -98,14 +128,19 @@ function Get-JIMConnectedSystemObject {
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -Force
 
         Gets every Connected System Object header for Connected System 1, overriding the
-        1000-page safety cap for very large connector spaces (over ~100,000 objects).
+        1000-page safety cap for very large connector spaces (over about 50,000 objects at the default page size of 50).
 
     .LINK
         Get-JIMConnectedSystem
         Get-JIMPendingExport
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ConnectedSystemObjectHeader', ParameterSetName = 'ListAll')]
+    [OutputType('JIM.ConnectedSystemObjectDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.ConnectedSystemObjectAttributeValueDto', ParameterSetName = 'AttributeValues')]
+    [OutputType('JIM.ConnectedSystemObjectAttributeValueDto', ParameterSetName = 'AttributeValuesAll')]
+    [OutputType([int], ParameterSetName = 'Count')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'AttributeValues', ValueFromPipelineByPropertyName)]
@@ -178,7 +213,11 @@ function Get-JIMConnectedSystemObject {
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
-        [switch]$Ascending
+        [switch]$Ascending,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [switch]$HasUnresolvedReference
     )
 
     process {
@@ -250,7 +289,7 @@ function Get-JIMConnectedSystemObject {
             'List' {
                 Write-Verbose "Getting Connected System Objects for Connected System $ConnectedSystemId (Page: $Page, PageSize: $PageSize)"
                 $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $Page -PageSize $PageSize `
-                    -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
+                    -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending -HasUnresolvedReference:$HasUnresolvedReference
 
                 $response = Invoke-JIMApi -Endpoint $endpoint
                 foreach ($item in $response.items) {
@@ -263,7 +302,7 @@ function Get-JIMConnectedSystemObject {
                 $pageRequest = {
                     param($p)
                     $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $p -PageSize $PageSize `
-                        -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
+                        -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending -HasUnresolvedReference:$HasUnresolvedReference
                     Invoke-JIMApi -Endpoint $endpoint
                 }
 

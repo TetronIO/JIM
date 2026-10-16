@@ -112,6 +112,8 @@ public class ExportExecutionParallelBatchTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Collision Remediation reads whether Metaverse Object changes are tracked; an empty set falls back to the default.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
@@ -773,6 +775,135 @@ public class ExportExecutionParallelBatchTests
     /// <summary>
     /// Tests that the ExportExecutionOptions.MaxParallelism defaults to 1 (sequential).
     /// </summary>
+    /// <summary>
+    /// The deferred pass sends Creates too, once their references resolve, and decides for each of its batches whether
+    /// an Initial Password follows exactly as the first pass does (#2039): a Create sent without the flag would be
+    /// created enabled on Active Directory and refused there.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredCreateFromARuleThatAsksForAPassword_IsHandedToTheConnectorFlaggedAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        SyncRepo.SeedSyncRule(ProvisioningRuleAskingForAPassword(targetSystem));
+
+        var create = SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Create, DateTime.UtcNow.AddMinutes(-1), referencedMvoId);
+        create.ProvisioningSyncRuleId = InitialPasswordRuleId;
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connector = CreateCapturingConnector(handedToConnector);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 10, MaxParallelism = 1 }, CancellationToken.None);
+
+        Assert.That(handedToConnector.Where(h => h.Id == create.Id).Select(h => h.InitialPasswordFollows), Is.EqualTo(new[] { true }));
+    }
+
+    /// <summary>
+    /// Parallel deferred batches re-load their Pending Exports on a repository of their own, so each batch must make
+    /// the decision against that repository; one deciding only on the primary would hand a fresh, unflagged copy to
+    /// every connector but the first (#2039).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_CreateFromARuleThatAsksForAPasswordIsFlaggedOnEveryConnectorAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        var rule = ProvisioningRuleAskingForAPassword(targetSystem);
+        SyncRepo.SeedSyncRule(rule);
+
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var creates = Enumerable.Range(0, 2)
+            .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Create, baseTime.AddSeconds(i), referencedMvoId))
+            .ToList();
+        foreach (var create in creates)
+            create.ProvisioningSyncRuleId = InitialPasswordRuleId;
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connectorFactoryCalled = false;
+        Func<IConnector> connectorFactory = () =>
+        {
+            connectorFactoryCalled = true;
+            return CreateCapturingConnector(handedToConnector).Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
+            new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData, syncRules: [rule]));
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateCapturingConnector(handedToConnector).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectorFactoryCalled, Is.True, "precondition: the second batch ran on a connector of its own");
+            Assert.That(handedToConnector.Select(h => h.Id), Is.EquivalentTo(creates.Select(c => c.Id)));
+            Assert.That(handedToConnector.Select(h => h.InitialPasswordFollows), Is.All.True);
+        }
+    }
+
+    /// <summary>
+    /// An Update to an account still owed a password is flagged on the instances each parallel batch re-loaded, through
+    /// the batch's own repository (#2158): the owed passwords exist only there, so a decision made on the primary's
+    /// repository, or on the primary's copies, would hand every Connector an unflagged Update that Active Directory then
+    /// refuses.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatch_UpdateToAnAccountOwedAPassword_IsFlaggedOnTheBatchsOwnInstancesAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var updates = Enumerable.Range(0, 2)
+            .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, baseTime.AddSeconds(i), referencedMvoId))
+            .ToList();
+        foreach (var update in updates)
+            update.ConnectedSystemObject!.MetaverseObjectId = Guid.NewGuid();
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connectorFactoryCalled = false;
+        Func<IConnector> connectorFactory = () =>
+        {
+            connectorFactoryCalled = true;
+            return CreateCapturingConnector(handedToConnector, setsPasswords: true).Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
+        {
+            var batchRepository = TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+            batchRepository.QueuePasswordChangesAsync(updates.Select(update => OwedPassword(targetSystem.Id, update.ConnectedSystemObject!)).ToList())
+                .GetAwaiter().GetResult();
+            return new SyncRepositoryScope(batchRepository);
+        };
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateCapturingConnector(handedToConnector, setsPasswords: true).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectorFactoryCalled, Is.True, "precondition: the second batch ran on a connector of its own");
+            Assert.That(handedToConnector.Select(h => h.Id), Is.EquivalentTo(updates.Select(u => u.Id)));
+            Assert.That(handedToConnector.Select(h => h.InitialPasswordFollows), Is.All.True);
+            Assert.That(SyncRepo.GetMetaverseObjectIdsOwedPasswordCallCount, Is.Zero, "decided through each batch's own repository, never the primary's");
+        }
+    }
+
+    private static PendingPasswordChange OwedPassword(int connectedSystemId, ConnectedSystemObject account) => new()
+    {
+        Id = Guid.NewGuid(),
+        MetaverseObjectId = account.MetaverseObjectId!.Value,
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemObjectId = account.Id,
+        Origin = PendingPasswordChangeOrigin.Provisioned,
+        Status = PendingPasswordChangeStatus.Parked,
+        CreatedAt = DateTime.UtcNow,
+        ExpiresAt = DateTime.UtcNow.AddDays(7),
+        ActivityId = Guid.NewGuid()
+    };
+
     [Test]
     public void ExportExecutionOptions_MaxParallelism_DefaultsTo1()
     {
@@ -789,6 +920,416 @@ public class ExportExecutionParallelBatchTests
         var options = new ExportExecutionOptions();
         Assert.That(options.BatchSize, Is.EqualTo(100));
     }
+
+    #region Batch interruption (#2083)
+
+    /// <summary>
+    /// #2083: a run cancelled while the Connector held a batch left every Pending Export in it Executing, which neither
+    /// the export queue nor import reconciliation reads, until the Worker restarted. Nothing was recorded for the batch,
+    /// so it must go back exactly as it was before it was sent, with no attempt counted.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_CancelledWhileTheConnectorHoldsABatch_PutsTheBatchBackAsItWas()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedExportsRetriedOnce(targetSystem, 3);
+        var before = exports.Select(PendingExportRetryState.Of).ToList();
+
+        using var cts = new CancellationTokenSource();
+        var connector = CreateScriptedConnector((_, _) =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, cts.Token));
+
+        Assert.That(exports.Select(PendingExportRetryState.Of), Is.EqualTo(before));
+    }
+
+    /// <summary>
+    /// #2083: a Connector that stops at a safe point on cancellation reports what it wrote and marks the rest not
+    /// attempted. What it wrote is recorded (a Create's External ID, its execution item), and what it never started goes
+    /// back as it was, uncounted and with no execution item, so the next run carries on without resending a write that
+    /// already happened. The run then stops before the next batch.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReportsTheRestNotAttemptedOnCancellation_RecordsWhatWasWrittenAndPutsTheRestBackAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 5);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        var connector = CreateScriptedConnector((sent, _) =>
+        {
+            calls++;
+            cts.Cancel();
+            return sent.Select((_, i) => i == 0 ? ConnectedSystemExportResult.Succeeded() : ConnectedSystemExportResult.NotAttempted()).ToList();
+        });
+        var recorded = new List<ProcessedExportItem>();
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 3 }, cts.Token,
+            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls, Is.EqualTo(1), "the run stops before sending another batch");
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1).Select(PendingExportRetryState.Of), Is.EqualTo(exports.Skip(1).Select(pe => before[pe.Id])),
+                "the changes never started, and the batch never sent, are as they were");
+            Assert.That(recorded.Select(item => (item.PendingExportId, item.Succeeded)), Is.EqualTo(new[] { ((Guid?)exports[0].Id, true) }),
+                "one execution item, for the change that was written");
+        }
+    }
+
+    /// <summary>
+    /// #2083: the deferred pass had no handling at all. A run cancelled part-way through it left the interrupted batch
+    /// Executing, and the execution items of the deferred batches already written, which are only handed on once the pass
+    /// ends, were never recorded.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_CancelledDuringTheDeferredPass_RecordsTheBatchesWrittenAndPutsTheInterruptedOneBack()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        using var cts = new CancellationTokenSource();
+        var connector = CreateScriptedConnector((sent, call) =>
+        {
+            if (call == 1)
+                return sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+        var recorded = new List<ProcessedExportItem>();
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 1 }, cts.Token,
+            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; }));
+
+        var written = exports.Where(pe => pe.Status == PendingExportStatus.Exported).ToList();
+        var interrupted = exports.Except(written).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Has.Count.EqualTo(2));
+            Assert.That(recorded.Select(item => item.PendingExportId), Is.EquivalentTo(written.Select(pe => (Guid?)pe.Id)),
+                "the first deferred batch's execution items are recorded");
+            Assert.That(interrupted, Has.All.Matches<PendingExport>(pe => pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 0),
+                "the interrupted batch goes back to Pending, uncounted");
+        }
+    }
+
+    /// <summary>
+    /// #2083: a deferred batch whose Connector threw escaped the deferred pass with its Pending Exports still Executing.
+    /// It is a failed attempt like any other batch failure: counted, scheduled for a retry, and reported per change.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredBatchConnectorThrows_FailsTheBatchAndLeavesNothingExecutingAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        var connector = CreateScriptedConnector((sent, call) => call == 1
+            ? sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList()
+            : throw new InvalidOperationException("The directory went away"));
+        var recorded = new List<ProcessedExportItem>();
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 1 }, CancellationToken.None,
+            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; });
+
+        var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failed, Has.Count.EqualTo(2));
+            Assert.That(failed, Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("The directory went away")));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+            Assert.That(recorded.Where(item => !item.Succeeded).Select(item => (item.PendingExportId, item.ConnectedSystemObject)),
+                Is.EquivalentTo(failed.Select(pe => ((Guid?)pe.Id, pe.ConnectedSystemObject))),
+                "each failure names its Pending Export and its Connected System Object");
+        }
+    }
+
+    /// <summary>
+    /// #2083: a parallel batch that threw was counted as failed, with execution items naming no object, but its Pending
+    /// Exports were never written: they stayed Executing until the Worker restarted.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatchThrows_RecordsAFailedAttemptOnEachOfItsPendingExportsAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () => CreateScriptedConnector((_, _) => throw new InvalidOperationException("The directory went away")).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failed, Has.Count.EqualTo(2));
+            Assert.That(failed, Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("The directory went away")));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+            Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
+                Is.EquivalentTo(failed.Select(pe => (Guid?)pe.Id)));
+        }
+    }
+
+    /// <summary>
+    /// #2197: a parallel batch whose Connector created a container and then failed still hands the container on to be
+    /// selected. Captured only from a batch that succeeded, the container of a failed one was lost when its Connector
+    /// was closed and disposed, and the accounts created in it stayed unconfirmed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatchCreatesAContainerThenThrows_StillReportsTheContainerAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () =>
+        {
+            var created = new List<string>();
+            var connector = CreateScriptedConnector((_, _) =>
+            {
+                created.Add("OU=New,DC=panoply,DC=local");
+                throw new InvalidOperationException("The directory went away");
+            });
+            connector.As<IConnectorContainerCreation>().Setup(c => c.CreatedContainerExternalIds).Returns(() => created.ToList());
+            return connector.Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+        var reported = new List<string>();
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory,
+            containersCreated: reported.AddRange);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.EqualTo(2), "the batch failed");
+            Assert.That(result.CreatedContainerExternalIds, Is.EqualTo(new[] { "OU=New,DC=panoply,DC=local" }));
+            Assert.That(reported, Is.EqualTo(new[] { "OU=New,DC=panoply,DC=local" }));
+        }
+    }
+
+    /// <summary>
+    /// #2083: a parallel batch cancelled while its Connector held it was left Executing.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ParallelDeferredBatchCancelled_LeavesNothingExecuting()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        using var cts = new CancellationTokenSource();
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () => CreateScriptedConnector((_, _) =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        }).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            cts.Token, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory));
+
+        var notWritten = exports.Where(pe => pe.Status != PendingExportStatus.Exported).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(notWritten, Is.Not.Empty, "the cancelled batch is among them");
+            Assert.That(notWritten.Select(PendingExportRetryState.Of), Is.EqualTo(notWritten.Select(pe => before[pe.Id])),
+                "every change not written is exactly as it was before the run");
+        }
+    }
+
+    /// <summary>
+    /// #2083: a Connector reporting a change not attempted while the run carries on is not exporting it. Putting it back
+    /// silently would repeat that every run with nothing to show for it; it is a failed attempt with an execution item.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReportsNotAttemptedWithoutTheRunBeingCancelled_CountsAFailedAttemptAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var connector = CreateScriptedConnector((sent, _) =>
+            sent.Select((_, i) => i == 0 ? ConnectedSystemExportResult.Succeeded() : ConnectedSystemExportResult.NotAttempted()).ToList());
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1), Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("not attempted")));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+            Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
+                Is.EquivalentTo(exports.Skip(1).Select(pe => (Guid?)pe.Id)));
+        }
+    }
+
+    /// <summary>
+    /// #2197: a batch's results are recorded before anything that processes them further can fail. Collision Remediation
+    /// failing for one rejected change used to fail the whole batch before any result was recorded, so a change the
+    /// Connector had written was counted as a failed attempt and sent again (a Create, a second time).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CollisionRemediationFailsForOneChange_RecordsTheOthersResultsFirstAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        targetSystem.ConnectorDefinition.SupportsUniquenessRejectionClassification = true;
+        var exports = SeedFreshExports(targetSystem, 2);
+        var written = new HashSet<Guid>();
+        SyncRepo.OnPendingExportsUpdated = ids => written.UnionWith(ids);
+        SyncRepo.FailSyncRuleLoadWith = new InvalidOperationException("The Synchronisation Rules could not be read.");
+        var rejection = ConnectedSystemExportResult.Failed("That value is already in use.");
+        rejection.ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse;
+        var connector = CreateScriptedConnector((_, _) => [ConnectedSystemExportResult.Succeeded(), rejection]);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Does.Contain(exports[0].Id), "the written change's result is recorded");
+            Assert.That(result.ProcessedExportItems.Where(item => item.Succeeded).Select(item => item.PendingExportId),
+                Is.EqualTo(new[] { (Guid?)exports[0].Id }));
+            Assert.That(result.ProcessedExportItems.Where(item => !item.Succeeded).Select(item => item.PendingExportId),
+                Is.EqualTo(new[] { (Guid?)exports[1].Id }), "only the change whose remediation failed is reported failed");
+        }
+    }
+
+    /// <summary>
+    /// #2197: a Connector that returns fewer results than it was handed changes has not said what became of the rest, and
+    /// a change JIM cannot account for is never read as a success: that would confirm a write nobody made. Each missing
+    /// result is a failed attempt, with an execution item.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReturnsTooFewResults_CountsEachMissingOneAsAFailedAttemptAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var connector = CreateScriptedConnector((_, _) => [ConnectedSystemExportResult.Succeeded()]);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1), Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("no result")));
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+        }
+    }
+
+    /// <summary>
+    /// #2197: when the run has been cancelled, a change the Connector returned no result for is taken to be one it never
+    /// started: it goes back as it was, uncounted, as a change the Connector reports not attempted does (#2083).
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ConnectorReturnsTooFewResultsOnCancellation_PutsTheMissingOnesBackAsItWas()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        using var cts = new CancellationTokenSource();
+        var connector = CreateScriptedConnector((_, _) =>
+        {
+            cts.Cancel();
+            return [ConnectedSystemExportResult.Succeeded()];
+        });
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, cts.Token));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1).Select(PendingExportRetryState.Of), Is.EqualTo(exports.Skip(1).Select(pe => before[pe.Id])));
+        }
+    }
+
+    /// <summary>
+    /// #2083: a parallel batch whose Connector fails, and then fails again as its connection is closed, is one failed
+    /// batch: its failure is recorded once, and the close failure is reported beside it rather than as the batch failing
+    /// a second time with execution items naming no object.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatchFailsAndItsConnectionFailsToClose_RecordsTheFailureOnceAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 4);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () => CreateScriptedConnector(
+            (_, _) => throw new InvalidOperationException("The directory went away"),
+            closeFailure: new InvalidOperationException("The connection was already broken")).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failed, Has.Count.EqualTo(2));
+            Assert.That(result.FailedCount, Is.EqualTo(2), "the batch's failure is counted once");
+            Assert.That(result.ProcessedExportItems.Count(item => !item.Succeeded && item.PendingExportId == null), Is.EqualTo(1),
+                "the close failure is reported once, beside the batch's own items");
+        }
+    }
+
+    /// <summary>
+    /// #2083: an <see cref="OperationCanceledException"/> nobody asked for, such as an HTTP client's timeout, was taken
+    /// for the run being cancelled: the batch was left Executing and the run ended as "Export cancelled". It is a failed
+    /// attempt at the batch.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorTimesOutWithoutTheRunBeingCancelled_FailsTheBatchRatherThanCancellingTheRunAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var connector = CreateScriptedConnector((_, _) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing."));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports, Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("HttpClient.Timeout")));
+            Assert.That(result.FailedCount, Is.EqualTo(3));
+            Assert.That(result.ProcessedExportItems.Select(item => item.PendingExportId), Is.EquivalentTo(exports.Select(pe => (Guid?)pe.Id)));
+        }
+    }
+
+    #endregion
 
     #region Helper Methods
 
@@ -914,6 +1455,111 @@ public class ExportExecutionParallelBatchTests
                 }
             }
         };
+    }
+
+    private const int InitialPasswordRuleId = 92039;
+
+    private static SyncRule ProvisioningRuleAskingForAPassword(ConnectedSystem targetSystem) => new()
+    {
+        Id = InitialPasswordRuleId,
+        Name = "Provision Users with an Initial Password",
+        Direction = SyncRuleDirection.Export,
+        ConnectedSystemId = targetSystem.Id,
+        ProvisionToConnectedSystem = true,
+        InitialPassword = new SyncRuleInitialPassword { SyncRuleId = InitialPasswordRuleId, Enabled = true }
+    };
+
+    /// <summary>
+    /// A connector that succeeds for everything and records, as it is handed each Pending Export, whether an Initial
+    /// Password was said to follow it.
+    /// </summary>
+    private static Mock<IConnector> CreateCapturingConnector(System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)> handedToConnector,
+        bool setsPasswords = false)
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        if (setsPasswords)
+            mockConnector.As<IConnectorPasswordManagement>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                foreach (var handed in exports.Select(export => (export.Id, export.InitialPasswordFollows)))
+                    handedToConnector.Add(handed);
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+        return mockConnector;
+    }
+
+    /// <summary>
+    /// A Connector whose every export call is answered by <paramref name="script"/>, given what was sent and which call
+    /// this is, counting from one. The script may throw.
+    /// </summary>
+    private static Mock<IConnector> CreateScriptedConnector(
+        Func<IList<PendingExport>, int, List<ConnectedSystemExportResult>> script,
+        Exception? closeFailure = null)
+    {
+        var call = 0;
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        if (closeFailure != null)
+            mockExportConnector.Setup(c => c.CloseExportConnection()).Throws(closeFailure);
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .Returns((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                Task.FromResult(script(exports, Interlocked.Increment(ref call))));
+        return mockConnector;
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="count"/> Update exports never yet attempted, queued a second apart so they are sent in order.
+    /// </summary>
+    private List<PendingExport> SeedFreshExports(ConnectedSystem targetSystem, int count)
+    {
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var queuedAt = DateTime.UtcNow.AddMinutes(-30);
+        var exports = new List<PendingExport>();
+        for (var i = 0; i < count; i++)
+        {
+            var cso = CreateCso(targetSystem, targetUserType);
+            ConnectedSystemObjectsData.Add(cso);
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            pe.CreatedAt = queuedAt.AddSeconds(i);
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+            exports.Add(pe);
+        }
+        return exports;
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="count"/> Update exports that have failed once before and are due their retry, so putting one
+    /// back has a previous attempt, a schedule and an error message to preserve.
+    /// </summary>
+    private List<PendingExport> SeedExportsRetriedOnce(ConnectedSystem targetSystem, int count)
+    {
+        var exports = SeedFreshExports(targetSystem, count);
+        foreach (var pe in exports)
+        {
+            pe.ErrorCount = 1;
+            pe.LastAttemptedAt = DateTime.UtcNow.AddMinutes(-10);
+            pe.NextRetryAt = DateTime.UtcNow.AddMinutes(-8);
+            pe.LastErrorMessage = "An earlier attempt failed";
+        }
+        return exports;
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="count"/> deferred Update exports that resolve on the deferred pass, a second apart.
+    /// </summary>
+    private List<PendingExport> SeedResolvableDeferredExports(ConnectedSystem targetSystem, ConnectedSystemObjectType targetUserType, int count)
+    {
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        var queuedAt = DateTime.UtcNow.AddMinutes(-30);
+        return Enumerable.Range(0, count)
+            .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, queuedAt.AddSeconds(i), referencedMvoId))
+            .ToList();
     }
 
     private static Mock<IConnector> CreateMockConnector(ConnectedSystemExportResult defaultResult)

@@ -46,6 +46,59 @@ public class PasswordDeliveryRunResult
     public int WithdrawnCount { get; set; }
 
     /// <summary>
+    /// Passwords delivered to an account whose enabled state an export wrote (#2064), leaving that state to the
+    /// Attribute Flow rather than applying the provisioning Synchronisation Rule's Enable Account. Counted so the lane's
+    /// summary says how often the flow, not the rule, decided; each delivery's Activity says so too. Included in
+    /// <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int EnabledStateLeftToAttributeFlowCount { get; set; }
+
+    /// <summary>
+    /// Passwords delivered to an account whose flags an export wrote (#2159), leaving "Password never expires" to the
+    /// Attribute Flow that writes them rather than applying the provisioning Synchronisation Rule's expiry. Counted so
+    /// the lane's summary says how often the flow, not the rule, decided; each delivery's Activity says so where it
+    /// differs from what the rule asked. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int PasswordNeverExpiresLeftToAttributeFlowCount { get; set; }
+
+    /// <summary>
+    /// Passwords whose delivery completed an enable JIM withheld until a password existed (#2039, #2064, #2158): the
+    /// account was held disabled, at creation or when an Update enabled it, only because Active Directory refuses an
+    /// enabled account with no password, and its Attribute Flow still asks for it enabled. Included in
+    /// <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int WithheldEnablesCompletedCount { get; set; }
+
+    /// <summary>
+    /// Passwords delivered where the Connected System could not apply everything asked of it, such as an expiry
+    /// behaviour it has no equivalent for (#2159): the password is set, and its Activity is completed with a warning
+    /// naming what was applied instead. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int ExpiryBehaviourNotHonouredCount { get; set; }
+
+    /// <summary>
+    /// Password changes delivered as an account's first password in place of its Initial Password (#2160): the
+    /// person's own password, with the provisioning Synchronisation Rule's promises about the account (whether it is
+    /// enabled, and whether its password never expires). Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int FirstPasswordsDeliveredInPlaceCount { get; set; }
+
+    /// <summary>
+    /// Password changes owing an account its first password that were delivered without the Initial Password's
+    /// promises (#2160): the provisioning Synchronisation Rule no longer sets one, or the change reached another of the
+    /// person's accounts. Each delivery's Activity says which. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int FirstPasswordPromisesNotAppliedCount { get; set; }
+
+    /// <summary>
+    /// Changes given back unattempted because an export was being sent to their account (#2173, #2158, #2159): that
+    /// export may be disabling it, writing the flags it owns, or holding back an enable the delivery would complete, so
+    /// the delivery waits for it and tries again shortly. Nothing is counted against them, and they are neither
+    /// retrying nor delivered.
+    /// </summary>
+    public int PostponedCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.
@@ -76,6 +129,6 @@ public class PasswordDeliveryRunResult
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || WithdrawnCount > 0
-        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
+        || PostponedCount > 0 || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
         || ConnectorCouldNotBeResolved;
 }

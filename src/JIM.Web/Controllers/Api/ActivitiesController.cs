@@ -5,6 +5,7 @@ using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using JIM.Utilities;
 using JIM.Web.Models;
 using JIM.Web.Models.Api;
@@ -61,9 +62,9 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// <param name="createdFrom">Optional inclusive lower bound on the Activity's creation time (UTC).</param>
     /// <param name="createdTo">Optional inclusive upper bound on the Activity's creation time (UTC).</param>
     /// <param name="connectedSystem">Optional filter for Connected System names, matched against the Activity's target
-    /// context (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// context (repeat the query parameter for multiple values; additive/OR within the filter). Whole name, ignoring case.</param>
     /// <param name="runProfile">Optional filter for Run Profile names, matched against the Activity's target name
-    /// (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// (repeat the query parameter for multiple values; additive/OR within the filter). Whole name, ignoring case.</param>
     /// <param name="initiatedBy">Optional case-insensitive partial match on the initiator's recorded name. Distinct
     /// from <c>initiatedById</c>, which matches an exact principal.</param>
     /// <param name="scheduledOnly">Optional filter: <c>true</c> returns only Activities a Schedule produced,
@@ -320,7 +321,130 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
         }
 
-        return Ok(ActivityRunProfileExecutionItemDetailDto.FromEntity(item));
+        var dto = ActivityRunProfileExecutionItemDetailDto.FromEntity(item);
+        if (ActivityRunProfileExecutionItemMatchCandidate.AreRecordedFor(item.ErrorType))
+        {
+            dto.MatchCandidates = (await _application.Activities.GetMatchCandidatesAsync(id))
+                .Select(MatchCandidateDetailDto.FromModel)
+                .ToList();
+        }
+
+        if (item.ObjectChangeType == ObjectChangeType.Joined
+            && await _application.Activities.GetJoinedOutcomeAsync(id) is { } joined)
+        {
+            dto.JoinObjectMatchingRuleId = joined.ObjectMatchingRuleId;
+            dto.JoinObjectMatchingRuleDescriptionSnapshot = joined.ObjectMatchingRuleDescriptionSnapshot;
+            dto.JoinMatchedValue = joined.MatchedValue;
+        }
+
+        return Ok(dto);
+    }
+
+    /// <summary>
+    /// Get what caused a Run Profile Execution Item
+    /// </summary>
+    /// <remarks>
+    /// Walks upward from the item through the causes JIM recorded, as cohorts: causes sharing an edge type, reason,
+    /// Connected System, Synchronisation Rule, object type and attribute read as one entry with a count. Each member
+    /// carries its own causes in turn, as far back as Activity retention and a depth bound allow, and every member says
+    /// why the walk stopped there (<c>NoFurtherCauses</c>, <c>CauseNotRetained</c> or <c>DepthLimitReached</c>).
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Execution Item.</param>
+    /// <returns>The item's causes.</returns>
+    /// <response code="200">Returns the causes (no cohorts when nothing recorded caused the item).</response>
+    /// <response code="404">If no Execution Item has the id.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("items/{id:guid}/causes", Name = "GetActivityExecutionItemCauses")]
+    [ProducesResponseType(typeof(CausalChainDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetActivityExecutionItemCausesAsync(Guid id)
+    {
+        _logger.LogDebug("Getting causes of execution item: {Id}", id);
+
+        if (await _application.Activities.GetActivityRunProfileExecutionItemCoreAsync(id) == null)
+            return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
+
+        return Ok(CausalChainDto.FromModel(await _application.Activities.GetCausalChainAsync(id)));
+    }
+
+    /// <summary>
+    /// Get what a Run Profile Execution Item went on to cause
+    /// </summary>
+    /// <remarks>
+    /// Walks downward from the item: the objects its changes went on to affect, in later runs as well as this one,
+    /// grouped into cohorts with exact counts. Each cohort includes its first members; page through the rest with
+    /// its <c>cohortKey</c>. Every branch ends with a named state: a cohort's <c>ending</c> (for example
+    /// <c>Confirmed</c> or <c>WaitingForExport</c>), counts of members that led nowhere further, or
+    /// <c>isFurtherThanShown</c> where the read bound was reached. Consequences can still be happening, so the result
+    /// is a reading taken at <c>checkedAt</c>; <c>hasWaitingBranches</c> says whether reading again later could show
+    /// more.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Execution Item.</param>
+    /// <returns>The item's consequences.</returns>
+    /// <response code="200">Returns the consequences.</response>
+    /// <response code="404">If no Execution Item has the id.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("items/{id:guid}/consequences", Name = "GetActivityExecutionItemConsequences")]
+    [ProducesResponseType(typeof(CausalConsequencesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetActivityExecutionItemConsequencesAsync(Guid id)
+    {
+        _logger.LogDebug("Getting consequences of execution item: {Id}", id);
+
+        if (await _application.Activities.GetActivityRunProfileExecutionItemCoreAsync(id) == null)
+            return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
+
+        return Ok(CausalConsequencesDto.FromModel(await _application.Activities.GetCausalConsequencesAsync(id)));
+    }
+
+    /// <summary>
+    /// List the members of one consequence cohort
+    /// </summary>
+    /// <remarks>
+    /// Pages through one cohort of an item's consequences, earliest first and then by name. The cohort is named by the
+    /// <c>cohortKey</c> the consequences returned for it, passed back unchanged; the key is the cohort's path from the
+    /// item, so it stays valid between requests without anything being held on the server.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Execution Item the consequences were read for.</param>
+    /// <param name="cohortKey">The cohort's key, from <c>GET /activities/items/{id}/consequences</c>.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="search">Text a member's name must contain, case-insensitively.</param>
+    /// <returns>A page of the cohort's members.</returns>
+    /// <response code="200">Returns the page of members.</response>
+    /// <response code="400">If the cohort key is not one.</response>
+    /// <response code="404">If no Execution Item has the id.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("items/{id:guid}/consequences/cohorts/{cohortKey}/members", Name = "GetActivityExecutionItemConsequenceCohortMembers")]
+    [ProducesResponseType(typeof(PaginatedResponse<CausalConsequenceMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetActivityExecutionItemConsequenceCohortMembersAsync(
+        Guid id,
+        string cohortKey,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search)
+    {
+        _logger.LogDebug("Getting consequence cohort members of execution item: {Id} (Page: {Page}, PageSize: {PageSize})",
+            id, pagination.Page, pagination.PageSize);
+
+        if (await _application.Activities.GetActivityRunProfileExecutionItemCoreAsync(id) == null)
+            return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
+
+        var result = await _application.Activities.GetCausalConsequenceCohortMembersAsync(
+            id, cohortKey, pagination.Page, pagination.PageSize, search);
+        if (result == null)
+            return BadRequest(ApiErrorResponse.BadRequest("The cohort key is not one this API returned. Read the item's consequences for a current key."));
+
+        return Ok(new PaginatedResponse<CausalConsequenceMemberDto>
+        {
+            Items = result.Results.Select(CausalConsequenceMemberDto.FromModel).ToList(),
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        });
     }
 
     /// <summary>

@@ -1,10 +1,13 @@
 ---
 title: Schedules
+description: "Run Run Profiles in order, on a timetable or on demand, with Schedules: their triggers, steps, executions and history."
+type: object
+audience: administrator
 ---
 
 # Schedules
 
-A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and supports several step types: [Run Profile](run-profiles.md) execution, PowerShell scripts, external executables, and SQL scripts.
+A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and each step runs a [Run Profile](run-profiles.md).
 
 Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
@@ -39,13 +42,14 @@ A `stepIndex` orders steps; multiple steps with the same index run in parallel.
 ### Step types
 
 - **Run Profile**<br /> Execute a [Run Profile](run-profiles.md) against a Connected System.
-- **PowerShell**<br /> Run a PowerShell script with arguments.
-- **Executable**<br /> Run an external executable.
-- **SQL script**<br /> Run a SQL script against a configured database connection.
+
+The portal also lists **PowerShell Script**, **Executable** and **SQL Script** steps, and does not let you choose them: JIM does not run them. The REST API accepts them, and the Scheduler skips each one, logging a warning that names the step. A SQL Script step's connection string is stored without encryption, so never give one a real credential.
 
 ### When a step fails
 
 What happens when a step fails is set once for the whole Schedule, with exceptions per step.
+
+A step fails when its Activity ends **Failed With Error**, **Complete With Error** or **Cancelled**. Warnings do not count, including object-level data errors reported as warnings. A step whose Worker stopped part-way through fails too, because JIM marks its Activity **Failed With Error** (see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#task-was-abandoned-due-to-worker-crash-or-restart)).
 
 **The Schedule's setting.** On the Steps tab of the Schedule editor, above the step list, **When a step fails** is one of:
 
@@ -73,13 +77,17 @@ Upgrading JIM changes nothing about how your existing Schedules behave: every ex
 
 From automation, the Schedule's setting is `-OnStepFailure` on `New-JIMSchedule` and `Set-JIMSchedule`, and a step's is `-OnFailure` on `Add-JIMScheduleStep` and `Set-JIMScheduleStep`; the REST API carries the same settings as `onStepFailure` and `onFailure`. See the [Schedules cmdlets](../powershell/schedules.md) for details.
 
-Nothing is lost when a schedule stops or cannot start: the steps that did not run are simply attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
+Nothing is lost when a schedule stops or cannot start: the steps that did not run are attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
 
 ## Executions
 
 Each schedule run produces a **Schedule Execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
 
-A Schedule Execution typically appears as a parent activity with one child activity per step; this lets you walk down a schedule's execution tree from a single high-level record into the per-step detail.
+Each step's work is recorded as an [Activity](activities.md) of its own, which names the Schedule and the step that produced it; the [Schedule Execution view](#the-schedule-execution-view) links each step to its Activity.
+
+### When a run is due
+
+The Scheduler checks for Schedules that are due every 30 seconds, and again as soon as a step of a running Schedule finishes. A Schedule that falls due while its previous run is still going does not start a second run beside it: it starts at the first check after the running one ends. A Schedule with no steps never runs: nothing starts when it falls due, and running it by hand is refused. To run it, add at least one step.
 
 ### Seeing how a run ended
 
@@ -113,7 +121,7 @@ A step that was already running when the run was cancelled shows as **Cancelled*
 
 An execution that is still in progress refreshes as it goes, and can be cancelled from this view, including while it is still starting (shown as **Queued**). A cancellation always stands: a step that finishes after you cancel the run does not change how it ended, and nothing further is started. Starting a schedule normally takes seconds; if a run is still **Queued** five minutes later (most likely because a JIM service stopped part-way through starting it), JIM marks it **Failed** with the message "The Schedule did not finish starting, most likely because a JIM service stopped part-way through. No steps ran."
 
-The same reasons are available to automation: each step returned by `Get-JIMScheduleExecution -Id` and the Schedule Execution REST endpoint carries a `CancellationReason`. See the [Schedules cmdlets](../powershell/schedules.md#get-jimscheduleexecution) for the field-by-field description.
+The same reasons are available to automation: each step returned by `Get-JIMScheduleExecution -Id` and the Schedule Execution REST endpoint carries a `CancellationReason`. See [`Get-JIMScheduleExecution`](../powershell/schedule-executions.md#get-jimscheduleexecution) for the field-by-field description.
 
 ### Watching one run
 
@@ -133,9 +141,9 @@ Disabled schedules don't fire on their cron trigger and don't appear as eligible
 
 JIM ships with a small number of **built-in schedules** that are part of the product rather than something you create. They behave like any other schedule with one difference: their name is fixed and they cannot be deleted. You can still change **when** they run and enable or disable them.
 
-- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work.
+- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work. Each run re-checks the time since the last run that ended **Complete**, so a run that ended any other way, including **Complete With Error**, is covered again by the next one. A rule whose [expression criterion compares against a relative date](scoping-criteria.md#relative-dates-in-scope-filters) has no stored date to narrow by, so each run evaluates every object of that rule's type, in batches, and its Activity says how many. An object whose scope a criterion cannot decide is left as it is, and the run ends **Complete With Warning**, naming how many such objects there were.
 
-- **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
+- **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
 
 What you can and can't do with a built-in schedule:
 
@@ -154,7 +162,7 @@ Every configuration change to a schedule is recorded in the immutable audit log 
 
 ## Change history
 
-Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret: a change to it is recorded, but its value is never stored or shown.
+Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret here: a change to it is recorded, but the history never holds or shows its value.
 
 The same history is available from the `Get-JIMConfigurationChangeHistory` [cmdlet](../powershell/history.md) (`-Type Schedule -Id <guid>`) and the Schedule `change-history` REST endpoints in the [interactive API reference](../../api/reference/).
 
@@ -165,7 +173,7 @@ When changing a schedule from automation you can record a reason alongside the c
 **Setting up an automated nightly sync:**
 
 1. Create a schedule with a cron trigger, a specific-times pattern, and the schedule enabled
-2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential). If this is a new deployment, or a Synchronisation Rule, Object Matching Rule or Attribute Priority change has just gone in, run the schedule's Connected Systems through [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) first, since a delta cycle alone only catches what changes from here. Order the synchronisation steps sources first: where a Synchronisation Rule [derives a Metaverse attribute](synchronisation-rules.md#deriving-metaverse-attributes) from one another Connected System contributes, synchronise that system before the one hosting the derived flow. The other order still converges, one cycle later, because JIM marks the objects whose inputs changed so the hosting system's next delta synchronisation picks them up.
+2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential). If this is a new deployment, or a Synchronisation Rule, Object Matching Rule or Attribute Priority change has just gone in, run the schedule's Connected Systems through [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) first, since a delta cycle alone only catches what changes from here. Order the synchronisation steps sources first: where a Synchronisation Rule [derives a Metaverse attribute](derived-attributes.md) from one another Connected System contributes, synchronise that system before the one hosting the derived flow. The other order still converges, one cycle later, because JIM marks the objects whose inputs changed so the hosting system's next Delta Synchronisation picks them up.
 3. Verify by triggering a manual run before the first scheduled fire
 4. Monitor the resulting execution to confirm each step completes as expected
 
@@ -184,10 +192,10 @@ When changing a schedule from automation you can record a reason alongside the c
 ## Manage Schedules
 
 - **JIM portal**<br /> Schedules area of the admin UI
-- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Invoke-JIMSchedule`, etc.)
+- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) to configure a Schedule (`Get-JIMSchedule`, `New-JIMSchedule` and the rest), and [Schedule Execution cmdlets](../powershell/schedule-executions.md) to run one and follow its runs (`Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
-- [Run Profiles](run-profiles.md) -- the operations executed by Run Profile steps
-- [Activities](activities.md) -- each schedule execution produces a parent activity with child activities per step
+- [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
+- [Activities](activities.md): the Activity each step produces, and filtering Activities by Schedule

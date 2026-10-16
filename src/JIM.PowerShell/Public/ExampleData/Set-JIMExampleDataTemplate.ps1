@@ -11,29 +11,28 @@ function Set-JIMExampleDataTemplate {
         Built-in Data Generation Templates cannot be updated.
 
     .PARAMETER Id
-        The unique identifier of the Data Generation Template to update.
+        The Data Generation Template to update.
 
     .PARAMETER Name
         The name of the Data Generation Template to update.
 
     .PARAMETER NewName
-        The new name for the Data Generation Template.
+        The new name.
 
     .PARAMETER ObjectType
-        When specified, replaces the template's ENTIRE Object Type graph: every Object Type and every
-        attribute configuration not present in the supplied hashtables is removed. To add a single
-        attribute without restating the rest, use Add-JIMExampleDataTemplateAttribute instead.
-        Hashtable shape is as New-JIMExampleDataTemplate's -ObjectType parameter.
+        Replaces the template's whole Object Type graph: every Object Type and attribute configuration not in these
+        hashtables is removed. Add-JIMExampleDataTemplateAttribute adds one attribute without restating the rest.
+        The hashtables take the same shape as New-JIMExampleDataTemplate -ObjectType.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Data Generation
-        Template's configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Data Generation Template object.
+        Returns the updated Data Generation Template.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Data Generation Template object.
+        With -PassThru, the updated Data Generation Template; otherwise nothing.
 
     .EXAMPLE
         Set-JIMExampleDataTemplate -Id 7 -NewName "Demo Users v2"
@@ -57,7 +56,7 @@ function Set-JIMExampleDataTemplate {
         Add-JIMExampleDataTemplateAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -123,6 +122,12 @@ function Set-JIMExampleDataTemplate {
 
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates/$Id" -Method 'PUT' -Body $body
                 Write-Verbose "Updated Data Generation Template: $Id"
+
+                # What the save said about the template's expressions without refusing it (#2055 Phase 3): each
+                # written as the server phrased it.
+                foreach ($saveWarning in @($response.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
 
                 if ($PassThru) {
                     $response

@@ -45,9 +45,22 @@ public class SchemaRefreshResult
     public List<string> UpdatedObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// Object Types the Connector now reports under a name differing only in case. Each keeps its id and takes the
+    /// new casing (#2051); it is not listed as removed or added.
+    /// </summary>
+    public List<SchemaNameChange> RenamedObjectTypes { get; set; } = new();
+
+    /// <summary>
     /// Attributes that were added, grouped by object type name.
     /// </summary>
     public Dictionary<string, List<string>> AddedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Attributes the Connector now reports under a name differing only in case, grouped by object type name. Each
+    /// keeps its id, so the mappings referring to it survive, and takes the new casing (#2051); it is not listed as
+    /// removed or added.
+    /// </summary>
+    public Dictionary<string, List<SchemaNameChange>> RenamedAttributes { get; set; } = new();
 
     /// <summary>
     /// Attributes that were removed, grouped by object type name.
@@ -61,6 +74,24 @@ public class SchemaRefreshResult
     /// never overwritten and therefore never appears here.
     /// </summary>
     public Dictionary<string, List<SchemaAttributeDefinitionChange>> ChangedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Changes to how the Connected System classifies a selected Object Type (its class kind, or inheritance that
+    /// involves another selected Object Type), grouped by Object Type name. These are applied by the merge; they are
+    /// reported because they can change which Object Type existing entries resolve to at the next import (#2049).
+    /// Deliberately absent from <see cref="HasRemovalsOrDefinitionChanges"/>: cancelling one keeps things exactly as
+    /// they are, because matching reads the classification JIM has stored.
+    /// </summary>
+    public Dictionary<string, List<SchemaObjectTypeClassificationChange>> ChangedObjectTypeClassifications { get; set; } = new();
+
+    /// <summary>
+    /// Existing Object Types whose classification the Connected System now reports differently in a way that cannot
+    /// change which Object Type an entry resolves to: an unselected type, inheritance naming no other selected type,
+    /// or a class kind change that does not make a class auxiliary or stop it being one. Applying records it, which is
+    /// what keeps the classification the selection preview relies on current; an Object Type already listed in
+    /// <see cref="ChangedObjectTypeClassifications"/> is not repeated here.
+    /// </summary>
+    public List<string> ObjectTypesWithClassificationUpdates { get; set; } = new();
 
     /// <summary>
     /// Attributes that could not be removed because they are referenced by Synchronisation Rules.
@@ -109,13 +140,19 @@ public class SchemaRefreshResult
     public bool ActionRequired => AttributesInUse.Count > 0;
 
     /// <summary>
-    /// Whether there were any changes to the schema.
+    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, and
+    /// case-only renames, so a refresh carrying only those is offered for applying rather than reported as up to date
+    /// and discarded.
     /// </summary>
     public bool HasChanges => AddedObjectTypes.Count > 0 ||
                               RemovedObjectTypes.Count > 0 ||
+                              RenamedObjectTypes.Count > 0 ||
+                              RenamedAttributes.Values.Sum(v => v.Count) > 0 ||
                               AddedAttributes.Values.Sum(v => v.Count) > 0 ||
                               RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
-                              ChangedAttributes.Values.Sum(v => v.Count) > 0;
+                              ChangedAttributes.Values.Sum(v => v.Count) > 0 ||
+                              HasObjectTypeClassificationChanges ||
+                              ObjectTypesWithClassificationUpdates.Count > 0;
 
     /// <summary>
     /// Whether the refresh found changes that can invalidate existing configuration or leave stale data behind:
@@ -128,6 +165,32 @@ public class SchemaRefreshResult
                                                   ChangedAttributes.Values.Sum(v => v.Count) > 0;
 
     /// <summary>
+    /// Whether the refresh changes how the Connected System classifies a selected Object Type, which can change
+    /// which Object Type existing entries resolve to at the next import. Surfaces warn on it, but it does not
+    /// warrant the destructive decision; see <see cref="ChangedObjectTypeClassifications"/>.
+    /// </summary>
+    public bool HasObjectTypeClassificationChanges => ChangedObjectTypeClassifications.Values.Sum(v => v.Count) > 0;
+
+    /// <summary>
+    /// The Object Type as JIM held it before the refresh, for a type this result names. The result names a type the
+    /// way the Connector now reports it, so a type renamed only in case (#2051) is found under its old name. An exact
+    /// name wins, so a schema holding two names that differ only in case resolves each to its own type.
+    /// </summary>
+    /// <param name="objectTypeName">The Object Type name as this result reports it.</param>
+    /// <returns>The pre-refresh type, or null when JIM did not hold it before the refresh.</returns>
+    public SchemaRefreshPreRefreshType? FindPreRefreshType(string objectTypeName)
+    {
+        var exact = PreRefreshSchema.FirstOrDefault(type => string.Equals(type.Name, objectTypeName, StringComparison.Ordinal));
+        if (exact != null)
+            return exact;
+
+        var rename = RenamedObjectTypes.FirstOrDefault(r => string.Equals(r.NewName, objectTypeName, StringComparison.Ordinal));
+        return rename == null
+            ? null
+            : PreRefreshSchema.FirstOrDefault(type => string.Equals(type.Name, rename.OldName, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Records a definition change the merge applied to an existing attribute, grouped under its object type.
     /// </summary>
     public void AddChangedAttribute(string objectTypeName, SchemaAttributeDefinitionChange change)
@@ -136,6 +199,19 @@ public class SchemaRefreshResult
         {
             changes = new List<SchemaAttributeDefinitionChange>();
             ChangedAttributes[objectTypeName] = changes;
+        }
+        changes.Add(change);
+    }
+
+    /// <summary>
+    /// Records a classification change the merge applied to a selected Object Type, grouped under that Object Type.
+    /// </summary>
+    public void AddChangedClassification(string objectTypeName, SchemaObjectTypeClassificationChange change)
+    {
+        if (!ChangedObjectTypeClassifications.TryGetValue(objectTypeName, out var changes))
+        {
+            changes = new List<SchemaObjectTypeClassificationChange>();
+            ChangedObjectTypeClassifications[objectTypeName] = changes;
         }
         changes.Add(change);
     }

@@ -1,5 +1,8 @@
 ---
 title: Operations
+description: "The Operations page: the queue, history, Schedules and Passwords tabs, and the Service Health of the Worker and Scheduler."
+type: object
+audience: operator
 ---
 
 # Operations
@@ -8,14 +11,14 @@ title: Operations
 
 ## The tabs
 
-- **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activities.md#live-progress).
+- **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activity-progress.md).
 - **History**<br /> The [Activities](activities.md) record of everything JIM has done, filterable by outcome, type and Schedule, with a side panel for each one.
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
-- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/passwords.md#watching-the-queue).
+- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/password-synchronisation.md#watching-the-queue).
 
 ## Service Health
 
-JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Until now the only sign either was alive was the container health check, which a person at the portal never sees; a Worker that had stopped looked exactly like a Worker with nothing to do, right up until a Schedule failed to run. Each service now writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it.
+JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
 The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The chevron at the end of the header collapses the panel to that one line, keeping the summary and the live indicator in view, and the portal remembers the choice.
 
@@ -74,9 +77,9 @@ if ($health.Overall -ne 'Healthy') {
 
 The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
-## See also
+## Related
 
-- [Activities](activities.md) -- the record of every operation, and how to watch one run
-- [Schedules](schedules.md) -- automated, ordered sequences of operations
-- [Password Synchronisation](../concepts/passwords.md#password-synchronisation) -- what the Passwords tab is watching
-- [Deployment: Health Monitoring](../administration/deployment.md#health-monitoring) -- the container health checks and web-tier probes
+- [Activities](activities.md): the record of every operation, and how to watch one run
+- [Schedules](schedules.md): automated, ordered sequences of operations
+- [Password Synchronisation](../concepts/password-synchronisation.md): what the Passwords tab is watching
+- [Deployment: Health Monitoring](../administration/deployment.md#health-monitoring): the container health checks and web-tier probes

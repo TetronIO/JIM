@@ -9,12 +9,12 @@ namespace JIM.Web.Models.Api;
 public class HistoryCleanupResponse
 {
     /// <summary>
-    /// Number of CSO change records deleted.
+    /// Number of Connected System Object change records deleted.
     /// </summary>
     public int CsoChangesDeleted { get; set; }
 
     /// <summary>
-    /// Number of MVO change records deleted.
+    /// Number of Metaverse Object change records deleted.
     /// </summary>
     public int MvoChangesDeleted { get; set; }
 
@@ -105,7 +105,7 @@ public class HistoryCountResponse
     public required string ConnectedSystemName { get; set; }
 
     /// <summary>
-    /// Count of CSO change records for this Connected System.
+    /// Number of Connected System Object change records for this Connected System.
     /// </summary>
     public int ChangeRecordCount { get; set; }
 }

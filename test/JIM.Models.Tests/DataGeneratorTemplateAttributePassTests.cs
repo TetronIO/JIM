@@ -47,7 +47,7 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
@@ -88,7 +88,7 @@ public class DataGeneratorTemplateAttributePassTests
         // numbers can be assigned to attributes of type number AND string
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             MinNumber = 1
         };
@@ -96,7 +96,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             MaxNumber = 50
         };
@@ -104,7 +104,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             MaxNumber = 100
         };
@@ -112,7 +112,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true
         };
@@ -120,7 +120,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject5 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             MinNumber = 1
@@ -129,7 +129,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject6 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             MinNumber = 1
@@ -143,7 +143,7 @@ public class DataGeneratorTemplateAttributePassTests
         // numbers can be assigned to attributes of type number AND string
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MinNumber = 1
@@ -152,7 +152,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MaxNumber = 50
@@ -161,7 +161,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MinNumber = 0,
@@ -176,7 +176,7 @@ public class DataGeneratorTemplateAttributePassTests
         // numbers can be assigned to attributes of type number AND string
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MinNumber = 1
@@ -185,7 +185,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MaxNumber = 50
@@ -194,7 +194,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             RandomNumbers = true,
             MinNumber = 0,
@@ -204,7 +204,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject4 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             MinNumber = 1
@@ -213,7 +213,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject5 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             MaxNumber = 50
@@ -222,7 +222,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject6 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true,
             MinNumber = 0,
@@ -325,7 +325,7 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
@@ -333,7 +333,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() }
         };
@@ -366,7 +366,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() }
         };
@@ -374,7 +374,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new(), new() }
         };
@@ -382,7 +382,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new(), new() },
             Pattern = "{0} {1}"
@@ -395,7 +395,7 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Guid },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Guid },
             PopulatedValuesPercentage = 100
         };
         Assert.That(subject1.Validate, Throws.Nothing);
@@ -406,7 +406,7 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
             PopulatedValuesPercentage = 100
         };
@@ -418,7 +418,7 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
             PopulatedValuesPercentage = 100,
             MvaRefMinAssignments = 10
@@ -427,7 +427,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
             PopulatedValuesPercentage = 100,
             MvaRefMaxAssignments = 10
@@ -436,7 +436,7 @@ public class DataGeneratorTemplateAttributePassTests
 
         var subject3 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
             PopulatedValuesPercentage = 100,
             MvaRefMinAssignments = 10,
@@ -450,14 +450,14 @@ public class DataGeneratorTemplateAttributePassTests
     {
         var subject1 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 50
         };
         Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 95
         };
         Assert.That(subject2.Validate, Throws.Nothing);

@@ -143,7 +143,7 @@
 @* Link to full Pending Export details *@
 @if (ConnectedSystemId is { } connectedSystemId)
 {
-    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew"
                Href="@($"/admin/connected-systems/{connectedSystemId}/pending-exports/{PendingExport.Id}")">
         View Full Pending Export Details
     </MudButton>
@@ -214,23 +214,6 @@
         };
     }
 
-    private static string GetAttributeValue(PendingExportAttributeValueChange change)
-    {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
-
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToLocalTime().ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
-    }
+    private static string GetAttributeValue(PendingExportAttributeValueChange change) =>
+        JIM.Web.Models.PendingExportValueDisplay.Text(change, localTime: true) ?? "[null]";
 }

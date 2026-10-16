@@ -52,4 +52,25 @@ public class GeneratedValueAvailabilityWordingTests
             Assert.That(value, Is.EqualTo("jbloggs"));
         }
     }
+
+    [Test]
+    public void ProbeNote_ValueBuiltFromTheGeneratedValue_NamesTheValueAndWhatJimWouldGenerateAgain()
+    {
+        // Generated Value Forms (#2023): the probe is for the Email built from Account Name, so a collision makes JIM draw
+        // another Account Name, not another Email.
+        var (beforeValue, value, afterValue) = GeneratedValueAvailabilityWording.ProbeNote(new SyncPreviewGeneratedValueProbe
+        {
+            AttributeName = "Email",
+            Value = "jbloggs@corp.local",
+            BuiltFromAttributeName = "Account Name",
+            ConnectedSystemNames = ["Corp AD"]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(beforeValue, Does.Contain("Email").And.Contain("Account Name"));
+            Assert.That(value, Is.EqualTo("jbloggs@corp.local"));
+            Assert.That(afterValue, Does.Contain("different Account Name"));
+        }
+    }
 }

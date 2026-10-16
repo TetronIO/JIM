@@ -22,31 +22,40 @@ function Connect-JIM {
         falls back to in-memory tokens for the session. Use -NoPersist to opt out.
 
     .PARAMETER Url
-        The base URL of the JIM instance, e.g., 'https://jim.company.com' or 'http://localhost:5200'.
+        The JIM instance's base URL, for example https://jim.example.com or http://localhost:5200.
 
     .PARAMETER ApiKey
-        The API key for authentication. API keys can be created in the JIM web interface
-        under Admin > API Keys. When specified, skips interactive authentication. API key
-        connections never read or write the credential store.
+        An API key, for non-interactive authentication; create one in the portal under Admin > API Keys. With a key,
+        Connect-JIM does not open a browser, and never reads or writes the credential store.
 
-        Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has
-        no record of, or one that is disabled or has expired. An infrastructure key, set in
-        JIM_INFRASTRUCTURE_API_KEY, exists only once JIM has started with it set, and expires
-        24 hours later.
+        Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has no record of, or one
+        that is disabled or has expired. An infrastructure key, set in JIM_INFRASTRUCTURE_API_KEY, exists only once
+        JIM has started with it set, and expires 24 hours later; restarting JIM renews an expired one.
 
     .PARAMETER Force
-        Forces re-authentication even if a valid session exists. Ignores any persisted
-        refresh token and overwrites it with the newly obtained one.
+        Signs in again even when a valid session exists, ignoring any persisted refresh token and overwriting it
+        with the new one.
 
     .PARAMETER NoPersist
-        Authenticates for this session only, without reading from or writing to the
-        operating system credential store. Useful on shared machines.
+        Signs in for this session only, without reading from or writing to the operating system's credential store.
+        Useful on shared machines.
 
     .PARAMETER TimeoutSeconds
-        How long to wait for interactive authentication to complete. Defaults to 300 (5 minutes).
+        How long to wait, in seconds, for the browser sign-in to complete.
 
     .OUTPUTS
-        Returns the connection information on success.
+        The connection made.
+
+        JIM.Connection
+        Url (string): The JIM instance's address.
+        AuthMethod (string): How the connection authenticated: OAuth or ApiKey.
+        Connected (bool): Always $true; a connection that fails throws instead.
+        ServerVersion (string): The JIM version the instance reported.
+        Authorised (bool): Whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM;
+            always $true for an API key.
+        Status (string): JIM's health status.
+        ExpiresAt (datetime): When the access token expires; OAuth only.
+        ApiKey (string): The key's first eight and last four characters; API key only.
 
     .EXAMPLE
         Connect-JIM -Url "https://jim.company.com"
@@ -90,7 +99,7 @@ function Connect-JIM {
         https://github.com/TetronIO/JIM
     #>
     [CmdletBinding(DefaultParameterSetName = 'Interactive')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.Connection')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
@@ -135,7 +144,6 @@ function Connect-JIMWithApiKey {
         Internal function to connect using API key authentication.
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
         [string]$BaseUrl,
@@ -205,7 +213,6 @@ function Connect-JIMInteractive {
         Internal function to connect using interactive browser authentication.
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
         [string]$BaseUrl,

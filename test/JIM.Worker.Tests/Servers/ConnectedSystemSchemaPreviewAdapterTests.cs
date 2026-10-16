@@ -36,6 +36,7 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     private const int SystemId = 5;
     private const int UserTypeId = 9;
     private const int GroupTypeId = 11;
+    private const int ComputerTypeId = 13;
     private const int AnchorAttributeId = 100;
     private const int DisplayNameAttributeId = 101;
     private const int DepartmentAttributeId = 102;
@@ -52,6 +53,7 @@ public class ConnectedSystemSchemaPreviewAdapterTests
 
     private ConnectedSystemObjectType _userType = null!;
     private ConnectedSystemObjectType _groupType = null!;
+    private ConnectedSystemObjectType _computerType = null!;
     private SyncRule _importRule = null!;
 
     private static readonly Guid FirstUser = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -105,6 +107,27 @@ public class ConnectedSystemSchemaPreviewAdapterTests
             ]
         };
 
+        // A directory's computer class inherits from user, so an entry that is a computer also carries user. The
+        // User and Group types record no class kind or inheritance, as Object Types discovered before JIM recorded
+        // either do.
+        _computerType = new ConnectedSystemObjectType
+        {
+            Id = ComputerTypeId,
+            Name = "Computer",
+            ConnectedSystemId = SystemId,
+            Selected = false,
+            RemoveContributedAttributesOnObsoletion = true,
+            Attributes =
+            [
+                new ConnectedSystemObjectTypeAttribute { Id = 130, Name = "objectGuid", Type = AttributeDataType.Guid, IsExternalId = true }
+            ],
+            Tags =
+            [
+                new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural },
+                new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.SuperiorClass, Value = "User" }
+            ]
+        };
+
         _importRule = new SyncRule
         {
             Id = ImportRuleId,
@@ -117,7 +140,7 @@ public class ConnectedSystemSchemaPreviewAdapterTests
         };
 
         _connectedSystemRepo.Setup(r => r.GetObjectTypesAsync(SystemId))
-            .ReturnsAsync(() => [_userType, _groupType]);
+            .ReturnsAsync(() => [_userType, _groupType, _computerType]);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(SystemId, It.IsAny<bool>(), It.IsAny<bool>()))
             .ReturnsAsync(() => [_importRule]);
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountOfTypeAsync(SystemId, It.IsAny<int>()))
@@ -254,6 +277,180 @@ public class ConnectedSystemSchemaPreviewAdapterTests
         var findings = await _adapter.ValidateAsync(Context(WithUserType(type => type with { Selected = false })));
 
         Assert.That(findings.Select(f => f.Severity), Has.None.EqualTo(PreviewValidationSeverity.Blocking));
+    }
+
+    // #2049: where two selected Object Types overlap, an entry carrying both classes imports as one of them, so
+    // changing the selection can move objects JIM already holds from one Object Type to the other. The import refuses
+    // that by default and keeps the held object, so the preview has to say so, naming both types, rather than promise
+    // a plain arrival or departure.
+
+    [Test]
+    public async Task Validate_SelectingAMoreSpecificTypeWhileItsSuperiorIsSelected_WarnsObjectsWillChangeTypeAsync()
+    {
+        var findings = await _adapter.ValidateAsync(Context(WithComputerType(type => type with { Selected = true })));
+        var overlap = FindingsNaming(findings, "Computer", "User");
+
+        Assert.That(overlap, Has.Count.EqualTo(1),
+            "every computer is also a user, so User objects that are computers now arrive as Computer");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(overlap[0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
+            Assert.That(overlap[0].PropertyName, Is.EqualTo(nameof(ConnectedSystemObjectType.Selected)));
+        }
+    }
+
+    [Test]
+    public async Task Validate_DeselectingAMoreSpecificType_WarnsObjectsFallBackToTheSelectedSuperiorAsync()
+    {
+        _computerType.Selected = true;
+
+        var findings = await _adapter.ValidateAsync(Context(WithComputerType(type => type with { Selected = false })));
+        var overlap = FindingsNaming(findings, "Computer", "User");
+
+        Assert.That(overlap, Has.Count.EqualTo(1),
+            "with Computer deselected its objects still come back, as User, so they are refused and kept rather " +
+            "than obsoleted, and the obsoletion the deselection warning describes overstates what happens to them");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(overlap[0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
+            Assert.That(overlap[0].PropertyName, Is.EqualTo(nameof(ConnectedSystemObjectType.Selected)));
+            Assert.That(findings.Count(f => f.Message.Contains("Computer", StringComparison.Ordinal) &&
+                                            !f.Message.Contains("User", StringComparison.Ordinal) &&
+                                            f.Severity == PreviewValidationSeverity.Warning),
+                Is.EqualTo(1), "the deselection's own warning stands beside it, for the objects that do leave");
+        }
+    }
+
+    [Test]
+    public async Task Validate_SelectingAStructuralTypeWhileAnAuxiliaryIsSelected_WarnsAsync()
+    {
+        _groupType.Selected = true;
+        _groupType.Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }
+        ];
+
+        var findings = await _adapter.ValidateAsync(Context(WithComputerType(type => type with { Selected = true })));
+        var overlap = FindingsNaming(findings, "Computer", "Group");
+
+        Assert.That(overlap, Has.Count.EqualTo(1),
+            "an entry carrying a structural class and an auxiliary one is the structural class");
+        Assert.That(overlap[0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
+    }
+
+    [Test]
+    public async Task Validate_SelectingAnUnrelatedType_AddsNoOverlapWarningAsync()
+    {
+        // Group records its class kind and inheritance, and neither names User.
+        _groupType.Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural },
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.SuperiorClass, Value = "top" }
+        ];
+
+        var findings = await _adapter.ValidateAsync(Context(WithGroupType(type => type with { Selected = true })));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(FindingsNaming(findings, "Group", "User"), Is.Empty);
+            Assert.That(findings.Select(f => f.Severity), Has.None.EqualTo(PreviewValidationSeverity.Warning));
+        }
+    }
+
+    [Test]
+    public async Task Validate_TypesWithNoInheritanceRecorded_AddNoOverlapWarningAsync()
+    {
+        // Discovered before JIM recorded class kinds or inheritance: the order an entry lists its classes in decides
+        // which it imports as, and the preview cannot know that, so it says nothing rather than warn on every pair.
+        _computerType.Tags = [];
+
+        var findings = await _adapter.ValidateAsync(Context(WithComputerType(type => type with { Selected = true })));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(FindingsNaming(findings, "Computer", "User"), Is.Empty);
+            Assert.That(findings.Select(f => f.Severity), Has.None.EqualTo(PreviewValidationSeverity.Warning));
+        }
+    }
+
+    [Test]
+    public async Task Validate_OverlapWithATypeThePayloadOmits_UsesItsStoredSelectionAsync()
+    {
+        // The payload says nothing about User, so User stays selected, as the save would leave it.
+        var proposal = new ConnectedSystemSchemaProposal(
+            [Stored().For(ComputerTypeId)! with { Selected = true }]);
+
+        var findings = await _adapter.ValidateAsync(Context(proposal));
+
+        Assert.That(FindingsNaming(findings, "Computer", "User"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Validate_SwitchingSelectionBetweenOverlappingTypes_WarnsObjectsWillChangeTypeAsync()
+    {
+        // Selecting one type while deselecting the other moves the objects carrying both whichever of the two ranks
+        // higher: before, only the deselected type could hold them; after, only the selected one can.
+        var toComputer = new ConnectedSystemSchemaProposal(
+        [
+            Stored().For(UserTypeId)! with { Selected = false },
+            Stored().For(ComputerTypeId)! with { Selected = true }
+        ]);
+
+        var toComputerFindings = await _adapter.ValidateAsync(Context(toComputer));
+
+        _computerType.Selected = true;
+        _userType.Selected = false;
+        var toUser = new ConnectedSystemSchemaProposal(
+        [
+            Stored().For(UserTypeId)! with { Selected = true },
+            Stored().For(ComputerTypeId)! with { Selected = false }
+        ]);
+
+        var toUserFindings = await _adapter.ValidateAsync(Context(toUser));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(FindingsNaming(toComputerFindings, "Computer", "User"), Has.Count.EqualTo(1),
+                "User objects that are computers now arrive as Computer");
+            Assert.That(FindingsNaming(toComputerFindings, "Computer", "User").Select(f => f.Severity),
+                Is.All.EqualTo(PreviewValidationSeverity.Warning));
+            Assert.That(FindingsNaming(toUserFindings, "Computer", "User"), Has.Count.EqualTo(1),
+                "every Computer object is also a user, so with Computer deselected they all arrive as User");
+        }
+    }
+
+    [Test]
+    public async Task Validate_SelectingTwoOverlappingTypesTogether_AddsNoOverlapWarningAsync()
+    {
+        // Neither type was selected, so JIM holds no imported object of either to move.
+        _userType.Selected = false;
+        var proposal = new ConnectedSystemSchemaProposal(
+        [
+            Stored().For(UserTypeId)! with { Selected = true },
+            Stored().For(ComputerTypeId)! with { Selected = true }
+        ]);
+
+        var findings = await _adapter.ValidateAsync(Context(proposal));
+
+        Assert.That(FindingsNaming(findings, "Computer", "User"), Is.Empty);
+    }
+
+    [Test]
+    public async Task Validate_DeselectingBothOverlappingTypes_AddsNoOverlapWarningAsync()
+    {
+        // Neither type is selected afterwards, so the objects carrying both are not returned at all: they are
+        // obsoleted, exactly as each deselection warning says.
+        _computerType.Selected = true;
+        _importRule.Enabled = false;
+        var proposal = new ConnectedSystemSchemaProposal(
+        [
+            Stored().For(UserTypeId)! with { Selected = false },
+            Stored().For(ComputerTypeId)! with { Selected = false }
+        ]);
+
+        var findings = await _adapter.ValidateAsync(Context(proposal));
+
+        Assert.That(FindingsNaming(findings, "Computer", "User"), Is.Empty);
     }
 
     [Test]
@@ -526,7 +723,7 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     };
 
     private ConnectedSystemSchemaProposal Stored() =>
-        ConnectedSystemSchemaProposal.FromCurrentConfiguration([_userType, _groupType]);
+        ConnectedSystemSchemaProposal.FromCurrentConfiguration([_userType, _groupType, _computerType]);
 
     private ConnectedSystemSchemaProposal WithUserType(
         Func<ConnectedSystemObjectTypeSelectionProposal, ConnectedSystemObjectTypeSelectionProposal> edit) =>
@@ -535,6 +732,21 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     private ConnectedSystemSchemaProposal WithGroupType(
         Func<ConnectedSystemObjectTypeSelectionProposal, ConnectedSystemObjectTypeSelectionProposal> edit) =>
         Replace(GroupTypeId, edit);
+
+    private ConnectedSystemSchemaProposal WithComputerType(
+        Func<ConnectedSystemObjectTypeSelectionProposal, ConnectedSystemObjectTypeSelectionProposal> edit) =>
+        Replace(ComputerTypeId, edit);
+
+    /// <summary>
+    /// The findings that name both Object Types: the overlap findings (#2049). Every other selection finding names
+    /// only the type it is about.
+    /// </summary>
+    private static List<PreviewValidationFinding> FindingsNaming(IEnumerable<PreviewValidationFinding> findings,
+        string objectTypeName, string otherObjectTypeName) =>
+        findings
+            .Where(f => f.Message.Contains(objectTypeName, StringComparison.Ordinal) &&
+                        f.Message.Contains(otherObjectTypeName, StringComparison.Ordinal))
+            .ToList();
 
     private ConnectedSystemSchemaProposal Replace(int objectTypeId,
         Func<ConnectedSystemObjectTypeSelectionProposal, ConnectedSystemObjectTypeSelectionProposal> edit) =>

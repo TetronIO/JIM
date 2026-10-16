@@ -42,6 +42,22 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
+    public async Task Render_JoinedByMatching_ShowsTheValueAndTheRuleItMatchedOnAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.JoinedByMatchingItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        var match = cut.Find(".tl-match").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(match, Does.Contain("48213"));
+            Assert.That(match, Does.Contain("Employee ID equals employeeNumber"));
+        }
+    }
+
+    [Test]
     public async Task Render_SourceRow_ForAnItemThatRecordsAMetaverseObject_ShowsTheMetaverseObjectNotARecordAsync()
     {
         // An export scope review item has no Connected System Object of its own, so its opening row names the

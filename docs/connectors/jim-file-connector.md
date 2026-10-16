@@ -1,6 +1,11 @@
-# JIM File Connector
+---
+title: JIM File Connector
+description: Synchronise identities with CSV and delimited text files, where JIM finds them, and the settings the File Connector takes.
+type: object
+audience: administrator
+---
 
-## Overview
+# JIM File Connector
 
 The JIM File Connector enables bi-directional synchronisation of identity data with CSV and delimited text files. It is ideal for integrating with systems that produce flat-file extracts, such as HR exports, batch feeds, or data migration files.
 
@@ -12,27 +17,11 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Multi-valued attributes**<br /> Supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
 - **Schema auto-discovery**<br /> Column headers are read automatically to build the schema
 - **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Long Number, Decimal, Boolean, Guid, DateTime
-- **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
+- **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed. A date with no time zone is read as UTC, and one with an offset is converted to UTC
 - **Object type support**<br /> Objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
 - **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
 - **Auto-confirm export**<br /> An export counts as confirmed as soon as the file is written, and JIM records the values it wrote, so it knows what the file holds without reading it back (see [Export Only mode](#export-only-mode))
 - **Stop on first error**<br /> Optionally halt processing on the first error encountered, useful for debugging data quality issues
-
-## Settings
-
-| Setting | Description | Default | Example |
-|---------|-------------|---------|---------|
-| File Path | Path to the CSV file inside the container. Used for import, export, or both depending on mode. | *(required)* | `/connector-files/Users.csv` |
-| Mode | Operational mode: Import Only, Export Only, or Bidirectional. | `Import Only` | `Bidirectional` |
-| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(one of these two is required)* | `Type` |
-| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(one of these two is required)* | `User` |
-| Delimiter | Field delimiter character. | `,` | `\t` (tab) |
-| Multi-Value Delimiter | Character used to separate multiple values within a single field. | `\|` | `;` |
-| Culture | Culture code for parsing locale-sensitive values. Uses invariant culture if not specified. | *(invariant)* | `en-gb` |
-| Stop On First Error | Stop processing when the first error is encountered. Useful for debugging. | `false` | `true` |
-
-!!! note "Object type configuration"
-    You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
 
 ## File access
 
@@ -100,7 +89,7 @@ Then configure the File Connector with `File Path = /connector-files/hr-input/em
     - Make the host directory readable/writable by UID 1654 (`chown 1654:1654 /mnt/hr-extracts`), or
     - Adjust your network share's mount options (`uid=1654,gid=1654` for CIFS, or apply NFS UID-mapping) so files appear to be owned by UID 1654 inside the container.
 
-    Permission errors during sync show up as RPEIs on the failing import or export Activity, with a clear "Access to the path … is denied" message.
+    Permission errors during a run show up as execution item errors on the failing import or export Activity, with a clear "Access to the path … is denied" message.
 
 #### On Podman
 
@@ -167,7 +156,7 @@ JIM's File Connector configurations would then point at:
 
 When you configure a File Connector Connected System and trigger schema discovery, JIM performs the following steps:
 
-1. **Reads the header row**<br /> Column names become attribute names in the schema.
+1. **Reads the header row**<br /> Column names become attribute names in the schema. On import a column is matched to its attribute ignoring case, so a file whose header later reads `employeeid` still fills `EmployeeId`.
 2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
 3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Long Number, Decimal, Boolean, Guid, or DateTime, in that order (narrowest numeric type first). Whole numbers within 32-bit range infer Number, larger whole numbers infer Long Number, and fractional or exponent-notation values (for example `1.5` or `1.5E3`) infer Decimal. If none of these match, the attribute defaults to Text.
 4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
@@ -208,6 +197,22 @@ JIM records values only when it writes them. Point a new Export Only Connected S
 
 The import reads every row into the Connector Space, and moves the objects it finds to Normal. Rows JIM did not write, and objects JIM expected but the file does not have, are reported by that import like any other.
 
+## Settings
+
+| Setting | Description | Default | Example |
+|---------|-------------|---------|---------|
+| File Path | Path to the CSV file inside the container. Used for import, export, or both depending on mode. | *(required)* | `/connector-files/Users.csv` |
+| Mode | Operational mode: Import Only, Export Only, or Bidirectional. | `Import Only` | `Bidirectional` |
+| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(one of these two is required)* | `Type` |
+| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(one of these two is required)* | `User` |
+| Delimiter | Field delimiter character. | `,` | `\t` (tab) |
+| Multi-Value Delimiter | Character used to separate multiple values within a single field. | `\|` | `;` |
+| Culture | Culture code for parsing locale-sensitive values. Uses invariant culture if not specified. | *(invariant)* | `en-gb` |
+| Stop On First Error | Stop processing when the first error is encountered. Useful for debugging. | `false` | `true` |
+
+!!! note "Object type configuration"
+    You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
+
 ## Troubleshooting
 
 ### File not found
@@ -246,15 +251,23 @@ The error `Row X has Y columns but the header defines Z columns` means a data ro
 
 The error `Object type column 'Type' not found in file headers` means the column name specified in Object Type Column does not match any column in the file.
 
-- Check the spelling and case of the column name -- the match is case-insensitive, but the column must exist in the header row.
+- Check the spelling and case of the column name; the match is case-insensitive, but the column must exist in the header row.
 - If the file does not have an object type column, use the Object Type setting instead.
+
+### Column missing from the file
+
+An import fails with an error naming the columns when the file's header lacks a column that a selected Object Type reads: a selected attribute, or its External ID or Secondary External ID. JIM stops rather than reading the column as empty, which would clear that attribute on every object. This includes a Connected System whose file has never had the column: its imports fail until you add the column to the file or deselect the attribute.
+
+- Check the header row; the match ignores case, but the column must be there.
+- If the column was removed on purpose, deselect the attribute on the Connected System's Schema tab, or refresh the schema.
+
+The same error is raised when two columns' names differ only in case, such as `Name` and `name`, because JIM cannot tell which one an attribute means. Rename or remove one of them.
 
 ### Encoding issues
 
 If imported data contains garbled characters or unexpected symbols:
 
-- Set the **Culture** setting to match the file's locale (e.g. `en-gb`, `de-de`).
-- Ensure the file is saved in UTF-8 encoding.
+- Ensure the file is saved in UTF-8 encoding. JIM reads the file as UTF-8 (or as UTF-16 or UTF-32 when the file starts with a byte order mark), and no setting changes this; the **Culture** setting only affects how numbers and dates are parsed.
 - If the file was exported from another system, check whether that system uses a different character encoding.
 
 ### Multi-valued attribute not detected
@@ -263,3 +276,9 @@ If attributes that should be multi-valued are appearing as single-valued:
 
 - **Duplicate column approach**<br /> Ensure the column name appears more than once in the header row. The names must match exactly (case-insensitive).
 - **In-field delimiter approach**<br /> Check that the Multi-Value Delimiter setting matches the delimiter used within the field values.
+
+## Related
+
+- [Connectors](index.md)
+- [Connected Systems](../configuration/connected-systems.md)
+- [Your First Synchronisation](../getting-started/first-synchronisation.md): two File Connector Connected Systems, end to end.

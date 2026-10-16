@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
@@ -107,7 +108,7 @@ public class ObjectMatchingRule : IAuditable
     /// When true, attribute value comparisons are case-sensitive.
     /// When false (default), comparisons ignore case differences.
     /// </summary>
-    public bool CaseSensitive { get; set; } = false;
+    public bool CaseSensitive { get; set; } = ObjectMatchingDefaults.CaseSensitive;
 
     /// <summary>
     /// Validates that the rule is correctly configured.
@@ -144,16 +145,88 @@ public class ObjectMatchingRule : IAuditable
         if (hasSyncRule && (MetaverseObjectTypeId != null || MetaverseObjectType != null))
             return "An Advanced mode Object Matching Rule takes the Metaverse Object Type from the Synchronisation Rule that owns it, so it must not name one of its own.";
 
-        // Must have at least one source
-        if (Sources.Count == 0)
-            return "An Object Matching Rule must have a source attribute, or it has nothing to match on.";
+        return DescribeComparisonInvalidity();
+    }
 
-        // Must have a target attribute
+    /// <summary>
+    /// What this rule compares, for example <c>Employee ID equals employeeId</c>, or the expression in place of the
+    /// attribute name when the rule computes its value.
+    /// </summary>
+    /// <remarks>
+    /// Used where a rule has to be named after the fact: the candidates of an ambiguous match, and the Joined outcome
+    /// a matching join records (#2052). An attribute that has not been loaded is named by its id, so the description
+    /// never leaves a side blank.
+    /// </remarks>
+    public string DescribeComparison()
+    {
+        var source = Sources.OrderBy(s => s.Order).FirstOrDefault();
+        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
+            ? source?.ConnectedSystemAttribute?.Name ?? source?.ConnectedSystemAttributeId?.ToString(CultureInfo.InvariantCulture)
+            : source.Expression;
+        var target = TargetMetaverseAttribute?.Name ?? TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
+        return $"{target} equals {sourceText}";
+    }
+
+    /// <summary>
+    /// Why what this rule compares could never be worked out, in the terms an administrator would use, or null when
+    /// its shape is sound: exactly one source, holding exactly one of a Connected System attribute or an expression,
+    /// and a Metaverse attribute to compare it with.
+    /// </summary>
+    /// <remarks>
+    /// The part of <see cref="DescribeInvalidity"/> that does not depend on who owns the rule, so a rule can be
+    /// checked before it has an owner: one added to a Synchronisation Rule in the portal has none until the
+    /// Synchronisation Rule is saved. The matching engine fails a rule of any other shape for every object it meets
+    /// (#2052), so the shape is refused when the rule is saved. Checking the types involved needs the Connected
+    /// System Object Type and the Metaverse attribute, which this model may not have loaded; the application layer's
+    /// validator does that.
+    /// </remarks>
+    public string? DescribeComparisonInvalidity()
+    {
+        if (Sources.Count == 0)
+            return "An Object Matching Rule must have a source, a Connected System attribute or an expression, or it has nothing to match on.";
+
+        if (Sources.Count > 1)
+            return $"An Object Matching Rule takes exactly one source, a Connected System attribute or an expression; this one has {Sources.Count}. " +
+                   "To match on a combination of attributes, write an expression that combines them.";
+
+        var source = Sources[0];
+        var hasAttribute = source.ConnectedSystemAttributeId.HasValue || source.ConnectedSystemAttribute != null;
+        var hasExpression = !string.IsNullOrWhiteSpace(source.Expression);
+
+        if (hasAttribute && hasExpression)
+            return "An Object Matching Rule's source is either a Connected System attribute or an expression, not both.";
+
+        if (!hasAttribute && !hasExpression)
+            return "An Object Matching Rule's source names neither a Connected System attribute nor an expression, so the rule has nothing to match on.";
+
         if (TargetMetaverseAttributeId == null && TargetMetaverseAttribute == null)
             return "An Object Matching Rule must name the Metaverse Attribute its source values are compared against.";
 
         return null;
     }
+
+    /// <summary>
+    /// The data types an Object Matching Rule can compare: those an equality lookup over the Metaverse attribute value
+    /// indexes covers. Matching on anything else (a date, a flag, a reference, raw bytes) cannot find an object.
+    /// </summary>
+    public static IReadOnlySet<AttributeDataType> MatchableTypes { get; } = new HashSet<AttributeDataType>
+    {
+        AttributeDataType.Text,
+        AttributeDataType.Number,
+        AttributeDataType.LongNumber,
+        AttributeDataType.Decimal,
+        AttributeDataType.Guid
+    };
+
+    /// <summary>
+    /// Whether an Object Matching Rule can compare values of <paramref name="type"/>; see <see cref="MatchableTypes"/>.
+    /// </summary>
+    public static bool IsMatchableType(AttributeDataType type) => MatchableTypes.Contains(type);
+
+    /// <summary>
+    /// The matchable types as an administrator reads them, for messages that say what to choose instead.
+    /// </summary>
+    public const string MatchableTypesDescription = "Text, Number, LongNumber, Decimal or Guid";
 
     /// <summary>
     /// Why a rule of the given scope would never be consulted under the Connected System's active matching mode,

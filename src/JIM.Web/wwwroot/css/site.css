@@ -416,8 +416,8 @@ html[lang] .mud-alert-close {
 /* Info popover (<InfoPopover />, behind <TermHint /> and <PageInfo />). MudMenu's list gives its content
    vertical padding only, so unpadded text ran flush against the popover's left edge; the body carries the
    horizontal padding itself, a measure that keeps an explanation to a readable width, and a title that
-   reads as a heading rather than as the first sentence. The Glossary link sits apart from the text it
-   follows, on its own line. */
+   reads as a heading rather than as the first sentence. The links (Documentation, then Glossary) sit apart
+   from the text they follow, on a line of their own. */
 .jim-info-popover {
     padding: 8px 16px;
     max-width: 24rem;
@@ -435,9 +435,15 @@ html[lang] .mud-alert-close {
     color: var(--mud-palette-text-secondary);
 }
 
+.jim-info-popover-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    margin-top: 10px;
+}
+
 .jim-info-popover-link {
     display: inline-block;
-    margin-top: 10px;
     font-weight: 600;
 }
 
@@ -914,7 +920,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
 }
 
 /* A tab's count badge is absolutely positioned around a zero-width anchor, so it
-   occupies no layout space; when the tab is wider than its 160px min-width the
+   occupies no layout space; when the tab is wider than its 120px min-width the
    badge's right half lands past the tab's padding edge and .mud-ripple's
    overflow:hidden clips it. Reserve the badge's overhang in the tab's width. */
 html[lang] .mud-tab .mud-badge-root.mud-tab-badge {
@@ -2634,6 +2640,19 @@ html[lang] .jim-schema-change-table td {
     box-shadow: none !important;
 }
 
+/* Who started an Activity (<ActivityInitiator />): the icon stays beside the name, centred on its first line, however
+   narrow the column; a long name wraps beside the icon rather than under it. */
+.jim-activity-initiator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    vertical-align: middle;
+}
+
+.jim-activity-initiator > .mud-icon-root {
+    flex-shrink: 0;
+}
+
 /* Activity detail slide-out panel (Operations History) */
 .jim-activity-panel {
     position: fixed;
@@ -3103,6 +3122,27 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     cursor: default;
 }
 
+/* What an expression produced (<ExpressionTester />, the Object Matching Rule editor's Try it): in the editor's
+   typeface, with whitespace kept, so a value carrying a stray space reads differently from one that does not. That
+   difference is often the whole answer to "why did this not match". */
+.jim-expression-output {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The "equals" between an Object Matching Rule's source and its Metaverse attribute, on the inputs' row rather than
+   centred on its grid cell: an expression's cell grows with its helper text and the Insert attribute menu, and
+   centring on the cell would leave the word hanging below both fields. Its line box is made the input's box (the
+   select's 8px control margin, then the 38px outlined input), so the text centres on the input by construction
+   rather than by a font-dependent nudge. Qualified with .mud-typography because MudBlazor's own margin reset loads
+   after this sheet and would win a tie. */
+.jim-matching-rule-equals.mud-typography {
+    margin-top: 8px;
+    line-height: 38px;
+    align-self: flex-start;
+}
+
 /* Attribute table styles (<AttributeTable />: Connected System Object, Pending Export, Metaverse Object) */
 .jim-attribute-table {
     border-radius: var(--jim-container-radius);
@@ -3218,6 +3258,14 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     color: var(--mud-palette-warning);
 }
 
+/* An unresolved value with its likely cause beside it (#959): the chip drops below the value when the cell is too
+   narrow for both, rather than squeezing the value onto several lines. */
+.jim-attr-unresolved-with-cause {
+    flex-wrap: wrap;
+    column-gap: 8px;
+    row-gap: 4px;
+}
+
 .jim-attr-multivalue {
     display: flex;
     align-items: center;
@@ -3238,6 +3286,139 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
 
 .jim-attr-expand-link.mud-link:hover {
     opacity: 1;
+}
+
+/* ─── Expression assist (#2053): the editor's suggestions and signature help ───
+   Both float under the field, over whatever follows it, so the form below does not jump as the caret moves in and
+   out of a call. The host is the positioning context; the list matches the field's width. Every colour is a theme
+   token, and the kind glyphs reuse the expression highlighter's own function and accessor colours, so fx, MV and CS
+   read in the list as they do in the field. */
+.jim-expression-editor-host {
+    position: relative;
+}
+
+.jim-expression-assist-list,
+.jim-expression-signature {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 2px);
+    z-index: var(--mud-zindex-popover, 1200);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius, 4px);
+}
+
+.jim-expression-assist-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 4px 0 0;
+}
+
+.jim-expression-assist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.jim-expression-assist-item:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-expression-assist-item-active,
+.jim-expression-assist-item-active:hover {
+    background: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+.jim-expression-assist-kind {
+    flex: 0 0 auto;
+    min-width: 26px;
+    margin-top: 1px;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+    text-align: center;
+}
+
+.jim-expression-assist-kind-function {
+    color: var(--jim-expr-function);
+}
+
+.jim-expression-assist-kind-mv {
+    color: var(--jim-expr-accessor-mv);
+}
+
+.jim-expression-assist-kind-cs {
+    color: var(--jim-expr-accessor-cs);
+}
+
+.jim-expression-assist-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.jim-expression-assist-label {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    overflow-wrap: anywhere;
+}
+
+.jim-expression-assist-description {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
+.jim-expression-assist-hint {
+    position: sticky;
+    bottom: 0;
+    margin-top: 4px;
+    padding: 4px 12px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+}
+
+/* Information only, and it floats over the Insert attribute and Insert function buttons under the field: a press
+   goes through it to them, and the field's blur then closes it. */
+.jim-expression-signature {
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    box-shadow: var(--mud-elevation-4);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
+.jim-expression-signature-call {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    background: none;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-expression-signature-active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.jim-expression-signature-description,
+.jim-expression-signature-parameter {
+    color: var(--mud-palette-text-secondary);
 }
 
 /* ─── One-line cells (every virtualised row is exactly one line) ───
@@ -4750,6 +4931,13 @@ html[lang] .jim-kv-table td:first-child {
     box-shadow: inset 3px 0 0 0 var(--mud-palette-error);
 }
 
+/* A row whose system set the password but could not apply everything asked of it (#2159): the same treatment as
+   a failed row, in the warning colour, because its sentence says what the person will actually find. */
+.jim-password-result--warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 12%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--mud-palette-warning);
+}
+
 /* Primary rather than secondary: on a failed row this sentence is the thing to read, where a successful
    row's "Password set." is only confirmation. */
 .jim-password-result-reason {
@@ -6062,6 +6250,29 @@ html[lang] .jim-password-timeline.mud-timeline {
     cursor: default;
 }
 
+/* Insert function (#2053) reuses the attribute menu's shell and items; each item is the signature over what the
+   function does, so the menu is wider to keep most signatures on one line. */
+.jim-insert-function-menu {
+    min-width: 380px;
+    max-width: min(560px, 90vw);
+}
+
+.jim-insert-function-signature {
+    display: block;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    background: none;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.jim-insert-function-description {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
 /* "Checked for availability in" (generated Attribute Flow form, #242): an excluded Connected System's row steps back,
    but its Include switch keeps full strength, since switching it back on is the one thing to do with that row. */
 .jim-availability-row-excluded td:not(.jim-availability-include) {
@@ -6071,6 +6282,18 @@ html[lang] .jim-password-timeline.mud-timeline {
 .jim-availability-table .jim-availability-include {
     width: 1%;
     white-space: nowrap;
+}
+
+/* "Built from generated value" (Attribute Flow dialog, #2014): an accent edge ties the block to the generated value it
+   names; it steps back to the ordinary outline while the switch is not in effect, or when there is no switch. The
+   outlined-paper rules above set every border with !important (html[lang] .mud-paper-outlined, and the nested-paper
+   border colour), so these need it too; they win on source order at equal specificity. */
+html[lang] .jim-built-from-generated-value.mud-paper-outlined {
+    border-left: 3px solid var(--mud-palette-primary) !important;
+}
+
+html[lang] .jim-built-from-generated-value-inactive.mud-paper-outlined {
+    border-left-color: var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default))) !important;
 }
 
 /* ─── Connection explanations (#348): the Connections tab's row expansions and Not connected section ───
@@ -6214,6 +6437,29 @@ td.jim-connection-detail-cell {
     font-weight: 500;
 }
 
+/* An expression criterion's inputs (#2054): under the criterion's text, spanning the outcome column too. */
+.jim-scoping-expression-inputs {
+    grid-column: 2 / -1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.jim-scoping-expression-accessor {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    margin-right: 6px;
+}
+
+.jim-scoping-expression-held {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 /* The server's bullets: each typed segment set apart by its look, never by added words. */
 .jim-scoping-bullets {
     margin: 0;
@@ -6347,4 +6593,143 @@ td.jim-connection-detail-cell {
 
 .jim-allow-rename-value dd {
     margin: 0;
+}
+
+/* The Unresolved References section (#959), on a Run Profile Execution Item's page and a Connected System Object's
+   page. The head carries the section's tone as an accent bar and a faint wash, as the item page's mocks drew it:
+   red where the run counted the references as the item's error, amber where it left them unresolved without doing
+   so, and plain on the object's own page. Qualified with .mud-paper so MudBlazor's later stylesheet cannot reset
+   the clipping that lets the accent follow the container's corners. */
+.jim-unresolved-references.mud-paper {
+    overflow: hidden;
+}
+
+.jim-unresolved-references-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-unresolved-references-error .jim-unresolved-references-head {
+    border-top: 3px solid var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
+}
+
+.jim-unresolved-references-warning .jim-unresolved-references-head {
+    border-top: 3px solid var(--mud-palette-warning);
+    background: color-mix(in srgb, var(--mud-palette-warning) 7%, transparent);
+}
+
+/* The Attribute Values Not Imported section (#2066), on a Run Profile Execution Item's page: the values an import
+   could not read. Always the item's error, so it takes the Unresolved References section's red head. The value
+   received is tinted red so it reads as the thing that was refused, and the next step sits in a quiet panel beneath
+   the table, as the item page's mocks drew it. */
+.jim-attribute-values-not-imported.mud-paper {
+    overflow: hidden;
+}
+
+.jim-attribute-values-not-imported-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    border-top: 3px solid var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
+}
+
+.jim-attribute-value-unreadable {
+    background: color-mix(in srgb, var(--mud-palette-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mud-palette-error) 30%, transparent);
+    border-radius: 3px;
+    padding: 1px 6px;
+}
+
+.jim-attribute-values-next-step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
+}
+
+/* The next steps (#959), grouped by where each is taken: one grid of three columns (how many references, the step,
+   the tab to take it on) shared by both groups, so the columns line up across them. Each cell stretches to its row's
+   height, so the row's divider is one unbroken line, and its content starts at the top: the count chip and the link
+   are one text line tall, so whatever the step's text wraps to, the row reads from its first line rather than floating
+   its ends between lines. The space between columns is the step's own padding, not a grid gap, which would cut the
+   divider into pieces. */
+.jim-unresolved-fixes {
+    display: grid;
+    grid-template-columns: 4rem minmax(0, 1fr) max-content;
+}
+
+/* Across a whole Connected System ("Where they point") each step also says how many objects its values sit on, in a
+   column of its own between the step and its link, so the counts read down the page as the reference counts do. */
+.jim-unresolved-fixes-with-objects {
+    grid-template-columns: 4rem minmax(0, 1fr) max-content max-content;
+}
+
+/* Qualified with the cell class: .jim-unresolved-fix-cell's padding shorthand comes later in this sheet. */
+.jim-unresolved-fix-cell.jim-unresolved-fix-objects {
+    padding-right: 24px;
+    text-align: right;
+    white-space: nowrap;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-unresolved-fix-group {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0 8px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-unresolved-fix-cell {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+    line-height: 1.5rem;
+}
+
+.jim-unresolved-fix-text {
+    padding-left: 16px;
+    padding-right: 16px;
+    overflow-wrap: anywhere;
+}
+
+/* A flex box rather than a line box, so the chip's top is the cell's padding edge, level with the step's first line. */
+.jim-unresolved-fix-count-cell {
+    display: flex;
+    align-items: flex-start;
+}
+
+.jim-unresolved-fix-remedy {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The count chip sized to one text line and to the widest count likely, so the counts of a group read as a column.
+   Qualified: MudBlazor's own chip sizing loads after this sheet (see "Custom CSS in site.css" in JIM.Web/CLAUDE.md). */
+html[lang] .mud-chip.jim-unresolved-fix-count {
+    height: 1.5rem;
+    min-width: 2.75rem;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-unresolved-fix-action {
+    white-space: nowrap;
+}
+
+.jim-unresolved-fix-more {
+    grid-column: 1 / -1;
+    padding: 8px 0 4px;
 }

@@ -1,5 +1,8 @@
 ---
-title: SSO Setup - Microsoft Entra ID
+title: "SSO Setup: Microsoft Entra ID"
+description: Register JIM with Microsoft Entra ID so administrators sign in to the portal, and the PowerShell module, with their Entra ID accounts.
+type: how-to
+audience: implementer
 ---
 
 # SSO Setup: Microsoft Entra ID
@@ -39,12 +42,12 @@ After registration, note these values from the **Overview** page:
 3. Add a description (e.g. `JIM Web Client`)
 4. Select an expiry period
 5. Click **Add**
-6. **Copy the secret value immediately** -- it will not be shown again
+6. **Copy the secret value immediately**; it will not be shown again
 
 ## Step 4: Configure API Permissions
 
 1. Go to **API permissions**
-2. Verify `User.Read` (Delegated) is present -- this is added by default and provides the OpenID Connect scopes needed for authentication
+2. Verify `User.Read` (Delegated) is present; it is added by default and provides the OpenID Connect scopes needed for authentication
 
 !!! note
     The standard OIDC scopes (`openid`, `profile`, `email`, `offline_access`) are requested at runtime and do not need to be added as Graph API permissions.
@@ -105,7 +108,7 @@ Because the web and PowerShell platforms share the same **Application (client) I
 - **Use a separate app registration** for the PowerShell module (stricter isolation): create a second app registration with only the Mobile/Desktop platform, note its Application (client) ID, and set `JIM_SSO_PUBLIC_CLIENT_ID` to that value.
 
 !!! note
-    Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401--8409. You may need to add additional redirect URIs if you encounter port conflicts.
+    Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401 to 8409. You may need to add additional redirect URIs if you encounter port conflicts.
 
 !!! note "Refresh tokens"
     The refresh token is issued because JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. Setting **Allow public client flows** to **Yes** (step 8 above) is a separate requirement: it marks the registration as a public client so the module can redeem the authorization code via PKCE without a client secret. This matters when the module shares the web application's registration, which already has a secret and would otherwise be treated as confidential. The refresh token enables silent in-session renewal and optional cross-session token persistence.
@@ -148,6 +151,14 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 4. Find the `sub` claim value
 5. Update `JIM_SSO_INITIAL_ADMIN` with this value
 
+## Check it worked
+
+1. Open JIM in a browser. JIM sends you to Microsoft Entra ID to sign in, then returns you to JIM, signed in.
+2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
+3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+
+To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
 ## Next steps
 
-With the configuration in place, [test your configuration](../sso-setup.md#testing-your-configuration) to verify sign-in, claims, sign-out, and API access. If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).
+If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

@@ -28,6 +28,48 @@ public static class ConnectedSystemObjectTypeTagExtensions
     }
 
     /// <summary>
+    /// Whether the Connected System says this object type inherits from the class named
+    /// <paramref name="className"/>, directly or further up the chain.
+    /// </summary>
+    /// <remarks>
+    /// False when the Connected System said nothing about inheritance, which is not the same as saying the type does
+    /// not inherit from it; see <see cref="ObjectTypeTags.Keys.SuperiorClass"/>.
+    /// </remarks>
+    public static bool InheritsFrom(this ConnectedSystemObjectType objectType, string className)
+    {
+        return objectType.Tags.Any(tag =>
+            tag.Key == ObjectTypeTags.Keys.SuperiorClass &&
+            string.Equals(tag.Value, className, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Whether an entry carrying both this Object Type's class and <paramref name="other"/>'s imports as this one
+    /// when both are selected, as far as the schema JIM holds can say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two rules, in order. A class that is not auxiliary takes the entry from an auxiliary one, because a structural
+    /// class is what an entry is and an auxiliary class is only something it also carries; an unclassified type is
+    /// not auxiliary (see <see cref="IsAuxiliary"/>), so it counts as what the entry is, as it always has. Between two
+    /// classes that are not auxiliary, the more specific takes the entry: the one whose recorded inheritance names the
+    /// other (#2043).
+    /// </para>
+    /// <para>
+    /// False both ways means the schema does not settle it: two auxiliary classes, or two classes with no inheritance
+    /// recorded between them. The order the entry lists its classes in then decides, which only the entry itself can
+    /// say. The LDAP Connector resolves every entry by this, and the schema selection preview predicts by it, so the
+    /// two cannot disagree about which Object Type an entry becomes (#2049).
+    /// </para>
+    /// </remarks>
+    public static bool TakesEntriesFrom(this ConnectedSystemObjectType objectType, ConnectedSystemObjectType other)
+    {
+        if (objectType.IsAuxiliary())
+            return false;
+
+        return other.IsAuxiliary() || objectType.InheritsFrom(other.Name);
+    }
+
+    /// <summary>
     /// Whether the Connected System classified this object type as a structural class: one an object can be, rather
     /// than one it merely carries.
     /// </summary>

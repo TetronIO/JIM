@@ -82,7 +82,7 @@ else
                 changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve
                 the hierarchy.
             </InfoPopover>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
                        OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto">
                 @if (_hierarchyBeingRetrieved)
                 {
@@ -121,7 +121,7 @@ else
                 <div class="pa-4">
                     <div class="d-flex justify-end mb-3">
                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
-                                   Variant="Variant.Outlined" Color="Color.Primary"
+                                   Variant="Variant.Outlined"
 
                                    OnClick="CopyHierarchyChangesToClipboardAsync">
                             Copy Changes
@@ -348,7 +348,7 @@ else
         }
 
         <div class="d-flex align-center gap-4 mt-4">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+            <MudButton Variant="Variant.Outlined" DropShadow="false"
                        OnClick="ApplyAdvancedTextWithFeedback" data-testid="jim-scope-text-apply">
                 Apply
             </MudButton>
@@ -402,7 +402,7 @@ else
         @* Preview (#1251): deselecting a container takes everything beneath it out of import scope, which obsoletes *@
         @* those objects, disconnects whatever they were joined to, and can leave Metaverse Objects with no          *@
         @* connectors at all. This is the count an administrator needs before saving, not afterwards.                *@
-        <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Outlined" Color="Color.Primary"
+        <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Outlined"
                    StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewScopeSelectionAsync"
                    Disabled="@_startingPreview" DropShadow="false">
             Preview Changes

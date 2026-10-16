@@ -521,5 +521,104 @@ public class ImportDeleteObjectTests
         }
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // The Activity message's figures (#2129): a delete the Connector reports is a deletion, not an update; one for an
+    // object JIM no longer holds changes nothing, so it is counted as unchanged.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task FullImport_ConnectorReportsDeleteOfHeldObject_CountsItDeletedNotUpdatedAsync()
+    {
+        var activity = await ImportADeleteAsync(heldStatus: ConnectedSystemObjectStatus.Normal);
+
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 deleted)"));
+    }
+
+    [Test]
+    public async Task FullImport_ConnectorReportsDeleteOfAlreadyObsoleteObject_CountsItUnchangedAsync()
+    {
+        var activity = await ImportADeleteAsync(heldStatus: ConnectedSystemObjectStatus.Obsolete);
+
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"),
+            "The object was gone before the run started, so the delete changed nothing.");
+    }
+
+    [Test]
+    public async Task FullImport_ConnectorReportsDeleteOfObjectJimDoesNotHold_CountsItUnchangedAsync()
+    {
+        var activity = await ImportADeleteAsync(heldStatus: null);
+
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+    }
+
+    /// <summary>
+    /// Runs an import whose only object is a delete the Connector reports for <see cref="TestConstants.CS_OBJECT_1_HR_ID"/>,
+    /// after seeding the object JIM holds for it with <paramref name="heldStatus"/>, or seeding nothing where that is null.
+    /// </summary>
+    private async Task<Activity> ImportADeleteAsync(ConnectedSystemObjectStatus? heldStatus)
+    {
+        var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        if (heldStatus.HasValue)
+        {
+            var held = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = 1,
+                ConnectedSystem = ConnectedSystemsData.First(),
+                Type = connectedSystemObjectType,
+                Status = heldStatus.Value,
+                ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
+            };
+            held.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
+                    Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()),
+                    ConnectedSystemObject = held
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    StringValue = TestConstants.CS_OBJECT_1_DISPLAY_NAME,
+                    Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()),
+                    ConnectedSystemObject = held
+                }
+            };
+            connectedSystemObjectData.Add(held);
+        }
+
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(connectedSystemObjectData.BuildMockDbSet().Object);
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: connectedSystemObjectData, activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Deleted,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                }
+            }
+        });
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var processor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await processor.PerformImportAsync();
+        return activity;
+    }
+
     // todo: test activity/Run Profile execution item/change object creation
 }

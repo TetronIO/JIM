@@ -3,28 +3,36 @@
 
 <#
 .SYNOPSIS
-    Creates Full Sync and Delta Sync schedules for Scenario 008.
+    Creates Full Synchronisation and Delta Synchronisation schedules for Scenario 008.
 
 .DESCRIPTION
     Creates two schedules for the Scenario 008 cross-domain entitlement sync environment.
     This script is intended to be run AFTER Scenario 008 setup and test execution,
     to add schedules for demo/screenshot purposes and manual experimentation.
+    Capture-Screenshots.ps1 -PrepareData runs it for the published screenshots (#582).
 
-    The script is idempotent - it will not create schedules that already exist.
+    It works on whichever directory type Scenario 008 ran against: the source system is the
+    one whose name ends in "APAC" and the target the one ending in "EMEA" (Panoply APAC and
+    Panoply EMEA on Samba AD; Yellowstone APAC and Glitterband EMEA on OpenLDAP and 389
+    Directory Server).
 
-    Full Sync Schedule:
+    Both schedules are created disabled, so they never start on their own; enable them in the
+    portal or with Set-JIMSchedule to see them run. The script is idempotent: it will not
+    create schedules that already exist.
+
+    Full Synchronisation Schedule (Sundays at 01:00):
     1. Full Import (APAC + EMEA in parallel)
     2. Full Sync (APAC then EMEA sequentially)
-    3. Export (EMEA - target only, in parallel if multiple targets)
-    4. Delta Import (EMEA - target only, in parallel if multiple targets)
-    5. Delta Sync (EMEA - target only, sequentially)
+    3. Export (EMEA - target only)
+    4. Delta Import (EMEA - target only, confirming the export)
+    5. Delta Sync (EMEA - target only, confirming the export)
 
-    Delta Sync Schedule:
+    Delta Synchronisation Schedule (hourly, Monday to Saturday):
     1. Delta Import (APAC + EMEA in parallel)
     2. Delta Sync (APAC then EMEA sequentially)
-    3. Export (EMEA - target only, in parallel if multiple targets)
-    4. Delta Import (EMEA - target only, in parallel if multiple targets)
-    5. Delta Sync (EMEA - target only, sequentially)
+    3. Export (EMEA - target only)
+    4. Delta Import (EMEA - target only, confirming the export)
+    5. Delta Sync (EMEA - target only, confirming the export)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -97,20 +105,20 @@ catch {
 # ============================================================================
 Write-TestStep "Step 3" "Verifying Scenario 008 connected systems"
 
-$existingSystems = Get-JIMConnectedSystem
+# Scenario 008 names its systems after the directory it ran against, so find them by role.
+$existingSystems = @(Get-JIMConnectedSystem)
+$sourceCandidates = @($existingSystems | Where-Object { $_.name -like '* APAC' })
+$targetCandidates = @($existingSystems | Where-Object { $_.name -like '* EMEA' })
 
-$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Panoply APAC" }
-$targetSystem = $existingSystems | Where-Object { $_.name -eq "Panoply EMEA" }
-
-if (-not $sourceSystem) {
-    throw "Source connected system 'Panoply APAC' not found. Run Scenario 008 setup first."
-}
-if (-not $targetSystem) {
-    throw "Target connected system 'Panoply EMEA' not found. Run Scenario 008 setup first."
+if ($sourceCandidates.Count -ne 1 -or $targetCandidates.Count -ne 1) {
+    $found = if ($existingSystems.Count -gt 0) { ($existingSystems.name -join ', ') } else { 'none' }
+    throw "Expected one Connected System ending in 'APAC' (source) and one ending in 'EMEA' (target); found: $found. Run Scenario 008 setup first."
 }
 
-Write-Host "  Source: Panoply APAC (ID: $($sourceSystem.id))" -ForegroundColor Green
-Write-Host "  Target: Panoply EMEA (ID: $($targetSystem.id))" -ForegroundColor Green
+$sourceName = $sourceCandidates[0].name
+$targetName = $targetCandidates[0].name
+Write-Host "  Source: $sourceName (ID: $($sourceCandidates[0].id))" -ForegroundColor Green
+Write-Host "  Target: $targetName (ID: $($targetCandidates[0].id))" -ForegroundColor Green
 
 # ============================================================================
 # Step 4: Check for existing schedules
@@ -118,8 +126,8 @@ Write-Host "  Target: Panoply EMEA (ID: $($targetSystem.id))" -ForegroundColor G
 Write-TestStep "Step 4" "Checking for existing schedules"
 
 $existingSchedules = Get-JIMSchedule
-$fullSyncScheduleName = "Scenario 008 - Full Sync"
-$deltaSyncScheduleName = "Scenario 008 - Delta Sync"
+$fullSyncScheduleName = "Full Synchronisation Schedule"
+$deltaSyncScheduleName = "Delta Synchronisation Schedule"
 
 $existingFullSync = $existingSchedules | Where-Object { $_.name -eq $fullSyncScheduleName }
 $existingDeltaSync = $existingSchedules | Where-Object { $_.name -eq $deltaSyncScheduleName }
@@ -128,15 +136,36 @@ if ($existingFullSync -and $existingDeltaSync) {
     Write-Host "  Both schedules already exist - nothing to do" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Existing schedules:" -ForegroundColor Cyan
-    Write-Host "  Full Sync:  $($existingFullSync.id)" -ForegroundColor Gray
-    Write-Host "  Delta Sync: $($existingDeltaSync.id)" -ForegroundColor Gray
+    Write-Host "  Full Synchronisation:  $($existingFullSync.id)" -ForegroundColor Gray
+    Write-Host "  Delta Synchronisation: $($existingDeltaSync.id)" -ForegroundColor Gray
     return
 }
 
+# Adds the steps both schedules share: import both systems in parallel, synchronise them in turn, export to the
+# target, then a delta import and sync on the target to confirm what was exported.
+function Add-SynchronisationCycle {
+    param([string]$ScheduleId, [string]$ImportProfile, [string]$SyncProfile)
+
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $sourceName -RunProfileName $ImportProfile | Out-Null
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $targetName -RunProfileName $ImportProfile -Parallel | Out-Null
+    Write-Host "    + $ImportProfile ($sourceName + $targetName in parallel)" -ForegroundColor Gray
+
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $sourceName -RunProfileName $SyncProfile | Out-Null
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $targetName -RunProfileName $SyncProfile | Out-Null
+    Write-Host "    + $SyncProfile ($sourceName then $targetName sequentially)" -ForegroundColor Gray
+
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $targetName -RunProfileName "Export" | Out-Null
+    Write-Host "    + Export ($targetName)" -ForegroundColor Gray
+
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $targetName -RunProfileName "Delta Import" | Out-Null
+    Add-JIMScheduleStep -ScheduleId $ScheduleId -StepType RunProfile -ConnectedSystemName $targetName -RunProfileName "Delta Sync" | Out-Null
+    Write-Host "    + Delta Import and Delta Sync ($targetName, confirming the export)" -ForegroundColor Gray
+}
+
 # ============================================================================
-# Step 5: Create Full Sync schedule
+# Step 5: Create Full Synchronisation schedule
 # ============================================================================
-Write-TestStep "Step 5" "Creating Full Sync schedule"
+Write-TestStep "Step 5" "Creating Full Synchronisation schedule"
 
 if ($existingFullSync) {
     Write-Host "  Schedule '$fullSyncScheduleName' already exists (ID: $($existingFullSync.id))" -ForegroundColor Yellow
@@ -145,73 +174,22 @@ if ($existingFullSync) {
 else {
     $fullSyncSchedule = New-JIMSchedule `
         -Name $fullSyncScheduleName `
-        -Description "Full synchronisation cycle: full import all systems, full sync sequentially, export targets, confirming delta import and sync on targets" `
-        -TriggerType Manual `
+        -Description "Weekly mop-up schedule." `
+        -TriggerType Cron `
+        -PatternType SpecificTimes `
+        -DaysOfWeek @(0) `
+        -RunTimes @("01:00") `
         -PassThru
-
     Write-Host "  Created schedule '$fullSyncScheduleName' (ID: $($fullSyncSchedule.id))" -ForegroundColor Green
-
-    # Step 5a: Full Import - all systems in parallel
     Write-Host "    Adding steps..." -ForegroundColor Gray
-
-    # Full Import APAC (sequential - first step)
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply APAC" `
-        -RunProfileName "Full Import" | Out-Null
-
-    # Full Import EMEA (parallel with APAC)
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Full Import" `
-        -Parallel | Out-Null
-
-    Write-Host "    + Full Import (APAC + EMEA in parallel)" -ForegroundColor Gray
-
-    # Step 5b: Full Sync - all systems sequentially
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply APAC" `
-        -RunProfileName "Full Sync" | Out-Null
-
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Full Sync" | Out-Null
-
-    Write-Host "    + Full Sync (APAC then EMEA sequentially)" -ForegroundColor Gray
-
-    # Step 5c: Export - target systems in parallel
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Export" | Out-Null
-
-    Write-Host "    + Export (EMEA)" -ForegroundColor Gray
-
-    # Step 5d: Delta Import - target systems in parallel (confirming export)
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Import" | Out-Null
-
-    Write-Host "    + Delta Import (EMEA - confirming export)" -ForegroundColor Gray
-
-    # Step 5e: Delta Sync - target systems sequentially (confirming export)
-    Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Sync" | Out-Null
-
-    Write-Host "    + Delta Sync (EMEA - confirming export)" -ForegroundColor Gray
-    Write-Host "  Full Sync schedule created with all steps" -ForegroundColor Green
+    Add-SynchronisationCycle -ScheduleId $fullSyncSchedule.id -ImportProfile "Full Import" -SyncProfile "Full Sync"
+    Write-Host "  Full Synchronisation schedule created with all steps" -ForegroundColor Green
 }
 
 # ============================================================================
-# Step 6: Create Delta Sync schedule
+# Step 6: Create Delta Synchronisation schedule
 # ============================================================================
-Write-TestStep "Step 6" "Creating Delta Sync schedule"
+Write-TestStep "Step 6" "Creating Delta Synchronisation schedule"
 
 if ($existingDeltaSync) {
     Write-Host "  Schedule '$deltaSyncScheduleName' already exists (ID: $($existingDeltaSync.id))" -ForegroundColor Yellow
@@ -220,67 +198,17 @@ if ($existingDeltaSync) {
 else {
     $deltaSyncSchedule = New-JIMSchedule `
         -Name $deltaSyncScheduleName `
-        -Description "Delta synchronisation cycle: delta import all systems, delta sync sequentially, export targets, confirming delta import and sync on targets" `
-        -TriggerType Manual `
+        -Description "Normal BAU synchronisation schedule." `
+        -TriggerType Cron `
+        -PatternType Interval `
+        -DaysOfWeek @(1, 2, 3, 4, 5, 6) `
+        -IntervalValue 1 `
+        -IntervalUnit Hours `
         -PassThru
-
     Write-Host "  Created schedule '$deltaSyncScheduleName' (ID: $($deltaSyncSchedule.id))" -ForegroundColor Green
-
-    # Step 6a: Delta Import - all source systems in parallel
     Write-Host "    Adding steps..." -ForegroundColor Gray
-
-    # Delta Import APAC (sequential - first step)
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply APAC" `
-        -RunProfileName "Delta Import" | Out-Null
-
-    # Delta Import EMEA (parallel with APAC)
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Import" `
-        -Parallel | Out-Null
-
-    Write-Host "    + Delta Import (APAC + EMEA in parallel)" -ForegroundColor Gray
-
-    # Step 6b: Delta Sync - all systems sequentially
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply APAC" `
-        -RunProfileName "Delta Sync" | Out-Null
-
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Sync" | Out-Null
-
-    Write-Host "    + Delta Sync (APAC then EMEA sequentially)" -ForegroundColor Gray
-
-    # Step 6c: Export - target systems in parallel
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Export" | Out-Null
-
-    Write-Host "    + Export (EMEA)" -ForegroundColor Gray
-
-    # Step 6d: Delta Import - target systems in parallel (confirming export)
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Import" | Out-Null
-
-    Write-Host "    + Delta Import (EMEA - confirming export)" -ForegroundColor Gray
-
-    # Step 6e: Delta Sync - target systems sequentially (confirming export)
-    Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
-        -StepType RunProfile `
-        -ConnectedSystemName "Panoply EMEA" `
-        -RunProfileName "Delta Sync" | Out-Null
-
-    Write-Host "    + Delta Sync (EMEA - confirming export)" -ForegroundColor Gray
-    Write-Host "  Delta Sync schedule created with all steps" -ForegroundColor Green
+    Add-SynchronisationCycle -ScheduleId $deltaSyncSchedule.id -ImportProfile "Delta Import" -SyncProfile "Delta Sync"
+    Write-Host "  Delta Synchronisation schedule created with all steps" -ForegroundColor Green
 }
 
 # ============================================================================
@@ -291,9 +219,9 @@ Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host "  Schedules Created Successfully" -ForegroundColor Green
 Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Full Sync:  $($fullSyncSchedule.id)" -ForegroundColor Cyan
-Write-Host "  Delta Sync: $($deltaSyncSchedule.id)" -ForegroundColor Cyan
+Write-Host "  Full Synchronisation:  $($fullSyncSchedule.id)" -ForegroundColor Cyan
+Write-Host "  Delta Synchronisation: $($deltaSyncSchedule.id)" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Both schedules are set to Manual trigger." -ForegroundColor Gray
-Write-Host "  Use the JIM UI or Start-JIMSchedule to run them." -ForegroundColor Gray
+Write-Host "  Both schedules are disabled, so they never start on their own." -ForegroundColor Gray
+Write-Host "  Enable them in the JIM UI or with Set-JIMSchedule, or run one with Start-JIMSchedule." -ForegroundColor Gray
 Write-Host ""

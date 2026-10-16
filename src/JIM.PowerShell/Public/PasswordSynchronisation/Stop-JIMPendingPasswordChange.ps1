@@ -19,37 +19,41 @@ function Stop-JIMPendingPasswordChange {
         Applies to changes JIM has not finished with: Pending and Parked. An Expired or already Cancelled change
         is left alone rather than having its recorded outcome overwritten.
 
+        Cancelling a Connected System Object's first password, an Initial Password or a change carrying one (see
+        ProvisionedConnectedSystemObjectId on Get-JIMPendingPasswordChange), leaves that object without a password
+        from JIM, and not enabled as its Synchronisation Rule's Initial Password asks, until a password is set on it.
+
         Whatever it covers, this is one request and one Activity, however many changes are piped in.
 
     .PARAMETER Id
-        The unique identifiers of the queued changes to cancel. Accepts queued changes from the pipeline.
-        Combines with the other criteria rather than replacing them, so "-Status Parked" alongside piped changes
-        means "these, if they are still parked": a change delivered since you listed it is not cancelled.
+        The IDs of the queued changes to cancel. Combines with the other criteria rather than replacing them, so
+        -Status Parked alongside piped changes means these changes, if they are still parked.
 
     .PARAMETER ConnectedSystemId
-        Cancel the changes queued for one Connected System. Accepts a Connected System from the pipeline.
+        Cancel the changes queued for this Connected System.
 
     .PARAMETER Status
-        Cancel only changes in this state: Pending or Parked.
+        Cancel only changes in this state. An Expired or Cancelled change keeps the outcome it has, so those states
+        match nothing.
 
     .PARAMETER FailureReason
         Cancel only changes whose last attempt failed this way.
 
     .PARAMETER MetaverseObjectId
-        Cancel only one identity's queued changes.
+        Cancel only this Metaverse Object's queued changes.
 
     .PARAMETER Search
-        Cancel only changes matching this free-text search over the identity and Connected System names.
+        Cancel only changes matching this free-text search over the Metaverse Object and Connected System names.
 
     .PARAMETER EntireQueue
-        Cancel every queued password change in the deployment. Required when nothing else narrows the request,
-        so a command that names no criteria cannot empty the queue by accident.
+        Cancel every queued password change in the deployment. Required when nothing else narrows the request, so a
+        command that names no criteria cannot act on everything by accident.
 
     .PARAMETER Force
         Skips the confirmation prompt.
 
     .OUTPUTS
-        PSCustomObject with an AffectedCount property: how many changes were cancelled.
+        One object, whose AffectedCount says how many changes were cancelled. Zero is an answer, not an error.
 
     .EXAMPLE
         Stop-JIMPendingPasswordChange -ConnectedSystemId 7
@@ -80,7 +84,7 @@ function Stop-JIMPendingPasswordChange {
         Set-JIMMetaverseObjectPassword
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PasswordQueueActionResponse')]
     param(
         [Parameter(ValueFromPipelineByPropertyName)]
         [guid[]]$Id,
@@ -141,7 +145,7 @@ function Stop-JIMPendingPasswordChange {
         elseif ($EntireQueue) { "every queued password change" }
         else { "the matching queued password changes" }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Stop delivering, leaving the password unchanged on the target")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Stop delivering, leaving the password unchanged on the target" -Force:$Force)) {
             return
         }
 

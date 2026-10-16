@@ -212,4 +212,36 @@ public class RunProfileSafeguardsValidatorTests
         Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
             Is.EqualTo("MaxCreates can only be set on an Export Run Profile."));
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Allow Object Type Changes (#2049): a Full Import setting
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void Validate_AllowObjectTypeChangesOnFullImportRunProfile_ReturnsNull()
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.FullImport, AllowObjectTypeChanges = true };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    public void Validate_AllowObjectTypeChangesOnNonFullImportRunProfile_NamesTheField(ConnectedSystemRunType runType)
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = runType, AllowObjectTypeChanges = true };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
+            Is.EqualTo("AllowObjectTypeChanges can only be enabled on a Full Import Run Profile."));
+    }
+
+    [Test]
+    public void Validate_AllowObjectTypeChangesOffOnNonFullImportRunProfile_ReturnsNull()
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.DeltaImport, AllowObjectTypeChanges = false };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
+    }
 }

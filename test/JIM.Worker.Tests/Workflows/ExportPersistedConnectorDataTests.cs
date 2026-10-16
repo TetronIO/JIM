@@ -5,10 +5,12 @@ using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -67,21 +69,22 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
         var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
         var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
 
-        // OperationCanceledException is not caught by the per-batch failure handler (which only
-        // catches and records plain export failures) - it propagates straight past ExportAsync,
-        // through the finally that closes the connection, exercising the "the run is already failing"
-        // path. SyncExportTaskProcessor itself then swallows OperationCanceledException (treats it as
-        // a graceful stop), so PerformExportAsync completes without throwing here.
-        var connector = new MockCallConnector
+        // The run is cancelled while the Connector holds the batch: the cancellation is not a batch failure the per-batch
+        // handler records, so it propagates through the finally that closes the connection, exercising the "the run is
+        // already failing" path. SyncExportTaskProcessor itself then treats a requested cancellation as a graceful stop,
+        // so PerformExportAsync completes without throwing here.
+        using var run = new CancellationTokenSource();
+        var connector = new MockCallConnector();
+        connector.WithConnectedSystemExportResultFactory(_ =>
         {
-            ExportExceptionToThrow = new OperationCanceledException("simulated mid-export cancellation")
-        };
+            run.Cancel();
+            return ConnectedSystemExportResult.Succeeded();
+        });
         connector.WithCloseExportConnectionReturnValue("invalidated-pin");
 
         var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
         var processor = new SyncExportTaskProcessor(
-            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask,
-            new CancellationTokenSource());
+            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask, run);
 
         // Act
         await processor.PerformExportAsync();
@@ -133,6 +136,43 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// #2083: an <see cref="OperationCanceledException"/> nobody asked for (a timeout surfacing as one, outside any batch)
+    /// was taken for the run being cancelled, and the Activity completed as "Export cancelled". It is a failure of the
+    /// run, and fails its Activity.
+    /// </summary>
+    [Test]
+    public async Task Export_OperationCanceledExceptionWithoutTheRunBeingCancelled_FailsTheRunAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("Target System");
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var displayNameAttr = csoType.Attributes.Single(a => a.Name == "DisplayName");
+        var cso = await CreateCsoAsync(connectedSystem.Id, csoType, "Original Name");
+        CreatePendingExport(connectedSystem, cso, displayNameAttr);
+
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
+
+        var timeout = new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
+        var connector = new MockCallConnector { OpenExportExceptionToThrow = timeout };
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+        var processor = new SyncExportTaskProcessor(
+            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask,
+            new CancellationTokenSource());
+
+        // Act
+        var thrown = Assert.CatchAsync<OperationCanceledException>(async () => await processor.PerformExportAsync());
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown, Is.SameAs(timeout), "the run fails on the exception itself rather than reading it as a cancellation");
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+        }
+    }
+
     [Test]
     public async Task Export_DoesNotPersist_WhenCloseExportConnectionReturnsNullAsync()
     {
@@ -165,6 +205,67 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
     }
 
     #region Helpers
+
+    /// <summary>
+    /// #2197: a container the Connector created for an account is selected whether or not the run completes. Captured only
+    /// at the end of a completed run, a cancelled run's containers were never selected, so the accounts created in them
+    /// stayed unconfirmed and later exports there were refused as outside the managed scope.
+    /// </summary>
+    [Test]
+    public async Task Export_RunCancelledAfterAContainerWasCreated_StillAutoSelectsItAsync()
+    {
+        var connectedSystem = await CreateConnectedSystemAsync("Target System");
+        // Selecting containers reads a configured Connected System, which has settings.
+        connectedSystem.SettingValues.Add(new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = "Host" }, StringValue = "dc1.panoply.local" });
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var displayNameAttr = csoType.Attributes.Single(a => a.Name == "DisplayName");
+        var cso = await CreateCsoAsync(connectedSystem.Id, csoType, "Original Name");
+        CreatePendingExport(connectedSystem, cso, displayNameAttr);
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
+
+        using var run = new CancellationTokenSource();
+        var connector = new ContainerCreatingConnector();
+        connector.WithConnectedSystemExportResultFactory(_ =>
+        {
+            connector.Created("OU=New,DC=panoply,DC=local");
+            run.Cancel();
+            return ConnectedSystemExportResult.Succeeded();
+        });
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+        workerTask.InitiatedByType = ActivityInitiatorType.System;
+        var processor = new SyncExportTaskProcessor(new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask, run);
+        await processor.PerformExportAsync();
+
+        var autoSelections = await DbContext.Activities.Where(a => a.ParentActivityId == activity.Id && a.Message != null && a.Message.StartsWith("Auto-selecting")).ToListAsync();
+        Assert.That(autoSelections, Has.Count.EqualTo(1), "the container the cancelled run created is still auto-selected");
+    }
+
+    /// <summary>
+    /// A Connector that creates a container during export, and forgets the containers it created when its connection is
+    /// closed, as the contract says (<see cref="IConnectorContainerCreation.CreatedContainerExternalIds"/>).
+    /// </summary>
+    private sealed class ContainerCreatingConnector : MockCallConnector, IConnectorExportUsingCalls, IConnectorContainerCreation
+    {
+        private readonly List<string> _created = [];
+
+        public void Created(string containerExternalId) => _created.Add(containerExternalId);
+
+        public IReadOnlyList<string> CreatedContainerExternalIds => _created.ToList();
+
+        string? IConnectorExportUsingCalls.CloseExportConnection()
+        {
+            _created.Clear();
+            return CloseExportConnection();
+        }
+
+        public Task<bool> VerifyContainerExistsAsync(string containerExternalId) => Task.FromResult(true);
+
+        public string? GetParentContainerExternalId(string containerExternalId) => null;
+
+        public string GetContainerDisplayName(string containerExternalId) => containerExternalId;
+    }
 
     private PendingExport CreatePendingExport(
         ConnectedSystem connectedSystem, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute displayNameAttr)

@@ -37,6 +37,23 @@ public interface IConnectorUniquenessProbe
     public Task<UniquenessProbeResult> ProbeAsync(UniquenessProbeRequest request, ILogger logger, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Searches for several attributes' batches of one object at once (Generated Value Forms, #2023), returning one
+    /// result per request in the requests' order, each exactly as <see cref="ProbeAsync"/> would have answered it. A
+    /// Connector that can put several attributes in one search (the LDAP Connector, one per route) overrides this; the
+    /// default searches one attribute at a time. Never throws for a fault in the Connected System.
+    /// </summary>
+    public async Task<IReadOnlyList<UniquenessProbeResult>> ProbeAttributesAsync(IReadOnlyList<UniquenessProbeRequest> requests, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        var results = new List<UniquenessProbeResult>(requests.Count);
+        foreach (var request in requests)
+            results.Add(await ProbeAsync(request, logger, cancellationToken));
+
+        return results;
+    }
+
+    /// <summary>
     /// Closes the probe connection. Safe to call when it was never opened, or when opening it failed.
     /// </summary>
     public void CloseUniquenessProbeConnection();

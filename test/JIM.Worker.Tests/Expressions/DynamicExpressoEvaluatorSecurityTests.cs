@@ -27,6 +27,17 @@ public class DynamicExpressoEvaluatorSecurityTests
         _evaluator = new DynamicExpressoEvaluator();
     }
 
+    /// <summary>
+    /// Asserts the attempt fails as the one expression error every consumer reports (#2153, N5), and that the guard
+    /// underneath it is the one this review relies on: the evaluator wraps the failure, it does not replace it.
+    /// </summary>
+    private static void AssertExpressionError<TGuard>(Action attempt) where TGuard : Exception
+    {
+        var error = Assert.Throws<ExpressionEvaluationException>(attempt);
+
+        Assert.That(error!.InnerException, Is.InstanceOf<TGuard>());
+    }
+
     #region Chained Reflection Escape Attempts
 
     [Test]
@@ -36,7 +47,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().GetMethods()", context));
     }
 
@@ -47,7 +58,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().Assembly", context));
     }
 
@@ -57,7 +68,7 @@ public class DynamicExpressoEvaluatorSecurityTests
         // The exact example DynamicExpresso's own documentation cites as blocked.
         var context = new ExpressionContext();
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("typeof(double).GetMethods()", context));
     }
 
@@ -66,7 +77,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("typeof(double).Assembly", context));
     }
 
@@ -77,28 +88,23 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ReflectionNotAllowedException>(() =>
+        AssertExpressionError<ReflectionNotAllowedException>(() =>
             _evaluator.Evaluate("mv[\"a\"].GetType().GetMethod(\"ToString\")", context));
     }
 
     /// <summary>
-    /// A bare <c>GetType()</c> call is NOT blocked: the visitor only rejects a method call or member access
-    /// whose static receiver type is already <see cref="Type"/> or <see cref="System.Reflection.MemberInfo"/>
-    /// (i.e. chained reflection). <c>mv["a"].GetType()</c> receives on <c>object</c>, so it parses and
-    /// evaluates, returning a <see cref="Type"/> instance. This is documented, not hidden: see
-    /// EXPRESSION_SECURITY.md. It does not itself grant further reflection; any attempt to chain a further
-    /// call or member access onto the result within the same expression is blocked (see the tests above).
+    /// A bare <c>GetType()</c> call is refused when the expression is parsed (#2053), closing the finding this review
+    /// once left open: no expression can hold a <see cref="Type"/>, so nothing can be chained onto one however it is
+    /// re-typed (see EXPRESSION_SECURITY.md, "Late binding").
     /// </summary>
     [Test]
-    public void Evaluate_BareGetType_ParsesAndReturnsTypeInstance()
+    public void Evaluate_BareGetType_IsRefused()
     {
         var context = new ExpressionContext(
             new Dictionary<string, object?> { { "a", "some value" } },
             new Dictionary<string, object?>());
 
-        var result = _evaluator.Evaluate("mv[\"a\"].GetType()", context);
-
-        Assert.That(result, Is.EqualTo(typeof(string)));
+        AssertExpressionError<ReflectionNotAllowedException>(() => _evaluator.Evaluate("mv[\"a\"].GetType()", context));
     }
 
     #endregion
@@ -110,7 +116,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("System.Diagnostics.Process.Start(\"cmd\")", context));
     }
 
@@ -119,7 +125,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("new System.IO.FileStream(\"x\", 0)", context));
     }
 
@@ -128,7 +134,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("Environment.GetEnvironmentVariable(\"PATH\")", context));
     }
 
@@ -137,7 +143,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("Activator.CreateInstance(typeof(object))", context));
     }
 
@@ -146,7 +152,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<UnknownIdentifierException>(() =>
+        AssertExpressionError<UnknownIdentifierException>(() =>
             _evaluator.Evaluate("AppDomain.CurrentDomain", context));
     }
 
@@ -167,7 +173,7 @@ public class DynamicExpressoEvaluatorSecurityTests
             new Dictionary<string, object?> { { "a", "original" } },
             new Dictionary<string, object?>());
 
-        Assert.Throws<ParseException>(() =>
+        AssertExpressionError<ParseException>(() =>
             _evaluator.Evaluate("mv[\"a\"] = \"changed\"", context));
     }
 
@@ -201,7 +207,7 @@ public class DynamicExpressoEvaluatorSecurityTests
     {
         var context = new ExpressionContext();
 
-        Assert.Throws<ParseException>(() => _evaluator.Evaluate("Upper(mv[\"a\"]", context));
+        AssertExpressionError<ParseException>(() => _evaluator.Evaluate("Upper(mv[\"a\"]", context));
     }
 
     [Test]
@@ -263,6 +269,106 @@ public class DynamicExpressoEvaluatorSecurityTests
         var result = _evaluator.Evaluate("Enumerable.Range(0, 1000).Count()", context);
 
         Assert.That(result, Is.EqualTo(1000));
+    }
+
+    #endregion
+
+    #region Late Binding (#2053)
+
+    // Expressions are late-bound so a transform's untyped result still joins and compares as text. A late-bound value
+    // can reach its runtime type's public members, so these prove the reflection guard still holds when the chain to
+    // System.Type runs through a late-bound result first, and through the several-values type every multi-valued
+    // attribute now reads as. See engineering/EXPRESSION_SECURITY.md, "Late binding".
+
+    [TestCase("cs[\"a\"].Substring(0).GetType().Assembly")]
+    [TestCase("cs[\"a\"].Substring(0).GetType().GetMethods()")]
+    [TestCase("cs[\"a\"].Substring(0).GetType().GetMethod(\"Clone\").Invoke(cs[\"a\"], null)")]
+    [TestCase("Lower(cs[\"a\"]).GetType().Assembly")]
+    [TestCase("cs[\"many\"].GetType().Assembly")]
+    [TestCase("cs[\"many\"][0].GetType().GetMethods()")]
+    [TestCase("Split(cs[\"a\"], \",\").GetType().Assembly")]
+    [TestCase("cs[\"bytes\"].GetValue(0).GetType().Assembly")]
+    public void Evaluate_ReflectionThroughALateBoundValue_ThrowsReflectionNotAllowedException(string expression)
+    {
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?>
+        {
+            { "a", "some value" },
+            { "many", new List<object?> { "x", "y" } },
+            { "bytes", new byte[] { 1 } }
+        });
+
+        AssertExpressionError<ReflectionNotAllowedException>(() => _evaluator.Evaluate(expression, context));
+    }
+
+    // A Type re-typed as object reaches the runtime binder rather than the parse-time reflection guard: every route by
+    // which an expression can hand on a value it was given (IIF, Coalesce, a cast, the several-values functions) must
+    // still be refused, without ever returning a Type, Assembly, MethodInfo or delegate.
+    private static readonly string[] ReflectionThroughAnUntypedPassThrough =
+    [
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly",
+        "Coalesce(cs[\"a\"].GetType(), null).Assembly",
+        "((object)cs[\"a\"].GetType()).Assembly",
+        "((object)typeof(string)).Assembly",
+        "IIF(true, (object)typeof(string), null).GetMethods()",
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly.GetType(\"System.IO.File\")",
+        "IIF(true, cs[\"a\"].GetType(), null).Assembly.GetType(\"System.IO.File\").GetMethod(\"Exists\").Invoke(null, null)",
+        "Min(cs[\"a\"].GetType()).Assembly",
+        "Max(cs[\"a\"].GetType()).Assembly",
+        "Where(cs[\"a\"].GetType(), \"equals\", \"x\").Assembly",
+        "Coalesce(null, cs[\"a\"].GetType())",
+        "IIF(true, cs[\"a\"].GetType(), null)",
+        "cs[\"a\"].GetType()",
+        "typeof(string)",
+        "Split(\"a\", \",\").GetType()",
+        "Coalesce(cs[\"a\"].GetType().Name, null)",
+    ];
+
+    [TestCaseSource(nameof(ReflectionThroughAnUntypedPassThrough))]
+    public void Evaluate_ReflectionThroughAnUntypedPassThrough_IsAnExpressionErrorReturningNoReflectionObject(string expression)
+    {
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?> { { "a", "some value" } });
+
+        object? result = null;
+        Assert.Throws<ExpressionEvaluationException>(() => result = _evaluator.Evaluate(expression, context));
+        Assert.That(result, Is.Not.InstanceOf<Type>().And.Not.InstanceOf<System.Reflection.MemberInfo>()
+            .And.Not.InstanceOf<System.Reflection.Assembly>().And.Not.InstanceOf<Delegate>());
+    }
+
+    [TestCaseSource(nameof(ReflectionThroughAnUntypedPassThrough))]
+    public void Validate_ReflectionThroughAnUntypedPassThrough_IsRejected(string expression)
+    {
+        Assert.That(_evaluator.Validate(expression).IsValid, Is.False);
+    }
+
+    [TestCase("cs[\"a\"].Substring(0).GetType().Assembly")]
+    [TestCase("Lower(cs[\"a\"]).GetType().GetMethods()")]
+    public void Validate_ReflectionThroughALateBoundValue_IsRejected(string expression)
+    {
+        Assert.That(_evaluator.Validate(expression).IsValid, Is.False);
+    }
+
+    [Test]
+    public void Evaluate_AMemberTheValueDoesNotHave_IsAnExpressionError()
+    {
+        // Late binding resolves members while the expression runs, so a misspelt one fails then rather than at parse
+        // time; it is still the one expression error, never a JIM fault.
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?> { { "a", "abc" } });
+
+        Assert.Throws<ExpressionEvaluationException>(() => _evaluator.Evaluate("cs[\"a\"].Lenght", context));
+    }
+
+    [Test]
+    public void Evaluate_ChangingTheBytesOfOneOfSeveralBinaryValues_LeavesTheStoredValueAlone()
+    {
+        var stored = new byte[] { 1 };
+        var context = new ExpressionContext(connectedSystemAttributes: new Dictionary<string, object?>
+        {
+            { "certs", new List<object?> { stored, new byte[] { 2 } } }
+        });
+
+        try { _evaluator.Evaluate("cs[\"certs\"][0][0] = (byte)9", context); } catch (ExpressionEvaluationException) { /* refused is as good as copied */ }
+
+        Assert.That(stored[0], Is.EqualTo(1));
     }
 
     #endregion

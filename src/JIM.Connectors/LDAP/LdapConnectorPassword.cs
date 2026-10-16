@@ -5,6 +5,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Text;
 namespace JIM.Connectors.LDAP;
 
@@ -226,16 +227,23 @@ internal class LdapConnectorPassword
     }
 
     /// <summary>
-    /// Applies the requested expiry behaviour and enabled state once the password is in place.
+    /// Applies the requested expiry behaviour and enabled state once the password is in place, and reports what the
+    /// account's password now does about expiry.
+    /// <para>
+    /// "Password never expires" is applied only where the caller did not ask for it to be left as it is (#2159): where
+    /// something else owns it, it stays as the account has it. "Must change at next sign-in" belongs to the password
+    /// and is written whatever happens to the flag, after the flag, so that a delivery that leaves the flag set says so:
+    /// Active Directory ignores pwdLastSet = 0 on an account whose password never expires.
+    /// </para>
     /// </summary>
     private async Task<PasswordSetResult> ApplyPostPasswordStateAsync(string distinguishedName, PasswordSetOptions options, string password)
     {
         if (!IsActiveDirectory)
             return BuildNonActiveDirectoryResult(options);
 
-        var userAccountControlResult = await ApplyUserAccountControlAsync(distinguishedName, options, password);
-        if (userAccountControlResult != null)
-            return userAccountControlResult;
+        var (failure, readValue, finalValue) = await ApplyUserAccountControlAsync(distinguishedName, options, password);
+        if (failure != null)
+            return failure;
 
         if (options.ExpiryBehaviour == PasswordExpiryBehaviour.RequireChangeAtNextSignIn)
         {
@@ -246,15 +254,41 @@ internal class LdapConnectorPassword
             };
             modification.Add(PwdLastSetMustChange);
 
-            var failure = await SendAndClassifyAsync(new ModifyRequest(distinguishedName, modification),
+            var pwdLastSetFailure = await SendAndClassifyAsync(new ModifyRequest(distinguishedName, modification),
                 $"require a password change at next sign-in on '{distinguishedName}'", password);
 
-            if (failure != null)
-                return failure;
+            if (pwdLastSetFailure != null)
+                return pwdLastSetFailure;
         }
 
-        return PasswordSetResult.Succeeded(options.ExpiryBehaviour);
+        var neverExpiresNow = HasDontExpirePassword(finalValue);
+        var result = options.ExpiryBehaviour == PasswordExpiryBehaviour.RequireChangeAtNextSignIn && neverExpiresNow
+            ? PasswordSetResult.SucceededWithExpiryDowngrade(PasswordExpiryBehaviour.NeverExpires,
+                "A change at the next sign-in was asked for and set, but the account has \"Password never expires\" set, which JIM " +
+                "was told to leave as it is, and Active Directory does not ask for a new password while that flag is set.")
+            : PasswordSetResult.Succeeded(DescribeAppliedExpiry(finalValue, options.ExpiryBehaviour));
+
+        result.PasswordNeverExpiresChanged = readValue.HasValue && finalValue.HasValue && HasDontExpirePassword(readValue) != neverExpiresNow;
+        return result;
     }
+
+    /// <summary>
+    /// What the account's password does about expiry, given the userAccountControl it was left with (null where the
+    /// object has none) and the behaviour asked for: "never expires" wherever the flag is set, whatever was asked;
+    /// otherwise what was asked, bar Never expires itself, which without the flag means the directory's policy.
+    /// </summary>
+    internal static PasswordExpiryBehaviour DescribeAppliedExpiry(int? finalUserAccountControl, PasswordExpiryBehaviour requested)
+    {
+        if (HasDontExpirePassword(finalUserAccountControl))
+            return PasswordExpiryBehaviour.NeverExpires;
+
+        return requested == PasswordExpiryBehaviour.NeverExpires
+            ? PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy
+            : requested;
+    }
+
+    private static bool HasDontExpirePassword(int? userAccountControl) =>
+        userAccountControl is { } value && (value & LdapConnectorConstants.UAC_DONT_EXPIRE_PASSWORD) != 0;
 
     /// <summary>
     /// Reports what a directory that is not Active Directory could actually honour.
@@ -262,20 +296,24 @@ internal class LdapConnectorPassword
     /// Expiry on these directories is governed by whichever password policy applies to the entry, and there is
     /// no portable per-entry override, so anything other than "expires according to the target's policy" is
     /// reported as a downgrade rather than quietly ignored. The password itself is set either way, so this is a
-    /// success with a caveat.
+    /// success with a caveat. Never expires that the caller asked to be left as it is (#2159) was not asked to be
+    /// applied, so it is no downgrade.
     /// </para>
     /// </summary>
     private PasswordSetResult BuildNonActiveDirectoryResult(PasswordSetOptions options)
     {
         var applied = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+        var asked = options.LeavePasswordNeverExpiresAsIs && options.ExpiryBehaviour == PasswordExpiryBehaviour.NeverExpires
+            ? applied
+            : options.ExpiryBehaviour;
 
-        if (options.ExpiryBehaviour == applied && options.EnableAccount != true)
+        if (asked == applied && options.EnableAccount != true)
             return PasswordSetResult.Succeeded(applied);
 
         var caveats = new List<string>();
 
-        if (options.ExpiryBehaviour != applied)
-            caveats.Add($"'{DescribeExpiryBehaviour(options.ExpiryBehaviour)}' is an Active Directory behaviour with no " +
+        if (asked != applied)
+            caveats.Add($"'{DescribeExpiryBehaviour(asked)}' is an Active Directory behaviour with no " +
                         $"portable equivalent on this directory, so the password will expire according to whichever password " +
                         $"policy the directory applies to the account.");
 
@@ -288,9 +326,11 @@ internal class LdapConnectorPassword
 
     /// <summary>
     /// Reads the entry's current userAccountControl, applies the requested flags, and writes it back if the value
-    /// changed. Returns null on success, or the failure to report.
+    /// changed. Returns the failure to report, or null on success; with the value read and the value the account was
+    /// left with (both null for an object that has no userAccountControl).
     /// </summary>
-    private async Task<PasswordSetResult?> ApplyUserAccountControlAsync(string distinguishedName, PasswordSetOptions options, string password)
+    private async Task<(PasswordSetResult? Failure, int? ReadValue, int? FinalValue)> ApplyUserAccountControlAsync(
+        string distinguishedName, PasswordSetOptions options, string password)
     {
         var searchRequest = new SearchRequest(distinguishedName, "(objectClass=*)", SearchScope.Base, AttributeUserAccountControl);
 
@@ -301,61 +341,131 @@ internal class LdapConnectorPassword
         }
         catch (DirectoryOperationException ex)
         {
-            return BuildFailure(ex.Response?.ResultCode ?? ResultCode.Other, ex.Message,
-                $"read the current account flags on '{distinguishedName}'", password);
+            return (BuildFailure(ex.Response?.ResultCode ?? ResultCode.Other, ex.Message,
+                $"read the current account flags on '{distinguishedName}'", password), null, null);
         }
         catch (LdapException ex)
         {
-            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+            return (PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
                 $"The password was set, but JIM could not read the current account flags on '{distinguishedName}' to apply " +
-                $"the expiry and enabled state: {Redact(ex.Message, password)}");
+                $"the expiry and enabled state: {Redact(ex.Message, password)}"), null, null);
         }
 
         if (searchResponse.Entries.Count == 0)
-            return PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound,
-                $"The password was set, but '{distinguishedName}' could not be read back to apply the expiry and enabled state.");
+            return (PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound,
+                $"The password was set, but '{distinguishedName}' could not be read back to apply the expiry and enabled state."), null, null);
 
         var currentValue = ParseUserAccountControl(searchResponse.Entries[0]);
         if (currentValue == null)
         {
-            // No userAccountControl means this object type has no account flags (a contact, for instance).
-            // The password is set; there is simply nothing further to apply.
-            return options.EnableAccount == true || options.ExpiryBehaviour == PasswordExpiryBehaviour.NeverExpires
-                ? PasswordSetResult.Failed(PasswordSetFailureReason.UnsupportedOperation,
+            // No userAccountControl means this object type has no account flags (a contact, for instance). The password
+            // is set; there is simply nothing further to apply, which matters only where something was asked of a flag.
+            var flagAsked = options.EnableAccount == true ||
+                            (options.ExpiryBehaviour == PasswordExpiryBehaviour.NeverExpires && !options.LeavePasswordNeverExpiresAsIs);
+            return flagAsked
+                ? (PasswordSetResult.Failed(PasswordSetFailureReason.UnsupportedOperation,
                     $"The password was set, but '{distinguishedName}' has no userAccountControl attribute, so the requested " +
-                    $"expiry and enabled state cannot be applied to it.")
-                : null;
+                    $"expiry and enabled state cannot be applied to it."), null, null)
+                : (null, null, null);
         }
 
-        var updatedValue = ApplyUserAccountControlFlags(currentValue.Value, options.ExpiryBehaviour, options.EnableAccount);
-        if (updatedValue == currentValue.Value)
-            return null;
+        var updatedValue = ApplyUserAccountControlFlags(currentValue.Value, options.ExpiryBehaviour, options.EnableAccount,
+            options.LeavePasswordNeverExpiresAsIs);
 
-        var modification = new DirectoryAttributeModification
+        // A delivery that changes nothing sends nothing, so the compare-and-swap below (#2161) is never reached for it.
+        if (updatedValue == currentValue.Value)
+            return (null, currentValue, currentValue);
+
+        var swapFailure = await SwapUserAccountControlAsync(distinguishedName, currentValue.Value, updatedValue, password);
+        return swapFailure != null
+            ? (swapFailure, currentValue, null)
+            : (null, currentValue, updatedValue);
+    }
+
+    /// <summary>
+    /// Writes the account's flags only if they are still the ones read (#2161): the value read is deleted and the new
+    /// one added in a single request, which the directory applies whole or not at all, and refuses with
+    /// noSuchAttribute when the value read is no longer there. The Password Delivery Service runs beside the export
+    /// run, so an export can change the flags between the read and this write (a leaver's disable, say), and a
+    /// Replace computed from the stale read would overwrite it, enabling the leaver.
+    /// <para>
+    /// On that refusal the flags are left as the export left them and the delivery is reported as a transient failure,
+    /// rather than re-read and swapped again here: whether this password should enable the account is the engine's
+    /// decision, taken afresh at the next attempt from what the export recorded, and re-applying this attempt's
+    /// decision over the export's value would undo it all the same. The password itself is already set.
+    /// </para>
+    /// </summary>
+    private async Task<PasswordSetResult?> SwapUserAccountControlAsync(string distinguishedName, int readValue, int newValue, string password)
+    {
+        var expected = new DirectoryAttributeModification
         {
             Name = AttributeUserAccountControl,
-            Operation = DirectoryAttributeOperation.Replace
+            Operation = DirectoryAttributeOperation.Delete
         };
-        modification.Add(updatedValue.ToString());
+        expected.Add(readValue.ToString(CultureInfo.InvariantCulture));
 
-        return await SendAndClassifyAsync(new ModifyRequest(distinguishedName, modification),
-            $"apply the account flags on '{distinguishedName}'", password);
+        var replacement = new DirectoryAttributeModification
+        {
+            Name = AttributeUserAccountControl,
+            Operation = DirectoryAttributeOperation.Add
+        };
+        replacement.Add(newValue.ToString(CultureInfo.InvariantCulture));
+
+        var operationDescription = $"apply the account flags on '{distinguishedName}'";
+        ResultCode resultCode;
+        string? errorMessage;
+        try
+        {
+            var response = await _executor.SendRequestAsync(new ModifyRequest(distinguishedName, expected, replacement));
+            resultCode = response.ResultCode;
+            errorMessage = response.ErrorMessage;
+        }
+        catch (DirectoryOperationException ex)
+        {
+            resultCode = ex.Response?.ResultCode ?? ResultCode.Other;
+            errorMessage = ex.Message;
+        }
+        catch (LdapException ex)
+        {
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"JIM could not {operationDescription}: {Redact(ex.Message, password)}");
+        }
+
+        if (resultCode == ResultCode.Success)
+            return null;
+
+        if (resultCode == ResultCode.NoSuchAttribute)
+        {
+            _logger.Information("LdapConnectorPassword: The account flags on {DistinguishedName} changed between JIM reading them ({ReadValue}) and writing {NewValue}; " +
+                "they are left as they are, and the delivery is tried again",
+                LogSanitiser.Sanitise(distinguishedName), readValue, newValue);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"The password was set, but the account flags on '{distinguishedName}' changed while JIM was applying the expiry and enabled state, " +
+                "most likely because an export wrote them at the same moment. JIM left them as they are and tries again.");
+        }
+
+        return BuildFailure(resultCode, errorMessage, operationDescription, password);
     }
 
     /// <summary>
     /// Applies the expiry behaviour and enabled state to an Active Directory userAccountControl value.
     /// <para>
     /// "Must change at next sign-in" and "never expires" contradict each other in Active Directory, which is why
-    /// JIM models expiry as one tri-state choice. Selecting either of the expiring states therefore has to clear
-    /// DONT_EXPIRE_PASSWORD, not merely leave it alone: an account that already carries the flag would otherwise
-    /// keep it and silently ignore the administrator's choice.
+    /// JIM models expiry as one tri-state choice. Where the caller owns "Password never expires", selecting either of
+    /// the expiring states therefore has to clear DONT_EXPIRE_PASSWORD, not merely leave it alone: an account that
+    /// already carries the flag would otherwise keep it and silently ignore the choice. Where something else owns it
+    /// (<paramref name="leavePasswordNeverExpiresAsIs"/>, #2159), the flag is left exactly as it is; the enabled state is
+    /// still applied.
     /// </para>
     /// </summary>
-    internal static int ApplyUserAccountControlFlags(int currentValue, PasswordExpiryBehaviour expiryBehaviour, bool? enableAccount)
+    internal static int ApplyUserAccountControlFlags(int currentValue, PasswordExpiryBehaviour expiryBehaviour, bool? enableAccount,
+        bool leavePasswordNeverExpiresAsIs = false)
     {
-        var value = expiryBehaviour == PasswordExpiryBehaviour.NeverExpires
-            ? currentValue | LdapConnectorConstants.UAC_DONT_EXPIRE_PASSWORD
-            : currentValue & ~LdapConnectorConstants.UAC_DONT_EXPIRE_PASSWORD;
+        var value = currentValue;
+        if (!leavePasswordNeverExpiresAsIs)
+            value = expiryBehaviour == PasswordExpiryBehaviour.NeverExpires
+                ? value | LdapConnectorConstants.UAC_DONT_EXPIRE_PASSWORD
+                : value & ~LdapConnectorConstants.UAC_DONT_EXPIRE_PASSWORD;
 
         if (enableAccount == true)
             value &= ~LdapConnectorConstants.UAC_ACCOUNTDISABLE;
@@ -451,7 +561,7 @@ internal class LdapConnectorPassword
         // Active Directory reports a password policy rejection as a constraint violation carrying the Win32 code
         // ERROR_PASSWORD_RESTRICTIONS, and reports the same condition as unwillingToPerform in some cases. The
         // code in the diagnostic message is the reliable signal, so it is checked ahead of the result code.
-        if (errorMessage != null && errorMessage.Contains(ErrorPasswordRestrictions, StringComparison.OrdinalIgnoreCase))
+        if (errorMessage != null && errorMessage.Contains(LdapConnectorConstants.AD_ERROR_PASSWORD_RESTRICTIONS, StringComparison.OrdinalIgnoreCase))
             return PasswordSetFailureReason.PolicyRejection;
 
         return resultCode switch
@@ -502,12 +612,6 @@ internal class LdapConnectorPassword
     /// RFC 3062 LDAP Password Modify extended operation.
     /// </summary>
     internal const string PasswordModifyExtensionOid = "1.3.6.1.4.1.4203.1.11.1";
-
-    /// <summary>
-    /// Win32 ERROR_PASSWORD_RESTRICTIONS, which Active Directory embeds in the diagnostic message when it rejects
-    /// a password for failing the policy in force for the account.
-    /// </summary>
-    private const string ErrorPasswordRestrictions = "0000052D";
 
     private const byte TagSequence = 0x30;
 

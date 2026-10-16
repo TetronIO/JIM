@@ -23,7 +23,8 @@ internal static class RpeiBulkColumns
         "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
         "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
         "AttributeFlowCount", "OutcomeSummary", "PendingExportId",
-        "DeletionPolicySnapshotJson", "MetaverseObjectId"
+        "DeletionPolicySnapshotJson", "MetaverseObjectId", "UnresolvedReferenceCount",
+        "AttributeValueErrorsJson", "SourceLocation"
     ];
 
     /// <summary>
@@ -42,11 +43,17 @@ internal static class RpeiBulkColumns
     /// <summary>
     /// Columns deliberately excluded from <see cref="ActivityRunProfileExecutionItemsUpdate"/>:
     /// the identity, snapshots and change classification are immutable once the RPEI is inserted.
+    /// UnresolvedReferenceCount (#959) is too: an import records it while resolving references, before
+    /// the item is first inserted, and nothing later changes it. Leaving it out also means an update
+    /// built from a read that does not select it (the cross-page merge read) cannot null it. The same
+    /// holds for AttributeValueErrorsJson and SourceLocation (#2066), which an import records from what the
+    /// Connector reported, before the item is first inserted.
     /// </summary>
     internal static readonly string[] ActivityRunProfileExecutionItemsUpdateExclusions =
     [
         "Id", "ActivityId", "ObjectChangeType", "NoChangeReason", "ConnectedSystemObjectId",
-        "ExternalIdSnapshot", "DisplayNameSnapshot", "ObjectTypeSnapshot", "PendingExportId", "MetaverseObjectId"
+        "ExternalIdSnapshot", "DisplayNameSnapshot", "ObjectTypeSnapshot", "PendingExportId", "MetaverseObjectId",
+        "UnresolvedReferenceCount", "AttributeValueErrorsJson", "SourceLocation"
     ];
 
     /// <summary>
@@ -57,6 +64,7 @@ internal static class RpeiBulkColumns
         "Id", "ActivityRunProfileExecutionItemId", "ParentSyncOutcomeId",
         "OutcomeType", "TargetEntityId", "TargetEntityDescription",
         "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId",
-        "SyncRuleId", "SyncRuleName", "StagedChangeType"
+        "SyncRuleId", "SyncRuleName", "StagedChangeType",
+        "ObjectMatchingRuleId", "ObjectMatchingRuleDescriptionSnapshot", "MatchedValue"
     ];
 }

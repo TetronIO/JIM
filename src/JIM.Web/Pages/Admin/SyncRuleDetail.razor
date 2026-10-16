@@ -3,6 +3,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
 @using JIM.Models.Core
+@using JIM.Models.Exceptions
 @using JIM.Models.Logic
 @using JIM.Models.Preview
 @using JIM.Models.Staging.DTOs
@@ -23,7 +24,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span>
+    <PageInfo Title="Synchronisation Rule" DocsPage="configuration/synchronisation-rules.md">
+        A Synchronisation Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_syncRule is { Id: > 0 })
@@ -98,6 +103,16 @@ else if (_syncRule != null)
             <SyncRuleAttributeFlowTab @ref="_attributeFlowTab" SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
+        @* Saved rules only: a test case covers configuration that exists. It saves and runs on its own, against the rule
+           as saved, so the rule's save bar is hidden here as on the read-only tabs. MudTabs renders only the tab on
+           show, so the panel loads afresh each time it is opened, after any save made on another tab. *@
+        @if (_syncRule.Id > 0)
+        {
+            <MudTabPanel Text="Tests">
+                <ConfigurationTestCasesPanel SyncRuleId="_syncRule.Id" />
+            </MudTabPanel>
+        }
+
         @if (_syncRule.Id > 0)
         {
             <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
@@ -160,7 +175,7 @@ else if (_syncRule != null)
             {
                 @if (previewBaseline.DestructiveTogglesEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
                         Disabled="@_startingPreview">
                         Preview Deprovisioning Impact
@@ -171,7 +186,7 @@ else if (_syncRule != null)
                 @* separately and answer different questions.                                                     *@
                 @if (previewBaseline.ScopeEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined"
                         StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
                         Disabled="@_startingPreview">
                         Preview Scope Impact
@@ -182,7 +197,7 @@ else if (_syncRule != null)
                 @* leaving costs them, and this decides what the ones staying end up holding.                     *@
                 @if (previewBaseline.AttributeFlowEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined"
                         StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
                         Disabled="@_startingPreview">
                         Preview Attribute Flow Impact
@@ -193,7 +208,7 @@ else if (_syncRule != null)
                 @* staying hold, and these decide whether the rule runs at all and what it may create.            *@
                 @if (previewBaseline.BehaviourEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined"
                         StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
                         Disabled="@_startingPreview">
                         Preview Behaviour Impact
@@ -330,12 +345,12 @@ else if (_syncRule != null)
     /// </summary>
     private bool ShowIdentityStrip => _syncRule is { Id: > 0, ConnectedSystem: not null };
 
-    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
-    // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
-    // either is active. Computed rather than a constant because the Passwords tab is conditional, and a
-    // fixed index would put the save bar back on a read-only tab whenever it is present.
-    private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
-    private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
+    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule Tests,
+    // Changes and Danger Zone follow. Tests saves and runs test cases on its own, and the other two are read-only
+    // views, so the editing save bar is hidden when any of them is active. Computed rather than a constant because the
+    // Passwords tab is conditional, and a fixed index would put the save bar back on one of them whenever it is present.
+    private int TestsTabIndex => ShowInitialPasswordTab ? 5 : 4;
+    private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= TestsTabIndex;
 
     /// <summary>
     /// The recall-or-keep choices for the Attribute Flow mapping removals staged in the editor this session
@@ -858,17 +873,30 @@ else if (_syncRule != null)
         var previewActivityId = confirming.IsStale ? null : confirming.ActivityId;
         var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
         bool wasSuccessful;
-        try
+        ConfigurationTestGateOptions? configurationTestGate = null;
+        while (true)
         {
-            wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId,
-                mappingRemovalChoices: _mappingRemovalChoices);
-        }
-        catch (ArgumentException ex)
-        {
-            // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
-            // targeting the same attribute (#1532); surface its message rather than an unhandled error.
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
+            try
+            {
+                wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId,
+                    mappingRemovalChoices: _mappingRemovalChoices, configurationTestGate: configurationTestGate);
+                break;
+            }
+            catch (ConfigurationTestsRegressedException ex)
+            {
+                // the save gate (#2055 Phase 4b): the change stops configuration test cases passing, and nothing was
+                // saved. Keep editing leaves the edit on the page; accepting or saving anyway saves it again.
+                configurationTestGate = await ConfigurationTestGateDialog.ShowAsync(DialogService, ex);
+                if (configurationTestGate == null)
+                    return;
+            }
+            catch (ArgumentException ex)
+            {
+                // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
+                // targeting the same attribute (#1532); surface its message rather than an unhandled error.
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
         }
         // the staged removals the choices describe have been applied; a failed save keeps them for the retry.
         if (wasSuccessful)
@@ -883,6 +911,7 @@ else if (_syncRule != null)
             case true when isSyncRuleNew:
                 Snackbar.Add("Synchronisation Rule created.", Severity.Success);
                 ReportSequenceSkips();
+                ReportSaveWarnings();
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
@@ -893,6 +922,7 @@ else if (_syncRule != null)
                 _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
+                ReportSaveWarnings();
                 if (_attributeFlowTab != null)
                     await _attributeFlowTab.RefreshDerivedFlowStepsAsync();
                 break;
@@ -908,6 +938,18 @@ else if (_syncRule != null)
     /// <see cref="JIM.Models.Logic.SyncRuleMappingGeneration.SequenceSkippedAhead"/> by
     /// <c>CreateOrUpdateSyncRuleAsync</c>). A no-op when the save touched no such mapping.
     /// </summary>
+    /// <summary>
+    /// After the whole-rule save, one snackbar per warning it raised: a problem with an Attribute Flow expression or a
+    /// Scoping Criterion the save left as it was (#2055 Phase 3, #2054), or a derived flow calling a non-repeatable
+    /// function (#1750).
+    /// The same list the REST API returns as <c>warnings</c> and PowerShell writes as warnings.
+    /// </summary>
+    private void ReportSaveWarnings()
+    {
+        foreach (var warning in _syncRule?.SaveWarnings ?? [])
+            Snackbar.Add(warning, Severity.Warning);
+    }
+
     private void ReportSequenceSkips()
     {
         if (_syncRule == null)

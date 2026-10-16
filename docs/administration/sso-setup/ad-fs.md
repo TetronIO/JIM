@@ -1,5 +1,8 @@
 ---
-title: SSO Setup - AD FS
+title: "SSO Setup: AD FS"
+description: Register JIM with AD FS so administrators sign in to the portal, and the PowerShell module, with their Active Directory accounts.
+type: how-to
+audience: implementer
 ---
 
 # SSO Setup: AD FS
@@ -10,7 +13,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using AD FS (A
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
 
 !!! note "Two client types, two AD FS applications"
-    The JIM web application is a **confidential client**: it runs on a server and authenticates to AD FS with a shared secret, so it is registered as an AD FS **Server application**. The optional PowerShell module is a **public client**: it runs on an administrator's machine and uses PKCE with a loopback redirect instead of a secret, so it is registered as a separate AD FS **Native application**. Both live in the same Application Group. Steps 1--6 configure the confidential web application; Step 7 adds the public client for the PowerShell module.
+    The JIM web application is a **confidential client**: it runs on a server and authenticates to AD FS with a shared secret, so it is registered as an AD FS **Server application**. The optional PowerShell module is a **public client**: it runs on an administrator's machine and uses PKCE with a loopback redirect instead of a secret, so it is registered as a separate AD FS **Native application**. Both live in the same Application Group. Steps 1 to 6 configure the confidential web application; Step 7 adds the public client for the PowerShell module.
 
 ## Step 1: Create an Application Group
 
@@ -24,7 +27,7 @@ This template creates a **Server application** (the confidential web client) and
 
 ## Step 2: Configure the Server Application
 
-1. Note the **Client Identifier** (auto-generated GUID) -- this becomes `JIM_SSO_CLIENT_ID`
+1. Note the **Client Identifier** (auto-generated GUID); this becomes `JIM_SSO_CLIENT_ID`
 2. Add the **Redirect URI**: `https://your-jim-url/signin-oidc` (`your-jim-url` is JIM's address, such as `jim.example.com`, with `:port` added if JIM does not use 443), then click **Add**
 3. Add a second **Redirect URI** for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Add**. AD FS validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
 4. Click **Next**
@@ -32,7 +35,7 @@ This template creates a **Server application** (the confidential web client) and
 ## Step 3: Configure Application Credentials
 
 1. Check **Generate a shared secret**
-2. **Copy the secret value** -- store it securely; this becomes `JIM_SSO_SECRET`
+2. **Copy the secret value** and store it securely; this becomes `JIM_SSO_SECRET`
 3. Click **Next**
 
 !!! note
@@ -68,13 +71,13 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 1. Right-click your Application Group and select **Properties**
 2. Click **Add application**
 3. Select **Native application**, then click **Next**
-4. Note the **Client Identifier** (auto-generated GUID) -- this becomes `JIM_SSO_PUBLIC_CLIENT_ID`
+4. Note the **Client Identifier** (auto-generated GUID); this becomes `JIM_SSO_PUBLIC_CLIENT_ID`
 5. Add the **Redirect URI**: `http://localhost:8400/callback/`, then click **Add**
 6. Click **Next**, then **Close**
 7. Grant the native application access to the Web API: back in the Application Group properties, select the **Web API**, click **Edit**, and on the **Client Permissions** tab ensure the native application is permitted the `openid`, `profile`, `email` and `offline_access` scopes
 
 !!! note
-    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). AD FS 2019 and later support PKCE for native applications, which the module uses for security. If port 8400 is busy, the module will try ports 8401--8409; add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
+    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). AD FS 2019 and later support PKCE for native applications, which the module uses for security. If port 8400 is busy, the module will try ports 8401 to 8409; add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
 
 ## Step 8: Configure JIM Environment Variables
 
@@ -124,6 +127,14 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
  => issue(Type = "email", Value = c.Value);
 ```
 
+## Check it worked
+
+1. Open JIM in a browser. JIM sends you to AD FS to sign in, then returns you to JIM, signed in.
+2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
+3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+
+To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
 ## AD FS Troubleshooting
 
 - **Token signing certificate**: Ensure your AD FS token signing certificate is trusted by the JIM server
@@ -133,4 +144,4 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
 
 ## Next steps
 
-With the configuration in place, [test your configuration](../sso-setup.md#testing-your-configuration) to verify sign-in, claims, sign-out, and API access. If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).
+If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

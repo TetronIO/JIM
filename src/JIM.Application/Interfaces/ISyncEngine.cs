@@ -215,10 +215,36 @@ public interface ISyncEngine
     /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
     /// <param name="pendingExport">The pre-loaded Pending Export for this CSO (or null if none).</param>
     /// <param name="result">The result object to populate with reconciliation outcomes.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected
+    /// System (<c>ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync</c>), deciding whether a change written with
+    /// an interim value until an Initial Password is delivered is held or released (#2039). Null when the caller did
+    /// not look, in which case such a change is held: the safe answer, since releasing re-sends a value the target
+    /// refuses. Read only for a flagged change, so callers whose objects carry none need not supply it.</param>
     void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
-        PendingExportReconciliationResult result);
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null);
+
+    /// <summary>
+    /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run
+    /// did not return its Connected System Object (#2039): each is held while a password is owed to the object's
+    /// Metaverse Object and released otherwise, exactly as <see cref="ReconcileCsoAgainstPendingExport"/> would; no other
+    /// change is touched, since the import did not read the object.
+    /// This method does NOT perform any database operations; the caller persists <c>result.PendingExportToUpdate</c>.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object the Pending Export writes to.</param>
+    /// <param name="metaverseObjectId">The Metaverse Object it is joined to, or null when it is joined to none.</param>
+    /// <param name="pendingExport">The object's Pending Export.</param>
+    /// <param name="result">The result object to populate with the held and released changes.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System
+    /// (<c>ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync</c>).</param>
+    void JudgeChangesAwaitingInitialPasswordNotReconciled(
+        Guid connectedSystemObjectId,
+        Guid? metaverseObjectId,
+        PendingExport pendingExport,
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid> metaverseObjectIdsOwedPassword);
 
     /// <summary>
     /// Determines if an attribute change has been confirmed by comparing the exported value
@@ -361,8 +387,10 @@ public interface ISyncEngine
     /// <param name="csoAlreadyCurrentCount">Output: count of attributes skipped because the CSO already has the value.</param>
     /// <param name="expressionEvaluator">The evaluator for expression-based mappings; a caller that passes
     /// none gets a per-call default.</param>
-    /// <param name="removedAttributes">Optional set of attribute values removed from the MVO (multi-valued
-    /// removals become Remove changes; single-valued removals become null-clearing Updates).</param>
+    /// <param name="removedAttributes">Optional set of attribute values removed from the MVO. The change shape follows
+    /// the target attribute's plurality (#2182): where both source and target are multi-valued, a removed value becomes a
+    /// Remove change; everywhere else the target gets one Update carrying the value that survives, or a null-clearing
+    /// Update when none does.</param>
     /// <param name="mvAttributeDictionary">Optional pre-built MVO attribute dictionary for expression evaluation.</param>
     /// <param name="preResolvedReferenceValues">Optional pre-resolved reference values (reference recall, #908).</param>
     /// <param name="flowErrors">Optional collector for Attribute Flow errors (multi-valued to single-valued truncation).</param>
@@ -382,10 +410,10 @@ public interface ISyncEngine
         List<PendingExportAttributeValueChange>? noNetChangeSkipped = null);
 
     /// <summary>
-    /// Decides the removal change a reference recall stages for one matched target row (#908/#1003): a
-    /// multi-valued source synthesises a Remove carrying the resolved value, a single-valued source a
-    /// null-clearing Update, and a multi-valued removal with no resolvable value returns null (nothing can be
-    /// staged; the orchestrator counts it as dropped).
+    /// Decides the removal change a reference recall stages for one matched target row (#908/#1003). The shape
+    /// follows the target attribute's plurality (#2182): where both source and target are multi-valued, a Remove
+    /// carrying the resolved value, or null when that value cannot be resolved (nothing can be staged; the
+    /// orchestrator counts it as dropped); everywhere else a null-clearing Update.
     /// </summary>
     /// <param name="flow">The direct reference flow whose target attribute still holds the deleted value.</param>
     /// <param name="resolvedRemovalValue">The deleted object's resolved value in the flow's target system, or null.</param>

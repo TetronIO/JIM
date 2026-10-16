@@ -53,6 +53,20 @@
                      rejection carrying 0000052D). The rule is then corrected to a compliant static password and the
                      account is released: enabled, with a password, nothing parked.
 
+      EnableWhileOwed
+                  9. A pre-hire's start date arrives before their Initial Password is delivered (#2158). The
+                     userAccountControl Attribute Flow Scenario 017's setup removed is put back (Archived disables,
+                     anything else enables), and one more HR user is provisioned Archived, with a static Initial
+                     Password only a domain controller refuses, so the account is created disabled and its password
+                     PARKED. The user is then made Active: the enabling Update, which Active Directory refuses for an
+                     account with no password, is sent again disabled because a password is still owed, so the export
+                     succeeds with no "will not enable an account that has no password" error, the directory holds 514,
+                     the change is held, and the confirming Delta Import raises no "not confirmed" warning.
+                 10. The rule is corrected, which releases the parked password: its delivery sets the password and
+                     completes the held enable (the directory holds 512, and the delivery's Activity says the enable
+                     was held back until the account had a password), and the next Delta Import confirms the change,
+                     leaving no Pending Export.
+
     Steps are cumulative: a named step runs everything before it. The domain policy changes are not undone here;
     every run starts from a checkpoint revert, which undoes them (the values replaced are printed).
 
@@ -63,7 +77,7 @@
 
 .PARAMETER Step
     Which part to execute. Steps are cumulative: a named step runs everything up to and including itself
-    (Policy, Discovery, Provision, Override, All).
+    (Policy, Discovery, Provision, Override, EnableWhileOwed, All).
 
 .PARAMETER Template
     Accepted for runner compatibility and deliberately not used for sizing. This scenario asserts against the
@@ -95,7 +109,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'Template, WaitSeconds and SkipPopulate are accepted for the runner, which passes the same parameters to every scenario.')]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Policy", "Discovery", "Provision", "Override", "All")]
+    [ValidateSet("Policy", "Discovery", "Provision", "Override", "EnableWhileOwed", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -308,7 +322,8 @@ function Add-FixtureAccount {
 function Get-AccountState {
     <#
     .SYNOPSIS
-        An account's enabled state and password stamp, read from the directory as its administrator.
+        An account's enabled state, raw userAccountControl and password stamp, read from the directory as its
+        administrator.
     #>
     param([Parameter(Mandatory=$true)][string]$SamAccountName)
 
@@ -318,8 +333,92 @@ function Get-AccountState {
 
     return @{
         Enabled            = (([int]$entry["userAccountControl"][0] -band 2) -eq 0)
+        UserAccountControl = [int]$entry["userAccountControl"][0]
         PasswordWasStamped = ($entry.ContainsKey("pwdLastSet") -and "$($entry["pwdLastSet"][0])" -ne "0")
     }
+}
+
+function Add-HrUser {
+    <#
+    .SYNOPSIS
+        Adds one user to the HR CSV, cloned from its last row so every column holds a valid value, and copies the CSV
+        to where the Connector reads it.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][System.Collections.Specialized.OrderedDictionary]$Overrides
+    )
+
+    $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+    $rows = @(Import-Csv $csvPath)
+    $newRow = $rows[-1].PSObject.Copy()
+    foreach ($column in $Overrides.Keys) {
+        if ($null -eq $newRow.PSObject.Properties[$column]) {
+            throw "hr-users.csv has no '$column' column, so the new user cannot be added to it. The generator (Generate-TestCSV.ps1) has changed; update this scenario."
+        }
+        $newRow.$column = $Overrides[$column]
+    }
+    @($rows) + $newRow | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
+}
+
+function Set-HrUserStatus {
+    <#
+    .SYNOPSIS
+        Changes one HR user's status in the CSV, found by employee id, and copies the CSV to where the Connector
+        reads it.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$EmployeeId,
+        [Parameter(Mandatory=$true)][string]$Status
+    )
+
+    $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+    $rows = @(Import-Csv $csvPath)
+    $target = @($rows | Where-Object { $_.employeeId -eq $EmployeeId })
+    if ($target.Count -ne 1) {
+        throw "Expected exactly one HR user with employee id $EmployeeId, found $($target.Count)."
+    }
+    $target[0].status = $Status
+    $rows | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
+}
+
+function Get-HeldChangeCount {
+    <#
+    .SYNOPSIS
+        How many changes to the Connected System's accounts are held until a password is delivered: written with an
+        interim value (AwaitsInitialPassword) and still awaiting their confirming import. No API surfaces the hold,
+        which is internal state, so it is read from JIM's database as Scenario 001 reads its own invariants.
+    #>
+    param([Parameter(Mandatory=$true)][int]$ConnectedSystemId)
+
+    # psql -c takes no bind parameters; the value interpolated is an integer this script owns.
+    $query = 'SELECT count(*) FROM "PendingExportAttributeValueChanges" avc ' +
+             'JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId" ' +
+             "WHERE avc.""AwaitsInitialPassword"" AND pe.""ConnectedSystemId"" = $([int]$ConnectedSystemId)"
+    $output = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not read the held changes from JIM's database: $output"
+    }
+    return [int]("$output".Trim())
+}
+
+function Invoke-DirectoryDeltaImportAndSync {
+    <#
+    .SYNOPSIS
+        Runs the directory's Delta Import and Delta Sync, asserting each completed with no warning and no error: a
+        held change the import misread would surface as a "not confirmed" warning.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Label)
+
+    $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Delta Import ($Label)"
+    $importActivityId = $r.activityId
+
+    $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Delta Sync ($Label)"
+
+    return $importActivityId
 }
 
 function Wait-ParkedAndPendingChange {
@@ -352,7 +451,7 @@ Write-Host "Step:         $Step (steps are cumulative)" -ForegroundColor Gray
 Write-Host ""
 
 # Cumulative dispatch: each step builds on the previous one's state.
-$stepOrder = @("Policy", "Discovery", "Provision", "Override")
+$stepOrder = @("Policy", "Discovery", "Provision", "Override", "EnableWhileOwed")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -691,11 +790,8 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
                       "$($_.Exception.Message)"
             }
 
-            # One more HR user. Cloned from the last row so every column has a valid value, then made unique.
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-            $rows = @(Import-Csv $csvPath)
-            $newRow = $rows[-1].PSObject.Copy()
-            $overrides = [ordered]@{
+            # One more HR user, cloned from the last row so every column has a valid value, then made unique.
+            Add-HrUser -Overrides ([ordered]@{
                 employeeId        = "EMP000999"
                 firstName         = $givenName
                 lastName          = $surname
@@ -706,15 +802,7 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
                 userPrincipalName = "$samAccountName@$($DirectoryConfig.Domain)"
                 employeeType      = "Employee"
                 employeeEndDate   = ""
-            }
-            foreach ($column in $overrides.Keys) {
-                if ($null -eq $newRow.PSObject.Properties[$column]) {
-                    throw "hr-users.csv has no '$column' column, so the new user cannot be added to it. The generator (Generate-TestCSV.ps1) has changed; update this scenario."
-                }
-                $newRow.$column = $overrides[$column]
-            }
-            @($rows) + $newRow | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-            Copy-CsvToConnectorFiles -SourcePath $csvPath
+            })
             Write-Host "  OK Added $displayName ($samAccountName) to the HR CSV; the Initial Password contains '$surname'" -ForegroundColor Green
 
             Write-Host "  [1/4] HR CSV Full Import..." -ForegroundColor DarkGray
@@ -796,6 +884,160 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
                 -Detail "State read from the directory: $(if ($null -eq $releasedState) { 'the account does not exist' } else { "enabled $($releasedState.Enabled), password stamped $($releasedState.PasswordWasStamped)" })."
         }
 
+        if ($lastStepIndex -ge $stepOrder.IndexOf("EnableWhileOwed")) {
+            # ---------------------------------------------------------------------------------------------------------
+            # EnableWhileOwed: an Attribute Flow enables an account whose password is still owed (#2158)
+            # ---------------------------------------------------------------------------------------------------------
+            Write-TestSection "Test 9: Enabling a pre-hire whose Initial Password is parked holds the enable rather than failing"
+
+            $preHireGivenName = "Juniper"
+            $preHireSurname = "Hawthorne"
+            $preHireSam = "jhawthorne98"
+            $preHireEmployeeId = "EMP000998"
+            $preHireDisplayName = "$preHireGivenName $preHireSurname"
+
+            # Put back the userAccountControl Attribute Flow Scenario 017's setup removed, exactly as Scenario 001
+            # configures it: Archived disables the account, every other status enables it. It is what enables the
+            # pre-hire when their status changes; without it nothing would.
+            $ldapUserType = @(Get-JIMConnectedSystem -Id $config.LDAPSystemId -ObjectTypes) |
+                Where-Object { $_.name -eq $DirectoryConfig.UserObjectClass } | Select-Object -First 1
+            $userAccountControlAttribute = if ($ldapUserType) { @($ldapUserType.attributes) | Where-Object { $_.name -eq 'userAccountControl' } | Select-Object -First 1 } else { $null }
+            if (-not $userAccountControlAttribute) {
+                throw "Could not find the userAccountControl attribute of '$($DirectoryConfig.UserObjectClass)' on $($DirectoryConfig.ConnectedSystemName)."
+            }
+            $existingFlow = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ExportSyncRuleId) |
+                Where-Object { $_.TargetConnectedSystemAttributeName -eq 'userAccountControl' } | Select-Object -First 1
+            if (-not $existingFlow) {
+                New-JIMSyncRuleMapping -SyncRuleId $config.ExportSyncRuleId `
+                    -TargetConnectedSystemAttributeId $userAccountControlAttribute.id `
+                    -Expression 'IIF(Eq(mv["Status"], "Archived"), DisableUser(512), EnableUser(512))' | Out-Null
+                Write-Host "  OK Added the userAccountControl Attribute Flow (Archived disables, anything else enables)" -ForegroundColor Green
+            }
+
+            # A static Initial Password only a domain controller refuses, as in Test 7: it contains the pre-hire's
+            # surname. The pre-hire's password is therefore parked, and stays owed, until the rule is corrected.
+            $preHireRefusedPassword = "$preHireSurname-" + (Get-ActiveDirectoryFixturePassword -Length 16 -Avoid @($preHireGivenName, $preHireSam))
+            $preHireCorrectedPassword = Get-ActiveDirectoryFixturePassword -Length 20 -Avoid @($preHireGivenName, $preHireSurname, $preHireSam)
+            Set-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId -Source Static `
+                -StaticPassword (ConvertTo-SecurePasswordValue -Text $preHireRefusedPassword) `
+                -ChangeReason "Scenario 024: a password only the domain can refuse, so the pre-hire's stays owed" | Out-Null
+
+            Add-HrUser -Overrides ([ordered]@{
+                employeeId        = $preHireEmployeeId
+                firstName         = $preHireGivenName
+                lastName          = $preHireSurname
+                email             = "$preHireSam@$($DirectoryConfig.Domain)"
+                samAccountName    = $preHireSam
+                displayName       = $preHireDisplayName
+                status            = "Archived"
+                userPrincipalName = "$preHireSam@$($DirectoryConfig.Domain)"
+                employeeType      = "Employee"
+                employeeEndDate   = ""
+            })
+            Write-Host "  OK Added $preHireDisplayName ($preHireSam) to the HR CSV as Archived, a pre-hire who has not started" -ForegroundColor Green
+
+            Write-Host "  [1/5] HR CSV Full Import and Delta Sync (the pre-hire)..." -ForegroundColor DarkGray
+            $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Full Import (pre-hire)"
+            $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Delta Sync (pre-hire)"
+
+            Write-Host "  [2/5] Directory Export (the pre-hire is created disabled, its Initial Password refused)..." -ForegroundColor DarkGray
+            $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Export (pre-hire created)"
+
+            $preHireParked = Wait-ParkedAndPendingChange -ConnectedSystemId $config.LDAPSystemId -ExpectedParked 1
+            Add-TestResult -Name "The pre-hire's Initial Password is parked, so a password is still owed to the account" `
+                -Passed (@($preHireParked.Parked).Count -eq 1) `
+                -Detail "Expected 1 parked row, found $(@($preHireParked.Parked).Count) after $($preHireParked.Seconds) seconds (still pending: $(@($preHireParked.Pending).Count))."
+
+            Write-Host "  [3/5] Directory Delta Import and Delta Sync (confirms the Create)..." -ForegroundColor DarkGray
+            Invoke-DirectoryDeltaImportAndSync -Label "pre-hire created" | Out-Null
+
+            $createdState = Get-AccountState -SamAccountName $preHireSam
+            Add-TestResult -Name "The pre-hire exists disabled and without a password" `
+                -Passed ($null -ne $createdState -and -not $createdState.Enabled -and -not $createdState.PasswordWasStamped) `
+                -Detail "State read from the directory: $(if ($null -eq $createdState) { 'the account does not exist' } else { "userAccountControl $($createdState.UserAccountControl), password stamped $($createdState.PasswordWasStamped)" })."
+
+            # The start date arrives while the password is still parked.
+            Set-HrUserStatus -EmployeeId $preHireEmployeeId -Status "Active"
+            Write-Host "  OK $preHireDisplayName is now Active in HR; the Attribute Flow enables the account" -ForegroundColor Green
+
+            Write-Host "  [4/5] HR CSV Full Import and Delta Sync (the start date arrives)..." -ForegroundColor DarkGray
+            $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Full Import (start date)"
+            $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Delta Sync (start date)"
+
+            $pendingEnable = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search $preHireDisplayName)
+            Add-TestResult -Name "Making the pre-hire Active queues an Update to their account" `
+                -Passed ($pendingEnable.Count -eq 1) `
+                -Detail "Found $($pendingEnable.Count) Pending Export(s) for $preHireDisplayName."
+
+            # The export is where the issue failed: Active Directory refuses the 512, and before #2158 the export
+            # reported "Active Directory will not enable an account that has no password". Assert-ActivitySuccess
+            # fails on any execution item error, so a clean Activity is the proof; the item check names it if not.
+            Write-Host "  [5/5] Directory Export (the enabling Update)..." -ForegroundColor DarkGray
+            $enableExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            $refusedItems = @(Get-JIMActivity -Id $enableExport.activityId -ExecutionItems |
+                Where-Object { (Get-PropertyText -Object $_ -Name 'errorType') -eq 'PasswordRequiredToEnableAccount' })
+            Add-TestResult -Name "The enabling Update is not reported as Active Directory refusing an account with no password" `
+                -Passed ($refusedItems.Count -eq 0) `
+                -Detail "$($refusedItems.Count) execution item(s) reported PasswordRequiredToEnableAccount: $(@($refusedItems | ForEach-Object { Get-PropertyText -Object $_ -Name 'errorMessage' }) -join ' | ')"
+            Assert-ActivitySuccess -ActivityId $enableExport.activityId -Name "Directory Export (enabling Update held)"
+
+            $heldState = Get-AccountState -SamAccountName $preHireSam
+            Add-TestResult -Name "The directory holds the pre-hire disabled (514) until the password exists" `
+                -Passed ($null -ne $heldState -and $heldState.UserAccountControl -eq 514) `
+                -Detail "userAccountControl read from the directory: $(if ($null -eq $heldState) { 'the account does not exist' } else { $heldState.UserAccountControl })."
+
+            $heldCount = Get-HeldChangeCount -ConnectedSystemId $config.LDAPSystemId
+            Add-TestResult -Name "The enabling change is held until the password is delivered" `
+                -Passed ($heldCount -eq 1) `
+                -Detail "Found $heldCount held change(s) on $($DirectoryConfig.ConnectedSystemName); expected the pre-hire's userAccountControl alone."
+
+            # Assert-ActivitySuccess inside the helper fails on the "not confirmed" warning a misread hold would raise.
+            $confirmingImportId = Invoke-DirectoryDeltaImportAndSync -Label "enable held"
+            $unconfirmedItems = @(Get-JIMActivity -Id $confirmingImportId -ExecutionItems |
+                Where-Object { (Get-PropertyText -Object $_ -Name 'errorType') -eq 'ExportNotConfirmed' })
+            Add-TestResult -Name "The confirming import holds the change rather than reporting it not confirmed" `
+                -Passed ($unconfirmedItems.Count -eq 0 -and (Get-HeldChangeCount -ConnectedSystemId $config.LDAPSystemId) -eq 1) `
+                -Detail "$($unconfirmedItems.Count) ExportNotConfirmed item(s); the hold must survive the import while the password is parked."
+
+            Write-TestSection "Test 10: Delivering the password completes the held enable"
+
+            $correctedAt = (Get-Date).ToUniversalTime()
+            Set-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId -Source Static `
+                -StaticPassword (ConvertTo-SecurePasswordValue -Text $preHireCorrectedPassword) `
+                -ChangeReason "Scenario 024: correct the rule so the pre-hire's password is delivered" | Out-Null
+
+            $deliveredResult = Wait-ParkedAndPendingChange -ConnectedSystemId $config.LDAPSystemId -ExpectedParked 0
+            Write-Host ("  Released and delivered {0} s after the rule was saved" -f $deliveredResult.Seconds) -ForegroundColor Cyan
+            Add-TestResult -Name "The pre-hire's password is released and delivered once the rule is corrected" `
+                -Passed (@($deliveredResult.Parked).Count -eq 0 -and @($deliveredResult.Pending).Count -eq 0) `
+                -Detail "Parked: $(@($deliveredResult.Parked).Count), pending: $(@($deliveredResult.Pending).Count) after $($deliveredResult.Seconds) seconds."
+
+            $enabledState = Get-AccountState -SamAccountName $preHireSam
+            Add-TestResult -Name "The delivery enables the pre-hire (512) and the password is set" `
+                -Passed ($null -ne $enabledState -and $enabledState.UserAccountControl -eq 512 -and $enabledState.PasswordWasStamped) `
+                -Detail "State read from the directory: $(if ($null -eq $enabledState) { 'the account does not exist' } else { "userAccountControl $($enabledState.UserAccountControl), password stamped $($enabledState.PasswordWasStamped)" })."
+
+            # The delivery's Activity states why the account is enabled whatever the rule's Enable Account says:
+            # the CompletesWithheldEnable basis.
+            $deliveryActivities = @(Get-JIMActivity -Search $DirectoryConfig.ConnectedSystemName -CreatedFrom $correctedAt -PageSize 100 |
+                Where-Object { (Get-PropertyText -Object $_ -Name 'message') -match 'held the enable back until the account had a password' })
+            Add-TestResult -Name "The delivery's Activity says the enable was held back until the account had a password" `
+                -Passed ($deliveryActivities.Count -eq 1) `
+                -Detail "Found $($deliveryActivities.Count) delivery Activit(ies) completing a withheld enable since the rule was corrected."
+
+            Invoke-DirectoryDeltaImportAndSync -Label "enable completed" | Out-Null
+            $remainingHeld = Get-HeldChangeCount -ConnectedSystemId $config.LDAPSystemId
+            $remainingExports = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search $preHireDisplayName)
+            Add-TestResult -Name "The next import confirms the enable and the Pending Export is gone" `
+                -Passed ($remainingHeld -eq 0 -and $remainingExports.Count -eq 0) `
+                -Detail "Held changes: $remainingHeld; Pending Exports for ${preHireDisplayName}: $($remainingExports.Count)."
+        }
+
         # The worker logs everything it does through the password channel; an Error there means a delivery that failed
         # quietly behind a green Activity. A refusal that parks an account is logged as a Warning, not an Error.
         Assert-NoWorkerErrors -Since $startTime
@@ -827,4 +1069,7 @@ if ($failed -gt 0) {
 Write-Host ""
 Write-Host "OK JIM read the domain policy as the domain enforces it, and every Initial Password it generated from it" -ForegroundColor Green
 Write-Host "   was accepted by a domain controller that provably refuses shorter ones." -ForegroundColor Green
+if ($lastStepIndex -ge $stepOrder.IndexOf("EnableWhileOwed")) {
+    Write-Host "   An account enabled while its password was owed was held disabled, then enabled by the delivery." -ForegroundColor Green
+}
 exit 0

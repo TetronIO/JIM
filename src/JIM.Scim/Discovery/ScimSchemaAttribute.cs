@@ -41,8 +41,8 @@ public class ScimSchemaAttribute
     public List<string> CanonicalValues { get; set; } = [];
 
     /// <summary>
-    /// Whether string comparisons are case sensitive. Recorded for completeness; JIM does not model
-    /// per-attribute case sensitivity, which the connector documentation states.
+    /// Whether string comparisons are case sensitive. Absent means false per RFC 7643 section 7. JIM records it
+    /// as the attribute's case-exact declaration.
     /// </summary>
     [JsonPropertyName("caseExact")]
     public bool CaseExact { get; set; }

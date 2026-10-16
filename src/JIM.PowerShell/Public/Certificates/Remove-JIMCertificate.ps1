@@ -13,20 +13,20 @@ function Remove-JIMCertificate {
         The unique identifier (GUID) of the certificate to delete.
 
     .PARAMETER InputObject
-        Certificate object to delete (from pipeline).
+        The certificate to remove, as Get-JIMCertificate returns it.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the certificate's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER Force
-        Suppresses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .PARAMETER PassThru
-        If specified, returns the deleted certificate object.
+        Returns the certificate as it was before it was removed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the deleted certificate object.
+        With -PassThru, the certificate as it was before it was removed; otherwise nothing.
 
     .EXAMPLE
         Remove-JIMCertificate -Id $certId
@@ -49,7 +49,7 @@ function Remove-JIMCertificate {
         Set-JIMCertificate
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TrustedCertificateDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,
@@ -84,7 +84,7 @@ function Remove-JIMCertificate {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Certificate")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action "Delete Certificate" -Force:$Force) {
             Write-Verbose "Deleting certificate: $certId"
 
             try {

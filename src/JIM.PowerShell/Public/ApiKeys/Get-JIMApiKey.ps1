@@ -15,10 +15,10 @@ function Get-JIMApiKey {
         The unique identifier (GUID) of a specific API Key to retrieve.
 
     .PARAMETER Name
-        Filter API Keys by name. Supports wildcards (e.g., "CI*").
+        Filters API Keys by name, such as "CI*".
 
     .OUTPUTS
-        PSCustomObject representing API Key(s).
+        Each API Key. The key itself is never returned; KeyPrefix identifies it.
 
     .EXAMPLE
         Get-JIMApiKey
@@ -41,7 +41,7 @@ function Get-JIMApiKey {
         Remove-JIMApiKey
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ApiKeyDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,

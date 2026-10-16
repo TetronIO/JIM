@@ -18,25 +18,24 @@ function Set-JIMMetaverseAttributePriority {
         Move-JIMMetaverseAttributePriority instead.
 
     .PARAMETER AttributeId
-        The unique identifier of the Metaverse Attribute.
+        The ID of the Metaverse Attribute.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Metaverse Object Type that scopes the priority list.
+        The ID of the Metaverse Object Type the priority order applies to.
 
     .PARAMETER MappingId
-        Every current contributing mapping ID, in the desired priority order (highest first). A
-        mapping whose Synchronisation Rule is being deleted may be omitted.
+        Every contributing Attribute Flow mapping ID, once each, highest priority first. A mapping whose
+        Synchronisation Rule is being deleted may be left out; it stays at the bottom.
 
     .PARAMETER NullIsValueMappingId
-        Mapping IDs (from -MappingId) that should have their "Null is a value" flag set, so an
-        authoritative source can positively assert "no value" rather than falling through to
-        the next-priority source. Mappings not listed here have the flag cleared.
+        The mapping IDs, from -MappingId, whose "Null is a value" flag is set, so that source can assert the
+        attribute has no value rather than defer to the next source. Every other mapping has the flag cleared.
 
     .PARAMETER PassThru
-        If specified, returns the resulting priority order.
+        Returns the resulting priority order.
 
     .OUTPUTS
-        If -PassThru is specified, returns the resulting priority order.
+        With -PassThru, the resulting priority order; otherwise nothing.
 
     .EXAMPLE
         Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12, 78
@@ -53,7 +52,7 @@ function Set-JIMMetaverseAttributePriority {
         Move-JIMMetaverseAttributePriority
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AttributePriorityOrderDto')]
     param(
         [Parameter(Mandatory)]
         [int]$AttributeId,

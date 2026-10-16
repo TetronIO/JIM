@@ -11,13 +11,13 @@ function Get-JIMRoleMember {
         Members are returned sorted by display name.
 
     .PARAMETER RoleId
-        The unique identifier (integer) of the Role whose members to retrieve.
+        The ID of the Role.
 
     .PARAMETER InputObject
-        Role object from the pipeline (e.g., from Get-JIMRole).
+        A Role from the pipeline, for example from Get-JIMRole.
 
     .OUTPUTS
-        PSCustomObject representing metaverse object(s) that are members of the Role.
+        One object per member of the Role.
 
     .EXAMPLE
         Get-JIMRoleMember -RoleId 1
@@ -40,7 +40,7 @@ function Get-JIMRoleMember {
         Remove-JIMRoleMember
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RoleMemberDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]

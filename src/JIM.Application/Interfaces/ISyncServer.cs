@@ -87,16 +87,7 @@ public interface ISyncServer
     /// <summary>
     /// Finds a matching MVO for join evaluation using the configured matching rules.
     /// </summary>
-    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
-
-    /// <summary>
-    /// Finds a matching CSO for export provisioning using Object Matching Rules.
-    /// </summary>
-    Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules);
+    Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
 
     #endregion
 
@@ -192,6 +183,13 @@ public interface ISyncServer
     Task DeleteConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Deletes CSOs quietly, without execution items: objects their Metaverse Object's deletion had already
+    /// disconnected. Each deletion is still recorded when Connected System Object change tracking is on, attributed
+    /// to <paramref name="activity"/>, so the object's history stays findable by its id once its row is gone.
+    /// </summary>
+    Task DeleteConnectedSystemObjectsQuietlyAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity);
 
     /// <summary>
     /// Creates "Added" change tracking records for provisioned CSOs.
@@ -345,7 +343,8 @@ public interface ISyncServer
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null);
+        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
+        Action<IReadOnlyList<string>>? containersCreated = null);
 
     #endregion
 }

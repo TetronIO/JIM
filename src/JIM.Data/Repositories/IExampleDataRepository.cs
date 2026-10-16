@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 namespace JIM.Data.Repositories;
@@ -17,6 +18,12 @@ public interface IExampleDataRepository
     public Task DeleteExampleDataSetAsync(int exampleDataSetId);
 
     public Task<List<ExampleDataTemplate>> GetTemplatesAsync();
+
+    /// <summary>
+    /// Returns every Example Data Template attribute carrying an Expression, flattened with its template and
+    /// Metaverse Object Type, for the attribute reader index (#2265).
+    /// </summary>
+    public Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync();
     public Task<List<ExampleDataTemplateHeader>> GetTemplateHeadersAsync();
     /// <summary>
     /// Retrieves a Data Generation Template.

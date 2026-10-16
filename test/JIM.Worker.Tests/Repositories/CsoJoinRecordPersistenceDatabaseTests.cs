@@ -59,7 +59,9 @@ public class CsoJoinRecordPersistenceDatabaseTests
         await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
-    private sealed record Seeded(int SystemId, int TypeId, int ExternalIdAttributeId, int RuleId, Guid MvoId, Guid CsoId);
+    private sealed record Seeded(int SystemId, int TypeId, int ExternalIdAttributeId, int RuleId, Guid MvoId, Guid CsoId, int MatchingRuleId);
+
+    private const string MatchValue = "E100";
 
     /// <summary>
     /// Seeds a Connected System, an import Synchronisation Rule, a Metaverse Object, and one Connected System Object:
@@ -85,7 +87,14 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Name = RuleName, Direction = SyncRuleDirection.Import, ConnectedSystem = system,
             ConnectedSystemObjectType = csType, MetaverseObjectType = mvType
         };
-        seed.AddRange(connectorDefinition, system, csType, mvType, mvo, rule);
+        // The Object Matching Rule a matching join records (#2052).
+        var employeeIdAttribute = new MetaverseAttribute { Name = "Employee ID", Type = AttributeDataType.Text };
+        var matchingRule = new ObjectMatchingRule
+        {
+            ConnectedSystemObjectType = csType, MetaverseObjectType = mvType, TargetMetaverseAttribute = employeeIdAttribute,
+            Sources = [new ObjectMatchingRuleSource { ConnectedSystemAttribute = externalIdAttribute }]
+        };
+        seed.AddRange(connectorDefinition, system, csType, mvType, mvo, rule, employeeIdAttribute, matchingRule);
         await seed.SaveChangesAsync();
 
         var cso = new ConnectedSystemObject
@@ -100,12 +109,12 @@ public class CsoJoinRecordPersistenceDatabaseTests
         if (joined)
         {
             cso.MetaverseObjectId = mvo.Id;
-            cso.RecordJoin(ConnectedSystemObjectJoinMethod.Projection, rule, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, rule, DateTime.UtcNow, matchingRule, MatchValue);
         }
         seed.ConnectedSystemObjects.Add(cso);
         await seed.SaveChangesAsync();
 
-        return new Seeded(system.Id, csType.Id, externalIdAttribute.Id, rule.Id, mvo.Id, cso.Id);
+        return new Seeded(system.Id, csType.Id, externalIdAttribute.Id, rule.Id, mvo.Id, cso.Id, matchingRule.Id);
     }
 
     private async Task<ConnectedSystemObject> ReadCsoAsync(Guid id)
@@ -122,7 +131,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
         {
             var cso = await write.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == s.CsoId);
             cso.MetaverseObjectId = s.MvoId;
-            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow,
+                new ObjectMatchingRule { Id = s.MatchingRuleId }, MatchValue);
             await new PostgresDataRepository(write).Sync.UpdateConnectedSystemObjectJoinStatesAsync([cso]);
         }
 
@@ -134,6 +144,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(stored.JoinSyncRuleId, Is.EqualTo(s.RuleId));
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.EqualTo(s.MatchingRuleId), "#2052: which rule matched");
+            Assert.That(stored.JoinMatchValue, Is.EqualTo(MatchValue), "#2052: what it matched on");
         }
     }
 
@@ -156,6 +168,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.Null);
+            Assert.That(stored.JoinMatchValue, Is.Null);
         }
     }
 
@@ -167,7 +181,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
         {
             var cso = await write.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == s.CsoId);
             cso.MetaverseObjectId = s.MvoId;
-            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow,
+                new ObjectMatchingRule { Id = s.MatchingRuleId }, MatchValue);
             await new PostgresDataRepository(write).ConnectedSystems.UpdateConnectedSystemObjectsAsync([cso]);
         }
 
@@ -177,6 +192,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(stored.JoinSyncRuleId, Is.EqualTo(s.RuleId));
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.EqualTo(s.MatchingRuleId), "#2052: which rule matched");
+            Assert.That(stored.JoinMatchValue, Is.EqualTo(MatchValue), "#2052: what it matched on");
         }
     }
 
@@ -200,6 +217,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.Null);
+            Assert.That(stored.JoinMatchValue, Is.Null);
         }
     }
 
@@ -220,6 +239,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.Null);
+            Assert.That(stored.JoinMatchValue, Is.Null);
         }
     }
 
@@ -240,6 +261,8 @@ public class CsoJoinRecordPersistenceDatabaseTests
             Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.Null);
+            Assert.That(stored.JoinMatchValue, Is.Null);
         }
     }
 
@@ -261,9 +284,34 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.EqualTo(s.MvoId), "the object stays joined");
-            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.Projection), "how it joined is still known");
+            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching), "how it joined is still known");
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.EqualTo(s.MatchingRuleId), "#2052: which rule matched");
+            Assert.That(stored.JoinMatchValue, Is.EqualTo(MatchValue), "#2052: what it matched on");
+        }
+    }
+
+    /// <summary>
+    /// Deleting the Object Matching Rule that made a join must not fail or remove the joined object (#2052): the
+    /// reference is cleared and the value it matched on kept, through the portal's untracked context.
+    /// </summary>
+    [Test]
+    public async Task DeleteObjectMatchingRuleAsync_RuleRecordedOnJoin_NullsTheReferenceAndKeepsTheValueAsync()
+    {
+        var s = await SeedAsync(joined: true);
+        await using (var write = NewContext(QueryTrackingBehavior.NoTracking))
+        {
+            var matchingRule = await write.ObjectMatchingRules.SingleAsync(r => r.Id == s.MatchingRuleId);
+            await new PostgresDataRepository(write).ConnectedSystems.DeleteObjectMatchingRuleAsync(matchingRule);
+        }
+
+        var stored = await ReadCsoAsync(s.CsoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.MetaverseObjectId, Is.EqualTo(s.MvoId), "the object stays joined");
+            Assert.That(stored.JoinObjectMatchingRuleId, Is.Null);
+            Assert.That(stored.JoinMatchValue, Is.EqualTo(MatchValue));
         }
     }
 }

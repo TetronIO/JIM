@@ -12,83 +12,77 @@ function Get-JIMActivity {
         administrative actions.
 
     .PARAMETER Id
-        The unique identifier (GUID) of a specific Activity to retrieve.
+        The Activity to get.
 
     .PARAMETER Search
-        Search query to filter activities by target name or type.
+        Return only the Activities whose target name or type contains this text; "Active Directory", for example,
+        finds the Activities of that Connected System.
 
     .PARAMETER Page
-        Page number for pagination. Defaults to 1.
+        The page of Activities to return.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 20.
+        How many Activities per page.
 
     .PARAMETER Operation
-        Filter by the operation the Activity performed, for example Execute for a Run Profile execution.
-        Accepts several values, which combine with OR.
+        Return only the Activities that performed one of these operations, for example Execute for a Run Profile
+        execution.
 
     .PARAMETER Outcome
-        Filter to Activities that recorded at least one of the given outcomes, for example Errors for runs
-        that recorded at least one error. Accepts several values, which combine with OR.
+        Return only the Activities that recorded at least one of these outcomes, for example Errors for runs that
+        recorded an error.
 
     .PARAMETER Status
-        Filter by the Activity's status: InProgress, Complete, CompleteWithWarning, CompleteWithError,
-        FailedWithError or Cancelled. Accepts several values, which combine with OR.
+        Return only the Activities with one of these statuses.
 
     .PARAMETER InitiatedById
-        Filter to the exact principal (Metaverse Object or API key) that initiated the Activity. Use
-        -InitiatedBy to match on the recorded name instead.
+        Return only the Activities initiated by this principal (a Metaverse Object or API key). -InitiatedBy matches
+        on the recorded name instead.
 
     .PARAMETER InitiatedBy
-        Filter by part of the initiator's recorded name, case-insensitively.
+        Return only the Activities whose initiator's recorded name contains this text, case-insensitively.
 
     .PARAMETER HasChildActivities
-        Filter by whether the Activity has child Activities: $true returns only those that do, $false only
-        those that do not. Omit to return both.
+        Return only the Activities that have child Activities ($true), or only those that have none ($false). Omit
+        it to return both.
 
     .PARAMETER CreatedFrom
-        Only return Activities created at or after this time. Converted to UTC before being sent.
+        Return only the Activities created at or after this time, which is converted to UTC.
 
     .PARAMETER CreatedTo
-        Only return Activities created at or before this time. Converted to UTC before being sent.
+        Return only the Activities created at or before this time, which is converted to UTC.
 
     .PARAMETER ConnectedSystem
-        Filter by Connected System name, matched against the Activity's target context. Exact match;
-        accepts several values, which combine with OR.
+        Return only the Activities of these Connected Systems, by name, ignoring case.
 
     .PARAMETER RunProfile
-        Filter by Run Profile name, matched against the Activity's target name. Exact match; accepts
-        several values, which combine with OR.
+        Return only the executions of these Run Profiles, by name, ignoring case.
 
     .PARAMETER ScheduledOnly
-        Filter by whether a Schedule produced the Activity: $true returns only work a Schedule produced,
-        $false only work nobody scheduled. Omit to return both.
+        Return only the Activities a Schedule produced ($true), or only those nobody scheduled ($false). Omit it to
+        return both.
 
     .PARAMETER ScheduleId
-        Filter to the Activities produced by particular Schedules. Accepts several values, which combine
-        with OR.
+        Return only the Activities these Schedules produced.
 
     .PARAMETER ExecutionItems
-        If specified with -Id, retrieves the execution items for a run profile activity.
-        Items are streamed individually for pipeline support.
+        Return the Activity's Run Profile Execution Items: what happened to each object.
 
     .PARAMETER Follow
-        If specified with -Id, follows the Activity's live progress (like tail -f): polls the
-        lightweight progress endpoint and renders a progress bar with phase, object counts,
-        throughput and estimated time remaining, until the Activity completes. Emits the final
-        Activity object when following ends. Press Ctrl+C to stop following early.
+        Follow the Activity's progress until it finishes, like tail -f, showing the step it is on, object counts,
+        throughput and the estimated time remaining. Ctrl+C stops following early.
 
     .PARAMETER IntervalSeconds
-        Polling interval in seconds when following. Defaults to 2. Range 1-300.
+        How many seconds to wait between reads of the progress.
 
     .PARAMETER MaxPolls
-        Maximum number of progress polls before following stops, whether or not the Activity has
-        completed. Useful for scripts that must not block indefinitely. If not specified, follows
-        until the Activity completes.
+        How many times to read the progress before following stops, whether or not the Activity has finished, for a
+        script that must not wait indefinitely. Omit it to follow until the Activity finishes.
 
     .OUTPUTS
-        PSCustomObject representing Activity/Activities or execution items. With -Follow, the
-        final Activity object (the same shape as -Id) is emitted when following ends.
+        A list returns each Activity's header, and -Id the Activity in full. -ExecutionItems returns each of the
+        Activity's Run Profile Execution Items. -Follow shows progress while it follows, then returns the Activity
+        in full.
 
     .EXAMPLE
         Get-JIMActivity
@@ -156,7 +150,10 @@ function Get-JIMActivity {
         Start-JIMRunProfile
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ActivityHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ActivityDetailDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.ActivityDetailDto', ParameterSetName = 'Follow')]
+    [OutputType('JIM.ActivityRunProfileExecutionItemHeader', ParameterSetName = 'ExecutionItems')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ExecutionItems', ValueFromPipelineByPropertyName)]

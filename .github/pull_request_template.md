@@ -47,6 +47,7 @@ reviewers) can see the reason.
 
 - [ ] Public documentation updated (`docs/`); page(s):
 - [ ] Engineering reference documentation updated (`engineering/`) where a design/architecture doc would otherwise be stale
+- [ ] Where this change alters documented behaviour, the statements it made wrong are rewritten in place (not appended to), and new material sits where the page's type puts it (`engineering/DOCUMENTATION_STANDARD.md`, MNT-1 and MNT-2)
 - [ ] No documentation needed
 
 <!-- Docs: n/a - <reason> -->

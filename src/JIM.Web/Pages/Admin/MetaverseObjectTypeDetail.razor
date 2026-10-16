@@ -19,7 +19,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span>
+    <PageInfo Title="Metaverse Object Type" DocsPage="configuration/metaverse.md#object-types">
+        A Metaverse Object Type is one kind of object the Metaverse holds, such as a User or a Group: its attributes, and what happens to its objects when they lose their connections.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_metaverseObjectType != null)
@@ -187,7 +191,7 @@
                     </MudButton>
                     @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
                     @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
-                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
                         Disabled="@(!CanSave() || _startingPreview)">
                         Preview Changes

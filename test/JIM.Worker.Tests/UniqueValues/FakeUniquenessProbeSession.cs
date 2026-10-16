@@ -15,7 +15,15 @@ internal sealed class FakeUniquenessProbeSession : IUniquenessProbeSession
     private readonly Dictionary<int, (string Name, Func<string, UniquenessProbeOutcome> Answer)> _systems = [];
     private readonly HashSet<int> _notProbed = [];
 
+    /// <summary>
+    /// Every attribute's batch asked, one entry per attribute, whether or not it shared a call with others.
+    /// </summary>
     public List<(UniquenessProbeTarget Target, IReadOnlyList<string> Candidates)> Calls { get; } = [];
+
+    /// <summary>
+    /// Every call made: the Connected System, and the attributes it carried.
+    /// </summary>
+    public List<(int ConnectedSystemId, IReadOnlyList<int> AttributeIds)> SystemCalls { get; } = [];
 
     public List<int> ValuesChosenWithoutProbe { get; } = [];
 
@@ -49,14 +57,21 @@ internal sealed class FakeUniquenessProbeSession : IUniquenessProbeSession
         return this;
     }
 
-    public Task<UniquenessProbeSessionResult> ProbeAsync(UniquenessProbeTarget target, IReadOnlyList<string> candidates)
+    public Task<IReadOnlyList<UniquenessProbeSessionResult>> ProbeAttributesAsync(int connectedSystemId, IReadOnlyList<UniquenessProbeBatch> batches)
     {
-        Calls.Add((target, candidates.ToList()));
-        var (name, answer) = _systems[target.ConnectedSystemId];
+        SystemCalls.Add((connectedSystemId, batches.Select(b => b.ConnectedSystemObjectTypeAttributeId).ToList()));
+        var (name, answer) = _systems[connectedSystemId];
 
-        return Task.FromResult(_notProbed.Contains(target.ConnectedSystemId)
-            ? UniquenessProbeSessionResult.NotProbed(name, candidates.Count)
-            : new UniquenessProbeSessionResult(name, candidates.Select(answer).ToList()));
+        var results = new List<UniquenessProbeSessionResult>(batches.Count);
+        foreach (var batch in batches)
+        {
+            Calls.Add((new UniquenessProbeTarget(connectedSystemId, batch.ConnectedSystemObjectTypeAttributeId), batch.Candidates.ToList()));
+            results.Add(_notProbed.Contains(connectedSystemId)
+                ? UniquenessProbeSessionResult.NotProbed(name, batch.Candidates.Count)
+                : new UniquenessProbeSessionResult(name, batch.Candidates.Select(answer).ToList()));
+        }
+
+        return Task.FromResult<IReadOnlyList<UniquenessProbeSessionResult>>(results);
     }
 
     public void RecordValueChosenWithoutProbe(int connectedSystemId) => ValuesChosenWithoutProbe.Add(connectedSystemId);

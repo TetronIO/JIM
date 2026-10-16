@@ -8,46 +8,86 @@ using JIM.Models.Core.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Detailed API representation of a MetaverseObjectType.
+/// A Metaverse Object Type in full.
 /// </summary>
 public class MetaverseObjectTypeDetailDto
 {
+    /// <summary>
+    /// The unique identifier of the Object Type.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The Object Type's singular name, such as User or Group.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The Object Type's plural name, such as Users or Groups.
+    /// </summary>
     public string PluralName { get; set; } = null!;
+
+    /// <summary>
+    /// When the Object Type was created (UTC).
+    /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// Whether JIM provides the Object Type. A built-in Object Type cannot be renamed or deleted, but its deletion
+    /// settings can be changed.
+    /// </summary>
     public bool BuiltIn { get; set; }
+
+    /// <summary>
+    /// The name of the MudBlazor icon the portal shows for the Object Type; null when none is set.
+    /// </summary>
     public string? Icon { get; set; }
+
+    /// <summary>
+    /// When JIM deletes this type's Metaverse Objects on its own.
+    /// </summary>
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
+
+    /// <summary>
+    /// How long JIM waits, once the deletion rule is met, before it deletes an object; null or zero deletes at
+    /// once.
+    /// </summary>
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
-    /// For the WhenAuthoritativeSourceDisconnected deletion rule: whether any one selected authoritative
-    /// source disconnecting triggers deletion (SpecificSourcesDisconnect), or every selected source must
-    /// disconnect first (AllSourcesDisconnect). Serialised as the enum member name.
+    /// For the WhenAuthoritativeSourceDisconnected deletion rule, whether every selected source must disconnect
+    /// before an object is deleted (AllSourcesDisconnect) or any one is enough (SpecificSourcesDisconnect). It has
+    /// no effect under the other rules.
     /// </summary>
     public AuthoritativeSourceTriggerMode DeletionTriggerMode { get; set; }
 
+    /// <summary>
+    /// The IDs of the Connected Systems whose disconnection triggers deletion under the
+    /// WhenAuthoritativeSourceDisconnected rule.
+    /// </summary>
     public List<int> DeletionTriggerConnectedSystemIds { get; set; } = new();
+
+    /// <summary>
+    /// The attributes bound to the Object Type. Listed only when the request includes child objects, so empty in
+    /// the result of creating or changing an Object Type.
+    /// </summary>
     public List<MetaverseAttributeSummaryDto> Attributes { get; set; } = new();
 
     /// <summary>
-    /// A configuration advisory for the stored deletion rule, or null when none applies (#1570). Set when
-    /// the rule is WhenLastConnectorDisconnected and enabled provisioning export Synchronisation Rules
-    /// exist for the type: provisioned target accounts then count as connectors, so an object outlives its
-    /// last source and keeps that source's values as last known state. PowerShell surfaces this as a
-    /// warning; act on it by moving to WhenAuthoritativeSourceDisconnected where target accounts should be
-    /// deprovisioned when the source of record departs.
+    /// A warning about the deletion rule, or null when there is none. It is set when the rule is
+    /// WhenLastConnectorDisconnected and enabled export Synchronisation Rules provision objects of this type: a
+    /// provisioned account counts as a connector, so an object outlives its last source and keeps that source's
+    /// values. Use WhenAuthoritativeSourceDisconnected if objects should be deprovisioned when their source of
+    /// record leaves.
     /// </summary>
     public string? DeletionRuleAdvisory { get; set; }
 
     /// <summary>
-    /// Connected Systems that project into this type without being one of its selected authoritative sources (#1256).
-    /// Populated only when the deletion rule is WhenAuthoritativeSourceDisconnected: such a system can create objects
-    /// that no selected source governs, which are then never deleted automatically, and the objects it shares with a
-    /// selected source are deleted when that source disconnects. Systems whose inbound Synchronisation Rules only join
-    /// (projection off) are never listed; leaving those out is the normal way to add attribute-only contributors.
-    /// Always present; empty when there is nothing to warn about, so a health-check script can fail on any entry.
+    /// The Connected Systems that project into this type without being one of its selected authoritative sources,
+    /// filled in only under the WhenAuthoritativeSourceDisconnected rule. Objects such a system creates that no
+    /// selected source also holds are never deleted automatically, and objects it shares with a selected source are
+    /// deleted when that source disconnects. Systems that only join are never listed. Always present, and empty
+    /// when there is nothing to warn about.
     /// </summary>
     public List<DeletionSourceGap> DeletionSourceWarnings { get; set; } = new();
 
@@ -107,7 +147,7 @@ public class CreateMetaverseObjectTypeRequest
 
     /// <summary>
     /// Determines when Metaverse Objects of this type should be automatically deleted.
-    /// Defaults to Manual when omitted.
+    /// WhenLastConnectorDisconnected when omitted, as for an Object Type created in the portal.
     /// </summary>
     public MetaverseObjectDeletionRule? DeletionRule { get; set; }
 
@@ -218,14 +258,33 @@ public class MetaverseObjectTypeNameAvailabilityDto
 }
 
 /// <summary>
-/// Summary representation of a MetaverseAttribute (used within ObjectType details).
+/// A Metaverse Attribute bound to an Object Type.
 /// </summary>
 public class MetaverseAttributeSummaryDto
 {
+    /// <summary>
+    /// The unique identifier of the attribute.
+    /// </summary>
     public int Id { get; set; }
+
+    /// <summary>
+    /// The attribute's name.
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The kind of value the attribute holds.
+    /// </summary>
     public AttributeDataType Type { get; set; }
+
+    /// <summary>
+    /// Whether the attribute holds one value or many.
+    /// </summary>
     public AttributePlurality AttributePlurality { get; set; }
+
+    /// <summary>
+    /// Whether JIM provides the attribute.
+    /// </summary>
     public bool BuiltIn { get; set; }
 
     public static MetaverseAttributeSummaryDto FromEntity(MetaverseAttribute entity)

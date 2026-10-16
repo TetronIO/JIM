@@ -3,15 +3,30 @@ site_url: https://docs.junctional.io
 repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
+# overrides/ is the theme's custom_dir, not content: without this it is also
+# published as a static file at /overrides/home.html.
 exclude_docs: |
   CLAUDE.md
+  overrides/
 
-# Silence the INFO emitted for relative links MkDocs leaves as-is for the
-# browser to resolve at runtime (e.g. links to the Scalar API reference
-# published alongside the docs at /api/reference/). Genuine broken
-# internal links are still reported via the not_found warning.
+# Link validation (#1454). Under --strict, which changelog-lint runs on every
+# pull request that touches the docs, a warning fails the build:
+#   - anchors: a link to a heading that does not exist on the target page,
+#     which MkDocs 1.6 only reports at INFO by default, so a broken anchor
+#     rendered as a working link that went nowhere;
+#   - absolute_links: a link written as /path rather than relative, which
+#     breaks if the site is ever served below the domain root;
+#   - omitted_files: a page that exists but is not in the nav, so readers can
+#     only reach it by guessing its URL.
+# Relative links MkDocs leaves as-is for the browser to resolve at runtime
+# (the Scalar API reference published at /api/reference/) stay silent here;
+# lychee checks those against the built site instead.
 validation:
+  nav:
+    omitted_files: warn
   links:
+    anchors: warn
+    absolute_links: warn
     unrecognized_links: ignore
 
 theme:
@@ -99,7 +114,9 @@ nav:
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Attribute Priority: concepts/attribute-priority.md
       - Passwords: concepts/passwords.md
+      - Password Synchronisation: concepts/password-synchronisation.md
       - Expressions: concepts/expressions.md
+      - Nulls and Missing Inputs: concepts/expression-nulls.md
       - Case Sensitivity: concepts/case-sensitivity.md
       - Object Naming: concepts/object-naming.md
   - Configuration:
@@ -107,14 +124,36 @@ nav:
       - Configuration Changes: configuration/configuration-changes.md
       - Sync Preview: configuration/sync-preview.md
       - Connected Systems: configuration/connected-systems.md
+      - Connector Space: configuration/connector-space.md
+      - Partitions and Containers: configuration/partitions-and-containers.md
+      - Unresolved References: configuration/unresolved-references.md
+      - Connected System Schema: configuration/connected-system-schema.md
+      - Connected System Attributes: configuration/connected-system-attributes.md
+      - Connected System Passwords: configuration/connected-system-passwords.md
+      - Removing a Connected System: configuration/removing-a-connected-system.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
+      - Scoping Criteria: configuration/scoping-criteria.md
+      - Object Matching Rules: configuration/object-matching-rules.md
+      - Attribute Mappings: configuration/attribute-mappings.md
+      - Configuration Tests: configuration/configuration-tests.md
+      - Generated Values: configuration/generated-values.md
+      - Generated Values in Target Systems: configuration/generated-values-in-target-systems.md
+      - Deriving Metaverse Attributes: configuration/derived-attributes.md
+      - Deprovisioning: configuration/deprovisioning.md
+      - Initial Password: configuration/initial-password.md
       - Data Flow: configuration/data-flow.md
       - Metaverse: configuration/metaverse.md
+      - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
+      - Deleted Objects: configuration/deleted-objects.md
+      - Example Data: configuration/example-data.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
+      - Execution Items: configuration/activity-execution-items.md
+      - Live Progress: configuration/activity-progress.md
+      - Causality: configuration/causality.md
       - API Keys: configuration/api-keys.md
       - Certificates: configuration/certificates.md
       - Service Settings: configuration/service-settings.md
@@ -123,7 +162,9 @@ nav:
       - administration/index.md
       - Working with Lists: administration/portal-lists.md
       - Deployment: administration/deployment.md
+      - TLS and Reverse Proxy: administration/tls-and-reverse-proxy.md
       - Running on Podman: administration/podman.md
+      - Installing on Podman by Hand: administration/podman-by-hand.md
       - Deploying with Ansible: administration/deploying-with-ansible.md
       - SSO Setup:
           - administration/sso-setup.md
@@ -136,16 +177,34 @@ nav:
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
+      - Factory Reset: administration/factory-reset.md
+      - Logs: administration/logs.md
       - Troubleshooting: administration/troubleshooting.md
+      - Troubleshooting Synchronisation: administration/troubleshooting-synchronisation.md
+      - Troubleshooting Podman: administration/troubleshooting-podman.md
   - Connectors:
       - connectors/index.md
       - JIM File Connector: connectors/jim-file-connector.md
-      - JIM LDAP Connector: connectors/jim-ldap-connector.md
+      - JIM LDAP Connector:
+          - connectors/jim-ldap-connector.md
+          - Delta Import: connectors/jim-ldap-connector-delta-import.md
+          - Values Already in Use: connectors/jim-ldap-connector-values-in-use.md
+          - Auxiliary Object Classes: connectors/jim-ldap-connector-auxiliary-classes.md
+          - Operational Attributes: connectors/jim-ldap-connector-operational-attributes.md
+          - Domain Controllers and Containers: connectors/jim-ldap-connector-topology.md
+          - Certificates: connectors/jim-ldap-connector-certificates.md
+          - Passwords: connectors/jim-ldap-connector-passwords.md
+          - Service Account Permissions: connectors/jim-ldap-connector-permissions.md
+          - Troubleshooting the LDAP Connector: connectors/jim-ldap-connector-troubleshooting.md
       - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
-          - Delta Import with a change-log table: connectors/jim-sql-connector-delta-import-change-log.md
-          - Delta Import with a watermark column: connectors/jim-sql-connector-delta-import-watermark.md
+          - "Delta Import: Change-Log Table": connectors/jim-sql-connector-delta-import-change-log.md
+          - "Delta Import: Watermark Column": connectors/jim-sql-connector-delta-import-watermark.md
+          - Values Already in Use: connectors/jim-sql-connector-values-in-use.md
+          - Worked Examples: connectors/jim-sql-connector-examples.md
+          - Security: connectors/jim-sql-connector-security.md
+          - Troubleshooting the SQL Connector: connectors/jim-sql-connector-troubleshooting.md
   - API:
       - api/index.md
       - Authentication: api/authentication.md
@@ -155,13 +214,31 @@ nav:
       - System: powershell/system.md
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
+      - Connectors: powershell/connectors.md
+      - Connected System Schema: powershell/connected-system-schema.md
+      - Auxiliary Object Classes: powershell/connected-system-auxiliary-classes.md
+      - Partitions and Containers: powershell/partitions-and-containers.md
+      - Connected System Objects: powershell/connected-system-objects.md
+      - Pending Exports: powershell/pending-exports.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
+      - Attribute Mappings: powershell/attribute-mappings.md
+      - Scoping Criteria: powershell/scoping-criteria.md
+      - Object Matching Rules: powershell/object-matching-rules.md
+      - Configuration Tests: powershell/configuration-tests.md
+      - Initial Password: powershell/initial-password.md
+      - Data Flow: powershell/data-flow.md
       - Metaverse: powershell/metaverse.md
+      - Metaverse Object Types: powershell/metaverse-object-types.md
+      - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
+      - Password Queue: powershell/password-queue.md
+      - Generated Values: powershell/generated-values.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
+      - Schedule Executions: powershell/schedule-executions.md
       - Activities: powershell/activities.md
+      - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md
       - Service Settings: powershell/service-settings.md
@@ -169,31 +246,12 @@ nav:
       - Security: powershell/security.md
       - History: powershell/history.md
       - Previews: powershell/previews.md
+      - Sync Preview: powershell/sync-preview.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
       - Worker Tasks: powershell/worker-tasks.md
       - File System: powershell/file-system.md
       - Logs: powershell/logs.md
-  - Developer Guide:
-      - developer/index.md
-      - Development Environment: developer/dev-environment.md
-      - Architecture: developer/architecture.md
-      - Building from Source: developer/building.md
-      - Testing: developer/testing.md
-      - PowerShell Module: developer/powershell-module.md
-      - Writing Connectors: developer/connectors.md
-      - Contributing: developer/contributing.md
-      - Diagrams:
-          - developer/diagrams/FULL_IMPORT_FLOW.md
-          - developer/diagrams/FULL_SYNC_CSO_PROCESSING.md
-          - developer/diagrams/DELTA_SYNC_FLOW.md
-          - developer/diagrams/EXPORT_EXECUTION_FLOW.md
-          - developer/diagrams/PENDING_EXPORT_LIFECYCLE.md
-          - developer/diagrams/ACTIVITY_AND_RPEI_FLOW.md
-          - developer/diagrams/CONNECTOR_LIFECYCLE.md
-          - developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md
-          - developer/diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md
-          - developer/diagrams/WORKER_TASK_LIFECYCLE.md
   - Reference:
       - Glossary: reference/glossary.md
       - Roadmap: reference/roadmap.md

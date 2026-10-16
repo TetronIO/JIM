@@ -239,4 +239,60 @@ Describe 'Get-DocumentedCommand' {
             $restore | Should -BeLike '*pg_restore*'
         }
     }
+
+    It 'returns a later block of the named step when asked for it, for a step that gives one command per case' {
+        $page = New-Page @'
+## Upgrading
+
+1. **Put the files in place.** Connected:
+
+    ```bash
+    curl -fsSLO https://example/file
+    ```
+
+    Air-gapped:
+
+    ```bash
+    cp bundle/file /opt/jim/
+    ```
+
+2. **Start it:**
+
+    ```bash
+    start it
+    ```
+'@
+
+        & $script:ScriptPath -Path $page -Heading 'Upgrading' -Step 'Put the files in place.' -Block 2 | Should -BeExactly 'cp bundle/file /opt/jim/'
+        & $script:ScriptPath -Path $page -Heading 'Upgrading' -Step 'Put the files in place.' | Should -BeExactly 'curl -fsSLO https://example/file'
+    }
+
+    It 'stops when the step has fewer blocks than the one asked for' {
+        $page = New-Page @'
+## Upgrading
+
+1. **Start it:**
+
+    ```bash
+    start it
+    ```
+'@
+
+        { & $script:ScriptPath -Path $page -Heading 'Upgrading' -Step 'Start it:' -Block 2 } | Should -Throw '*Upgrading*Start it:*'
+    }
+
+    It 'finds the upgrade and rollback commands in Upgrading, which the deployment lab''s upgrade cells run' {
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'upgrading.md'
+
+        & $script:ScriptPath -Path $page -Heading 'Upgrading with the installer' -Tab 'Air-gapped' | Should -BeLike '*sha256sum -c checksums.sha256*setup.sh --upgrade*'
+        & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Stop JIM' | Should -BeLike '*systemctl stop jim.service*'
+        & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Keep the current pod files' | Should -BeLike '*jim.yaml.previous*jim-database.yaml.previous*'
+        $airGapped = & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Put the new release''s files in place, and its images.' -Block 2
+        $airGapped | Should -BeLike '*podman load*'
+        $airGapped | Should -BeLike '*cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/*'
+        & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Start JIM' | Should -BeLike '*systemctl restart jim-database.service*systemctl start jim.service*'
+        & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Stop the services:' | Should -BeLike 'docker compose stop jim.web jim.worker jim.scheduler'
+        & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Point `JIM_VERSION` back' -Block 2 | Should -BeLike '*.previous*'
+        & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Start the services' | Should -BeLike '*docker compose*up -d*'
+    }
 }

@@ -71,7 +71,7 @@ public class SecondaryExternalIdMatchCandidateDatabaseTests
     /// flagged as the secondary external ID, on the caller's own context.
     /// </summary>
     private static async Task<(ConnectedSystem System, ConnectedSystemObjectType Type, ConnectedSystemObjectTypeAttribute SecondaryAttribute)> SeedSystemAndTypeAsync(
-        JimDbContext seed, string systemName = "Target System")
+        JimDbContext seed, string systemName = "Target System", bool secondaryCaseExact = false)
     {
         var connectorDefinition = new ConnectorDefinition { Name = $"Test Connector {Guid.NewGuid()}", BuiltIn = true };
         var system = new ConnectedSystem { Name = systemName, ConnectorDefinition = connectorDefinition };
@@ -92,6 +92,7 @@ public class SecondaryExternalIdMatchCandidateDatabaseTests
             Type = AttributeDataType.Text,
             AttributePlurality = AttributePlurality.SingleValued,
             IsSecondaryExternalId = true,
+            CaseExact = secondaryCaseExact,
             Selected = true
         };
         csType.Attributes.Add(objectGuidAttribute);
@@ -173,10 +174,10 @@ public class SecondaryExternalIdMatchCandidateDatabaseTests
 
     #endregion
 
-    #region Case sensitivity: exact equality
+    #region Case sensitivity: follows the attribute's case-exact declaration (#2051)
 
     [Test]
-    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffers_DoesNotMatchAsync()
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffersOnAnAttributeIgnoringCase_MatchesAsync()
     {
         await using var seed = NewContext();
         var (system, type, secondaryAttribute) = await SeedSystemAndTypeAsync(seed);
@@ -190,7 +191,44 @@ public class SecondaryExternalIdMatchCandidateDatabaseTests
         var result = await repository.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
             system.Id, type.Id, secondaryAttribute.Id, ["cn=john,dc=test"]);
 
-        Assert.That(result, Is.Empty, "a value differing only in case must not match: this is exact, case-sensitive equality, matching the single-object method");
+        Assert.That(result.Select(r => (r.Value, r.ConnectedSystemObjectId)), Is.EqualTo(new[] { ("cn=john,dc=test", cso.Id) }),
+            "a value differing only in case names the same object, and is reported under the value the caller asked for");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffersOnACaseExactAttribute_DoesNotMatchAsync()
+    {
+        await using var seed = NewContext();
+        var (system, type, secondaryAttribute) = await SeedSystemAndTypeAsync(seed, secondaryCaseExact: true);
+        var cso = CreateCso(system, type, secondaryAttribute, "CN=John,DC=test");
+        seed.Add(cso);
+        await seed.SaveChangesAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var result = await repository.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            system.Id, type.Id, secondaryAttribute.Id, ["cn=john,dc=test", "CN=John,DC=test"]);
+
+        Assert.That(result.Select(r => r.Value), Is.EqualTo(new[] { "CN=John,DC=test" }));
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task GetConnectedSystemObjectBySecondaryExternalIdAsync_CaseDiffers_FollowsTheDeclarationAsync(bool caseExact, bool expectMatch)
+    {
+        await using var seed = NewContext();
+        var (system, type, secondaryAttribute) = await SeedSystemAndTypeAsync(seed, secondaryCaseExact: caseExact);
+        var cso = CreateCso(system, type, secondaryAttribute, "CN=John,DC=test");
+        seed.Add(cso);
+        await seed.SaveChangesAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var found = await repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(system.Id, type.Id, "cn=john,dc=test");
+
+        Assert.That(found?.Id, expectMatch ? Is.EqualTo(cso.Id) : Is.Null);
     }
 
     #endregion

@@ -44,7 +44,11 @@ function New-JIMConfigurationChangePreview {
           Metaverse Objects that would leave eligible for deletion, which attributes would stop being
           refreshed and on how many objects, and whose contributed Metaverse values would be withdrawn, or
           kept, when their obsolete objects are next synchronised. Deselecting an Object Type that an enabled
-          Synchronisation Rule still manages is reported as Blocking, because saving it is refused.
+          Synchronisation Rule still manages is reported as Blocking, because saving it is refused. Selecting
+          or deselecting an Object Type that overlaps another selected one (computer and user in Active
+          Directory, or a structural class and an auxiliary class) is reported as a warning naming both: the
+          objects carrying both classes would change Object Type, which the next import refuses, keeping
+          them as they are, unless a Full Import runs with Allow Object Type Changes enabled.
         - -ConnectedSystemId with -Deletion previews deleting that Connected System by deprovisioning it
           through synchronisation, which is what Remove-JIMConnectedSystem does by default: which Metaverse
           attribute values another system would take over and which would be cleared, which Metaverse
@@ -65,7 +69,9 @@ function New-JIMConfigurationChangePreview {
         polls until the preview reaches a terminal state and returns the finished preview.
 
         A proposal that cannot be applied comes back with a blocking validation finding and is never
-        evaluated: check IsBlocked and ValidationFindings before reading anything else.
+        evaluated: check IsBlocked and ValidationFindings before reading anything else. Blocking and
+        Warning findings are also written to the warning stream as the preview starts; Information findings
+        go to the Verbose stream.
 
         Pass the returned ActivityId to the cmdlet that makes the change (Set-JIMMetaverseObjectType
         -PreviewActivityId, Remove-JIMConnectedSystem -PreviewActivityId for a deletion, or
@@ -73,8 +79,7 @@ function New-JIMConfigurationChangePreview {
         preview informed it.
 
     .PARAMETER MetaverseObjectTypeId
-        The Metaverse Object Type whose deletion settings are being proposed. Selects the deletion
-        settings surface; other surfaces gain their own parameters as their adapters ship.
+        The Metaverse Object Type whose deletion settings are being proposed. Selects the deletion settings surface.
 
     .PARAMETER ConnectedSystemId
         The Connected System whose partition and container selection is being proposed. Selects the scope
@@ -125,10 +130,9 @@ function New-JIMConfigurationChangePreview {
         -SelectedContainerIds; a proposal naming both is refused rather than resolved.
 
     .PARAMETER DeletionRule
-        The proposed deletion rule. Omitted previews the stored rule.
-        - Manual: objects are never automatically deleted
-        - WhenLastConnectorDisconnected: objects are deleted when all connectors are removed
-        - WhenAuthoritativeSourceDisconnected: objects are deleted when an authoritative source disconnects
+        The proposed deletion rule: Manual (objects are never deleted automatically), WhenLastConnectorDisconnected
+        (deleted once every connector is removed) or WhenAuthoritativeSourceDisconnected (deleted when an
+        authoritative source disconnects). Omitted previews the stored rule.
 
     .PARAMETER DeletionGracePeriod
         The proposed grace period, as a TimeSpan. Omitted previews the stored grace period;
@@ -137,10 +141,9 @@ function New-JIMConfigurationChangePreview {
     .PARAMETER DeletionTriggerConnectedSystemIds
         The proposed authoritative sources. Omitted previews the stored list.
 
-        Worth knowing before reading the result: this list is consulted at the moment a Connected System
-        Object disconnects, not by the housekeeping pass that acts on objects already marked, so changing
-        it alone moves no object's deletion date and the preview will honestly report no impact from it.
-        What it can do is make the proposal invalid, which comes back as a blocking finding.
+        JIM reads this list when a Connected System Object disconnects, not during housekeeping of objects
+        already marked, so changing it alone moves no object's deletion date and the preview reports no
+        impact from it. It can still make the proposal invalid, which comes back as a blocking finding.
 
     .PARAMETER DeletionTriggerMode
         The proposed trigger mode. Omitted previews the stored mode. Read at the same moment as the
@@ -154,7 +157,7 @@ function New-JIMConfigurationChangePreview {
         The proposed action for a joined target object whose Metaverse Object leaves this export rule's
         scope: Disconnect leaves the object in the target Connected System; Delete stages a Delete export
         that removes it. Omitted previews the stored action. Read only by export Synchronisation Rules,
-        and the preview says so honestly when the rule is an import rule.
+        and the preview says so when the rule is an import rule.
 
     .PARAMETER InboundOutOfScopeAction
         The proposed action for a joined Connected System Object that leaves this import rule's scope or
@@ -169,7 +172,8 @@ function New-JIMConfigurationChangePreview {
         criterion names one attribute by id (ConnectedSystemAttributeId on an import rule,
         MetaverseAttributeId on an export rule), a ComparisonType, and the value to compare against in the
         field matching the attribute's data type (StringValue, IntValue, LongValue, DecimalValue,
-        DateTimeValue, BoolValue or GuidValue).
+        DateTimeValue, BoolValue or GuidValue). To compare a computed value instead, a criterion gives an
+        Expression and the type to compare it as in CompareAs, and no attribute id.
 
         Mandatory, and an empty array is a valid and deliberate value: it proposes removing every criterion,
         which hands the rule every object of its type. That is the widest change the Scope tab can make, so
@@ -192,13 +196,47 @@ function New-JIMConfigurationChangePreview {
         write nothing; the preview reports that as a validation finding rather than as values that would
         never be written.
 
+    .PARAMETER RuleState
+        Whether the rule would run at all, which selects the behaviour toggles surface. Mandatory because the toggle
+        it sets is a boolean, so a caller who left it out could not be told apart from one proposing to switch the
+        rule off.
+
+    .PARAMETER ProjectToMetaverse
+        Whether the rule would create Metaverse Objects for the in-scope objects that match none. Omitted previews
+        the stored value.
+
+    .PARAMETER ProvisionToConnectedSystem
+        Whether the rule would create objects in the target Connected System for the in-scope Metaverse Objects that
+        have none. Omitted previews the stored value.
+
+    .PARAMETER EnforceState
+        Whether the rule would go on correcting drift in the target Connected System. Omitted previews the stored
+        value.
+
+    .PARAMETER MatchingRule
+        The proposed Object Matching Rules, as one hashtable per rule, across both matching modes. Each rule
+        takes an Order (rules are tried in ascending order until one matches), its owner
+        (ConnectedSystemObjectTypeId in Simple mode, SyncRuleId in Advanced mode), a MetaverseObjectTypeId
+        (required in Simple mode), a TargetMetaverseAttributeId, and a Sources array whose entries take an
+        Order and either a ConnectedSystemAttributeId or an Expression over the Connected System Object
+        (cs["attributeName"]), judged as saving the rule would judge it. CaseSensitive is optional: omitted, it
+        follows the sources exactly as a rule created without it does, respecting case only when a source
+        attribute's values are declared case-exact.
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every rule, so
+        nothing would join and every unjoined object would project a new identity instead.
+
+    .PARAMETER ObjectMatchingRuleMode
+        The matching mode the rules would use: ConnectedSystem (Simple) or SyncRule (Advanced). Omitted previews the
+        stored mode; pass it to preview the switch between them.
+
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
         exact either way; this decides only how much of the detail behind them can be read back with
         Get-JIMConfigurationChangePreviewDelta. Use it when you intend to export the full list.
 
     .PARAMETER Wait
-        Poll until the preview finishes, and return the finished preview rather than the start result.
+        Polls until the preview finishes, and returns the finished preview rather than the start result.
 
     .PARAMETER TimeoutSeconds
         How long -Wait polls before giving up and writing an error. The preview itself keeps running;
@@ -207,10 +245,13 @@ function New-JIMConfigurationChangePreview {
         system is not abandoned while it is working as expected. A value you pass is always honoured.
 
     .OUTPUTS
-        Without -Wait: PSCustomObject with ActivityId, ValidationFindings, IsBlocked, Failed,
-        EstimatedAffectedObjects, EstimatedDeltaRows and EstimatedDuration (set for a Full
-        Synchronisation preview only).
-        With -Wait: the preview, as returned by Get-JIMConfigurationChangePreview.
+        Without -Wait, the result of starting the preview: its Activity id, and what validation found. With -Wait,
+        the finished preview, as Get-JIMConfigurationChangePreview returns it; or the start result, at once, where
+        the proposal was blocked or validation failed, since nothing further will run.
+
+        JIM.ConfigurationChangePreviewStartResponse: Without -Wait, or where the proposal was blocked or validation failed
+
+        JIM.ConfigurationChangePreviewResponse: With -Wait, once the preview finishes
 
     .EXAMPLE
         New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
@@ -428,7 +469,8 @@ function New-JIMConfigurationChangePreview {
         Start-JIMRunProfile
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConfigurationChangePreviewStartResponse')]
+    [OutputType('JIM.ConfigurationChangePreviewResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'MetaverseObjectTypeDeletionSettings', ValueFromPipelineByPropertyName)]
         [int]$MetaverseObjectTypeId,
@@ -707,9 +749,12 @@ function New-JIMConfigurationChangePreview {
         foreach ($finding in $start.ValidationFindings) {
             # Surfaced as they are produced rather than left for the caller to find in the object: a
             # blocking finding means nothing was evaluated, and a script that read straight past it
-            # would treat "this change is impossible" as "this change affects nothing".
+            # would treat "this change is impossible" as "this change affects nothing". A warning is a
+            # consequence the caller did not ask for, such as objects changing Object Type and being
+            # refused at the next import (#2049), and on the Verbose stream nobody would see it.
+            # Information stays there, so it does not bury the findings that matter.
             $message = "Preview validation ($($finding.Severity)): $($finding.Message)"
-            if ($finding.Severity -eq 'Blocking') { Write-Warning $message } else { Write-Verbose $message }
+            if ($finding.Severity -in 'Blocking', 'Warning') { Write-Warning $message } else { Write-Verbose $message }
         }
 
         if (-not $Wait -or $start.IsBlocked -or $start.Failed) {

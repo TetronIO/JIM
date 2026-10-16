@@ -10,6 +10,7 @@ This skill drives the full happy-path between "I have committed work on a featur
 
 - **Strict mode is on for `main`.** A PR opened while the feature branch is behind `origin/main` will sit in `mergeStateStatus: BEHIND` and `--auto` cannot land it. Get the branch up to date *before* the PR exists.
 - **`github-code-quality` runs on every PR.** It almost always finds something. Build that fix loop into the flow rather than treating it as an exception.
+- **Auto-merge is queued, not done.** Unresolved review threads (the documentation review opens one per finding on any customer-docs change), a failed CodeQL analysis, a conflict or an unsigned commit each hold it silently. Wait with `scripts/Watch-PullRequest.ps1`, which reports each of them, never with a loop that only watches for `MERGED`.
 - **`gh pr merge ... --auto`** is the right command; the immediate failure right after `gh pr create` is expected, not a blocker.
 - **Squash-merge means `git branch -D`** is correct for cleanup, not `-d`.
 
@@ -166,21 +167,54 @@ gh pr merge <n> --squash --delete-branch --auto
 
 4. **Repeat until the bot has nothing left to say** and `gh pr checks <n>` shows all required checks passing or pending merge.
 
+## Resolve review threads
+
+Every unresolved review thread holds the merge (`main`'s ruleset requires conversation resolution), auto-merge included, whoever opened it. On a PR that changes customer pages (`docs/`, not `docs/developer/` or any `CLAUDE.md`), the documentation review (`docs-review.yml`, as `claude[bot]`) posts **one thread per finding** about two minutes after the PR opens or is marked ready, then a summary comment headed "**Documentation review: N findings**"; the summary is the sign it has finished. Expect it on any docs change.
+
+For each thread: **fix the text, or reply with why it stays as it is; then resolve the thread.** A reply alone leaves the merge blocked. Answering is the bar, not agreeing: the review's findings are claims to check (it reads the source for ACC-4), and a reasoned "stays as is" is a valid answer. For a generated page (ACC-5), the fix belongs in the source the generator reads (cmdlet help, a DTO comment), as the finding says.
+
+List the open threads, with the ids needed to reply and resolve:
+
+```bash
+gh api graphql -f query='query($n:Int!){repository(owner:"TetronIO",name:"JIM"){pullRequest(number:$n){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId author{login} path line body}}}}}}}' -F n=<n> \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not) | {id, comment: .comments.nodes[0].databaseId, path: .comments.nodes[0].path, line: .comments.nodes[0].line, author: .comments.nodes[0].author.login, body: .comments.nodes[0].body}'
+```
+
+Reply to a thread (by its first comment's `databaseId`), then resolve it (by the thread `id`):
+
+```bash
+gh api repos/TetronIO/JIM/pulls/<n>/comments/<comment-databaseId>/replies -f body='Fixed in <sha>: ...'
+gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=<thread-id>
+```
+
+In Claude Code on the web GraphQL is refused, so use the relay's routes instead; they key a thread by its first comment's id, which is the id `Watch-PullRequest.ps1` prints:
+
+```bash
+gh api repos/TetronIO/JIM/pulls/<n>/ccr/review_threads                        # resolved, path, line, comment_ids
+gh api repos/TetronIO/JIM/pulls/<n>/comments/<comment-id>/replies -f body='...'
+gh api -X POST repos/TetronIO/JIM/pulls/<n>/ccr/comments/<comment-id>/resolve
+```
+
+When you push a fix, reply naming the commit, then resolve. To ask for a fresh docs review after more commits, remove and re-add the `docs-review` label; it raises nothing an earlier run raised.
+
 ## Wait for the merge to land
 
-Use a Bash background command, not ScheduleWakeup or sleep-polling:
+Enabling auto-merge is not the end: a failed check, an unresolved thread, a conflict, a branch behind `main` or an unsigned commit each hold the merge, and nothing tells you unless you wait on the right thing. Use the watcher, in a Bash background command (not ScheduleWakeup or sleep-polling):
 
 ```
-until s=$(gh pr view <n> --json state -q .state) && [ "$s" != "OPEN" ]; do sleep 30; done; echo "$s"
+pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>
 ```
 
-Run with `run_in_background: true`. The harness will notify you when it exits. Do not poll proactively in the meantime.
+Run with `run_in_background: true`. It exits on the first thing that needs you, saying which, and the harness notifies you. Do not poll proactively in the meantime.
 
-- It exits on `MERGED` or `CLOSED`. A `CLOSED` result means someone closed the PR without merging it: stop and tell the user rather than cleaning up.
-- A transient `gh` failure keeps it waiting rather than ending the wait early.
-- Arm it even with Auto-fix on. The desktop app reports failures, conflicts and comments, not the merge itself, and this waits on the PR's state rather than its checks.
+- `Merged`: clean up (below).
+- `Closed`: someone closed the PR without merging it. Stop and tell the user rather than cleaning up.
+- `ChecksFailed`: read the failed check's log, fix, push (back to "Resolve code-quality bot issues" for bot findings).
+- `UnresolvedThreads`: "Resolve review threads" above.
+- `Conflict` or `Behind`: merge `origin/main` in and push, or `gh pr update-branch <n>`.
+- `Blocked`: every check passed and no thread is open; usually an unsigned commit (re-sign and force-push, per the root CLAUDE.md) or a required check that never ran.
 
-If the PR transitions to BEHIND while waiting (e.g. another PR landed on `main` first), run `gh pr update-branch <n>` to re-trigger checks, then re-arm the waiter.
+After acting, run it again, until `Merged`. A transient `gh` failure is retried, never reported. A thread deliberately left open for the user goes in `-AcknowledgedThreadIds <id>` so it stops ending the wait. Arm it even with the desktop app's Auto-fix on: the app reports failures, conflicts and comments, not the merge itself.
 
 ## Clean up
 

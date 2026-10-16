@@ -1,3 +1,10 @@
+---
+title: Object Naming
+description: How JIM decides what to call an object on every screen, from its naming attributes down to an identifier.
+type: concept
+audience: administrator
+---
+
 # Object Naming
 
 Wherever JIM shows you an object (a search result, a Pending Export, a causality chain, a change history entry) it has to decide what to call it. Identity data rarely offers a single reliable answer: an Active Directory group carries `cn` but often no `displayName`, a CSV feed might offer neither, and some objects genuinely have no name at all.

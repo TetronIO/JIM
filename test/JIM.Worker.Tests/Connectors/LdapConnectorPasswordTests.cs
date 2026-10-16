@@ -262,6 +262,39 @@ public class LdapConnectorPasswordTests
         Assert.That(result & UacNormalAccount, Is.EqualTo(UacNormalAccount));
     }
 
+    /// <summary>
+    /// Where something else owns "Password never expires" (an Attribute Flow that writes userAccountControl, or the
+    /// account itself for a propagated password; #2159), the flag stays exactly as the account has it, whichever expiry
+    /// was asked for.
+    /// </summary>
+    [TestCase(UacNormalAccount, PasswordExpiryBehaviour.RequireChangeAtNextSignIn)]
+    [TestCase(UacNormalAccount, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy)]
+    [TestCase(UacNormalAccount, PasswordExpiryBehaviour.NeverExpires)]
+    [TestCase(UacNormalAccount | UacDontExpirePassword, PasswordExpiryBehaviour.RequireChangeAtNextSignIn)]
+    [TestCase(UacNormalAccount | UacDontExpirePassword, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy)]
+    [TestCase(UacNormalAccount | UacDontExpirePassword, PasswordExpiryBehaviour.NeverExpires)]
+    public void ApplyUserAccountControlFlags_LeavingPasswordNeverExpiresAsIs_LeavesTheBit(int current, PasswordExpiryBehaviour expiryBehaviour)
+    {
+        var result = LdapConnectorPassword.ApplyUserAccountControlFlags(
+            current, expiryBehaviour, enableAccount: null, leavePasswordNeverExpiresAsIs: true);
+
+        Assert.That(result, Is.EqualTo(current));
+    }
+
+    /// <summary>
+    /// The enable is still applied when the flag is left: completing a withheld enable on an account whose flow asked for
+    /// 66048 makes 66050 into 66048, keeping the flow's "Password never expires" (#2039, #2159).
+    /// </summary>
+    [Test]
+    public void ApplyUserAccountControlFlags_LeavingPasswordNeverExpiresAsIs_StillAppliesTheEnable()
+    {
+        var result = LdapConnectorPassword.ApplyUserAccountControlFlags(
+            UacNormalAccount | UacDontExpirePassword | UacAccountDisable, PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+            enableAccount: true, leavePasswordNeverExpiresAsIs: true);
+
+        Assert.That(result, Is.EqualTo(UacNormalAccount | UacDontExpirePassword));
+    }
+
     #endregion
 
     #region failure classification
@@ -386,8 +419,7 @@ public class LdapConnectorPasswordTests
         Assert.That(result.Success, Is.True, result.ErrorMessage);
         Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
 
-        var userAccountControl = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl);
-        Assert.That(userAccountControl.Modifications[0][0], Is.EqualTo((0x0200 | UacDontExpirePassword).ToString()));
+        Assert.That(WrittenUserAccountControl(), Is.EqualTo((0x0200 | UacDontExpirePassword).ToString()));
 
         Assert.That(ModifiesFor(LdapConnectorPassword.AttributePwdLastSet), Is.Empty,
             "'Never expires' and 'must change at next sign-in' are mutually exclusive, so pwdLastSet must not be written.");
@@ -409,13 +441,275 @@ public class LdapConnectorPasswordTests
 
         Assert.That(result.Success, Is.True, result.ErrorMessage);
 
-        var userAccountControl = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl);
-        Assert.That(userAccountControl.Modifications[0][0], Is.EqualTo("512"), "0x0202 with the disable bit cleared is 0x0200.");
+        Assert.That(WrittenUserAccountControl(), Is.EqualTo("512"), "0x0202 with the disable bit cleared is 0x0200.");
 
         Assert.That(IndexOfModifyFor(LdapConnectorPassword.AttributeUnicodePwd),
             Is.LessThan(IndexOfModifyFor(LdapConnectorPassword.AttributeUserAccountControl)),
             "The account cannot be enabled until it holds a compliant password.");
     }
+
+    /// <summary>
+    /// The flags are written only if they are still the ones read (#2161): the value read is deleted and the new one
+    /// added in one request, which the directory refuses if the value has changed in between. A Replace would apply
+    /// whatever was there.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_WritesTheFlagsOnlyIfTheyAreStillTheOnesReadAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 0x0202);
+
+        await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn, EnableAccount = true },
+            CancellationToken.None);
+
+        var modifications = SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl).Modifications
+            .Cast<DirectoryAttributeModification>().ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(modifications.Select(m => m.Operation),
+                Is.EqualTo(new[] { DirectoryAttributeOperation.Delete, DirectoryAttributeOperation.Add }));
+            Assert.That(modifications[0][0], Is.EqualTo("514"), "the value read, which must still be there");
+            Assert.That(modifications[1][0], Is.EqualTo("512"));
+        }
+    }
+
+    /// <summary>
+    /// An export changed the account's flags between the read and the write (a leaver's disable, say). The directory
+    /// refuses the delete of the value read, and JIM does not overwrite what the export wrote: the password is set, the
+    /// flags are left as the export left them, and the delivery is reported as worth another attempt, when JIM decides
+    /// afresh what the password may do to the account.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_WhenTheFlagsChangeBetweenTheReadAndTheWrite_LeavesThemAndReportsATransientFailureAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .Returns((DirectoryRequest request) =>
+            {
+                _sentRequests.Add(request);
+                DirectoryResponse response = request switch
+                {
+                    SearchRequest => CreateSearchResponseWithUserAccountControl(0x0202),
+                    ModifyRequest modify when modify.Modifications.Cast<DirectoryAttributeModification>()
+                        .Any(m => m.Name == LdapConnectorPassword.AttributeUserAccountControl)
+                        => CreateResponse<ModifyResponse>(ResultCode.NoSuchAttribute, "00002083: AtrErr: DSID-03151F8E, #1: 0: 00002083: DSID-03151F8E, problem 1001 (NO_ATTRIBUTE_OR_VAL), data 0, Att 90008 (userAccountControl)"),
+                    _ => CreateResponse<ModifyResponse>(ResultCode.Success)
+                };
+                return Task.FromResult(response);
+            });
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn, EnableAccount = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(result.ErrorMessage, Does.Contain("changed"));
+            Assert.That(result.ErrorMessage, Does.Not.Contain(TestPassword));
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl).Count(), Is.EqualTo(1),
+                "one attempt at the swap, and no blind write after it");
+        }
+    }
+
+    #region "Password never expires" left to its owner (#2159)
+
+    /// <summary>
+    /// The reported bug. An Attribute Flow asserts 66048 (enabled, Password never expires) and the Initial Password
+    /// asks for "Expires according to the directory's policy": the delivery used to write 512 over the flow's value, and
+    /// the confirming import then saw a value nobody asserted. Told to leave the flag, the delivery needs no change to
+    /// userAccountControl and sends none at all.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_PasswordNeverExpiresLeftAsIs_FlowSetFlag_SendsNoUserAccountControlModifyAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 66048);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, LeavePasswordNeverExpiresAsIs = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl), Is.Empty, "the flow's value is left alone");
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires), "what the account now does");
+            Assert.That(result.ExpiryBehaviourWarning, Is.Null, "a flag left to its owner is not a failure to apply anything");
+            Assert.That(result.PasswordNeverExpiresChanged, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// "Must change at next sign-in" belongs to the password, so pwdLastSet = 0 is still written. Active Directory
+    /// ignores it while "Password never expires" is set, so the result is a success with a warning naming the conflict:
+    /// the helpdesk must not be told a change will be demanded.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_RequireChange_PasswordNeverExpiresLeftSet_WritesPwdLastSetAndWarnsAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 66048);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn, LeavePasswordNeverExpiresAsIs = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(SingleModifyFor(LdapConnectorPassword.AttributePwdLastSet).Modifications[0][0], Is.EqualTo("0"));
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl), Is.Empty);
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+            Assert.That(result.ExpiryBehaviourWarning, Does.Contain("Password never expires"));
+            Assert.That(result.ExpiryBehaviourHonoured, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// The mirror case: Never expires asked for (an Initial Password under a flow asserting 512), the flag left clear.
+    /// Nothing is written over the flow, and the result reports the expiry the account has, without a warning.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_NeverExpiresRequested_PasswordNeverExpiresLeftClear_ReportsExpiresByPolicyWithoutWarningAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: UacNormalAccount);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires, LeavePasswordNeverExpiresAsIs = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl), Is.Empty);
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributePwdLastSet), Is.Empty);
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+            Assert.That(result.ExpiryBehaviourWarning, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Real Active Directory with the #2039 hold: the flow asked for 66048, JIM created the account 66050 until it had a
+    /// password, and the delivery completes the enable. The flow's "Password never expires" survives: 66048, not 512.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_CompletingAWithheldEnable_KeepsTheFlowsPasswordNeverExpiresAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 66050);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions
+            {
+                ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+                EnableAccount = true,
+                LeavePasswordNeverExpiresAsIs = true
+            },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(WrittenUserAccountControl(), Is.EqualTo("66048"));
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+            Assert.That(result.PasswordNeverExpiresChanged, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// An object with no userAccountControl (a contact) has no flag to leave. Never expires asked for and left is not a
+    /// request the Connector was asked to apply, so it is not refused; the password simply expires by the directory's
+    /// policy.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_NoUserAccountControl_PasswordNeverExpiresLeft_SucceedsAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: null);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires, LeavePasswordNeverExpiresAsIs = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+            Assert.That(result.ExpiryBehaviourWarning, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// An administrator's explicit expiry still sets or clears the flag, and the result says whether that changed it,
+    /// so the delivery can warn where Enforce State will put a flow's value back.
+    /// </summary>
+    [TestCase(66048, PasswordExpiryBehaviour.RequireChangeAtNextSignIn, "512", true)]
+    [TestCase(UacNormalAccount, PasswordExpiryBehaviour.NeverExpires, "66048", true)]
+    public async Task SetPasswordAsync_ApplyingTheExpiryChangesPasswordNeverExpires_ReportsTheChangeAsync(
+        int current, PasswordExpiryBehaviour expiryBehaviour, string written, bool changed)
+    {
+        SetupActiveDirectory(currentUserAccountControl: current);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword, new PasswordSetOptions { ExpiryBehaviour = expiryBehaviour }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(WrittenUserAccountControl(), Is.EqualTo(written));
+            Assert.That(result.PasswordNeverExpiresChanged, Is.EqualTo(changed));
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(expiryBehaviour));
+        }
+    }
+
+    [Test]
+    public async Task SetPasswordAsync_PasswordNeverExpiresAlreadyAsAsked_ReportsNoChangeAsync()
+    {
+        SetupActiveDirectory(currentUserAccountControl: 66048);
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory).SetPasswordAsync(
+            TestDn, TestPassword, new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(ModifiesFor(LdapConnectorPassword.AttributeUserAccountControl), Is.Empty);
+            Assert.That(result.PasswordNeverExpiresChanged, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// A directory that is not Active Directory has no per-account flag. A propagated password queued with Never expires
+    /// is told to leave the flag, so the Connector was not asked to apply it and reports no downgrade.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_NeverExpiresLeftAsIsOnAGenericDirectory_ReportsNoDowngradeAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .Returns((DirectoryRequest request) =>
+            {
+                _sentRequests.Add(request);
+                return Task.FromResult<DirectoryResponse>(CreateResponse<ExtendedResponse>(ResultCode.Success));
+            });
+
+        var result = await CreateChannel(LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true).SetPasswordAsync(
+            TestDn, TestPassword,
+            new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires, LeavePasswordNeverExpiresAsIs = true },
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.ExpiryBehaviourWarning, Is.Null);
+            Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
+        }
+    }
+
+    #endregion
 
     [Test]
     public async Task SetPasswordAsync_WhenThePolicyRejectsThePassword_ReportsAPolicyRejectionAndLeavesTheAccountAloneAsync()
@@ -569,7 +863,11 @@ public class LdapConnectorPasswordTests
     public async Task SetPasswordAsync_RequestingTheHonourableStateOnAGenericDirectory_ReportsNoDowngradeAsync()
     {
         _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
-            .ReturnsAsync(CreateResponse<ExtendedResponse>(ResultCode.Success));
+            .Returns((DirectoryRequest request) =>
+            {
+                _sentRequests.Add(request);
+                return Task.FromResult<DirectoryResponse>(CreateResponse<ExtendedResponse>(ResultCode.Success));
+            });
 
         var result = await CreateChannel(LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true).SetPasswordAsync(
             TestDn, TestPassword,
@@ -703,7 +1001,7 @@ public class LdapConnectorPasswordTests
     /// Sets up an Active Directory that accepts every modification and reports the given userAccountControl when
     /// the entry is read back.
     /// </summary>
-    private void SetupActiveDirectory(int currentUserAccountControl)
+    private void SetupActiveDirectory(int? currentUserAccountControl)
     {
         _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
             .Returns((DirectoryRequest request) =>
@@ -732,6 +1030,14 @@ public class LdapConnectorPasswordTests
 
     private int IndexOfModifyFor(string attributeName) => _sentRequests.IndexOf(SingleModifyFor(attributeName));
 
+    /// <summary>
+    /// The userAccountControl value JIM wrote: the value added by the one modification of the attribute.
+    /// </summary>
+    private string WrittenUserAccountControl() =>
+        (string)SingleModifyFor(LdapConnectorPassword.AttributeUserAccountControl).Modifications
+            .Cast<DirectoryAttributeModification>()
+            .Single(m => m.Operation != DirectoryAttributeOperation.Delete)[0];
+
     private const BindingFlags NonPublicInstance = BindingFlags.NonPublic | BindingFlags.Instance;
 
     /// <summary>
@@ -743,15 +1049,20 @@ public class LdapConnectorPasswordTests
             args: ["", Array.Empty<DirectoryControl>(), resultCode, errorMessage ?? "", Array.Empty<Uri>()],
             culture: null)!;
 
-    private static SearchResponse CreateSearchResponseWithUserAccountControl(int userAccountControl)
+    /// <summary>
+    /// A read-back of the entry, carrying the given userAccountControl, or none at all for an object type that has no
+    /// account flags (a contact).
+    /// </summary>
+    private static SearchResponse CreateSearchResponseWithUserAccountControl(int? userAccountControl)
     {
         var attributes = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
-        typeof(SearchResultAttributeCollection)
-            .GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!
-            .Invoke(attributes, [
-                LdapConnectorPassword.AttributeUserAccountControl,
-                new DirectoryAttribute(LdapConnectorPassword.AttributeUserAccountControl, userAccountControl.ToString())
-            ]);
+        if (userAccountControl is { } value)
+            typeof(SearchResultAttributeCollection)
+                .GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!
+                .Invoke(attributes, [
+                    LdapConnectorPassword.AttributeUserAccountControl,
+                    new DirectoryAttribute(LdapConnectorPassword.AttributeUserAccountControl, value.ToString())
+                ]);
 
         var entry = (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
             args: [TestDn, attributes], culture: null)!;

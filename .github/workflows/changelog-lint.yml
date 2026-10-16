@@ -11,7 +11,9 @@ name: changelog-lint
 #      module's own comment-based help) may invoke a JIM cmdlet using a
 #      parameter ALIAS instead of its real name - see Lint-DocExamples.ps1 for
 #      the defect this prevents (an -Id alias silently meaning "every Run
-#      Profile on this Connected System", not "Run Profile 42").
+#      Profile on this Connected System", not "Run Profile 42"). Nor may an
+#      example pass a parameter the cmdlet does not declare, or a page name a
+#      JIM cmdlet that does not exist (#1454).
 #   4. CSS brace balance: no stylesheet may contain an unclosed rule. One
 #      missing '}' silently kills every rule below it for the rest of the file,
 #      and nothing else in the pipeline notices - CSS is not compiled, bUnit
@@ -25,8 +27,25 @@ name: changelog-lint
 #      label silently outgrows its cut and the edge reappears through the words -
 #      see Update-DiagramLabelCuts.ps1. This is the only step needing a browser,
 #      so it short-circuits unless the PR touched a diagram or the diagram tokens.
+#   6. Docs site links: the site builds with `mkdocs build --strict` and every
+#      link in the built site resolves (lychee, offline). Until this ran here,
+#      nothing checked the docs before merge, and a broken anchor rendered as a
+#      working link that went nowhere - see Test-DocsSite.ps1 (#1454). It
+#      short-circuits unless the PR touched a docs source.
+#   7. Docs conformance: every page is checked against the mechanical rules of
+#      engineering/DOCUMENTATION_STANDARD.md (front matter, one name per page,
+#      heading structure, code languages, stubs, page shape, accessibility,
+#      language, the product vocabulary, and no growth on an over-budget page),
+#      with a shrink-only baseline so
+#      existing debt can only fall - see Test-DocsConformance.ps1 (#1454). It
+#      reads Markdown sources only, so it is cheap enough to run on every PR.
+#   8. Docs coverage: the cmdlets, environment variables and expression
+#      functions the product has are all documented, nothing documented is
+#      gone, and every link from the product into the docs resolves - see
+#      Test-DocsCoverage.ps1 (#1454). It reads sources as well as pages, so a
+#      change to either can fail it, which is why it runs on every PR.
 #
-# All five run in this single job so they are enforced via the existing
+# All eight run in this single job so they are enforced via the existing
 # required "changelog-lint" status, without registering further required checks
 # in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
@@ -68,6 +87,19 @@ jobs:
           pwsh -File ./scripts/Lint-DocsCoupling.ps1
       - name: Lint PowerShell doc examples for parameter alias misuse
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
+      - name: Check docs conformance with the documentation standard
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Warnings are listed (and annotated) only for the pages this PR changed;
+          # errors always are. BASE_SHA is what an over-budget page's size is
+          # compared against (MNT-3).
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          export CHANGED_FILES
+          pwsh -File ./scripts/Test-DocsConformance.ps1
+      - name: Check docs coverage against what the product has
+        run: pwsh -File ./scripts/Test-DocsCoverage.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
       - name: Check concept diagrams (label cuts and lightbox framing)
@@ -99,3 +131,33 @@ jobs:
           export JIM_PLAYWRIGHT_MODULE="$(dirname "$PLAYWRIGHT_CORE_CLI")"
           pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check
           pwsh -File ./scripts/Test-DiagramLightbox.ps1
+      - name: Detect docs source changes
+        id: docs-sources
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The site includes CHANGELOG.md and files under test/integration/docker/
+          # by snippet, so a change to either can break the docs build too.
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(docs/|mkdocs\.yml$|CHANGELOG\.md$|test/integration/docker/|scripts/Test-DocsSite\.ps1$|\.github/workflows/changelog-lint\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No docs source changed; skipping the docs site build and link check."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      # The steps below are skipped (not failed) when no docs source changed, so the
+      # job still reports and stays safe as a required check. setup-python provides
+      # a pip the runner's system Python (externally managed) would refuse.
+      - name: Set up Python for the docs site build
+        if: steps.docs-sources.outputs.changed == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: 3.x
+      - name: Build the docs site strictly and check every link in it
+        if: steps.docs-sources.outputs.changed == 'true'
+        run: |
+          # The same bounded ranges as docs.yml, so the site checked here is the
+          # site that deploys.
+          pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+          pwsh -File ./scripts/Test-DocsSite.ps1

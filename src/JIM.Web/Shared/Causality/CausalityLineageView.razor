@@ -96,7 +96,7 @@
                            Identity that completes a create export's graph); an empty body would add padding
                            under it with nothing in it. *@
                         @if (lineageObject.Cards.Count > 0 || lineageObject.Endings.Count > 0
-                             || lineageObject.IsDeletedAfterThisRun)
+                             || lineageObject.IsDeletedAfterThisRun || lineageObject.Consequences.Count > 0)
                         {
                             <div class="ln-obj-body">
                                 @* Stated first because it is about what lies behind the oldest card, and the
@@ -106,7 +106,15 @@
                                    "deleted after this run" note at the other end for the same reason. *@
                                 @foreach (var ending in lineageObject.Endings)
                                 {
-                                    <div class="ln-end" @key="ending">@ending.Text</div>
+                                    <div class="ln-end" @key="ending">
+                                        @ending.Text
+                                        @foreach (var continuation in ending.Continuations)
+                                        {
+                                            <div class="ln-end-continue">
+                                                <a class="ln-link" href="@continuation.Href">@continuation.Text</a>
+                                            </div>
+                                        }
+                                    </div>
                                 }
                                 @foreach (var card in lineageObject.Cards)
                                 {
@@ -138,7 +146,7 @@
                                     }
                                     else if (card.Hop is { } hop)
                                     {
-                                        <CausalityLineageChainCard Hop="hop" @key="card" />
+                                        <CausalityLineageChainCard Hop="hop" Links="Model.Links" @key="card" />
                                     }
                                 }
                                 @* What became of the object afterwards, stated last because it happened
@@ -152,6 +160,20 @@
                                         <a class="ln-link" href="@deletedAfterThisRunHref">View deletion record</a>
                                     </div>
                                 }
+                                @* What later runs did to the object (#1811), below a rule because no run on this page did
+                                   it: the column carries on downwards as time passing, past this run. *@
+                                @if (lineageObject.Consequences.Count > 0)
+                                {
+                                    <div class="ln-after">After this run</div>
+                                    @foreach (var consequence in lineageObject.Consequences)
+                                    {
+                                        <CausalityLineageConsequenceCard @key="consequence" Consequence="consequence"
+                                                                         SelectedEvent="SelectedEvent"
+                                                                         OnSelect="ToggleSelectionAsync"
+                                                                         LoadMembers="LoadConsequenceMembers"
+                                                                         Links="Model.Links" />
+                                    }
+                                }
                             </div>
                         }
                     </div>
@@ -160,6 +182,35 @@
         }
     </div>
 </div>
+
+@* ─── What the item went on to cause: the walk's reading, never polled ─── *@
+@if (Model.Consequences is { HasAny: true } consequenceSummary)
+{
+    var checkedAtLocal = consequenceSummary.CheckedAt.ToLocalTime();
+    <div class="ln-footer">
+        @if (consequenceSummary.IsFurtherThanShown)
+        {
+            <div class="ln-footer-note">Some consequences go further than shown. Open the last item in a branch to carry on from there.</div>
+        }
+        <div class="ln-state @(consequenceSummary.HasWaitingBranches ? "waiting" : "done")">
+            <MudIcon Icon="@(consequenceSummary.HasWaitingBranches ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.Check)"
+                     aria-hidden="true" />
+            <span class="ln-state-text">@string.Join(" ", consequenceSummary.StateSentences)</span>
+            <span class="ln-checked" title="@checkedAtLocal.ToFriendlyDate()">Checked at @checkedAtLocal.ToString("HH:mm").</span>
+            @* Only while a branch waits on something that will happen by itself: offered at any other time, it would
+               hint at events that cannot come. *@
+            @if (consequenceSummary.HasWaitingBranches && OnCheckAgain.HasDelegate)
+            {
+                <MudButton Variant="Variant.Text" Class="ln-check-again"
+                           StartIcon="@Icons.Material.Filled.Refresh" OnClick="CheckAgainAsync">Check again</MudButton>
+            }
+        </div>
+    </div>
+}
+else if (Model.Consequences == null && ConsequencesLoading)
+{
+    <div class="ln-consequences-loading">Reading what this run went on to cause&hellip;</div>
+}
 
 @code {
     /// <summary>
@@ -184,6 +235,25 @@
 
     [Parameter]
     public EventCallback<CausalityEvent?> SelectedEventChanged { get; set; }
+
+    /// <summary>
+    /// Whether the page is still reading what the item went on to cause (#1811), which the footer says rather than
+    /// leaving the After this run sections to appear unannounced.
+    /// </summary>
+    [Parameter]
+    public bool ConsequencesLoading { get; set; }
+
+    /// <summary>
+    /// Raised by Check again, which the footer offers only while a branch is waiting.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCheckAgain { get; set; }
+
+    /// <summary>
+    /// Pages a consequence cohort's members; see <see cref="CausalityLineageConsequenceCard.LoadMembers"/>.
+    /// </summary>
+    [Parameter]
+    public Func<string, int, string?, Task<JIM.Models.Utility.PagedResultSet<JIM.Models.Activities.DTOs.CausalConsequenceMember>?>>? LoadConsequenceMembers { get; set; }
 
     /// <summary>
     /// The canvas grid: one flexible track per column with a fixed join track between each adjacent
@@ -291,6 +361,11 @@
             CausalityLineageColumnKind.Identity => "in the Metaverse",
             _ => "causes this view could not place"
         };
+    }
+
+    private Task CheckAgainAsync()
+    {
+        return OnCheckAgain.InvokeAsync();
     }
 
     private Task ToggleSelectionAsync(CausalityEvent causalityEvent)

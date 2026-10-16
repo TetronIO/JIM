@@ -42,18 +42,43 @@ public class ConfigurationChangeClassificationCompletenessTests
     [TearDown]
     public void TearDown() => _jim?.Dispose();
 
+    /// <summary>
+    /// One saved configuration test case of each kind, with every optional property set (#2055 Phase 4), so every key a
+    /// test case can emit is walked.
+    /// </summary>
+    private static List<ConfigurationTestCase> BuildFullTestCases() =>
+    [
+        new()
+        {
+            Id = 1, Name = "Flow", Description = "Checks the flow", Kind = ConfigurationTestCaseKind.AttributeFlow, SyncRuleMappingId = 1,
+            RunAsOfUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Inputs = [new ConfigurationTestInput(JIM.Models.Expressions.ExpressionInputSource.ConnectedSystem, "sn", ["Bloggs"])],
+            Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values, ["Bloggs"], InOrder: true)
+        },
+        new()
+        {
+            Id = 2, Name = "Scope", Kind = ConfigurationTestCaseKind.Scope, SyncRuleId = 1,
+            Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.InScope)
+        },
+        new()
+        {
+            Id = 3, Name = "Matching", Kind = ConfigurationTestCaseKind.ObjectMatchingRule, ObjectMatchingRuleId = 1,
+            Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.NoValue)
+        }
+    ];
+
     #region Snapshot key completeness
 
     [Test]
     public void Classification_SyncRuleSnapshot_ClassifiesEveryEmittedKey()
     {
-        AssertEveryKeyClassified(_service.CreateSnapshot(BuildFullSyncRule(), HashKey));
+        AssertEveryKeyClassified(_service.CreateSnapshot(BuildFullSyncRule(), HashKey, BuildFullTestCases()));
     }
 
     [Test]
     public void Classification_ConnectedSystemSnapshot_ClassifiesEveryEmittedKey()
     {
-        AssertEveryKeyClassified(_service.CreateSnapshot(BuildFullConnectedSystem(), HashKey));
+        AssertEveryKeyClassified(_service.CreateSnapshot(BuildFullConnectedSystem(), HashKey, BuildFullTestCases()));
     }
 
     [Test]
@@ -107,8 +132,8 @@ public class ConfigurationChangeClassificationCompletenessTests
         // click through. Every Class A key must say what it will do.
         var snapshots = new[]
         {
-            _service.CreateSnapshot(BuildFullSyncRule(), HashKey),
-            _service.CreateSnapshot(BuildFullConnectedSystem(), HashKey),
+            _service.CreateSnapshot(BuildFullSyncRule(), HashKey, BuildFullTestCases()),
+            _service.CreateSnapshot(BuildFullConnectedSystem(), HashKey, BuildFullTestCases()),
             _service.CreateSnapshot(BuildFullMetaverseObjectType(), HashKey),
             _service.CreateSnapshot(BuildFullMetaverseAttribute(), HashKey)
         };
@@ -385,9 +410,23 @@ public class ConfigurationChangeClassificationCompletenessTests
         });
         system.ObjectTypes!.Add(objectType);
         system.Partitions = [partition];
+        // Every Run-Type-specific setting is populated, across the two Run Types that carry them, so each key a Run
+        // Profile can emit has to be classified: the Full Import settings (#1618 detected-deletion limits, Verification
+        // Mode, #2049 Allow Object Type Changes) and the Export limits.
         system.RunProfiles!.Add(new ConnectedSystemRunProfile
         {
-            Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = 100
+            Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = 100,
+            VerifyImportContentHashes = true,
+            AllowObjectTypeChanges = true,
+            MaxDetectedDeletions = 500,
+            MaxDetectedDeletionsPercent = 10
+        });
+        system.RunProfiles!.Add(new ConnectedSystemRunProfile
+        {
+            Id = 51, Name = "Export", RunType = ConnectedSystemRunType.Export, PageSize = 100,
+            MaxCreates = 5,
+            MaxUpdates = 0,
+            MaxDeletes = 100
         });
         return system;
     }

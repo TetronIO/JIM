@@ -790,7 +790,12 @@ public class ObjectMatchingModeTests
             ConnectedSystemId = 1,
             ConnectedSystem = connectedSystem,
             MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the
+            // rule its Metaverse attribute, as the portal's loaded copies do.
+            ConnectedSystemObjectType = new ConnectedSystemObjectType
+            {
+                Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+            },
             ObjectMatchingRules = new List<ObjectMatchingRule>
             {
                 new()
@@ -798,6 +803,7 @@ public class ObjectMatchingModeTests
                     Id = 0,
                     Order = 0,
                     TargetMetaverseAttributeId = 100,
+                    TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                     Sources = new List<ObjectMatchingRuleSource>
                     {
                         new() { Order = 0, ConnectedSystemAttributeId = 10 }
@@ -837,7 +843,12 @@ public class ObjectMatchingModeTests
             ConnectedSystemId = 1,
             ConnectedSystem = connectedSystem,
             MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the
+            // rule its Metaverse attribute, as the portal's loaded copies do.
+            ConnectedSystemObjectType = new ConnectedSystemObjectType
+            {
+                Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+            },
             ObjectMatchingRules = new List<ObjectMatchingRule>
             {
                 new()
@@ -845,6 +856,7 @@ public class ObjectMatchingModeTests
                     Id = 0,
                     Order = 0,
                     TargetMetaverseAttributeId = 100,
+                    TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                     Sources = new List<ObjectMatchingRuleSource>
                     {
                         new() { Order = 0, ConnectedSystemAttributeId = 10 }
@@ -897,6 +909,50 @@ public class ObjectMatchingModeTests
         // Assert
         Assert.That(result, Is.True);
         _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Once);
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ScopingCriterionWithNoValueForAValueTakingOperator_ThrowsArgumentException()
+    {
+        // #2053: "Equals with no value" was the workaround for "has no value"; with the operator available it is refused.
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.Equals);
+        syncRule.ObjectScopingCriteriaGroups[0].Criteria[0].DateTimeValue = null;
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain("Account Expires").And.Contain("HasNoValue"));
+        _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ScopingCriterionHasNoValueWithAStaleValue_StoresItWithoutTheValueAsync()
+    {
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.HasNoValue);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(syncRule.ObjectScopingCriteriaGroups[0].Criteria[0].DateTimeValue, Is.Null);
+        }
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ScopingCriterionWithAnInvalidPattern_ThrowsArgumentException()
+    {
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.MatchesPattern);
+        var criterion = syncRule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.MetaverseAttribute = new MetaverseAttribute { Id = 51, Name = "Email", Type = AttributeDataType.Text };
+        criterion.DateTimeValue = null;
+        criterion.StringValue = "[a-z";
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain("Email").And.Contain("not a valid regular expression"));
     }
 
     private static SyncRule BuildExportSyncRuleWithScopingCriterion(SearchComparisonType comparisonType) => new()
@@ -976,7 +1032,12 @@ public class ObjectMatchingModeTests
             ObjectMatchingRuleMode = mode
         },
         MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+        // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the rule
+        // its Metaverse attribute, as the portal's loaded copies do.
+        ConnectedSystemObjectType = new ConnectedSystemObjectType
+        {
+            Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+        },
         ObjectMatchingRules = new List<ObjectMatchingRule>
         {
             new()
@@ -984,6 +1045,7 @@ public class ObjectMatchingModeTests
                 Id = 0,
                 Order = 0,
                 TargetMetaverseAttributeId = 100,
+                TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                 Sources = new List<ObjectMatchingRuleSource>
                 {
                     new() { Order = 0, ConnectedSystemAttributeId = 10 }

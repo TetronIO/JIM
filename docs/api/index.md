@@ -1,10 +1,13 @@
 ---
 title: API
+description: "What JIM's REST API covers, where its reference lives, and how to authenticate, page, filter and handle errors."
+type: reference
+audience: automation-author
 ---
 
 # API
 
-JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
+JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the Metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
 ## Where to find what
 
@@ -18,9 +21,40 @@ JIM exposes a REST API for programmatic access to all identity management operat
 
 The interactive API reference is the canonical, up-to-date specification of every endpoint. The pages in this section cover the cross-cutting concerns of using the API itself; the per-object behaviour (what a Connected System is, how a Schedule works) lives in the Configuration section.
 
+## Resource groups
+
+The interactive API reference groups its endpoints by resource. Each group, and the page that explains what it manages:
+
+| Resource group | What it covers |
+|----------------|----------------|
+| Activities | [Activities](../configuration/activities.md), their items and their progress (`/api/v1/activities`) |
+| ApiKeys | The [API keys](../configuration/api-keys.md) scripts and integrations authenticate with (`/api/v1/apikeys`) |
+| Auth | The OIDC settings a client needs before it can sign in (`/api/v1/auth/config`); unauthenticated |
+| Certificates | [Trusted Certificates](../configuration/certificates.md) for connections to Connected Systems (`/api/v1/certificates`) |
+| ConfigurationTests | Saved [configuration test cases](../configuration/configuration-tests.md), and running them (`/api/v1/configuration-tests`) |
+| ExampleData | Example Data templates and sets, for filling a test instance with realistic objects (`/api/v1/example-data`) |
+| FeatureFlags | Turning [Preview features](../administration/preview-features.md) on and off (`/api/v1/features`) |
+| FileSystem | Browsing the files a connector can read inside the container, such as the [File Connector](../connectors/jim-file-connector.md)'s import files (`/api/v1/filesystem`) |
+| GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
+| Health | Health, readiness, liveness and version probes for load balancers and orchestrators (`/api/v1/health`); unauthenticated, and answering for the web tier only |
+| History | Counting and clearing old change history and deleted-object records (`/api/v1/history`) |
+| Logs | Reading JIM's [service logs](../administration/configuration.md#logging) (`/api/v1/logs`) |
+| Metaverse | The [Metaverse](../configuration/metaverse.md) schema, Metaverse Objects, [Attribute Priority](../concepts/attribute-priority.md) and pending deletions (`/api/v1/metaverse`) |
+| PasswordSynchronisation | The [Password Synchronisation queue](../concepts/password-synchronisation.md#watching-the-queue) (`/api/v1/password-synchronisation`) |
+| PredefinedSearches | [Predefined Searches](../configuration/predefined-searches.md) and their criteria (`/api/v1/predefined-searches`) |
+| Previews | Reading and cancelling a [Configuration Change Preview](../configuration/configuration-changes.md) (`/api/v1/previews`) |
+| ScheduleExecutions | [Schedule Executions](../configuration/schedules.md#executions): watching and cancelling runs (`/api/v1/schedule-executions`) |
+| Schedules | [Schedules](../configuration/schedules.md), and running one on demand (`/api/v1/schedules`) |
+| Security | [Roles](../configuration/roles.md) and who holds them (`/api/v1/security`) |
+| ServiceSettings | [Service Settings](../configuration/service-settings.md) (`/api/v1/service-settings`) |
+| Synchronisation | [Connected Systems](../configuration/connected-systems.md), the objects in each Connector Space, [Run Profiles](../configuration/run-profiles.md), [Synchronisation Rules](../configuration/synchronisation-rules.md), [Data Flow](../configuration/data-flow.md) and Pending Exports (`/api/v1/synchronisation`) |
+| System | [Service Health](../configuration/operations.md#service-health) for the Worker and the Scheduler, and resetting an instance (`/api/v1/system`) |
+| UserInfo | The signed-in user (`/api/v1/userinfo`) |
+| WorkerTasks | The worker's task queue, and cancelling a task (`/api/v1/worker-tasks`) |
+
 ## Versioning
 
-The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. Future versions will appear under `/api/v2/` etc., with a deprecation period for the previous version.
+The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. A new major version gets its own prefix (`/api/v2/` and so on), and the version before it stays available through a deprecation period.
 
 ## Breaking changes
 
@@ -32,7 +66,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.16.0**
 
-- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) now ends `CompleteWithError`, naming the failed steps in `errorMessage`, where it previously ended `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
+- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) ends `CompleteWithError`, naming the failed steps in `errorMessage`; v0.15.0 and earlier ended it `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
 
 **v0.15.0**
 
@@ -45,7 +79,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.13.0**
 
-- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is now serialised as `"SynchronisationRule"` (previously `"SyncRule"`) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
+- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is serialised as `"SynchronisationRule"` (`"SyncRule"` in v0.12.0 and earlier) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
 
 ## Authentication
 
@@ -66,7 +100,9 @@ These behaviours are common across the API. The interactive API reference is aut
 
 **Enum values.** Enum-typed fields are always serialised as their string name in responses (for example `"status": "Enabled"`), and must be sent as their string name in request bodies. Numeric enum values are not accepted on input and are rejected with a `400 Bad Request`; this keeps the wire contract stable, since an enum's numeric ordinal is free to change between releases while its name is not.
 
-**Asynchronous operations.** Long-running operations (schema import, Run Profile execution, Connected System deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress. Setting a password (`POST /api/v1/metaverse/objects/{id}/password`, and its single Connected System Object form `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`) is the one operation that can be asked to wait: it answers `200` once every target Connected System has settled, or `202` with what is known when the time runs out. The default wait follows the target mode (10 seconds when `connectedSystemObjectIds` names the Connected System Objects, none when the password is propagated to every configured system) and `wait` (seconds, 0 to 30) overrides either; see [Passwords](../concepts/passwords.md#setting-a-password) for the per-target states in the body.
+**Date and time attribute values.** A `dateTimeValue` (on a Metaverse Object, Connected System Object or Pending Export attribute value, a change history entry, or a scoping or search criterion) is always UTC and ends in `Z` (for example `"2026-03-01T09:00:00.123456Z"`), whatever the server's time zone. JIM holds a date to the microsecond, so any digits of a source value beyond the sixth decimal place are dropped, and the fraction is omitted when it is zero (`"2026-03-01T09:00:00Z"`).
+
+**Asynchronous operations.** Long-running operations (schema import, Run Profile execution, Connected System deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress. Setting a password (`POST /api/v1/metaverse/objects/{id}/password`, and its single Connected System Object form `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`) is the one operation that can be asked to wait: it answers `200` once every target Connected System has settled, or `202` with what is known when the time runs out. The default wait follows the target mode (10 seconds when `connectedSystemObjectIds` names the Connected System Objects, none when the password is propagated to every configured system) and `wait` (seconds, 0 to 30) overrides either; see [Passwords](../concepts/password-synchronisation.md#setting-a-password) for the per-target states in the body.
 
 **Rate limiting.** Requests are throttled per client (see [Rate Limiting](rate-limiting.md)); an exceeded limit returns `429 Too Many Requests` with a `Retry-After` header.
 

@@ -76,15 +76,8 @@ public class SyncServer : ISyncServer
 
     #region Object Matching
 
-    public Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
+    public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
         => _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, matchingRules);
-
-    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules)
-        => _jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules);
 
     #endregion
 
@@ -305,6 +298,19 @@ public class SyncServer : ISyncServer
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
+    public async Task DeleteConnectedSystemObjectsQuietlyAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
+    {
+        // Built before the deletion, which takes the objects' attribute values with it; persisted after, so a record
+        // never describes an object that is still there.
+        var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
+        var deletionRecords = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords(connectedSystemObjects, activity, changeTrackingEnabled);
+
+        await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+
+        if (deletionRecords.Count > 0)
+            await _syncRepo.PersistCsoChangesAsync(deletionRecords);
+    }
+
     public async Task CreateProvisioningCsoChangeRecordsAsync(
         List<ConnectedSystemObject> provisioningCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> mvoIdToRpei)
@@ -411,10 +417,11 @@ public class SyncServer : ISyncServer
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null)
+        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
+        Action<IReadOnlyList<string>>? containersCreated = null)
         => _exportExec.ExecuteExportsAsync(
             connectedSystem, connector, runMode, options, cancellationToken,
-            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations);
+            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations, containersCreated);
 
     #endregion
 }

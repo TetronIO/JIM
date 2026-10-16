@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -43,7 +44,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_CsoJoinedByImportRuleMatching_RecordsMatchingImportRuleAsync()
     {
-        var (_, _, _, hrImportRule, hrCso) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: false);
+        var (_, _, _, hrImportRule, hrCso, _) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: false);
 
         using (Assert.EnterMultipleScope())
         {
@@ -51,6 +52,8 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
             Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.EqualTo(hrImportRule!.Id));
             Assert.That(hrCso.JoinSyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(hrCso.JoinObjectMatchingRuleId, Is.EqualTo(hrImportRule.ObjectMatchingRules.Single().Id), "#2052: which rule matched");
+            Assert.That(hrCso.JoinMatchValue, Is.EqualTo("EMP001"), "#2052: what it matched on");
         }
     }
 
@@ -62,7 +65,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_CsoJoinedByConnectedSystemMatchingWithNoImportRule_RecordsInboundMatchWithNoRuleAsync()
     {
-        var (_, _, _, hrImportRule, hrCso) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: true);
+        var (_, hrType, _, hrImportRule, hrCso, _) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -71,6 +74,33 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
             Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.Null);
             Assert.That(hrCso.JoinSyncRuleName, Is.Null);
+            Assert.That(hrCso.JoinObjectMatchingRuleId, Is.EqualTo(hrType.ObjectMatchingRules.Single().Id), "#2052: which rule matched");
+            Assert.That(hrCso.JoinMatchValue, Is.EqualTo("EMP001"), "#2052: what it matched on");
+        }
+    }
+
+    /// <summary>
+    /// The Activity item a matching join records says which rule matched and on what value (#2052), so the run's own
+    /// record explains the join after the rule changes or the object is joined elsewhere, which the object's current
+    /// join record cannot.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FullSync_CsoJoinedByMatching_RecordsTheRuleAndValueOnTheJoinedOutcomeAsync(bool simpleMode)
+    {
+        var (_, _, _, _, hrCso, hrActivity) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode);
+
+        var joined = hrActivity.RunProfileExecutionItems
+            .Where(r => r.ConnectedSystemObjectId == hrCso.Id)
+            .SelectMany(r => r.SyncOutcomes)
+            .SingleOrDefault(o => !o.IsChildOutcome && o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        Assert.That(joined, Is.Not.Null, "precondition: the join records a Joined root outcome");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joined!.ObjectMatchingRuleId, Is.EqualTo(hrCso.JoinObjectMatchingRuleId));
+            Assert.That(joined!.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("EmployeeId equals EmployeeId"));
+            Assert.That(joined!.MatchedValue, Is.EqualTo("EMP001"));
         }
     }
 
@@ -119,7 +149,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
     /// A Directory projects a person, then HR's object joins it on Employee ID: through an import Synchronisation
     /// Rule's own Object Matching Rule, or, in simple mode, through the HR object type's with no import rule at all.
     /// </summary>
-    private async Task<(ConnectedSystem Hr, ConnectedSystemObjectType HrType, MetaverseObjectType MvType, SyncRule? HrImportRule, ConnectedSystemObject HrCso)>
+    private async Task<(ConnectedSystem Hr, ConnectedSystemObjectType HrType, MetaverseObjectType MvType, SyncRule? HrImportRule, ConnectedSystemObject HrCso, Activity HrActivity)>
         ArrangeDirectoryProjectsAndHrJoinsAsync(bool simpleMode)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
@@ -176,18 +206,19 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
         var hrCso = await CreateCsoAsync(hr.Id, hrType, "Jane Smith (HR)", "EMP001");
 
         await RunFullSyncAsync(directory);
-        await RunFullSyncAsync(hr);
+        var hrActivity = await RunFullSyncAsync(hr);
 
         hrCso = await ReloadEntityAsync(hrCso);
         Assert.That(hrCso.MetaverseObjectId, Is.Not.Null, "precondition: HR's object should have joined");
-        return (hr, hrType, mvType, hrImportRule, hrCso);
+        return (hr, hrType, mvType, hrImportRule, hrCso, hrActivity);
     }
 
-    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem, string profileName = "Full Sync")
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem, string profileName = "Full Sync")
     {
         var profile = await CreateRunProfileAsync(connectedSystem.Id, profileName, ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(connectedSystem.Id, profile, ConnectedSystemRunType.FullSynchronisation);
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, profile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 }

@@ -197,8 +197,30 @@ public class DynamicExpressoEvaluatorFunctionalityRegressionTests
     [Test]
     public void FormatDate_DocumentedExample_FormatsAsIsoDate()
     {
-        var context = new ExpressionContext(new Dictionary<string, object?> { { "HireDate", new DateTime(2020, 3, 15) } });
-        Assert.That(_evaluator.Evaluate("FormatDate((DateTime)mv[\"HireDate\"], \"yyyy-MM-dd\")", context), Is.EqualTo("2020-03-15"));
+        var context = new ExpressionContext(new Dictionary<string, object?> { { "Hire Date", new DateTime(2020, 3, 15, 0, 0, 0, DateTimeKind.Utc) } });
+        Assert.That(_evaluator.Evaluate("FormatDate(mv[\"Hire Date\"], \"yyyy-MM-dd\")", context), Is.EqualTo("2020-03-15"));
+    }
+
+    [Test]
+    public void ParseDate_DocumentedExample_ReadsADayFirstDateAsUtcMidnight()
+    {
+        var context = new ExpressionContext(new Dictionary<string, object?>(), new Dictionary<string, object?> { { "hireDate", "15/03/2026" } });
+
+        var result = _evaluator.Evaluate("ParseDate(cs[\"hireDate\"], \"dd/MM/yyyy\")", context);
+
+        Assert.That(result, Is.EqualTo(new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc)));
+        Assert.That(((DateTime)result!).Kind, Is.EqualTo(DateTimeKind.Utc));
+    }
+
+    [Test]
+    public void ParseDate_DocumentedExampleWithAZoneDesignator_ReadsTheUtcInstant()
+    {
+        var context = new ExpressionContext(new Dictionary<string, object?>(), new Dictionary<string, object?> { { "changed", "20260315103000Z" } });
+
+        var result = _evaluator.Evaluate("ParseDate(cs[\"changed\"], \"yyyyMMddHHmmssK\")", context);
+
+        Assert.That(result, Is.EqualTo(new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Utc)));
+        Assert.That(((DateTime)result!).Kind, Is.EqualTo(DateTimeKind.Utc));
     }
 
     [Test]
@@ -262,14 +284,14 @@ public class DynamicExpressoEvaluatorFunctionalityRegressionTests
     #region Collection Functions (docs/concepts/expressions.md #collection-functions)
 
     [Test]
-    public void CollectionContains_DocumentedExample_TrueWhenValuePresent()
+    public void Eq_DocumentedExample_TrueWhenAnyValueEquals()
     {
         var context = new ExpressionContext(null, new Dictionary<string, object?>
         {
             { "memberOf", new List<string> { "CN=Users", "CN=Admins" } }
         });
 
-        Assert.That(_evaluator.Evaluate("CollectionContains(cs[\"memberOf\"], \"CN=Admins\")", context), Is.True);
+        Assert.That(_evaluator.Evaluate("Eq(cs[\"memberOf\"], \"CN=Admins\")", context), Is.True);
     }
 
     [Test]
@@ -280,7 +302,7 @@ public class DynamicExpressoEvaluatorFunctionalityRegressionTests
             { "coursesCompleted", "SOFT101|SOFT201|SEC101" }
         });
 
-        var result = _evaluator.Evaluate("Split(cs[\"coursesCompleted\"], \"|\")", context) as string[];
+        var result = _evaluator.Evaluate("Split(cs[\"coursesCompleted\"], \"|\")", context) as ExpressionValues;
 
         Assert.That(result, Is.EqualTo(new[] { "SOFT101", "SOFT201", "SEC101" }));
     }
@@ -293,7 +315,9 @@ public class DynamicExpressoEvaluatorFunctionalityRegressionTests
             { "Groups", new[] { "Admin", "Users", "Developers" } }
         });
 
-        Assert.That(_evaluator.Evaluate("Join(mv[\"Groups\"], \",\")", context), Is.EqualTo("Admin,Users,Developers"));
+        // An attribute's values read in a fixed order (text by ordinal, #2053), so the joined text is the same after
+        // every import whatever order the directory returned them in.
+        Assert.That(_evaluator.Evaluate("Join(mv[\"Groups\"], \",\")", context), Is.EqualTo("Admin,Developers,Users"));
     }
 
     #endregion

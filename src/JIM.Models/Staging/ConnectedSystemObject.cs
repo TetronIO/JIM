@@ -148,11 +148,30 @@ public class ConnectedSystemObject
     public string? JoinSyncRuleName { get; set; }
 
     /// <summary>
+    /// The Object Matching Rule that found this object's Metaverse Object (#2052). Null unless the object was joined by
+    /// matching, when the join predates recording, or when the rule has since been deleted (in which case
+    /// <see cref="JoinMatchValue"/> still says what it matched on).
+    /// </summary>
+    public int? JoinObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// The value the joining Object Matching Rule matched on (#2052): what its attribute or expression computed and the
+    /// Metaverse Object holds. Several values are listed, separated by commas.
+    /// </summary>
+    public string? JoinMatchValue { get; set; }
+
+    /// <summary>
     /// Records how this object was joined and the Synchronisation Rule responsible, if any (#348). Every join site calls
     /// this, and <see cref="JoinType"/> follows from the method, so the record cannot describe a different join from
     /// the one made.
     /// </summary>
-    public void RecordJoin(ConnectedSystemObjectJoinMethod method, SyncRule? syncRule, DateTime dateJoined)
+    /// <param name="method">How the object was joined.</param>
+    /// <param name="syncRule">The Synchronisation Rule responsible for the join, if any.</param>
+    /// <param name="dateJoined">When the join was made.</param>
+    /// <param name="matchingRule">For a join made by matching, the Object Matching Rule that found the match (#2052).</param>
+    /// <param name="matchValue">For a join made by matching, the value it matched on (#2052).</param>
+    public void RecordJoin(ConnectedSystemObjectJoinMethod method, SyncRule? syncRule, DateTime dateJoined,
+        ObjectMatchingRule? matchingRule = null, string? matchValue = null)
     {
         JoinType = method switch
         {
@@ -165,6 +184,8 @@ public class ConnectedSystemObject
         DateJoined = dateJoined;
         JoinSyncRuleId = syncRule is { Id: > 0 } ? syncRule.Id : null;
         JoinSyncRuleName = syncRule?.Name;
+        JoinObjectMatchingRuleId = matchingRule is { Id: > 0 } ? matchingRule.Id : null;
+        JoinMatchValue = matchValue;
     }
 
     /// <summary>
@@ -177,6 +198,8 @@ public class ConnectedSystemObject
         JoinMethod = null;
         JoinSyncRuleId = null;
         JoinSyncRuleName = null;
+        JoinObjectMatchingRuleId = null;
+        JoinMatchValue = null;
     }
 
     /// <summary>
@@ -233,7 +256,7 @@ public class ConnectedSystemObject
 
     /// <summary>
     /// Whether a Full Synchronisation loading with <paramref name="watermark"/> (see
-    /// <see cref="ConnectedSystem.GetUnchangedObjectWatermark"/>) treats this object as unchanged and skips it: a joined,
+    /// <c>ConnectedSystem.GetUnchangedObjectWatermark</c>) treats this object as unchanged and skips it: a joined,
     /// normal object neither created nor updated since. One rule for the run's loader and the Full Synchronisation
     /// preview (#1530), so the preview never proposes a change for an object the run will not process.
     /// </summary>

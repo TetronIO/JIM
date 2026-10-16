@@ -71,10 +71,12 @@ Describe 'Get-JIMRunProfile' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
 
-        It 'Should document the targetsDeselectedPartition output property' {
-            # An operator scripting against JIM has to be able to find the Run Profiles that partition
-            # deselection has left inoperable without executing them and reading the failure.
-            ($help.returnValues | Out-String) | Should -Match 'targetsDeselectedPartition'
+        It 'Should declare that it returns the API''s Run Profile, so the reference documents its properties' {
+            # Scripts filter on TargetsDeselectedPartition (Run Profiles that partition deselection left inoperable),
+            # AllowObjectTypeChanges (#2049) and the Safeguards. The reference tables every property of the declared
+            # schema from the DTO's own comments, and build-and-test fails when the page and the schema disagree
+            # (ACC-5), so the properties are documented there rather than listed by hand in .OUTPUTS.
+            (Get-Command Get-JIMRunProfile).OutputType.Name | Should -Be 'JIM.RunProfileDto'
         }
     }
 }
@@ -270,6 +272,47 @@ Describe 'New-JIMRunProfile' {
                     -not $Body.ContainsKey('verifyImportContentHashes')
                 }
             }
+        }
+    }
+
+    Context 'AllowObjectTypeChanges binding (#2049)' {
+
+        It 'Should have an AllowObjectTypeChanges switch parameter' {
+            $command = Get-Command New-JIMRunProfile
+            $command.Parameters['AllowObjectTypeChanges'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Sends allowObjectTypeChanges=true in the request body when specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Full Import (Object Type changes)' -RunType FullImport -AllowObjectTypeChanges -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('allowObjectTypeChanges') -and $Body.allowObjectTypeChanges -eq $true
+                }
+            }
+        }
+
+        It 'Omits allowObjectTypeChanges from the request body when not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Plain Full Import' -RunType FullImport -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('allowObjectTypeChanges')
+                }
+            }
+        }
+
+        It 'Documents the parameter and gives an example using it' {
+            $help = Get-Help New-JIMRunProfile -Full
+            $description = (($help.parameters.parameter | Where-Object { $_.name -eq 'AllowObjectTypeChanges' }).description | ForEach-Object { $_.Text }) -join ' '
+            $description.Trim() | Should -Not -BeNullOrEmpty
+            ($help.Examples.Example.code -join "`n") | Should -Match '-AllowObjectTypeChanges'
         }
     }
 
@@ -482,6 +525,64 @@ Describe 'Set-JIMRunProfile' {
                     -not $Body.ContainsKey('verifyImportContentHashes')
                 }
             }
+        }
+    }
+
+    Context 'AllowObjectTypeChanges binding (#2049)' {
+
+        It 'Should have an AllowObjectTypeChanges bool parameter (not a switch, so $false is expressible)' {
+            $command = Get-Command Set-JIMRunProfile
+            $param = $command.Parameters['AllowObjectTypeChanges']
+            $param | Should -Not -BeNullOrEmpty
+            $param.ParameterType.Name | Should -Be 'Boolean'
+        }
+
+        It 'Sends allowObjectTypeChanges=$true in the request body when specified as $true' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -AllowObjectTypeChanges $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('allowObjectTypeChanges') -and $Body.allowObjectTypeChanges -eq $true
+                }
+            }
+        }
+
+        It 'Sends allowObjectTypeChanges=$false in the request body when specified as $false (not omitted)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -AllowObjectTypeChanges $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('allowObjectTypeChanges') -and $Body.allowObjectTypeChanges -eq $false
+                }
+            }
+        }
+
+        It 'Omits allowObjectTypeChanges from the request body when not specified (leaves unchanged)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Name 'Renamed' -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('allowObjectTypeChanges')
+                }
+            }
+        }
+
+        It 'Documents the parameter and gives examples turning it on and off' {
+            $help = Get-Help Set-JIMRunProfile -Full
+            $description = (($help.parameters.parameter | Where-Object { $_.name -eq 'AllowObjectTypeChanges' }).description | ForEach-Object { $_.Text }) -join ' '
+            $description.Trim() | Should -Not -BeNullOrEmpty
+            $examples = $help.Examples.Example.code -join "`n"
+            $examples | Should -Match '-AllowObjectTypeChanges \$true'
+            $examples | Should -Match '-AllowObjectTypeChanges \$false'
         }
     }
 

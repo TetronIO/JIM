@@ -267,7 +267,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(previewResult);
 
         var syncRules = await GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
-        var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow);
+        var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow, await GetAttributeReaderIndexAsync());
         dependents.DependentDerivedFlows = await DetectSchemaRefreshDerivedDependentsAsync(connectedSystemId, syncRules, dependents);
         return dependents;
     }

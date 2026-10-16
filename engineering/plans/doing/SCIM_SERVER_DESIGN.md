@@ -170,7 +170,22 @@ Inbound changes are accepted immediately and reach the Metaverse at the next sch
 
 - Connector name: **JIM SCIM 2.0 Service Provider Connector** (constant `ScimServiceProviderConnectorName` already exists in `src/JIM.Connectors/Constants.cs`), paired with the shipped **JIM SCIM 2.0 Client Connector**.
 - Endpoints live under `/scim/v2/{connectedSystemId}` in JIM.Web, outside the `/api` pipeline, so every `/api`-only stage (exception handling, rate limiting, role enrichment, redirect suppression) needs an explicit `/scim` counterpart.
-- Delivery sits behind an In Development feature flag until the JIM-to-JIM scenario passes.
+- Delivery sits behind a feature flag; see D16.
+
+### D16. A feature flag keeps it dark until it is ready
+
+Layers land on `main` one at a time, so a release can be cut with the Service Provider half built. A flag, `Features.ScimServiceProvider` in `FeatureFlagCatalogue`, keeps every layer invisible until it is switched on, so no release has to wait for the feature or be held back from `main`.
+
+- **Introduced in Phase 3**, with the first layer an administrator could see. Phases 1 and 2 add nothing reachable. Phase 3 registers and seeds the Connector, and seeding is data, which a flag does not gate (Developer Guide, Feature Flags), so the Connector row exists from then on and the gates below are what hide it. File the flag's removal issue in the same PR and give it as the catalogue entry's `TrackingIssueNumber`.
+- **Gated at every entry point, and nowhere deeper:**
+  - the `/scim` pipeline answers `404` while the flag is off, as though the route did not exist;
+  - creating a Connected System with the Service Provider Connector is refused (portal, REST, PowerShell), and the Connector is left out of the portal's Connector choice;
+  - scoped key management and the store summary (portal, REST, PowerShell) are refused.
+- **A Connected System that already exists keeps working, or fails loudly**, if the flag is turned off after one was created: its imports report that the feature is off rather than importing nothing.
+- **Three stages:**
+  1. **In Development** until the JIM-to-JIM scenario passes. Only development and the integration harness can switch it on; scenario setup uses `Enable-JIMFeature -AllowInDevelopment`.
+  2. **Preview** for at least one release, so administrators can try it against their own identity provider (Microsoft Entra ID, Okta, Keycloak), where client quirks such as #2094 surface, while its behaviour can still change. The Connector, its Connected System page and the docs carry the Preview label.
+  3. **Removed** once a release has shipped it in Preview without changes being needed: the catalogue entry, every gate, the flag-off tests and the harness's `Enable-JIMFeature` step go in the PR that closes the tracking issue.
 
 ## Technical Architecture
 
@@ -291,11 +306,13 @@ Migrations for the tables and indexes, the change feed, tombstones and purge flo
 
 ### Phase 3: Service Provider Connector
 
+Introduces the feature flag and its gates (D16), in the same PR as the Connector's registration.
+
 The store reader seam, the connector (Full and Delta Import), registration in `ConnectorFactory` and `SeedingServer.BuiltInConnectors`, capability flags (`SupportsFullImport` and `SupportsDeltaImport` true, `SupportsExport` false), and import tests including tombstones, the purge-floor failure and the missing-reader failure.
 
 ### Phase 4: HTTP surface
 
-Scoped key authentication and failure semantics (D3), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the In Development flag.
+Scoped key authentication and failure semantics (D3), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
 
 ### Phase 5: Surface parity and documentation
 
@@ -305,7 +322,7 @@ Scoped key authentication and failure semantics (D3), the `/scim` pipeline stage
 
 ### Phase 6: Acceptance
 
-The JIM-to-JIM integration scenario (both directions of the round trip, scheduled Delta Import and Delta Synchronisation to the Metaverse, a client Full Import proving deletes), leniency tests, then removal of the feature flag.
+The JIM-to-JIM integration scenario (both directions of the round trip, scheduled Delta Import and Delta Synchronisation to the Metaverse, a client Full Import proving deletes), leniency tests, then promotion of the flag from In Development to Preview. Its removal follows after a release in Preview (D16).
 
 ## Success Criteria
 

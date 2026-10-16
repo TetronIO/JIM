@@ -150,7 +150,7 @@
                                Variant="Variant.Outlined">
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">Error (default): record an error on each affected object</MudSelectItem>
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">Warn: complete with a warning summary</MudSelectItem>
-                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Ignore">Ignore: log only</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Ignore">Ignore: no error or warning</MudSelectItem>
                     </MudSelect>
                 </ChildContent>
             </MudExpansionPanel>
@@ -283,7 +283,7 @@
                 Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
                 stored until you choose to trust it.
             </MudText>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" DropShadow="false"
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" DropShadow="false"
                        StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
                        Disabled="_fetchingCertificate"
                        OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">

@@ -1,12 +1,15 @@
 ---
 title: API Authentication
+description: "Authenticate to JIM's REST API with an OpenID Connect bearer token or an API key, and when to use each."
+type: reference
+audience: automation-author
 ---
 
 # API Authentication
 
 All API requests must be authenticated. JIM supports two kinds of credential: **JWT access tokens** (via OIDC) and **API keys**. Both are sent the same way, as a bearer token in the `Authorization` header:
 
-```
+```http
 Authorization: Bearer <credential>
 ```
 

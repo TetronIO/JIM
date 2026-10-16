@@ -229,7 +229,165 @@ public class ImportUnresolvedReferenceHandlingTests
         Assert.That(activity.WarningMessage, Is.Null.Or.Empty, "Ignore mode must not set the Activity warning message.");
     }
 
+    /// <summary>
+    /// #959: every unresolved reference on an object counts, not only the first. The item used to record the first
+    /// value and say "there may be more"; it now carries the full count and says how they fall across attributes.
+    /// </summary>
+    [Test]
+    public async Task ResolveReferencesAsync_ErrorModeSeveralUnresolvedValues_RecordsEveryOneOnTheItemAsync()
+    {
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(Guid.NewGuid().ToString(), Guid.NewGuid().ToString()));
+
+        var activity = await RunImportAsync(mockFileConnector, UnresolvedReferenceHandling.Error);
+
+        var errorItem = activity.RunProfileExecutionItems.Single(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errorItem.UnresolvedReferenceCount, Is.EqualTo(2));
+            Assert.That(errorItem.ErrorMessage, Does.Contain("2 references"));
+            Assert.That(errorItem.ErrorMessage, Does.Contain(MockSourceSystemAttributeNames.MEMBER.ToString()));
+            Assert.That(errorItem.ErrorMessage, Does.Not.Contain("there may be more"));
+        }
+    }
+
+    /// <summary>
+    /// #959: an object whose item already carries another error used to lose its unresolved references from the
+    /// Activity entirely, because only an un-errored item took the unresolved reference error. The other error keeps
+    /// the primary slot, and the item still records how many references the run left unresolved.
+    /// </summary>
+    [Test]
+    public async Task ResolveReferencesAsync_ErrorModeItemAlreadyCarryingAnotherError_StillRecordsTheUnresolvedReferencesAsync()
+    {
+        const string connectorMessage = "Failed to parse 'startDate' as DateTime.";
+        var groupImportObject = CreateGroupImportObject(Guid.NewGuid().ToString());
+        groupImportObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
+        groupImportObject.ErrorMessage = connectorMessage;
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(groupImportObject);
+
+        var activity = await RunImportAsync(mockFileConnector, UnresolvedReferenceHandling.Error);
+
+        var item = activity.RunProfileExecutionItems.Single(i => i.ErrorType == ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.ErrorMessage, Does.Contain(connectorMessage), "The error that held the slot first keeps it.");
+            Assert.That(item.UnresolvedReferenceCount, Is.EqualTo(1), "The unresolved reference must not be dropped.");
+        }
+    }
+
+    /// <summary>
+    /// #959: Warn and Ignore keep the item un-errored, as #873 intended, but the count is still recorded, so the
+    /// Activity holds a per-object record of what the run left unresolved under every handling mode.
+    /// </summary>
+    [TestCase(UnresolvedReferenceHandling.Warn)]
+    [TestCase(UnresolvedReferenceHandling.Ignore)]
+    public async Task ResolveReferencesAsync_WarnOrIgnoreMode_RecordsTheCountOnTheUnerroredItemAsync(UnresolvedReferenceHandling handling)
+    {
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Guid.NewGuid().ToString()));
+
+        var activity = await RunImportAsync(mockFileConnector, handling);
+
+        // One object imported, so one item: the group's.
+        var item = activity.RunProfileExecutionItems.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.ErrorType, Is.Null.Or.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet));
+            Assert.That(item.UnresolvedReferenceCount, Is.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// #959: references unresolved on more than one attribute are broken down per attribute, so the message says
+    /// where to look on the Connected System Object rather than naming one value and leaving the rest implied.
+    /// </summary>
+    [Test]
+    public async Task ResolveReferencesAsync_ErrorModeUnresolvedOnTwoAttributes_BreaksTheCountDownPerAttributeAsync()
+    {
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateUserImportObject(managerRef: Guid.NewGuid().ToString(), tutorRef: Guid.NewGuid().ToString()));
+
+        var activity = await RunImportAsync(mockFileConnector, UnresolvedReferenceHandling.Error);
+
+        var errorItem = activity.RunProfileExecutionItems.Single(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errorItem.UnresolvedReferenceCount, Is.EqualTo(2));
+            Assert.That(errorItem.ErrorMessage, Does.Contain(
+                $"1 on {MockSourceSystemAttributeNames.CURRENT_COURSE_TUTOR}, 1 on {MockSourceSystemAttributeNames.MANAGER}"));
+        }
+    }
+
+    /// <summary>
+    /// #959: the count is null, not zero, on an item whose references all resolved (or that had none), matching how
+    /// the item's other optional counts read: absent means nothing to report.
+    /// </summary>
+    [Test]
+    public async Task ResolveReferencesAsync_NothingUnresolved_LeavesTheCountNullAsync()
+    {
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject());
+
+        var activity = await RunImportAsync(mockFileConnector, UnresolvedReferenceHandling.Error);
+
+        Assert.That(activity.RunProfileExecutionItems.Select(i => i.UnresolvedReferenceCount), Is.All.Null);
+    }
+
     #region helpers
+
+    private async Task<Activity> RunImportAsync(MockFileConnector mockFileConnector, UnresolvedReferenceHandling handling)
+    {
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        connectedSystem!.UnresolvedReferenceHandling = handling;
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await importProcessor.PerformImportAsync();
+        return activity;
+    }
+
+    /// <summary>
+    /// Builds a SOURCE_USER import object with its two single-valued references (MANAGER and CURRENT_COURSE_TUTOR)
+    /// set to the given values. Values matching no Connected System Object stay unresolved.
+    /// </summary>
+    private static ConnectedSystemImportObject CreateUserImportObject(string managerRef, string tutorRef)
+    {
+        return new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { Guid.NewGuid() },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Sam Okafor" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.MANAGER.ToString(),
+                    ReferenceValues = new List<string> { managerRef },
+                    Type = AttributeDataType.Reference
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.CURRENT_COURSE_TUTOR.ToString(),
+                    ReferenceValues = new List<string> { tutorRef },
+                    Type = AttributeDataType.Reference
+                }
+            }
+        };
+    }
 
     /// <summary>
     /// Builds a SOURCE_GROUP import object with a single multi-valued MEMBER reference. Passing a value that

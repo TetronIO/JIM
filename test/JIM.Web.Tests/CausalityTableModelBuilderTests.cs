@@ -109,6 +109,20 @@ public class CausalityTableModelBuilderTests
     }
 
     [Test]
+    public void Build_JoinedByMatching_CarriesTheValueAndTheRuleItMatchedOnAsOutcomeDetail()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.JoinedByMatchingItem(), CausalityTestData.NewJoinerContext());
+
+        var joinRow = CausalityTableModelBuilder.Build(model).Rows.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joinRow.OutcomeDetail, Does.Contain("48213"));
+            Assert.That(joinRow.OutcomeDetail, Does.Contain("Employee ID equals employeeNumber"));
+        }
+    }
+
+    [Test]
     public void Build_MvoDeletionCancelledOutcome_IsAJoinRow()
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };

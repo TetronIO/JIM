@@ -537,6 +537,26 @@ public class Rfc4512SchemaParserTests
         Assert.That(result!.Usage, Is.EqualTo(Rfc4512AttributeUsage.DistributedOperation));
     }
 
+    [Test]
+    public void ParseAttributeType_Obsolete_ParsesAsObsolete()
+    {
+        var definition = "( 1.3.6.1.4.1.4203.666.1.99 NAME 'retiredCounter' OBSOLETE SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 NO-USER-MODIFICATION USAGE dSAOperation )";
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.True);
+    }
+
+    [Test]
+    public void ParseAttributeType_NotObsolete_DefaultsToNotObsolete()
+    {
+        var definition = "( 2.5.4.3 NAME 'cn' SUP name SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{64} )";
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.False);
+    }
+
     #endregion
 
     #region GetRfcAttributeDataType (SYNTAX OID mapping)
@@ -683,6 +703,98 @@ public class Rfc4512SchemaParserTests
             Rfc4512AttributeUsage.UserApplications, isNoUserModification: true);
         Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
     }
+
+    #endregion
+
+    #region EQUALITY and the case-exact classifier (#2051)
+
+    [Test]
+    public void ParseAttributeType_WithEquality_ParsesTheMatchingRule()
+    {
+        var definition = "( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' ) DESC 'RFC 4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} )";
+
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result!.EqualityOid, Is.EqualTo("caseIgnoreMatch"));
+    }
+
+    [Test]
+    public void ParseAttributeType_WithoutEquality_EqualityIsNull()
+    {
+        var definition = "( 2.5.4.41 NAME 'name' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )";
+
+        var result = Rfc4512SchemaParser.ParseAttributeTypeDescription(definition);
+
+        Assert.That(result!.EqualityOid, Is.Null);
+    }
+
+    [TestCase("caseExactMatch")]
+    [TestCase("caseExactIA5Match")]
+    [TestCase("octetStringMatch")]
+    [TestCase("uuidMatch")]
+    [TestCase("CASEEXACTMATCH")]
+    [TestCase("2.5.13.5")]
+    [TestCase("1.3.6.1.4.1.1466.109.114.1")]
+    [TestCase("2.5.13.17")]
+    [TestCase("1.3.6.1.1.16.2")]
+    public void IsCaseExactMatchingRule_CaseExactRules_ReturnsTrue(string equality)
+    {
+        Assert.That(Rfc4512SchemaParser.IsCaseExactMatchingRule(equality), Is.True);
+    }
+
+    [TestCase("caseIgnoreMatch")]
+    [TestCase("caseIgnoreIA5Match")]
+    [TestCase("caseIgnoreListMatch")]
+    [TestCase("distinguishedNameMatch")]
+    [TestCase("2.5.13.2")]
+    [TestCase("2.5.13.1")]
+    [TestCase("integerMatch")]
+    [TestCase("")]
+    [TestCase(null)]
+    public void IsCaseExactMatchingRule_OtherRulesOrNone_ReturnsFalse(string? equality)
+    {
+        // No rule at all ignores case: the policy treats an undeclared identifier as the same thing in any case.
+        Assert.That(Rfc4512SchemaParser.IsCaseExactMatchingRule(equality), Is.False);
+    }
+
+    [Test]
+    public void ResolveEqualityOid_InheritedThroughSup_ReturnsTheSuperiorsRule()
+    {
+        // RFC 4512 4.1.2: a subtype without its own EQUALITY takes its supertype's, the same way it takes SYNTAX.
+        var all = Index(
+            "( 2.5.4.41 NAME 'name' EQUALITY caseIgnoreMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )",
+            "( 1.1.1 NAME 'exactName' EQUALITY caseExactMatch SUP name )",
+            "( 1.1.2 NAME 'exactNameChild' SUP exactName )",
+            "( 2.5.4.3 NAME 'cn' SUP name )");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Rfc4512SchemaParser.ResolveEqualityOid(all["exactNameChild"], all), Is.EqualTo("caseExactMatch"));
+            Assert.That(Rfc4512SchemaParser.ResolveEqualityOid(all["cn"], all), Is.EqualTo("caseIgnoreMatch"));
+            Assert.That(Rfc4512SchemaParser.ResolveEqualityOid(all["exactName"], all), Is.EqualTo("caseExactMatch"),
+                "An attribute's own rule wins over its supertype's.");
+        }
+    }
+
+    [Test]
+    public void ResolveEqualityOid_NoRuleAnywhereOrMissingSuperior_ReturnsNull()
+    {
+        var all = Index(
+            "( 1.1.1 NAME 'orphan' SUP missing )",
+            "( 1.1.2 NAME 'loopA' SUP loopB )",
+            "( 1.1.3 NAME 'loopB' SUP loopA )");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Rfc4512SchemaParser.ResolveEqualityOid(all["orphan"], all), Is.Null);
+            Assert.That(Rfc4512SchemaParser.ResolveEqualityOid(all["loopA"], all), Is.Null, "A SUP cycle ends rather than looping.");
+        }
+    }
+
+    private static Dictionary<string, Rfc4512AttributeTypeDescription> Index(params string[] definitions) =>
+        definitions
+            .Select(d => Rfc4512SchemaParser.ParseAttributeTypeDescription(d)!)
+            .ToDictionary(d => d.Name!, StringComparer.OrdinalIgnoreCase);
 
     #endregion
 }

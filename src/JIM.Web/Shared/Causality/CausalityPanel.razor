@@ -55,23 +55,37 @@
                 }
             </div>
         }
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
-                              IsSpeculative="_model.IsSpeculative">
-            <Actions>
-                @if (AvailableViews.Count > 1)
-                {
-                    <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
-                                     AriaLabel="Causality view" Class="seg" />
-                }
-            </Actions>
-        </CausalitySummaryBand>
+        @if (!LineageOnly)
+        {
+            <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                                  IsSpeculative="_model.IsSpeculative"
+                                  AfterThisRunPills="_lineageModel?.Consequences?.Pills"
+                                  OnAfterThisRunSelected="AfterThisRunSelected">
+                <Actions>
+                    @if (ExplorerHref != null)
+                    {
+                        <MudButton Variant="Variant.Outlined" DropShadow="false"
+                                   StartIcon="@Icons.Material.Filled.Hub" Href="@ExplorerHref"
+                                   Class="jim-causality-open-explorer">Open in explorer</MudButton>
+                    }
+                    @if (AvailableViews.Count > 1)
+                    {
+                        <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
+                                         AriaLabel="Causality view" Class="seg" />
+                    }
+                </Actions>
+            </CausalitySummaryBand>
+        }
 
         <div class="canvas-wrap">
             @switch (_view)
             {
                 case CausalityView.Lineage when _lineageModel is { } lineageModel:
                     <CausalityLineageView Model="lineageModel"
-                                        Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
+                                        Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent"
+                                        ConsequencesLoading="ConsequencesLoading"
+                                        OnCheckAgain="OnCheckConsequencesAgain"
+                                        LoadConsequenceMembers="LoadConsequenceMembers" />
                     break;
                 case CausalityView.Table when _tableModel is { } tableModel:
                     <CausalityTableView Model="tableModel" />
@@ -124,7 +138,14 @@
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline, CausalityView.Table];
 
-    private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
+    /// <summary>
+    /// The Lineage alone, for the Causality Explorer (#2100); see <see cref="LineageOnly"/>.
+    /// </summary>
+    private static readonly IReadOnlyList<CausalityView> LineageOnlyViews = [CausalityView.Lineage];
+
+    private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true
+        ? SpeculativeViews
+        : LineageOnly ? LineageOnlyViews : RecordedViews;
 
     private IReadOnlyList<SegmentedToggleOption<CausalityView>> ViewOptions =>
         AvailableViews.Select(view => new SegmentedToggleOption<CausalityView>(view, GetViewLabel(view))).ToList();
@@ -200,6 +221,46 @@
     [Parameter]
     public bool IsSynchronisationRun { get; set; }
 
+    /// <summary>
+    /// What the item went on to cause (#1811), or null while the page has not read it. Owned by the page for the same
+    /// reason as <see cref="Chain"/>; it arrives after the first render, and its arrival rebuilds only the Lineage, so a
+    /// card the reader has already selected stays selected.
+    /// </summary>
+    [Parameter]
+    public CausalConsequences? Consequences { get; set; }
+
+    /// <summary>
+    /// Whether the page is still reading <see cref="Consequences"/>.
+    /// </summary>
+    [Parameter]
+    public bool ConsequencesLoading { get; set; }
+
+    /// <summary>
+    /// Raised by the Lineage footer's Check again, which reads the consequences afresh.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCheckConsequencesAgain { get; set; }
+
+    /// <summary>
+    /// Pages a consequence cohort's members, by cohort key, page from 1, and find-box text.
+    /// </summary>
+    [Parameter]
+    public Func<string, int, string?, Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?>>? LoadConsequenceMembers { get; set; }
+
+    /// <summary>
+    /// Shows the Lineage alone, as the Causality Explorer does (#2100): no summary band, since the explorer's own header
+    /// says what is in view, and no view switcher, since the Timeline and Table stay on the item page.
+    /// </summary>
+    [Parameter]
+    public bool LineageOnly { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for this item (#2100), where the host offers to follow its Lineage there in place;
+    /// null where it does not, as the explorer itself does not.
+    /// </summary>
+    [Parameter]
+    public string? ExplorerHref { get; set; }
+
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalityLineageModel? _lineageModel;
@@ -212,9 +273,24 @@
     private CausalityPageContext? _builtContext;
     private IReadOnlySet<Guid>? _builtLivePendingExportIds;
     private CausalChain? _builtChain;
+    private CausalConsequences? _builtConsequences;
 
     protected override void OnParametersSet()
     {
+        // The consequences arrive on their own, after the first render (#1811): only the Lineage depends on them, so their
+        // arrival rebuilds the Lineage alone and keeps whatever the reader has expanded or selected.
+        if (!ReferenceEquals(Consequences, _builtConsequences)
+            && ReferenceEquals(Item, _builtItem) && ReferenceEquals(PreviewResult, _builtPreviewResult)
+            && Equals(Context, _builtContext)
+            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
+            && ReferenceEquals(Chain, _builtChain))
+        {
+            _builtConsequences = Consequences;
+            if (Item != null && _model != null && PreviewResult == null)
+                _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences);
+            return;
+        }
+
         // Build once per (Item, PreviewResult, Context, Chain) tuple; parent re-renders with unchanged
         // values must not discard the expanded/selected-event state by rebuilding the model. The chain
         // is an input (#1495): it supplies the export decision captions and the Lineage's chain cards,
@@ -230,6 +306,7 @@
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
         _builtChain = Chain;
+        _builtConsequences = Consequences;
 
         if (PreviewResult != null)
         {
@@ -245,7 +322,7 @@
             _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
                 DeletionPolicySnapshot, IsSynchronisationRun, Chain);
             _summary = CausalitySummaryBuilder.Build(_model);
-            _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
+            _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences);
             _tableModel = CausalityTableModelBuilder.Build(_model);
         }
         else
@@ -262,7 +339,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        // The explorer shows the Lineage whatever the reader last chose on an item page, and leaves that choice alone.
+        if (!firstRender || LineageOnly)
             return;
 
         // No try/catch needed: the preference service swallows JS interop unavailability internally
@@ -281,6 +359,19 @@
         _view = view;
         _selectedEvent = null;
         await PreferenceService.SetCausalityViewAsync(CausalityViewPreference.ToKey(view));
+    }
+
+    /// <summary>
+    /// Choosing an After this run pill opens the Lineage, the one view that shows consequences; once it is showing, the
+    /// pills have nowhere further to go and are left unclickable.
+    /// </summary>
+    private EventCallback AfterThisRunSelected => _view != CausalityView.Lineage
+        ? EventCallback.Factory.Create(this, SelectLineageAsync)
+        : default;
+
+    private Task SelectLineageAsync()
+    {
+        return SelectViewAsync(CausalityView.Lineage);
     }
 
     private void CloseDrawer()

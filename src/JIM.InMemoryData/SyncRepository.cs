@@ -46,6 +46,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
     private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
+    private readonly Dictionary<Guid, ActivityRunProfileExecutionItemMatchCandidate> _matchCandidates = new();
 
     /// <summary>
     /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
@@ -69,6 +70,42 @@ public class SyncRepository : ISyncRepository
     /// successful, which is the whole reason the password is staged rather than delivered inline.
     /// </summary>
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/> throws it, so a test can prove
+    /// that a batch failing after its exports succeeded still takes every one of them out of Executing (#2270).
+    /// </summary>
+    public Exception? FailConnectedSystemObjectUpdateWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="GetAllSyncRulesAsync"/> throws it, so a test can make a step that reads the rules after a
+    /// batch's exports came back (Collision Remediation) fail, and prove the batch's other results are not lost (#2197).
+    /// </summary>
+    public Exception? FailSyncRuleLoadWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
+    /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordMarkingWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> throws it, so a test can prove
+    /// that a delivery which cannot read whether an enable is held keeps the change rather than guessing (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordHoldProbeWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="CreateActivitiesAsync"/> throws it, so a test can prove that staging whose rows were written
+    /// but whose Activities were not still counts the passwords as queued.
+    /// </summary>
+    public Exception? FailActivityCreationWith { get; set; }
+
+    /// <summary>
+    /// Called with the ids <see cref="UpdatePendingExportsAsync"/> writes, so a test can see when an export's status is
+    /// written relative to the batch's other writes (#2173).
+    /// </summary>
+    public Action<IReadOnlyCollection<Guid>>? OnPendingExportsUpdated { get; set; }
 
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
@@ -108,6 +145,14 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Metaverse Objects, keyed by MVO ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
+
+    /// <summary>
+    /// The Connected System Object change records persisted without an execution item (quiet deletions), which the
+    /// RPEIs therefore cannot carry.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemObjectChange> StandaloneCsoChanges => _standaloneCsoChanges;
+
+    private readonly List<ConnectedSystemObjectChange> _standaloneCsoChanges = [];
 
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
@@ -153,6 +198,15 @@ public class SyncRepository : ISyncRepository
     {
         _objectTypes[objectType.Id] = objectType;
     }
+
+    /// <summary>
+    /// An attribute's case-exact declaration (#2051), from the seeded Object Types and Connected System Objects; an
+    /// attribute the repository has not seen ignores case, which is the declaration's default.
+    /// </summary>
+    private bool IsCaseExact(int attributeId) =>
+        _objectTypes.Values.SelectMany(t => t.Attributes ?? []).FirstOrDefault(a => a.Id == attributeId)?.CaseExact
+        ?? _csos.Values.SelectMany(c => c.AttributeValues).FirstOrDefault(av => av.AttributeId == attributeId && av.Attribute != null)?.Attribute?.CaseExact
+        ?? false;
 
     public void SeedSyncRule(SyncRule syncRule)
     {
@@ -406,9 +460,12 @@ public class SyncRepository : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
         int connectedSystemId, int attributeId, string attributeValue)
     {
+        // Mirrors the Postgres lookup: exact for a case-exact attribute, else ignoring case (#2051).
+        var caseExact = IsCaseExact(attributeId);
+        var key = IdentifierKey.For(attributeValue, caseExact);
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
-                .Any(av => av.AttributeId == attributeId && av.StringValue == attributeValue));
+                .Any(av => av.AttributeId == attributeId && av.StringValue != null && IdentifierKey.For(av.StringValue, caseExact) == key));
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
@@ -443,12 +500,14 @@ public class SyncRepository : ISyncRepository
     public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
+        // Same thing? Ignoring case unless the secondary external id attribute is case-exact (#2051).
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.TypeId == objectTypeId &&
                 c.SecondaryExternalIdAttributeId.HasValue &&
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
-                    av.StringValue == secondaryExternalIdValue));
+                    av.StringValue != null &&
+                    IdentifierKey.AreSame(av.StringValue, secondaryExternalIdValue, IsCaseExact(av.AttributeId))));
 
         // Cloned for the same reason as GetConnectedSystemObjectsByIdsAsync (#1079 Regression B):
         // this is the confirming import's PendingProvisioning fallback lookup path
@@ -460,9 +519,10 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Honest in-memory equivalent of the Postgres batch query: same predicate as
-    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
-    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
-    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (<c>StringValue</c> equality
+    /// against that CSO's own configured secondary external id attribute, ignoring case unless the
+    /// attribute is case-exact), evaluated for many values at once, each match reported under the value
+    /// asked for. Virtual so tests can spy on call counts to
     /// prove the import pipeline batches this per page instead of calling it per object.
     /// </summary>
     /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
@@ -478,7 +538,11 @@ public class SyncRepository : ISyncRepository
         if (secondaryExternalIdValues.Count == 0)
             return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
 
-        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        var caseExact = IsCaseExact(secondaryExternalIdAttributeId);
+        var requestedByKey = secondaryExternalIdValues
+            .Distinct(StringComparer.Ordinal)
+            .GroupBy(value => IdentifierKey.For(value, caseExact), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             if (cso.TypeId != objectTypeId ||
@@ -489,9 +553,9 @@ public class SyncRepository : ISyncRepository
                 av.AttributeId == secondaryExternalIdAttributeId &&
                 av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
                 av.StringValue != null &&
-                valueSet.Contains(av.StringValue)))
+                requestedByKey.ContainsKey(IdentifierKey.For(av.StringValue, caseExact))))
             {
-                results.Add((av.StringValue!, cso.Id, cso.Status));
+                results.AddRange(requestedByKey[IdentifierKey.For(av.StringValue!, caseExact)].Select(requested => (requested, cso.Id, cso.Status)));
             }
         }
 
@@ -512,16 +576,16 @@ public class SyncRepository : ISyncRepository
 
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, Guid>(CsoLookupKey.Comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv);
+            var primaryValue = GetExternalIdValueString(cso, primaryAv);
 
             if (primaryValue != null)
             {
-                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
                 result.TryAdd(cacheKey, cso.Id);
                 continue;
             }
@@ -530,11 +594,11 @@ public class SyncRepository : ISyncRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv);
+                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
 
                 if (secondaryValue != null)
                 {
-                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
                     result.TryAdd(cacheKey, cso.Id);
                 }
             }
@@ -549,18 +613,18 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
-        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(CsoLookupKey.Comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
 
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv);
+            var primaryValue = GetExternalIdValueString(cso, primaryAv);
 
             if (primaryValue != null)
             {
-                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
                 result.TryAdd(cacheKey, entry);
                 continue;
             }
@@ -569,11 +633,11 @@ public class SyncRepository : ISyncRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv);
+                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
 
                 if (secondaryValue != null)
                 {
-                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
                     result.TryAdd(cacheKey, entry);
                 }
             }
@@ -640,6 +704,8 @@ public class SyncRepository : ISyncRepository
         JoinMethod = cso.JoinMethod,
         JoinSyncRuleId = cso.JoinSyncRuleId,
         JoinSyncRuleName = cso.JoinSyncRuleName,
+        JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId,
+        JoinMatchValue = cso.JoinMatchValue,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
         DerivedInputChangePending = cso.DerivedInputChangePending,
@@ -671,9 +737,15 @@ public class SyncRepository : ISyncRepository
     {
         // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
         // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
-        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
-        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
-        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them, and text ignores case
+        // unless the anchor is case-exact (#2051). Keyed by the value asked for, as the Postgres implementation is.
+        var caseExact = IsCaseExact(attributeId);
+        var comparer = IdentifierKey.Comparer(caseExact);
+        var requestedByValue = attributeValues
+            .Distinct(StringComparer.Ordinal)
+            .GroupBy(value => value, comparer)
+            .ToDictionary(group => group.Key, group => group.ToList(), comparer);
+        var result = new Dictionary<string, ConnectedSystemObject>(comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
@@ -683,8 +755,11 @@ public class SyncRepository : ISyncRepository
                     ?? av.IntValue?.ToString()
                     ?? av.LongValue?.ToString()
                     ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
-                if (renderedValue != null && valueSet.Contains(renderedValue))
-                    result.TryAdd(renderedValue, cso);
+                if (renderedValue == null || !requestedByValue.TryGetValue(renderedValue, out var requested))
+                    continue;
+
+                foreach (var requestedValue in requested)
+                    result.TryAdd(requestedValue, cso);
             }
         }
         return Task.FromResult(result);
@@ -693,15 +768,20 @@ public class SyncRepository : ISyncRepository
     public virtual Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
         int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
-        var valueSet = new HashSet<string>(secondaryExternalIdValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Mirrors the Postgres implementation: keyed by the value asked for, each object's value compared as its own
+        // secondary external id attribute compares (ignoring case unless case-exact, #2051).
+        var requested = secondaryExternalIdValues.Distinct(StringComparer.Ordinal).ToList();
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
             if (!cso.SecondaryExternalIdAttributeId.HasValue) continue;
             var secIdAv = cso.AttributeValues
                 .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-            if (secIdAv?.StringValue != null && valueSet.Contains(secIdAv.StringValue))
-                result.TryAdd(secIdAv.StringValue, cso);
+            if (secIdAv?.StringValue == null) continue;
+
+            var comparer = IdentifierKey.Comparer(IsCaseExact(secIdAv.AttributeId));
+            foreach (var value in requested.Where(value => comparer.Equals(value, secIdAv.StringValue)))
+                result.TryAdd(value, cso);
         }
         return Task.FromResult(result);
     }
@@ -973,6 +1053,8 @@ public class SyncRepository : ISyncRepository
                 stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
+                stored.JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+                stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
@@ -1045,6 +1127,8 @@ public class SyncRepository : ISyncRepository
                 stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
+                stored.JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+                stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.Status = cso.Status;
                 BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
@@ -1122,6 +1206,9 @@ public class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
     {
+        if (FailConnectedSystemObjectUpdateWith != null)
+            throw FailConnectedSystemObjectUpdateWith;
+
         foreach (var (cso, newAvs) in updates)
         {
             if (_csos.TryGetValue(cso.Id, out var stored))
@@ -1219,11 +1306,13 @@ public class SyncRepository : ISyncRepository
                 if (av.UnresolvedReferenceValue == null || av.ReferenceValueId.HasValue)
                     continue;
 
-                // Try to find a CSO with this external ID value in the same Connected System
+                // Mirrors the Postgres fixup: the CSO whose Secondary External ID the reference names, ignoring case
+                // unless that attribute is case-exact (#2051).
                 var target = GetCsosForSystem(connectedSystemId)
-                    .FirstOrDefault(c => c.AttributeValues
-                        .Any(tav => tav.AttributeId == c.ExternalIdAttributeId &&
-                                    tav.StringValue == av.UnresolvedReferenceValue));
+                    .FirstOrDefault(c => c.SecondaryExternalIdAttributeId.HasValue && c.AttributeValues
+                        .Any(tav => tav.AttributeId == c.SecondaryExternalIdAttributeId &&
+                                    tav.StringValue != null &&
+                                    IdentifierKey.AreSame(tav.StringValue, av.UnresolvedReferenceValue, IsCaseExact(tav.AttributeId))));
 
                 if (target != null)
                 {
@@ -1240,14 +1329,18 @@ public class SyncRepository : ISyncRepository
     {
         // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
         // resolution below is a single pass either way.
-        // Build a lookup of secondary external ID values → CSO for the Connected System
-        var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        // Build a lookup of secondary external ID values → CSO for the Connected System, keyed as each attribute
+        // compares its values (ignoring case unless case-exact, #2051), so it mirrors the Postgres fixup.
+        var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+        var caseExactSecondaryKeys = new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.Attribute?.IsSecondaryExternalId == true && av.StringValue != null))
             {
-                if (av.Attribute?.IsSecondaryExternalId == true && av.StringValue != null)
-                    secondaryIdLookup.TryAdd(av.StringValue, cso);
+                if (av.Attribute!.CaseExact)
+                    caseExactSecondaryKeys.TryAdd(av.StringValue!, cso);
+                else
+                    secondaryIdLookup.TryAdd(IdentifierKey.For(av.StringValue!, caseExact: false), cso);
             }
         }
 
@@ -1267,7 +1360,8 @@ public class SyncRepository : ISyncRepository
                     if (valueChange.ReferenceValue != null || valueChange.StringValue == null)
                         continue;
 
-                    if (secondaryIdLookup.TryGetValue(valueChange.StringValue, out var targetCso))
+                    if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue, out var targetCso) ||
+                        secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue, caseExact: false), out targetCso))
                     {
                         valueChange.ReferenceValue = targetCso;
                         resolved++;
@@ -1348,134 +1442,64 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<MetaverseObject?>(null);
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int take)
+    {
+        // Mirrors the PostgreSQL lookup: equality per data type, case folded for Text when asked, distinct ids in id
+        // order. Decimal equality is numeric, so values differing only in scale (12.5 and 12.50) are equal.
+        var comparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+        bool Holds(MetaverseObjectAttributeValue av) => valueType switch
+        {
+            AttributeDataType.Text => av.StringValue != null && values.Any(v => comparer.Equals((string)v, av.StringValue)),
+            AttributeDataType.Number => av.IntValue.HasValue && values.Any(v => (int)v == av.IntValue.Value),
+            AttributeDataType.LongNumber => av.LongValue.HasValue && values.Any(v => (long)v == av.LongValue.Value),
+            AttributeDataType.Decimal => av.DecimalValue.HasValue && values.Any(v => (decimal)v == av.DecimalValue.Value),
+            AttributeDataType.Guid => av.GuidValue.HasValue && values.Any(v => (Guid)v == av.GuidValue.Value),
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
+        };
+
+        IReadOnlyList<Guid> ids = _mvos.Values
+            .Where(mvo => mvo.Type?.Id == metaverseObjectTypeId
+                          && mvo.AttributeValues.Any(av => av.AttributeId == metaverseAttributeId && Holds(av)))
+            .Select(mvo => mvo.Id)
+            .Order()
+            .Take(take)
+            .ToList();
+
+        return Task.FromResult(ids);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive) =>
+        (await FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, int.MaxValue)).Count;
+
     // Virtual so tests can simulate the identity split a real EF load produces (the SamePageJoinConflict
-    // page-flush regression coverage): production's matching query and an already-loaded CSO's own
+    // page-flush regression coverage): production's matching load and an already-loaded CSO's own
     // MetaverseObject navigation are separate database round trips, so a CSO obsoleted earlier in the same
     // page and a CSO joining via matching can end up with two distinct CLR instances of the same MVO row.
     // This dictionary-backed store returns the one stored reference for every lookup, so it cannot
     // reproduce that split on its own; a spy overriding this method can clone the match to reproduce it
     // deterministically. Matches the virtual precedent on the update/delete methods above.
-    public virtual Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject,
-        MetaverseObjectType metaverseObjectType,
-        ObjectMatchingRule rule)
-    {
-        if (rule.TargetMetaverseAttributeId == null)
-            return Task.FromResult<MetaverseObject?>(null);
-
-        // Get the source value from the CSO
-        string? sourceValue = null;
-        foreach (var source in rule.Sources.OrderBy(s => s.Order))
-        {
-            if (source.ConnectedSystemAttributeId.HasValue || source.ConnectedSystemAttribute != null)
-            {
-                var attrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId!.Value;
-                var av = connectedSystemObject.AttributeValues
-                    .FirstOrDefault(a => a.AttributeId == attrId);
-                sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
-                              (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
-                if (sourceValue != null) break;
-            }
-        }
-
-        if (sourceValue == null)
-            return Task.FromResult<MetaverseObject?>(null);
-
-        var comparison = rule.CaseSensitive
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
-
-        var targetAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId!.Value;
-        var matches = _mvos.Values
-            .Where(mvo =>
-            {
-                if (mvo.Type?.Id != metaverseObjectType.Id)
-                    return false;
-                return mvo.AttributeValues.Any(a =>
-                    a.AttributeId == targetAttrId &&
-                    string.Equals(
-                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
-                            (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
-                        sourceValue,
-                        comparison));
-            })
-            .ToList();
-
-        if (matches.Count > 1)
-            throw new MultipleMatchesException(
-                $"Multiple Metaverse Objects matched for rule {rule.Id}",
-                matches.Select(m => m.Id).ToList());
-
-        return Task.FromResult(matches.Count == 1 ? matches[0] : null);
-    }
-
-    public virtual Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule rule)
-    {
-        if (rule.Sources.Count == 0)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var source = rule.Sources[0];
-
-        // The connector-space side of the comparison always comes from the source's Connected System attribute.
-        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
-        if (csAttrId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        // The MVO side: the standard rule shape (source = Connected System attribute, target = Metaverse
-        // attribute) serves both import and export matching, so read the rule's Target Metaverse Attribute
-        // directly (mirrors the Postgres implementation).
-        var mvoAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
-        if (mvoAttrId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var mvoAttr = metaverseObject.AttributeValues?
-            .FirstOrDefault(av => av.AttributeId == mvoAttrId);
-        if (mvoAttr == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString() ??
-                     (mvoAttr.DecimalValue is { } mvoDecimal ? DecimalAttributeValue.ToCanonicalString(mvoDecimal) : null);
-        if (string.IsNullOrEmpty(mvoVal))
-            return Task.FromResult<ConnectedSystemObject?>(null);
-
-        var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-        bool ValueMatches(ConnectedSystemObject cso)
-        {
-            var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
-            if (csoAttr == null)
-                return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString() ??
-                         (csoAttr.DecimalValue is { } csoDecimal ? DecimalAttributeValue.ToCanonicalString(csoDecimal) : null);
-            return string.Equals(mvoVal, csoVal, comparison);
-        }
-
-        // Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO already joined
-        // to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not represent a
-        // live, unclaimed object in the target system.
-        var match = _csos.Values
-            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
-                          cso.TypeId == connectedSystemObjectType.Id &&
-                          cso.MetaverseObjectId == null &&
-                          cso.Status == ConnectedSystemObjectStatus.Normal)
-            .OrderBy(cso => cso.Id)
-            .FirstOrDefault(ValueMatches);
-
-        return Task.FromResult(match);
-    }
+    /// <inheritdoc />
+    public virtual Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId) =>
+        Task.FromResult(_mvos.GetValueOrDefault(metaverseObjectId));
 
     /// <summary>
-    /// In-memory mirror of the PostgreSQL batch candidate query for a single Object Matching Rule:
-    /// finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
-    /// the given values. Eligibility mirrors <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>
-    /// exactly; unlike that method, the attribute is identified by name (matching the batch query's
-    /// name-based join), so seeded attribute values must carry their <c>Attribute</c> navigation.
+    /// In-memory mirror of the PostgreSQL export matching candidate query for a single Object Matching
+    /// Rule: finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
+    /// the given values. Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO
+    /// already joined to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not
+    /// represent a live, unclaimed object in the target system. The attribute is identified by name
+    /// (matching the query's name-based join), so seeded attribute values must carry their
+    /// <c>Attribute</c> navigation.
     /// </summary>
     public virtual Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -1544,6 +1568,30 @@ public class SyncRepository : ISyncRepository
     /// still eligible (unjoined and Normal-status), or null otherwise. Same object reference the
     /// dictionary holds, matching the tracked (not no-tracking) semantics of the PostgreSQL method.
     /// </summary>
+    /// <summary>
+    /// In-memory mirror of the PostgreSQL stream an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052): every unjoined, Normal-status CSO of the type, ordered by id, with its values for the given attributes.
+    /// </summary>
+    public virtual async IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+    {
+        var unjoined = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal)
+            .OrderBy(cso => cso.Id)
+            .ToList();
+
+        foreach (var cso in unjoined)
+        {
+            await Task.Yield();
+            yield return (cso.Id, cso.AttributeValues
+                .Where(av => attributeIds.Contains(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0))
+                .ToList());
+        }
+    }
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
     {
         if (_csos.TryGetValue(connectedSystemObjectId, out var cso) &&
@@ -1562,7 +1610,8 @@ public class SyncRepository : ISyncRepository
     /// single-threaded, so no locking is required here; this method exists purely to give tests a
     /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
     /// </summary>
-    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue)
     {
         if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
             return Task.FromResult(false);
@@ -1573,6 +1622,8 @@ public class SyncRepository : ISyncRepository
         cso.JoinMethod = ConnectedSystemObjectJoinMethod.ExportMatching;
         cso.JoinSyncRuleId = joinSyncRuleId;
         cso.JoinSyncRuleName = joinSyncRuleName;
+        cso.JoinObjectMatchingRuleId = joinObjectMatchingRuleId;
+        cso.JoinMatchValue = joinMatchValue;
         cso.Status = ConnectedSystemObjectStatus.Normal;
         BumpRowVersion(cso);
         return Task.FromResult(true);
@@ -1725,12 +1776,12 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         IReadOnlyCollection<int> connectedSystemAttributeIds,
         IReadOnlyCollection<Guid> deletedReferenceCsoIds,
-        IReadOnlyCollection<string> loweredReferenceValues)
+        IReadOnlyCollection<string> referenceValues)
     {
         var csoIds = connectedSystemObjectIds as HashSet<Guid> ?? [.. connectedSystemObjectIds];
         var attributeIds = connectedSystemAttributeIds as HashSet<int> ?? [.. connectedSystemAttributeIds];
         var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
-        var loweredValues = loweredReferenceValues.ToHashSet(StringComparer.Ordinal);
+        var loweredValues = referenceValues.Select(value => IdentifierKey.For(value, caseExact: false)).ToHashSet(StringComparer.Ordinal);
 
         // Same comparison semantics as the SQL implementation: exact match on the resolved
         // reference id, or the pre-lowered raw reference string against LOWER(value).
@@ -1741,7 +1792,7 @@ public class SyncRepository : ISyncRepository
                 .Where(av => attributeIds.Contains(av.AttributeId) &&
                              ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
                               (av.UnresolvedReferenceValue != null &&
-                               loweredValues.Contains(av.UnresolvedReferenceValue.ToLowerInvariant()))))
+                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false)))))
                 .Select(av => new CsoReferenceValueMatch
                 {
                     AttributeValueId = av.Id,
@@ -1910,7 +1961,7 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
     {
         foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
-            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
+            _pendingExports[stamp.PendingExportId].RecordStager(stamp.QueuedByRunProfileExecutionItemId);
         return Task.CompletedTask;
     }
 
@@ -1976,8 +2027,14 @@ public class SyncRepository : ISyncRepository
     // event that makes state visible to fresh per-batch contexts in the parallel export path.
     public virtual Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
+        var written = new List<Guid>();
         foreach (var pe in pendingExports)
+        {
             _pendingExports[pe.Id] = pe;
+            written.Add(pe.Id);
+        }
+
+        OnPendingExportsUpdated?.Invoke(written);
         return Task.CompletedTask;
     }
 
@@ -2179,6 +2236,16 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
 
+            // Drain the ambiguous match candidate buffer (#2052), as the production flush does.
+            foreach (var candidate in rpei.MatchCandidates)
+            {
+                if (candidate.Id == Guid.Empty)
+                    candidate.Id = Guid.NewGuid();
+                candidate.ActivityRunProfileExecutionItemId = rpei.Id;
+                _matchCandidates[candidate.Id] = candidate;
+            }
+            rpei.MatchCandidates.Clear();
+
             // Drain the causal edge buffer (#1223), matching the production flush: outcome ids exist only now,
             // so the edge's transient outcome reference is resolved here, and the buffer is emptied once written
             // so a later flush of the same RPEI cannot duplicate it.
@@ -2227,6 +2294,11 @@ public class SyncRepository : ISyncRepository
     /// The causal edges recorded so far, for test assertions.
     /// </summary>
     public IReadOnlyCollection<CausalEdge> CausalEdges => _causalEdges.Values;
+
+    /// <summary>
+    /// The ambiguous match candidates recorded so far (#2052), for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates => _matchCandidates.Values;
 
     private static void AssignSyncOutcomeIds(
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)
@@ -2327,7 +2399,7 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(
         Guid activityId)
     {
         var activityRpeis = _rpeis.Values.Where(r => r.ActivityId == activityId).ToList();
@@ -2336,12 +2408,20 @@ public class SyncRepository : ISyncRepository
             r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
         var totalUnhandledErrors = activityRpeis.Count(r =>
             r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError);
-        return Task.FromResult((totalWithErrors, totalRpeis, totalUnhandledErrors));
+        var totalObjectTypeChangeRefusals = activityRpeis.Count(r =>
+            r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged);
+        return Task.FromResult(new ActivityRpeiErrorCounts(totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals));
     }
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         // No-op — CSO changes are already in memory on the RPEI objects
+        return Task.CompletedTask;
+    }
+
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    {
+        _standaloneCsoChanges.AddRange(changes);
         return Task.CompletedTask;
     }
 
@@ -2366,6 +2446,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
     {
+        if (FailSyncRuleLoadWith != null)
+            throw FailSyncRuleLoadWith;
+
         GetAllSyncRulesCallCount++;
         return Task.FromResult(_syncRules.Values.ToList());
     }
@@ -2396,6 +2479,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
     }
 
+    public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+    {
+        return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
+    }
+
     public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
     {
         (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
@@ -2404,8 +2492,104 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(watermarks);
     }
 
+    /// <summary>
+    /// How many times <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> has been called, so a test can prove
+    /// the export run reads which rules ask for an Initial Password once per batch (#2039).
+    /// </summary>
+    public int GetSyncRuleIdsWithInitialPasswordEnabledCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> throws it, so a test can prove a failed
+    /// lookup is contained rather than failing the export batch.
+    /// </summary>
+    public Exception? FailInitialPasswordRuleLookupWith { get; set; }
+
+    /// <summary>
+    /// How many times <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> has been called, so a test can prove the
+    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039), and the export run
+    /// only when a batch holds an Update a password could follow (#2158).
+    /// </summary>
+    public int GetMetaverseObjectIdsOwedPasswordCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> throws it (after counting the call), so a test can
+    /// prove a failed lookup is contained rather than failing the export batch (#2158).
+    /// </summary>
+    public Exception? FailOwedPasswordLookupWith { get; set; }
+
+    public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        GetMetaverseObjectIdsOwedPasswordCallCount++;
+        if (FailOwedPasswordLookupWith != null)
+            throw FailOwedPasswordLookupWith;
+
+        var asked = metaverseObjectIds.ToHashSet();
+        var owed = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && asked.Contains(c.MetaverseObjectId)
+                        && c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked)
+            .Select(c => c.MetaverseObjectId)
+            .ToHashSet();
+        return Task.FromResult(owed);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (FailInitialPasswordHoldProbeWith != null)
+            throw FailInitialPasswordHoldProbeWith;
+
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && asked.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
+    {
+        // The stored row, not a claimed copy: that is the point of reading afresh.
+        var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
+        var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
+        // Read from the stored instances, which the engine mutates in memory before it persists them: closer to "now"
+        // than PostgreSQL's persisted status, so a test interleaving a delivery with an export should assert on the
+        // mark rather than on this fact.
+        var executing = GetPendingExportsForSystem(connectedSystemId)
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
+        var stranded = executing?.LastAttemptedAt < exportsInFlightSince;
+        var inFlight = executing != null && !stranded;
+        return new AccountEnablementFacts(holds, marked, inFlight, stranded ? executing!.Id : null,
+            inFlight && executing!.ChangeType == PendingExportChangeType.Create);
+    }
+
+    public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+    {
+        // Joined to the Connected System Object, as the PostgreSQL query is: a Pending Export whose object is gone has
+        // no account for a password to be owed to.
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue && _csos.ContainsKey(pe.ConnectedSystemObjectId.Value))
+            .SelectMany(pe => pe.AttributeValueChanges
+                .Where(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+                .Select(c => new InitialPasswordHoldSummary
+                {
+                    AttributeValueChangeId = c.Id,
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = pe.ConnectedSystemObjectId!.Value,
+                    MetaverseObjectId = _csos[pe.ConnectedSystemObjectId!.Value].MetaverseObjectId
+                }))
+            .ToList();
+        return Task.FromResult(held);
+    }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
+        GetSyncRuleIdsWithInitialPasswordEnabledCallCount++;
+        if (FailInitialPasswordRuleLookupWith != null)
+            throw FailInitialPasswordRuleLookupWith;
+
         var enabled = _syncRules.Values
             .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
             .Select(r => r.Id)
@@ -2997,15 +3181,34 @@ public class SyncRepository : ISyncRepository
                         && pe.Status == PendingExportStatus.Exported));
     }
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
     {
+        var now = DateTime.UtcNow;
+        now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
         foreach (var pe in pendingExports)
         {
             pe.Status = PendingExportStatus.Executing;
-            pe.LastAttemptedAt = DateTime.UtcNow;
+            pe.LastAttemptedAt = now;
             _pendingExports[pe.Id] = pe;
         }
-        return Task.CompletedTask;
+        return Task.FromResult(now);
+    }
+
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
+    {
+        // Only rows still Executing are written, as the database's guarded UPDATE does. This store shares instances with
+        // the caller, so a result the caller set in memory and has not persisted reads here as already recorded; the
+        // guard's real semantics are proven against PostgreSQL.
+        var released = new HashSet<Guid>();
+        foreach (var state in states)
+        {
+            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing || pe.LastAttemptedAt != markedAt)
+                continue;
+
+            state.ApplyTo(pe);
+            released.Add(pe.Id);
+        }
+        return Task.FromResult<IReadOnlySet<Guid>>(released);
     }
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
@@ -3144,20 +3347,14 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Converts a CSO attribute value to its lowercase string representation for cache key building.
-    /// Mirrors the logic in ConnectedSystemRepository.GetExternalIdValueString.
+    /// A CSO anchor value in its lookup-key form, folded by its attribute's case-exact declaration. Mirrors
+    /// ConnectedSystemRepository.GetAllCsoImportStateLookupAsync.
     /// </summary>
-    private static string? GetExternalIdValueString(ConnectedSystemObjectAttributeValue? av)
+    private static string? GetExternalIdValueString(ConnectedSystemObject cso, ConnectedSystemObjectAttributeValue? av)
     {
         if (av == null) return null;
-        if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
-        if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
-        if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
-        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
-        // otherwise key differently despite being the same anchor (#1283).
-        if (av.DecimalValue.HasValue) return ExternalIdValue.ToCanonicalString(av.DecimalValue.Value);
-        if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
-        return null;
+        var attribute = av.Attribute ?? cso.Type?.Attributes.FirstOrDefault(a => a.Id == av.AttributeId);
+        return CsoLookupKey.ValueKey(av.StringValue, av.IntValue, av.LongValue, av.GuidValue, av.DecimalValue, attribute?.CaseExact ?? false);
     }
 
     private void AddToCsIndex(ConnectedSystemObject cso)
@@ -3237,13 +3434,17 @@ public class SyncRepository : ISyncRepository
     /// No transaction to hold in memory (#288 preview backstop); the preview's other defence-in-depth
     /// layers (structural purity, the read-only guard) still apply against this repository.
     /// </summary>
+    // The in-memory store has no transaction to hold; its writes land as they are made.
+    public Task<ISyncRepositoryTransaction?> BeginTransactionAsync() => Task.FromResult<ISyncRepositoryTransaction?>(null);
+
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
 
     #region Password Synchronisation queue (#1119)
 
-    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    public Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
     {
+        var notQueued = new List<PendingPasswordChange>();
         foreach (var change in changes)
         {
             // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema.
@@ -3254,6 +3455,15 @@ public class SyncRepository : ISyncRepository
 
             if (existing != null)
             {
+                // Mirrors the real repository's WHERE (#2160): a propagated change does not replace a first password
+                // still owed on a system whose Password Synchronisation is switched off.
+                if (existing.KeepsInitialPasswordObligationOver(change) && change.IsPropagated
+                    && !IsTakingPasswords(existing.ConnectedSystemId))
+                {
+                    notQueued.Add(change);
+                    continue;
+                }
+
                 existing.Supersede(change);
                 continue;
             }
@@ -3264,7 +3474,7 @@ public class SyncRepository : ISyncRepository
             _pendingPasswordChanges[change.Id] = change;
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(notQueued);
     }
 
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
@@ -3281,70 +3491,118 @@ public class SyncRepository : ISyncRepository
 
             var requestedId = change.Id;
 
-            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema
-            // and the narrower conflict clause the real repository applies for a provisioned change (#1697): the
-            // existing row wins unless it carries nothing worth keeping.
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema and the
+            // staging statement's decision (#1697, #2160), which this mirrors over the data this repository
+            // holds: the Connected Systems seeded with their Password Synchronisation, and the Connected System Objects.
             var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
                 c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
 
-            if (existing != null && !CanBeSupersededByAProvisionedChange(existing))
+            if (existing == null)
             {
-                // The existing row is the person's real password, already on its way or waiting on a person to
-                // fix it: nothing is written, and a propagated row held waiting on this exact account is
-                // released now that the account exists.
-                if (existing.Status == PendingPasswordChangeStatus.Pending && existing.NextRetryAt != null)
-                    existing.NextRetryAt = null;
-
+                _pendingPasswordChanges[change.Id] = change;
                 outcomes.Add(new ProvisionedPasswordStagingOutcome
                 {
-                    RowId = Guid.Empty,
+                    RowId = change.Id,
                     RequestedId = requestedId,
-                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                    Disposition = ProvisionedPasswordStagingDisposition.Inserted
                 });
                 continue;
             }
 
-            if (existing != null)
+            var before = Copy(existing);
+            var held = before.IsPropagated && !IsTakingPasswords(before.ConnectedSystemId);
+            var accountGone = before.IsExplicit && !IsStillThePersons(before.ConnectedSystemObjectId, before.MetaverseObjectId);
+            var givesWay = before.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
+                           || IsParkedBeyondCure(before) || held || accountGone || before.IsProvisioned;
+            var forAnotherObjectType = before.IsPropagated
+                                       && !ReachesPasswordSynchronisationTarget(before.ConnectedSystemId, change.ConnectedSystemObjectId);
+            var reaches = (before.IsExplicit && before.ConnectedSystemObjectId == change.ConnectedSystemObjectId)
+                          || (before.IsPropagated && !forAnotherObjectType);
+
+            ProvisionedPasswordStagingDisposition disposition;
+            if (!givesWay && reaches)
+            {
+                existing.CarryInitialPassword(change.ConnectedSystemObjectId!.Value, change.SyncRuleId!.Value,
+                    change.EnabledStateSetByAttributeFlow, change.ExpiresAt);
+                disposition = ProvisionedPasswordStagingDisposition.Coalesced;
+            }
+            else
             {
                 // The row now in the table keeps its own id rather than taking the change's, matching the real
                 // repository, so the caller must adopt it for anything it does with the change afterwards.
                 existing.Supersede(change);
-                change.Id = existing.Id;
-
-                outcomes.Add(new ProvisionedPasswordStagingOutcome
-                {
-                    RowId = existing.Id,
-                    RequestedId = requestedId,
-                    Disposition = ProvisionedPasswordStagingDisposition.Superseded
-                });
-                continue;
+                disposition = ProvisionedPasswordStagingDisposition.Superseded;
             }
 
-            _pendingPasswordChanges[change.Id] = change;
+            change.Id = existing.Id;
             outcomes.Add(new ProvisionedPasswordStagingOutcome
             {
-                RowId = change.Id,
+                RowId = existing.Id,
                 RequestedId = requestedId,
-                Disposition = ProvisionedPasswordStagingDisposition.Inserted
+                Disposition = disposition,
+                ExistingOrigin = before.Origin,
+                ExistingStatus = before.Status,
+                ExistingFailureReason = before.FailureReason,
+                ExistingTargetMessage = before.TargetMessage,
+                ExistingActivityId = before.ActivityId,
+                ExistingHeld = held,
+                ExistingAccountGone = accountGone,
+                ExistingForAnotherObjectType = forAnotherObjectType
             });
         }
 
         return Task.FromResult(outcomes);
     }
 
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (FailInitialPasswordMarkingWith != null)
+            throw FailInitialPasswordMarkingWith;
+
+        // Mirrors the PostgreSQL status mark (#2064, #2160): rows owing one of these accounts its first password,
+        // whatever their status, not already marked.
+        var accounts = connectedSystemObjectIds.ToHashSet();
+        var marking = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && ((c.ProvisionedConnectedSystemObjectId.HasValue && accounts.Contains(c.ProvisionedConnectedSystemObjectId.Value))
+                            || (c.IsProvisioned && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)))
+                        && !c.EnabledStateSetByAttributeFlow)
+            .ToList();
+
+        foreach (var change in marking)
+            change.EnabledStateSetByAttributeFlow = true;
+
+        return Task.FromResult(marking.Count);
+    }
+
+    /// <summary>Whether a seeded Connected System is taking propagated passwords; one not seeded has no configuration.</summary>
+    private bool IsTakingPasswords(int connectedSystemId) =>
+        _connectedSystems.TryGetValue(connectedSystemId, out var system) && system.PasswordSynchronisation is { Enabled: true };
+
+    /// <summary>Whether the named Connected System Object exists and still belongs to the person.</summary>
+    private bool IsStillThePersons(Guid? connectedSystemObjectId, Guid metaverseObjectId) =>
+        connectedSystemObjectId is { } id && _csos.TryGetValue(id, out var cso) && cso.MetaverseObjectId == metaverseObjectId;
+
+    /// <summary>Whether the account just provisioned is of the Object Type the system's Password Synchronisation targets.</summary>
+    private bool ReachesPasswordSynchronisationTarget(int connectedSystemId, Guid? connectedSystemObjectId) =>
+        _connectedSystems.TryGetValue(connectedSystemId, out var system)
+        && system.PasswordSynchronisation is { } configuration
+        && connectedSystemObjectId is { } id && _csos.TryGetValue(id, out var cso)
+        && cso.TypeId == configuration.TargetObjectTypeId;
+
     /// <summary>
-    /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
-    /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
-    /// and re-provisioned), or <see cref="PendingPasswordChangeStatus.Expired"/> /
-    /// <see cref="PendingPasswordChangeStatus.Cancelled"/> (a dead password). Anything else is the person's real
-    /// password and must win.
+    /// Whether a row is parked for a reason no attempt with the new account can cure: anything but a missing account or
+    /// an unreachable target.
     /// </summary>
-    private static bool CanBeSupersededByAProvisionedChange(PendingPasswordChange existing) =>
-        existing.Origin == PendingPasswordChangeOrigin.Provisioned
-        || existing.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled;
+    private static bool IsParkedBeyondCure(PendingPasswordChange row) =>
+        row.Status == PendingPasswordChangeStatus.Parked
+        && row.FailureReason is not (PasswordSetFailureReason.TargetObjectNotFound or PasswordSetFailureReason.Transient);
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
     {
+        if (FailActivityCreationWith != null)
+            throw FailActivityCreationWith;
+
         foreach (var activity in activities)
             _activities[activity.Id] = activity;
 
@@ -3387,7 +3645,7 @@ public class SyncRepository : ISyncRepository
         // as it must against PostgreSQL.
         var claimed = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
-            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
+            .Where(c => !excludePropagated || !c.IsHeldWhilePasswordSynchronisationIsOff)
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(maximum)
@@ -3501,7 +3759,9 @@ public class SyncRepository : ISyncRepository
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
         EnableAccount = source.EnableAccount,
-        SyncRuleId = source.SyncRuleId
+        SyncRuleId = source.SyncRuleId,
+        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow,
+        ProvisionedConnectedSystemObjectId = source.ProvisionedConnectedSystemObjectId
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
@@ -3528,7 +3788,7 @@ public class SyncRepository : ISyncRepository
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
-            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
+            .Where(c => !excludePropagated || !c.IsHeldWhilePasswordSynchronisationIsOff)
             .ToList();
 
         foreach (var change in expiring)
@@ -3649,6 +3909,7 @@ public class SyncRepository : ISyncRepository
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
                     Origin = c.Origin,
                     SyncRuleId = c.SyncRuleId,
+                    ProvisionedConnectedSystemObjectId = c.ProvisionedConnectedSystemObjectId,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,

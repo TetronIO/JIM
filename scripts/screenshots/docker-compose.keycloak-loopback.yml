@@ -1,0 +1,12 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# Publishes the development Keycloak at localhost:8181, the address its realm advertises to browsers (KC_HOSTNAME in
+# docker-compose.override.yml), for the published screenshots (#582). The devcontainer forwards that address, and the
+# integration runner bridges it where socat is installed; a host with neither (a CI runner) has nothing there, and the
+# capture cannot sign in. Applied by Capture-Screenshots.ps1 -PrepareData only when nothing answers at the address,
+# and bound to the loopback interface only, so the identity provider is never reachable from another machine.
+services:
+  jim.keycloak:
+    ports:
+      - "127.0.0.1:8181:8080"

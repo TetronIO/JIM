@@ -58,29 +58,193 @@ public class LdapObjectTypeMatcherTests
         Assert.That(matched, Is.SameAs(_posixAccount));
     }
 
+    // Windows Server and Samba AD both list an entry's classes from top down to the most specific (seen on a Windows
+    // Server 2025 domain controller in the Active Directory lab, #2043, and in a Samba AD domain's sam.ldb).
+    private static readonly string[] ActiveDirectoryUserClasses = ["top", "person", "organizationalPerson", "user"];
+    private static readonly string[] ActiveDirectoryComputerClasses = ["top", "person", "organizationalPerson", "user", "computer"];
+
     [Test]
-    public void Match_SeveralStructuralClassesSelected_KeepsTheDirectorysOrderOfPrecedence()
+    public void Match_ActiveDirectoryUserWithUserAndPersonSelected_ResolvesToUser()
     {
-        // Active Directory returns objectClass most specific first, which is the only statement of specificity
-        // JIM has, so among structural classes the first one still wins.
         var user = StructuralType("user");
-        var matched = LdapObjectTypeMatcher.Match(
-            ["user", "organizationalPerson", "person", "top"],
-            [_person, user]);
+
+        var matched = LdapObjectTypeMatcher.Match(ActiveDirectoryUserClasses, [user, _person]);
+
+        Assert.That(matched, Is.SameAs(user), "An Active Directory user must not import as person, the class it inherits from.");
+    }
+
+    [Test]
+    public void Match_ActiveDirectoryComputerWithUserAndComputerSelected_ResolvesToComputer()
+    {
+        // computer inherits from user, so a search for user returns every computer too.
+        var user = StructuralType("user");
+        var computer = StructuralType("computer");
+
+        var matched = LdapObjectTypeMatcher.Match(ActiveDirectoryComputerClasses, [user, computer]);
+
+        Assert.That(matched, Is.SameAs(computer));
+    }
+
+    [Test]
+    public void Match_ActiveDirectoryUserWithTypesTheSchemaHasNotClassified_ResolvesToUser()
+    {
+        // Object Types discovered before JIM recorded either a class kind or inheritance still resolve by the order
+        // the directory lists the classes in.
+        var user = new ConnectedSystemObjectType { Name = "user", Selected = true };
+        var person = new ConnectedSystemObjectType { Name = "person", Selected = true };
+
+        var matched = LdapObjectTypeMatcher.Match(ActiveDirectoryUserClasses, [user, person]);
 
         Assert.That(matched, Is.SameAs(user));
     }
 
     [Test]
+    public void Match_UntaggedTypesWithTopListedLast_ResolvesToTheFirstListed()
+    {
+        // An RFC 4512 directory returns objectClass in the order it was written, and LDIF commonly lists the most
+        // specific class first with top last (JIM's own OpenLDAP lab does). top marks the general end of the list.
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "organizationalPerson", "person", "top"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithTopListedFirst_ResolvesToTheLastListed()
+    {
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["top", "person", "organizationalPerson", "inetOrgPerson"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithNoTopListed_KeepsTheFirstListed()
+    {
+        // Nothing says which end is the general one, so the rule JIM has always applied stands.
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "person"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithTopListedBetweenThem_KeepsTheFirstListed()
+    {
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "top", "person"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_InheritanceKnown_ResolvesToTheMostSpecificClassWhateverOrderTheDirectoryListsThemIn()
+    {
+        var user = StructuralType("user", inheritsFrom: ["organizationalPerson", "person", "top"]);
+        var person = StructuralType("person", inheritsFrom: ["top"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapObjectTypeMatcher.Match(ActiveDirectoryUserClasses, [user, person]), Is.SameAs(user), "top first");
+            Assert.That(LdapObjectTypeMatcher.Match(ActiveDirectoryUserClasses.Reverse(), [user, person]), Is.SameAs(user), "most specific first");
+            Assert.That(LdapObjectTypeMatcher.Match(["person", "user", "top", "organizationalPerson"], [user, person]), Is.SameAs(user), "no order at all");
+        }
+    }
+
+    [Test]
+    public void Match_InheritanceKnownForOnlyTheMoreSpecificType_StillResolvesToIt()
+    {
+        // The more specific class names what it inherits from; the other need say nothing.
+        var inetOrgPerson = StructuralType("inetOrgPerson", inheritsFrom: ["organizationalPerson", "person", "top"]);
+        var person = StructuralType("person");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "person", "top"], [inetOrgPerson, person]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_InheritanceIsCaseInsensitive()
+    {
+        var user = StructuralType("user", inheritsFrom: ["ORGANIZATIONALPERSON", "Person", "top"]);
+        var person = StructuralType("person");
+
+        var matched = LdapObjectTypeMatcher.Match(["user", "person"], [user, person]);
+
+        Assert.That(matched, Is.SameAs(user));
+    }
+
+    [Test]
+    public void Match_AuxiliaryClassListedLastAfterTwoStructuralClasses_StillResolvesToTheMostSpecificStructuralClass()
+    {
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(
+            ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount"],
+            [_person, inetOrgPerson, _posixAccount]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
     public void Match_UnclassifiedTypesAreNotTreatedAsAuxiliary()
     {
-        // A Connected System that classifies nothing (the Active Directory path) must behave as it always has.
+        // An Object Type discovered before JIM classified class kinds must behave as it always has.
         var unclassified = new ConnectedSystemObjectType { Name = "user", Selected = true };
         var matched = LdapObjectTypeMatcher.Match(
             ["user", "top"],
             [unclassified, _posixAccount]);
 
         Assert.That(matched, Is.SameAs(unclassified));
+    }
+
+    [Test]
+    public void Match_TwoAuxiliaryClassesAndNoStructuralOne_KeepsTheFirstListed()
+    {
+        // Nothing in the schema ranks two auxiliary classes, so the order the entry lists them in stands.
+        var shadowAccount = AuxiliaryType("shadowAccount");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapObjectTypeMatcher.Match(["top", "posixAccount", "shadowAccount"], [_posixAccount, shadowAccount]), Is.SameAs(_posixAccount));
+            Assert.That(LdapObjectTypeMatcher.Match(["top", "shadowAccount", "posixAccount"], [_posixAccount, shadowAccount]), Is.SameAs(shadowAccount));
+        }
+    }
+
+    [Test]
+    public void Match_AgreesWithTakesEntriesFrom_ForEveryPairTheSchemaRanks()
+    {
+        // #2049: the schema selection preview predicts which Object Type an entry becomes with TakesEntriesFrom, so
+        // the import must resolve every pair it ranks the same way, whatever order the entry lists the classes in.
+        // Otherwise a preview could promise objects stay where they are while the import moves them.
+        var user = StructuralType("user", inheritsFrom: ["organizationalPerson", "person", "top"]);
+        var computer = StructuralType("computer", inheritsFrom: ["user", "organizationalPerson", "person", "top"]);
+        var unclassified = new ConnectedSystemObjectType { Name = "device", Selected = true };
+        ConnectedSystemObjectType[] schema = [_person, user, computer, unclassified, _posixAccount, _inetOrgPerson];
+
+        var rankedPairs = schema
+            .SelectMany(winner => schema
+                .Where(loser => !ReferenceEquals(winner, loser) && winner.TakesEntriesFrom(loser))
+                .Select(loser => (Winner: winner, Loser: loser)))
+            .ToList();
+
+        Assert.That(rankedPairs, Is.Not.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var (winner, loser) in rankedPairs)
+            {
+                Assert.That(LdapObjectTypeMatcher.Match([winner.Name, loser.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} listed first over {loser.Name}");
+                Assert.That(LdapObjectTypeMatcher.Match([loser.Name, winner.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} listed last over {loser.Name}");
+                Assert.That(LdapObjectTypeMatcher.Match(["top", loser.Name, winner.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} over {loser.Name} with top listed first");
+            }
+        }
     }
 
     [Test]
@@ -170,8 +334,13 @@ public class LdapObjectTypeMatcherTests
 
     #region Helpers
 
-    private static ConnectedSystemObjectType StructuralType(string name) =>
-        TypeOfKind(name, ObjectTypeTags.Values.ClassKindStructural);
+    private static ConnectedSystemObjectType StructuralType(string name, string[]? inheritsFrom = null)
+    {
+        var objectType = TypeOfKind(name, ObjectTypeTags.Values.ClassKindStructural);
+        foreach (var superiorClass in inheritsFrom ?? [])
+            objectType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.SuperiorClass, Value = superiorClass });
+        return objectType;
+    }
 
     private static ConnectedSystemObjectType AuxiliaryType(string name) =>
         TypeOfKind(name, ObjectTypeTags.Values.ClassKindAuxiliary);

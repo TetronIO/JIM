@@ -17,7 +17,7 @@ function Stop-JIMWorkerTask {
         The unique identifier (GUID) of the Worker Task to cancel.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -36,6 +36,7 @@ function Stop-JIMWorkerTask {
         Get-JIMWorkerTask
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id,
@@ -50,7 +51,7 @@ function Stop-JIMWorkerTask {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($Id, "Cancel Worker Task")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $Id -Action "Cancel Worker Task" -Force:$Force) {
             Write-Verbose "Requesting cancellation of Worker Task: $Id"
 
             try {

@@ -88,6 +88,13 @@ else
     }
 }
 
+@* Simple mode's rules are the Connected System's own, so their saved test cases are listed here (#2055 Phase 4); in
+   Advanced mode they are on each Synchronisation Rule's Tests tab. *@
+@if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem && ConnectedSystem.ObjectTypes is { Count: > 0 })
+{
+    <ConfigurationTestCasesPanel ConnectedSystem="ConnectedSystem" ReloadKey="_testCasesReloadKey" Class="mt-6" />
+}
+
 @* Mode Switch Dialog *@
 <MudDialog @bind-Visible="_modeSwitchDialogVisible" Options="_dialogOptions">
     <TitleContent>
@@ -178,12 +185,16 @@ else
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    /// <summary>
+    /// Bumped when a rule is added or deleted, so the test cases panel reloads and offers, or stops listing, the rule.
+    /// </summary>
+    private int _testCasesReloadKey;
+
     // Object Matching Rules
     private int _selectedMatchingRuleTabIndex;
-    private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
-    private MetaverseAttribute? _newMatchingRuleTargetAttribute;
-    private MetaverseObjectType? _newMatchingRuleMetaverseObjectType;
-    private bool _newMatchingRuleCaseSensitive = false;
+    // The rule being composed in each Object Type's Add Matching Rule panel, kept per type so switching tabs neither
+    // loses a half-composed rule nor offers one type's attribute to another's.
+    private readonly Dictionary<int, ObjectMatchingRuleDraft> _drafts = new();
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
     // One grid per Object Type, because a Connected System with several selected types renders one table per tab.
@@ -224,6 +235,7 @@ else
             var search = request.SearchText;
             rules = rules.Where(r =>
                 (r.Sources.FirstOrDefault()?.ConnectedSystemAttribute?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (r.Sources.FirstOrDefault()?.Expression?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (r.TargetMetaverseAttribute?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
@@ -246,7 +258,8 @@ else
     /// </remarks>
     private async Task PreviewProposedRuleAsync(ConnectedSystemObjectType objectType)
     {
-        if (!CanAddMatchingRule)
+        var draft = DraftFor(objectType);
+        if (!draft.CanAdd(requireMetaverseObjectType: true))
             return;
 
         var existing = objectType.ObjectMatchingRules;
@@ -254,10 +267,10 @@ else
             existing.Count == 0 ? 0 : existing.Max(rule => rule.Order) + 1,
             objectType.Id,
             null,
-            _newMatchingRuleMetaverseObjectType!.Id,
-            _newMatchingRuleTargetAttribute!.Id,
-            _newMatchingRuleCaseSensitive,
-            [new ObjectMatchingRuleSourceProposal(0, _newMatchingRuleSourceAttribute!.Id)]);
+            draft.MetaverseObjectType!.Id,
+            draft.TargetAttribute!.Id,
+            draft.CaseSensitive,
+            [draft.ToSourceProposal()]);
 
         var stored = await BuildStoredProposalAsync();
         await StartPreviewAsync(stored with { Rules = [.. stored.Rules, proposedRule] });
@@ -332,18 +345,24 @@ else
             await grid.RefreshAsync(invalidateTotals: true);
     }
 
-    /// <summary>
-    /// Whether the form describes a rule that could actually match. The Metaverse Object Type is as required as the
-    /// two attributes: a rule missing it is stored happily and never matches (#1458).
-    /// </summary>
-    private bool CanAddMatchingRule =>
-        _newMatchingRuleSourceAttribute != null
-        && _newMatchingRuleTargetAttribute != null
-        && _newMatchingRuleMetaverseObjectType != null;
+    /// <summary>The rule being composed for <paramref name="objectType"/>, created the first time its panel renders.</summary>
+    private ObjectMatchingRuleDraft DraftFor(ConnectedSystemObjectType objectType)
+    {
+        if (!_drafts.TryGetValue(objectType.Id, out var draft))
+        {
+            draft = new ObjectMatchingRuleDraft();
+            _drafts[objectType.Id] = draft;
+        }
+
+        return draft;
+    }
 
     private async Task HandleAddMatchingRuleAsync(ConnectedSystemObjectType objectType)
     {
-        if (!CanAddMatchingRule)
+        // The Metaverse Object Type is as required as what the rule compares: a rule missing it is stored happily
+        // and never matches (#1458).
+        var draft = DraftFor(objectType);
+        if (!draft.CanAdd(requireMetaverseObjectType: true))
             return;
 
         using var jim = JimFactory.Create();
@@ -354,26 +373,9 @@ else
             ? objectType.ObjectMatchingRules.Max(r => r.Order) + 1
             : 0;
 
-        var rule = new ObjectMatchingRule
-        {
-            Order = nextOrder,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            MetaverseObjectTypeId = _newMatchingRuleMetaverseObjectType!.Id,
-            MetaverseObjectType = _newMatchingRuleMetaverseObjectType,
-            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute!.Id,
-            TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
-            CaseSensitive = _newMatchingRuleCaseSensitive,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Order = 0,
-                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute!.Id,
-                    ConnectedSystemAttribute = _newMatchingRuleSourceAttribute
-                }
-            }
-        };
+        var rule = draft.ToRule(nextOrder);
+        rule.ConnectedSystemObjectTypeId = objectType.Id;
+        rule.ConnectedSystemObjectType = objectType;
 
         try
         {
@@ -382,15 +384,17 @@ else
             // Add to the local list for immediate UI update
             objectType.ObjectMatchingRules.Add(rule);
 
-            // Reset the form
-            _newMatchingRuleSourceAttribute = null;
-            _newMatchingRuleTargetAttribute = null;
-            _newMatchingRuleMetaverseObjectType = null;
-            _newMatchingRuleCaseSensitive = false;
+            draft.Reset();
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
+            _testCasesReloadKey++;
             StateHasChanged();
+        }
+        catch (InvalidDataException ex)
+        {
+            // The save's own refusal, with its reason (#1458, #1569, #2052): what the administrator needs to fix.
+            Snackbar.Add(ex.Message, Severity.Error);
         }
         catch (Exception ex)
         {
@@ -422,6 +426,7 @@ else
 
             Snackbar.Add("Matching rule has been deleted.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
+            _testCasesReloadKey++;
             StateHasChanged();
         }
         catch (Exception ex)
@@ -567,72 +572,21 @@ else
         <MudPaper Outlined="true" Class="pa-4 mb-4">
             <MudText Typo="Typo.h6" Class="mb-3">Add Matching Rule</MudText>
 
-            <MudGrid>
-                <MudItem xs="12" md="5">
-                    <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                               @bind-Value="_newMatchingRuleSourceAttribute"
-                               Label="Connected System Attribute"
-                               Variant="Variant.Outlined"
-                               HelperText="The Connected System attribute to match from">
-                        @foreach (var attr in objectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
-                        {
-                            <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
-                    <MudText Typo="Typo.h6">=</MudText>
-                </MudItem>
-                <MudItem xs="12" md="5">
-                    <MudSelect T="MetaverseAttribute"
-                               @bind-Value="_newMatchingRuleTargetAttribute"
-                               Label="Metaverse Attribute"
-                               Variant="Variant.Outlined"
-                               ToStringFunc="@(a => a?.Name ?? string.Empty)"
-                               HelperText="The Metaverse attribute to match against">
-                        @if (MetaverseAttributes != null)
-                        {
-                            @foreach (var attr in MetaverseAttributes.OrderBy(a => a.Name))
-                            {
-                                <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
-                            }
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    @* Where the rule looks. A Simple mode rule has no Synchronisation Rule to take this from, so
-                       one that names no type searches nothing and silently matches nothing (#1458). *@
-                    <MudSelect T="MetaverseObjectType"
-                               @bind-Value="_newMatchingRuleMetaverseObjectType"
-                               Label="Metaverse Object Type"
-                               Variant="Variant.Outlined"
-                               ToStringFunc="@(t => t?.Name ?? string.Empty)"
-                               HelperText="The type of Metaverse Object this rule searches">
-                        @if (MetaverseObjectTypes != null)
-                        {
-                            @foreach (var objectTypeOption in MetaverseObjectTypes.OrderBy(t => t.Name))
-                            {
-                                <MudSelectItem Value="@objectTypeOption">@objectTypeOption.Name</MudSelectItem>
-                            }
-                        }
-                    </MudSelect>
-                </MudItem>
-            </MudGrid>
-
-            <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
-                         Label="Case sensitive"
-                         Color="Color.Primary"
-                         Class="mt-3" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-                When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
-            </MudText>
+            @{
+                var draft = DraftFor(objectType);
+            }
+            <ObjectMatchingRuleEditor Draft="draft"
+                                      ObjectType="objectType"
+                                      MetaverseAttributes="MetaverseAttributes"
+                                      MetaverseObjectTypes="MetaverseObjectTypes"
+                                      ConnectedSystemName="@ConnectedSystem.Name"
+                                      OnChanged="StateHasChanged" />
 
             <div class="mt-3">
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                     <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
                                DropShadow="false"
-                               Disabled="@(!CanAddMatchingRule)"
+                               Disabled="@(!draft.CanAdd(requireMetaverseObjectType: true))"
                                OnClick="() => HandleAddMatchingRuleAsync(objectType)">
                         Add Matching Rule
                     </MudButton>
@@ -641,7 +595,7 @@ else
                        one it would have. The preview answers before the rule is saved. *@
                     <MudButton StartIcon="@Icons.Material.Filled.Preview"
                                DropShadow="false"
-                               Disabled="@(!CanAddMatchingRule || _startingPreview)"
+                               Disabled="@(!draft.CanAdd(requireMetaverseObjectType: true) || _startingPreview)"
                                OnClick="() => PreviewProposedRuleAsync(objectType)"
                                data-testid="jim-preview-matching-rule">
                         Preview Impact
@@ -690,16 +644,24 @@ else
                              LoadWindow="@((request, token) => LoadMatchingRuleWindowAsync(objectType, request, token))"
                              SingularName="Object Matching Rule"
                              PluralName="Object Matching Rules"
-                             SearchPlaceholder="Search by attribute name">
+                             SearchPlaceholder="Search by attribute name or expression">
             <Columns>
-                <TemplateColumn Title="Connected System Attribute" Sortable="false">
+                @* What the rule compares: a Connected System attribute's values, or an expression's result (#2052). *@
+                <TemplateColumn Title="Match Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Connected System Attribute</MudText>
+                        <MudText Typo="Typo.button">Match Value</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (context.Item.Sources.FirstOrDefault()?.ConnectedSystemAttribute is { } sourceAttribute)
+                        @{
+                            var source = context.Item.Sources.FirstOrDefault();
+                        }
+                        @if (!string.IsNullOrWhiteSpace(source?.Expression))
                         {
-                            @sourceAttribute.Name
+                            <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" Class="ma-0 jim-one-line" />
+                        }
+                        else if (source?.ConnectedSystemAttribute is { } sourceAttribute)
+                        {
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@sourceAttribute.Name" Class="ma-0" />
                         }
                         else
                         {
@@ -707,22 +669,22 @@ else
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Operator" Sortable="false">
+                <TemplateColumn Title="Operator" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Operator</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        =
+                        equals
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Metaverse Attribute" Sortable="false">
+                <TemplateColumn Title="Metaverse Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Metaverse Attribute</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.TargetMetaverseAttribute is { } targetAttribute)
                         {
-                            @targetAttribute.Name
+                            <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@targetAttribute.Name" Class="ma-0" />
                         }
                         else
                         {
@@ -730,7 +692,7 @@ else
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Case Sensitive" Sortable="false">
+                <TemplateColumn Title="Case Sensitive" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Case Sensitive</MudText>
                     </HeaderTemplate>
@@ -740,7 +702,7 @@ else
                                    Color="Color.Primary" />
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Actions" Sortable="false">
+                <TemplateColumn Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Actions</MudText>
                     </HeaderTemplate>

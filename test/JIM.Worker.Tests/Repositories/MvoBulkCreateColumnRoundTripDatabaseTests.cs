@@ -128,6 +128,7 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
         // forward reference resolves without cross-page fixup.
         var referencedMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = s.MvoType, Created = DateTime.UtcNow };
 
+        var schedulingItemId = Guid.NewGuid();
         var mvo = new MetaverseObject
         {
             Id = Guid.NewGuid(),
@@ -143,6 +144,7 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             DeletionTriggeredBySystemId = s.ContributingSystemId,
             DeletionTriggeredBySystemName = "Yellowstone HR",
             DeletionPolicySnapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected"}""",
+            DeletionScheduledByRunProfileExecutionItemId = schedulingItemId,
             CachedDisplayName = "Jo Bloggs",
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt
@@ -183,6 +185,7 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedMvo.DeletionTriggeredBySystemId, Is.EqualTo(s.ContributingSystemId));
             Assert.That(storedMvo.DeletionTriggeredBySystemName, Is.EqualTo("Yellowstone HR"));
             Assert.That(storedMvo.DeletionPolicySnapshotJson, Is.EqualTo("""{"deletionRule":"WhenAuthoritativeSourceDisconnected"}"""));
+            Assert.That(storedMvo.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItemId));
             Assert.That(storedMvo.CachedDisplayName, Is.EqualTo("Jo Bloggs"));
             Assert.That(storedMvo.ScopeReviewPending, Is.True);
             Assert.That(storedMvo.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));

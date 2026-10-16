@@ -26,24 +26,21 @@ function Get-JIMConfigurationChangePreviewDelta {
         Restrict the rows to those matching this text across the columns the detail carries.
 
     .PARAMETER Page
-        The page of rows to return. Defaults to 1.
+        The page of rows to return.
 
     .PARAMETER PageSize
-        Rows per page, up to 100. Defaults to 50.
+        How many rows per page.
 
     .PARAMETER All
         Fetch every page. Prefer -GroupId or -Search first: a full preview can carry a great many rows.
 
     .PARAMETER Force
-        Lift the client-side page cap that -All otherwise stops at.
+        With -All, fetches every page however many there are.
 
     .OUTPUTS
-        PSCustomObject per row, with ObjectDisplayName, ObjectTypeName, AttributeName, OldValue,
-        NewValue, TransitionType, PatternKey and the identifiers of the objects concerned.
-
-        PatternKey names what kind of change the row describes (EmailDomainChanged, ContainerChanged,
-        CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded, SuffixRemoved), and is empty where no
-        pattern was recognised. Useful for sorting a collapsed group's rows by the kind of edit they make.
+        Each row: what the proposed change would do to one object. PatternKey takes the same values as on a summary
+        group (see Get-JIMConfigurationChangePreview). MatchCandidates is empty unless the row is
+        WouldMatchAmbiguously.
 
     .EXAMPLE
         Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId
@@ -57,12 +54,20 @@ function Get-JIMConfigurationChangePreviewDelta {
 
         Lists the objects that would become eligible for deletion.
 
+    .EXAMPLE
+        $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
+        $group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldMatchAmbiguously' }
+        Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All |
+            Select-Object ObjectDisplayName, @{ n = 'Matches'; e = { $_.MatchCandidates.DisplayNameSnapshot -join ', ' } }
+
+        Lists each object a proposed Object Matching Rule would match ambiguously, with the objects it would find.
+
     .LINK
         New-JIMConfigurationChangePreview
         Get-JIMConfigurationChangePreview
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConfigurationChangePreviewDeltaResponse')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$ActivityId,

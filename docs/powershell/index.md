@@ -1,10 +1,13 @@
 ---
 title: PowerShell Module
+description: "How to install the JIM PowerShell module, connect it to JIM, and the conventions its cmdlets share: pipelines, output and confirmation."
+type: reference
+audience: automation-author
 ---
 
 # PowerShell Module
 
-The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, making it straightforward to script identity management workflows.
+The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, so identity management workflows can be scripted.
 
 ## Requirements
 
@@ -70,27 +73,44 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 |----------|---------|-------------|
 | [System](system.md) | 6 | Health checks, Service Health of the Worker and Scheduler, version, auth config, user info, and system reset |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 35 | Manage Connected Systems, schemas, partitions and containers, auxiliary classes, server certificates, Connector Space objects and their passwords, Password Synchronisation configuration, Pending Exports, and connector definitions |
+| [Connected Systems](connected-systems.md) | 7 | Create, configure, clear and delete Connected Systems, and preview what a deletion removes |
+| [Connectors](connectors.md) | 1 | List the Connectors a Connected System can be created from, and read one Connector's settings and capabilities |
+| [Connected System Schema](connected-system-schema.md) | 4 | Import a Connected System's schema, and choose which Object Types and attributes JIM manages |
+| [Auxiliary Object Classes](connected-system-auxiliary-classes.md) | 5 | Choose the auxiliary classes an LDAP Connected System's Object Types carry, and discover which are in use |
+| [Partitions and Containers](partitions-and-containers.md) | 7 | Import a Connected System's hierarchy, and choose which partitions and containers JIM imports from |
+| [Connected System Objects](connected-system-objects.md) | 7 | Read the Connected System Objects in a Connector Space, their history and unresolved references, and set their passwords |
+| [Pending Exports](pending-exports.md) | 1 | Read the Pending Exports waiting to be written to a Connected System |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 28 | Define Attribute Flows, Scoping Criteria, Object Matching Rules, initial passwords and generated values |
-| [Metaverse](metaverse.md) | 21 | Query objects, set passwords, manage schema types and attributes, set Attribute Priority, and review pending deletions |
-| [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
+| [Synchronisation Rules](synchronisation-rules.md) | 4 | List, create, change and delete Synchronisation Rules |
+| [Attribute Mappings](attribute-mappings.md) | 4 | List, create, change and delete a Synchronisation Rule's Attribute Flows, including generated values |
+| [Scoping Criteria](scoping-criteria.md) | 7 | Decide which objects a Synchronisation Rule processes, with groups of criteria |
+| [Object Matching Rules](object-matching-rules.md) | 9 | Switch a Connected System's matching mode, and manage its Object Matching Rules |
+| [Initial Password](initial-password.md) | 2 | Read and change the initial password a Synchronisation Rule sets on the Connected System Objects it provisions |
+| [Metaverse](metaverse.md) | 6 | Find and read Metaverse Objects, explain their values and connections, and review pending deletions |
+| [Metaverse Object Types](metaverse-object-types.md) | 4 | List, create, change and delete Object Types, and set their deletion rules |
+| [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |
+| [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and choose which Connected Systems receive synchronised passwords |
+| [Password Queue](password-queue.md) | 3 | List, retry and cancel queued password changes |
+| [Generated Values](generated-values.md) | 7 | List the values JIM generated and retired, read and restart a Sequence's counter, and decide on values a target rejected |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
-| [Schedules](schedules.md) | 12 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
-| [Activities](activities.md) | 3 | Monitor operation history, statistics, and execution items |
+| [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
+| [Schedule Executions](schedule-executions.md) | 3 | Run a Schedule now, and watch or stop its runs |
+| [Activities](activities.md) | 3 | Monitor operation history, a run's statistics, and child Activities |
+| [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
-| [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
+| [Certificates](certificates.md) | 8 | Manage trusted certificates for connector authentication, and approve the certificate a Connected System's server presents |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
-| [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Previews](previews.md) | 6 | Preview a configuration change before saving it, and preview what synchronising one object would do |
+| [History](history.md) | 4 | Query Configuration Change History, query deleted objects, and manage change history retention |
+| [Previews](previews.md) | 4 | Preview a configuration change before saving it |
+| [Sync Preview](sync-preview.md) | 2 | Preview what synchronising one object would do |
 | [Example Data](example-data.md) | 10 | Generate sample data for testing and evaluation, create, update, and remove reusable Example Data Sets, and build Data Generation Templates including their per-attribute generation configuration |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 | [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |
 | [File System](file-system.md) | 2 | Browse and validate server-side paths when configuring file-based connectors |
 | [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
-| [Data Flow](../configuration/data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
+| [Data Flow](data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
 
 ## Quick Start
 

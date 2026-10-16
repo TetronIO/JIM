@@ -328,6 +328,88 @@ Describe 'Set-JIMConnectedSystemAttribute' {
         }
     }
 
+    # Whether an attribute's values are case-exact is offered on every Connector (#2051), so the switch is on the
+    # Single set; the bulk hashtable carries it as caseExact like any other property.
+    Context 'Data type override' {
+
+        It 'Sends -Type Boolean to the attribute endpoint, which makes the attribute single-valued' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3; type = 'Boolean'; attributePlurality = 'SingleValued'; typeSetByAdministrator = $true } }
+
+                $result = Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Type Boolean -PassThru -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/1/object-types/2/attributes/3' -and
+                    $Body.type -eq 'Boolean' -and -not $Body.ContainsKey('attributePlurality')
+                }
+                $result.attributePlurality | Should -Be 'SingleValued'
+            }
+        }
+
+        It 'Surfaces the API''s refusal of a type override' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw "JIM API error (400): The 'JIM LDAP Connector' Connector states each attribute's data type from the Connected System's own schema, so it cannot be overridden." }
+
+                { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Type Boolean -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*cannot be overridden*'
+            }
+        }
+    }
+
+    Context 'Case-exact declaration' {
+
+        It 'Sends caseExact true when -CaseExact $true is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; caseExact = $true } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -CaseExact $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and $Body.ContainsKey('caseExact') -and $Body.caseExact -eq $true
+                }
+            }
+        }
+
+        It 'Sends caseExact false when -CaseExact $false is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; caseExact = $false } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -CaseExact $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('caseExact') -and $Body.caseExact -eq $false
+                }
+            }
+        }
+
+        It 'Leaves caseExact out when -CaseExact is not given, so the declaration is unchanged' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Selected $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.ContainsKey('caseExact') }
+            }
+        }
+
+        It 'Passes caseExact through a bulk update' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ updatedCount = 1; errors = $null } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeUpdates @{ 3 = @{ caseExact = $true } } -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Body.attributes['3'].caseExact -eq $true }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
@@ -535,6 +617,57 @@ Describe 'Import-JIMConnectedSystemSchema' {
                 $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
 
                 $result | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Writes one warning per Object Type classification change when -Preview is specified' {
+            # A selected Object Type the Connected System reclassifies can move entries between Object Types at the
+            # next import (#2049); a script reviewing the preview must not be able to miss it.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                            = $true
+                        hasChanges                         = $true
+                        hasRemovalsOrDefinitionChanges     = $false
+                        hasObjectTypeClassificationChanges = $true
+                        changedObjectTypeClassifications   = [PSCustomObject]@{
+                            posixAccount  = @(
+                                [PSCustomObject]@{ aspect = 'ClassKind'; oldValues = @('structural'); newValues = @('auxiliary') }
+                            )
+                            inetOrgPerson = @(
+                                [PSCustomObject]@{ aspect = 'ClassKind'; oldValues = @(); newValues = @('structural') },
+                                [PSCustomObject]@{ aspect = 'Inheritance'; oldValues = @('top'); newValues = @('person', 'top') }
+                            )
+                        }
+                    }
+                }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview -WarningVariable classificationWarnings -WarningAction SilentlyContinue
+
+                $classificationWarnings.Count | Should -Be 3
+                @($classificationWarnings | Where-Object { "$_" -like "*'posixAccount'*" }).Count | Should -Be 1
+                @($classificationWarnings | Where-Object { "$_" -like "*'inetOrgPerson'*" }).Count | Should -Be 2
+                $result.HasObjectTypeClassificationChanges | Should -BeTrue
+            }
+        }
+
+        It 'Writes no classification warning when -Preview reports none' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                            = $true
+                        hasChanges                         = $true
+                        hasObjectTypeClassificationChanges = $false
+                        changedObjectTypeClassifications   = [PSCustomObject]@{}
+                        addedObjectTypes                   = @('device')
+                    }
+                }
+
+                Import-JIMConnectedSystemSchema -Id 5 -Preview -WarningVariable classificationWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $classificationWarnings | Should -BeNullOrEmpty
             }
         }
 

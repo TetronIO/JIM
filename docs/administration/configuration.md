@@ -1,10 +1,13 @@
 ---
 title: Configuration Reference
+description: Every environment variable and Service Setting that configures JIM, by category, with its default and what it changes.
+type: reference
+audience: administrator
 ---
 
 # Configuration Reference
 
-JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The automated setup script configures these automatically; for manual setup, edit the file directly. The settings and their names are the same on both runtimes.
+JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The installer sets them for you; to change one later, edit the file. The settings and their names are the same on both runtimes.
 
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
@@ -26,7 +29,7 @@ Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootl
 
 These settings differ on Podman:
 
-- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing by Hand](podman.md#installing-by-hand) to store or change it.
+- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing on Podman by Hand](podman-by-hand.md) to store or change it.
 - **`DOCKER_REGISTRY`, `JIM_VERSION`, `JIM_WEB_PORT`**<br /> Not used: the pod file, `jim.yaml`, names JIM's images with their registry and version, and the HTTPS port is `PublishPort=` in the `jim.kube` unit.
 - **`JIM_DB_SHM_SIZE`**<br /> Not used: Podman cannot size a pod's `/dev/shm`, so the bundled database pod keeps its parallel query memory in its data folder instead.
 - **`JIM_DB_HOSTNAME`**<br /> `jim-database` for the bundled PostgreSQL, rather than Docker's `jim.database`.
@@ -65,7 +68,7 @@ JIM's certificate is not set in `.env`. The production compose file reads it fro
 | `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates                                 |
 | `tls/tls.key` | Its unencrypted private key, belonging to UID `1654` with mode `400`                            |
 
-To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. On Podman, the pod file sets the same settings, and JIM reads the pair from the Podman secret `jim-tls`, mounted at the same path. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
+To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. On Podman, the pod file sets the same settings, and JIM reads the pair from the Podman secret `jim-tls`, mounted at the same path. See [TLS and Reverse Proxy](tls-and-reverse-proxy.md) for providing, creating and renewing the certificate.
 
 ---
 
@@ -133,7 +136,7 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 | `JIM_SSO_CLIENT_ID`   | OAuth client/application ID.                                                                     | `12345678-1234-1234-1234-123456789abc`                       |
 | `JIM_SSO_SECRET`      | OAuth client secret. **Keep this value secure.**                                                 | *(from your IdP)*                                            |
 | `JIM_SSO_API_SCOPE`   | API scope for JWT bearer authentication (API endpoints).                                         | `api://{client-id}/access_as_user`                           |
-| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed -- JIM auto-detects the issuer from the authority URL. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
+| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed; JIM auto-detects the issuer from the authority URL. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
 | `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (e.g. a dev devcontainer where the JIM container reaches Keycloak via Docker DNS while the host reaches it via `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
 | `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
 
@@ -154,7 +157,7 @@ These variables control how JIM maps authenticated users to Metaverse Objects, e
 | Variable                | Description                                                                                                                                  | Default               | Example                   |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|---------------------------|
 | `JIM_SSO_CLAIM_TYPE`    | The JWT claim type containing the user's unique identifier. Use `sub` (standard OIDC subject identifier) for most providers.                | `sub`                 | `sub`                     |
-| `JIM_SSO_MV_ATTRIBUTE`  | The metaverse attribute name to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
+| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
 | `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
 
 !!! tip "Finding your admin's claim value"
@@ -170,23 +173,40 @@ Service settings are stored in the database and managed through the admin UI at 
 
 This differs from environment variables, which are applied at process startup and tend to be infrastructure-level concerns (database connection, OIDC authority, log paths). Service settings are the day-to-day operational knobs.
 
-The settings listed below are the ones most commonly adjusted; the full list is discoverable in the admin UI.
+Every Service Setting that changes how JIM behaves is listed below. The Preview Features category's feature flags are described in [Preview Features](preview-features.md). Where a read-only setting mirrors an environment variable, it shows the value JIM started with; change the variable and restart JIM to change it.
 
-| Key                          | Display name              | Category        | Description                                                                                                                                                                                                                                                      | Default       |
-|------------------------------|---------------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| Key | Display name | Category | Description | Default |
+|-----|--------------|----------|-------------|---------|
 | `Instance.Name`              | Service name              | Instance        | A friendly, editable name for this JIM instance. Appears in the sidebar, browser tab title, and footer so operators can distinguish multiple JIM deployments at a glance (for example, `JIM Production`, `JIM DR`).                                             | *(empty)*     |
 | `Instance.Id`                | Service ID                | Instance        | A stable GUID that uniquely identifies this JIM instance. Generated exactly once on first startup and never changes thereafter. Useful for tooling, logs, and telemetry correlation. Read-only.                                                                  | *(generated)* |
+| `SSO.Authority` | SSO authority | SSO | The OIDC authority JIM signs users in with. Read-only: mirrors `JIM_SSO_AUTHORITY`. | *(from `JIM_SSO_AUTHORITY`)* |
+| `SSO.ClientId` | SSO client ID | SSO | JIM's OIDC client identifier. Read-only: mirrors `JIM_SSO_CLIENT_ID`. | *(from `JIM_SSO_CLIENT_ID`)* |
+| `SSO.Secret` | SSO secret | SSO | JIM's OIDC client secret, stored encrypted. Read-only: mirrors `JIM_SSO_SECRET`. | *(from `JIM_SSO_SECRET`)* |
+| `SSO.ApiScope` | SSO API scope | SSO | The OIDC scope required to call JIM's API. Read-only: mirrors `JIM_SSO_API_SCOPE`. | *(from `JIM_SSO_API_SCOPE`)* |
+| `SSO.ClaimType` | SSO claim type | SSO | The token claim that identifies the person signing in; its value is matched against `SSO.MvAttribute`. Read-only: mirrors `JIM_SSO_CLAIM_TYPE`. | *(from `JIM_SSO_CLAIM_TYPE`)* |
+| `SSO.MvAttribute` | SSO Metaverse attribute | SSO | The Metaverse Attribute whose value is matched against the `SSO.ClaimType` claim, to find the Metaverse Object of the person signing in. Read-only: mirrors `JIM_SSO_MV_ATTRIBUTE`. | *(from `JIM_SSO_MV_ATTRIBUTE`)* |
 | `SSO.EnableLogOut`           | SSO enable log-out        | SSO             | Controls whether the sign-out button is shown in the JIM user menu. Set to `false` for deployments where users cannot realistically sign out of their enterprise-managed SSO session, for example on domain-joined devices with seamless SSO. | `true`        |
 | `Sync.PartitionValidationMode` | Run Profile partition validation | Synchronisation | Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. `Error` blocks execution; `Warning` allows execution but logs a warning.                                                         | `Error`       |
-| `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration change history is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
-| `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
+| `Sync.PageSize` | Sync page size | Synchronisation | The number of Connected System Objects processed per database page during synchronisation. Larger pages mean fewer database round trips; 200 to 1,000 suits most deployments. | `500` |
+| `Sync.PostClearReconciliation.MaxMissingPercent` | Post-clear reconciliation: maximum missing share | Synchronisation | The largest share, as a whole-number percentage, of the objects recorded when a Connector Space was [cleared](../configuration/connector-space.md#clearing-the-connector-space) that may still be missing a re-join before the post-clear reconciliation sweep refuses to run. Above it, JIM assumes the re-import was broken (a changed filter or base DN, say) rather than a genuine mass departure, and refuses until you re-import the Connected System or raise this setting. | `10` |
+| `Preview.WorkerThreshold` | Preview worker threshold | Synchronisation | The estimated number of affected objects above which a [Configuration Change Preview](../configuration/configuration-changes.md) is evaluated by the Worker rather than in the portal's own process. Smaller previews run in-process, so they return without waiting for the Worker to pick them up. Both give identical results. | `2500` |
+| `Preview.FullDataSetPromptThreshold` | Preview full data set prompt threshold | Synchronisation | The estimated number of object-level rows above which a Configuration Change Preview asks whether to keep the full data set or only a sample of each summary group. Below it, the preview keeps a sample without asking. Summary counts are exact either way; the choice decides how much you can drill into, and how much storage the preview uses. | `100000` |
+| `Worker.StaleTaskTimeout` | Stale task timeout | Maintenance | How long a running Worker task may go without a heartbeat before JIM treats its Worker as crashed: the Scheduler then fails the task's Activity and removes the task, so the work can be run again. A zero or negative value is ignored in favour of the default. Format: `d.hh:mm:ss`. | `00:05:00` (5 minutes) |
+| `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration Change History is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
+| `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which Configuration Change History (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
 | `History.SecurityEventRetentionPeriod` | Security event retention period | History | The duration for which [security audit events](../administration/security-audit-events.md) (interactive sign-in success/failure, and failed API key or SSO access token authentication) are retained. Kept separately from the general history and configuration change retention periods. Format: `d.hh:mm:ss`. | `365.00:00:00` (~1 year) |
 | `History.PasswordEventRetentionPeriod` | Password Synchronisation retention period | History | The duration for which [Password Synchronisation](../concepts/passwords.md) history is kept: the Activities recording what happened to each password change, and the queued changes that reached a terminal state (parked, expired, or cancelled). Changes still owed to a Connected System are never removed, however old. Shorten this to bound how long JIM holds an encrypted password it can no longer deliver. Format: `d.hh:mm:ss`. | `365.00:00:00` (~1 year) |
-| `History.CleanupBatchSize` | History cleanup batch size | History | The most records of any one kind a single retention pass removes. Lower values reduce database load per pass but take longer to work through a backlog; a pass that hits the cap simply continues on the next run. | `100` |
+| `History.CleanupBatchSize` | History cleanup batch size | History | The most records of any one kind a single retention pass removes. Lower values reduce database load per pass but take longer to work through a backlog; a pass that hits the cap continues on the next run. | `100` |
+| `ChangeTracking.CsoChanges.Enabled` | Track CSO changes <!-- conformance: allow LANG-4 "the label the portal shows" --> | History | Whether change history is recorded for every Connected System Object create, update and delete. Turning it off saves database writes at the cost of those objects' audit trail. | `true` |
+| `ChangeTracking.MvoChanges.Enabled` | Track MVO changes <!-- conformance: allow LANG-4 "the label the portal shows" --> | History | Whether change history is recorded for every Metaverse Object create, update and delete. Turning it off saves database writes at the cost of those objects' audit trail. | `true` |
 | `ChangeTracking.ConfigurationChanges.Enabled` | Track configuration changes | History | Enables or disables capture of Configuration Change History. When `true`, a redacted, versioned snapshot is recorded on the Activity for every configuration create, update, and delete. Set to `false` to stop capturing new history; existing history is not deleted. | `true`        |
+| `ChangeTracking.SyncOutcomes.Level` | Sync outcome tracking level | History | How much of each synchronisation outcome a Run Profile execution item records: `None` records no outcomes, `Standard` records the root outcomes, and `Detailed` records the full chain of what each change went on to cause. Higher levels give a richer audit trail and use more storage. | `Detailed` |
+| `Security.EncryptionKeyPath` | Encryption key storage path | Security | Where JIM keeps its encryption keys; see [Encryption Keys](#encryption-keys). Read-only: mirrors `JIM_ENCRYPTION_KEY_PATH`. | *(from `JIM_ENCRYPTION_KEY_PATH`; empty when it is unset)* |
+| `Security.ConfigurationChangeHashKey` | Configuration change hash key | Security | The key JIM uses to tell that a secret in a configuration change has changed, without storing the secret in the change history. Generated by JIM and stored encrypted. Read-only. | *(generated)* |
 | `Security.RateLimiting.Enabled` | API rate limiting enabled | Security | When `true`, REST API requests are throttled per client. See [Rate Limiting](../api/rate-limiting.md). | `true` |
 | `Security.RateLimiting.AuthenticatedRequestsPerMinute` | Authenticated API requests per minute | Security | The maximum REST API requests per minute for an authenticated client (per signed-in user or API key). | `300` |
 | `Security.RateLimiting.UnauthenticatedRequestsPerMinute` | Unauthenticated API requests per minute | Security | The maximum REST API requests per minute for an unauthenticated client (per IP address). | `30` |
+| `UI.ProgressUpdateInterval` | Progress update interval | UI | How often JIM reports progress while it generates Example Data from a template. Format: `d.hh:mm:ss`. | `00:00:01` (1 second) |
 
 !!! tip "Editing service settings"
     Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. The search box filters as you type, as it does on every list in the portal. Changes are audited: the settings page shows who last modified each value and when.
@@ -209,7 +229,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable                  | Description                                                                                                                                                                                 | Default                          | Example        |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|----------------|
-| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)* -- resolves to `/data/keys` in Docker | `/data/keys`   |
+| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)*: resolves to `/data/keys` in Docker | `/data/keys`   |
 
 !!! danger "These keys must be backed up with the database"
     The database ciphertext cannot be decrypted without these keys. A database backup restored without its matching keys leaves every stored secret unrecoverable. See [Backup & Disaster Recovery](backup-recovery.md).
@@ -228,7 +248,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
-| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
+| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](tls-and-reverse-proxy.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)*: forwarded headers are not trusted; the connecting socket's address is used as-is |
 
 !!! warning "Only set this behind a trusted reverse proxy"
     Trusting forwarded headers from an address you do not control lets a client spoof its own IP, defeating IP-based rate limiting and polluting logs. Only list proxies (or the proxy network) that terminate connections in front of JIM.
@@ -239,7 +259,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable                    | Description                                                                                                                                                                                      | Default  |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| `JIM_INFRASTRUCTURE_API_KEY` | Creates an API key on startup for automated configuration (CI/CD). The key must start with `jim_ak_` and be at least 32 characters. Has Administrator role, expires after 24 hours, and should be deleted after initial setup. | *(none)* |
+| `JIM_INFRASTRUCTURE_API_KEY` | Creates an API key on startup for automated configuration (CI/CD). The key must start with `jim_ak_` and be at least 32 characters. Has the Administrator role and works for 24 hours; when it has expired, restarting JIM renews it for another 24 hours. A disabled key stays disabled. Remove the variable once setup is done, and delete the key: while the variable is set, every restart creates the key again if it is missing. | *(none)* |
 
 Generate a key with:
 
@@ -251,11 +271,34 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
+## Installer
+
+`setup.sh` asks a question only when its answer is not already in its environment, so an installation can run unattended. Set the variables below, the identity provider's settings under [SSO / Authentication](#sso-authentication), and any database, port, proxy or API key settings from the sections above, and the installer asks nothing it already knows. Where a description names a flag, the flag does the same as the variable.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JIM_INSTALL_DIR` | The folder JIM is installed in | `/opt/jim` when run as root, otherwise `./jim` |
+| `JIM_SETUP_RUNTIME` | `docker` or `podman`; the same as `--runtime` | The one installed; asks if both are |
+| `JIM_SETUP_DB_MODE` | `bundled` for the bundled PostgreSQL, or `external` for your own server (with `JIM_DB_HOSTNAME`) | Asks |
+| `JIM_SETUP_TLS_MODE` | `generate` to create a certificate authority and a server certificate, or `provided` to install your organisation's certificate | Asks |
+| `JIM_SETUP_TLS_NAMES` | The DNS names and IP addresses users reach JIM at, comma-separated, for a generated certificate | Asks, suggesting this host's name and address |
+| `JIM_SETUP_TLS_CERT_FILE` | Your organisation's PEM certificate, followed by any intermediate CA certificates. Required with `provided` | |
+| `JIM_SETUP_TLS_KEY_FILE` | The certificate's unencrypted PEM private key. Required with `provided` | |
+| `JIM_SETUP_AUTO_START` | `true` to start JIM without asking | Asks |
+| `JIM_SETUP_PODMAN_ROOTLESS` | `true` to run JIM rootless on Podman; the same as `--rootless` | `false` |
+| `JIM_SETUP_PODMAN_ACCOUNT` | The account that runs JIM rootless, with `--rootless` | `jim` |
+| `JIM_SETUP_OPEN_FIREWALL` | `true` or `false`: open the HTTPS port in firewalld, when it is running. Podman only | Asks |
+| `JIM_SETUP_FIX_APPARMOR` | `true` or `false`: on a host whose AppArmor profiles for Podman stop JIM's containers using the network, or stop their processes signalling one another (Ubuntu 24.04), add the rules JIM needs. Podman only | Asks |
+| `JIM_SETUP_BACKUP_CONFIRMED` | `true`, with `--upgrade`: the database and encryption keys are backed up, so the upgrade does not ask | Asks, and an answer of no cancels the upgrade |
+
+---
+
 ## Performance Tuning
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
 | `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count  |
+| `JIM_CACHE_WARM_PARALLELISM` | How many Connected Systems the Worker loads into its lookup cache at once when it starts, before it takes any work. Higher values shorten start-up when there are many Connected Systems, at the cost of more database queries at once. A Connected System whose cache fails to load fills it as work needs it. | `3` |
 
 !!! info
-    The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required -- it is set automatically.
+    The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required; it is set automatically.

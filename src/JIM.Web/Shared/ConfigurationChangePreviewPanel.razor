@@ -511,6 +511,32 @@
                                                            Contributor="@ConfigurationChangePreviewWording.ValueContributor(preview.Surface, row.Item.TransitionType, true, activity.TargetName, selected.ConnectedSystemName)" />
                                     </CellTemplate>
                                 </TemplateColumn>
+                                @* The objects an ambiguous row would find (#2052), each linking to the object, so the
+                                   administrator can go straight to the conflict. Shown only for an ambiguous group, the
+                                   one transition that has candidates; hidden rather than conditional, so the column keeps
+                                   its place. One line per row: the first candidate, then "+n more". It is the grid's fill
+                                   column, so it takes what the other columns leave and a long name ellipsises rather than
+                                   pushing the row past the panel. No type on the chips: every candidate is of the type the
+                                   rule searches, and the tooltip names it. *@
+                                <TemplateColumn Title="Matches" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column"
+                                                Hidden="@(selected.TransitionType != ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously)">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Matches</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <OverflowList TItem="ConfigurationChangePreviewDeltaMatchCandidate" Items="@row.Item.MatchCandidates"
+                                                      Title="@CandidatesTitle(row.Item)">
+                                            <ItemTemplate Context="candidate">
+                                                <ObjectChip Kind="@CandidateSide(candidate)"
+                                                            Name="@CandidateName(candidate)" Href="@CandidateHref(candidate)"
+                                                            Tooltip="@CandidateTooltip(candidate)" Class="ma-0" />
+                                            </ItemTemplate>
+                                            <EmptyContent>
+                                                <EmptyValue />
+                                            </EmptyContent>
+                                        </OverflowList>
+                                    </CellTemplate>
+                                </TemplateColumn>
                                 @* The chevron that says a row opens, where the host can open one (the drill-down's only
                                    other affordance is a pointer cursor, which a touch screen never shows). Hidden rather
                                    than conditional, so it keeps its place among the columns. *@
@@ -646,6 +672,12 @@
     /// the stored rows do not carry. Resolved once per drill-down, and only when a fetched row will link to one.
     /// </summary>
     private string? _selectedGroupTypePluralName;
+
+    /// <summary>
+    /// The plural names Metaverse Object candidate links need, by the type name each candidate snapshotted. Resolved
+    /// once per type per drill-down; a type that cannot be resolved costs its links and nothing else.
+    /// </summary>
+    private readonly Dictionary<string, string?> _candidateTypePluralNames = new(StringComparer.OrdinalIgnoreCase);
     private VirtualisedDataGrid<ConfigurationChangePreviewGroup>? _groupsGrid;
     private VirtualisedDataGrid<ConfigurationChangePreviewDelta>? _deltasGrid;
 
@@ -897,6 +929,7 @@
             }
 
             await ResolveMetaverseObjectTypePluralNameAsync(jim, group, fetched);
+            await ResolveCandidateTypePluralNamesAsync(jim, fetched);
 
             var offsetIntoFirstPage = request.StartIndex - (firstPage * DeltaPageSize);
             return new VirtualisedWindow<ConfigurationChangePreviewDelta>(
@@ -1000,6 +1033,68 @@
         {
             Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: resolving the Metaverse Object Type for preview {ActivityId} failed", ActivityId);
         }
+    }
+
+    /// <summary>
+    /// Resolves the plural name of each Metaverse Object Type the fetched rows' candidates belong to, so their chips
+    /// link. Ambiguous rows only; every other row has no candidates.
+    /// </summary>
+    private async Task ResolveCandidateTypePluralNamesAsync(JimApplication jim, List<ConfigurationChangePreviewDelta> fetched)
+    {
+        var typeNames = fetched
+            .SelectMany(row => row.MatchCandidates)
+            .Where(candidate => candidate.CandidateKind == MatchCandidateKind.MetaverseObject && !string.IsNullOrEmpty(candidate.TypeNameSnapshot))
+            .Select(candidate => candidate.TypeNameSnapshot!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(typeName => !_candidateTypePluralNames.ContainsKey(typeName))
+            .ToList();
+
+        foreach (var typeName in typeNames)
+        {
+            try
+            {
+                var type = await jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
+                _candidateTypePluralNames[typeName] = type?.PluralName;
+            }
+            catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+            {
+                Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: resolving a candidate's Metaverse Object Type for preview {ActivityId} failed", ActivityId);
+                _candidateTypePluralNames[typeName] = null;
+            }
+        }
+    }
+
+    private static ObjectChipKind CandidateSide(ConfigurationChangePreviewDeltaMatchCandidate candidate) =>
+        candidate.CandidateKind == MatchCandidateKind.MetaverseObject ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject;
+
+    private static string CandidateName(ConfigurationChangePreviewDeltaMatchCandidate candidate) =>
+        ObjectDescription.ChipName(candidate.DisplayNameSnapshot, null) ?? candidate.CandidateId.ToString();
+
+    private static string CandidateTooltip(ConfigurationChangePreviewDeltaMatchCandidate candidate) =>
+        candidate.CandidateKind == MatchCandidateKind.MetaverseObject
+            ? ObjectDescription.ForMetaverseObjectChipTooltip(candidate.TypeNameSnapshot, candidate.DisplayNameSnapshot)
+            : ObjectDescription.ForConnectedSystemObjectChipTooltip(
+                candidate.TypeNameSnapshot, candidate.DisplayNameSnapshot, null, candidate.ConnectedSystemNameSnapshot);
+
+    private string? CandidateHref(ConfigurationChangePreviewDeltaMatchCandidate candidate)
+    {
+        if (candidate.CandidateKind == MatchCandidateKind.ConnectedSystemObject)
+            return candidate.ConnectedSystemId is { } connectedSystemId
+                ? Utilities.GetConnectedSystemObjectHref(connectedSystemId, candidate.CandidateId)
+                : null;
+
+        return candidate.TypeNameSnapshot is { Length: > 0 } typeName
+               && _candidateTypePluralNames.TryGetValue(typeName, out var pluralName) && pluralName is { Length: > 0 }
+            ? Utilities.GetMetaverseObjectHref(candidate.CandidateId, pluralName)
+            : null;
+    }
+
+    /// <summary>The "+n more" dialog's title: what was found, and how many in all where more were found than kept.</summary>
+    private static string CandidatesTitle(ConfigurationChangePreviewDelta row)
+    {
+        var total = row.MatchCandidates.Count == 0 ? 0 : Math.Max(row.MatchCandidates[0].CandidateTotal, row.MatchCandidates.Count);
+        var listed = total > row.MatchCandidates.Count ? $"{row.MatchCandidates.Count} of {total}" : $"{total}";
+        return $"Matches for {row.ObjectDisplayName} ({listed})";
     }
 
     private async Task CancelAsync()

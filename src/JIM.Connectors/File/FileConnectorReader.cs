@@ -13,10 +13,16 @@ internal class FileConnectorReader : IDisposable
 
     internal CsvReader CsvReader { get; }
 
-    internal FileConnectorReader(StreamReader reader, CsvReader csvReader)
+    /// <summary>
+    /// The file's name without its folder, for telling an administrator where a row came from.
+    /// </summary>
+    internal string FileName { get; }
+
+    internal FileConnectorReader(StreamReader reader, CsvReader csvReader, string fileName)
     {
         Reader = reader;
         CsvReader = csvReader;
+        FileName = fileName;
     }
 
     public void Dispose()

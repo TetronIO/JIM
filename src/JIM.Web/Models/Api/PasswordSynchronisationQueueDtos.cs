@@ -19,36 +19,44 @@ namespace JIM.Web.Models.Api;
 public class PendingPasswordChangeResponse
 {
     /// <summary>
-    /// The unique identifier of the queued change, as passed back to the retry and cancel endpoints.
+    /// The queued change's ID, which identifies it when retrying or cancelling it.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The identity whose password this is, and its display name.
+    /// The Metaverse Object whose password this is.
     /// </summary>
     public Guid MetaverseObjectId { get; set; }
 
-    /// <inheritdoc cref="MetaverseObjectId"/>
+    /// <summary>
+    /// That Metaverse Object's display name.
+    /// </summary>
     public string? MetaverseObjectDisplayName { get; set; }
 
     /// <summary>
-    /// The plural name of the identity's Metaverse Object Type, which is what a link to that identity is built
-    /// from. Carried so a caller rendering a list does not need a read per row to make one.
+    /// The plural name of that Metaverse Object's type, such as People.
     /// </summary>
+    /// <remarks>
+    /// A link to the Metaverse Object is built from it, so a caller rendering a list does not need a read per row
+    /// to make one.
+    /// </remarks>
     public string? MetaverseObjectTypePluralName { get; set; }
 
     /// <summary>
-    /// The Connected System the change is queued for, and its name.
+    /// The Connected System the change is queued for.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
-    /// <inheritdoc cref="ConnectedSystemId"/>
+    /// <summary>
+    /// That Connected System's name.
+    /// </summary>
     public string ConnectedSystemName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or
-    /// it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer
-    /// be delivered), or Cancelled (an administrator stopped it).
+    /// Where the change has got to: Pending (JIM still intends to deliver it), Delivering (the Password Delivery
+    /// Service has claimed it and is delivering it now), Parked (the target refused it, or it ran out of attempts,
+    /// so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or
+    /// Cancelled (an administrator stopped it).
     /// </summary>
     public PendingPasswordChangeStatus Status { get; set; }
 
@@ -60,15 +68,29 @@ public class PendingPasswordChangeResponse
     public PendingPasswordChangeOrigin Origin { get; set; }
 
     /// <summary>
-    /// The Synchronisation Rule a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row generates its
-    /// password from at each delivery attempt, or null for every other origin.
+    /// The Synchronisation Rule whose Initial Password this change delivers a Connected System Object's first password
+    /// under, or null where it is no Connected System Object's first password. A <c>Provisioned</c> change generates its
+    /// password from the rule at each delivery attempt; a change carrying a first password in place of the Initial
+    /// Password keeps its own password and takes only the rule's settings for enabling the Connected System Object and
+    /// for whether its password never expires.
     /// </summary>
     public int? SyncRuleId { get; set; }
 
     /// <summary>
-    /// Whether a delivery pass would attempt this change right now. Distinguishes a change waiting out a retry
-    /// backoff from one that is due and simply has not been reached, which <see cref="Status"/> alone cannot.
-    /// Never true while <see cref="Held"/> is: a pass steps over a system that is switched off.
+    /// The Connected System Object this change also gives its first password, or null. Set when the change was already
+    /// waiting as JIM provisioned that Connected System Object, or replaced its Initial Password before it was
+    /// delivered; delivering it then applies the provisioning Synchronisation Rule's Initial Password settings for
+    /// enabling the Connected System Object and for whether its password never expires. Cancelling such a change
+    /// leaves that Connected System Object without a password from JIM. For a <c>Provisioned</c> change, the Connected
+    /// System Object it is the Initial Password of.
+    /// </summary>
+    /// <remarks>#2160. Read from <c>PendingPasswordChange.ProvisionedConnectedSystemObjectId</c>.</remarks>
+    public Guid? ProvisionedConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff
+    /// from one that is due but not yet reached, which <c>Status</c> alone cannot. It is never true for a held
+    /// change, whose Connected System is switched off.
     /// </summary>
     public bool Due { get; set; }
 
@@ -81,12 +103,14 @@ public class PendingPasswordChangeResponse
     public bool Held { get; set; }
 
     /// <summary>
-    /// How the last attempt failed, and the target's own words, which is what says where the remedy lives. Both
-    /// null for a change that has not been attempted.
+    /// How the last attempt failed; null for a change that has not been attempted.
     /// </summary>
     public PasswordSetFailureReason? FailureReason { get; set; }
 
-    /// <inheritdoc cref="FailureReason"/>
+    /// <summary>
+    /// The target's own words for why the last attempt failed, which say where the remedy lies; null for a change
+    /// that has not been attempted.
+    /// </summary>
     public string? TargetMessage { get; set; }
 
     /// <summary>
@@ -115,12 +139,14 @@ public class PendingPasswordChangeResponse
     public DateTime ExpiresAt { get; set; }
 
     /// <summary>
-    /// When an administrator cancelled the change, and who, or null where nobody has. The name is null for a
-    /// cancellation made with an API key, which has no person behind it.
+    /// When an administrator cancelled the change, or null where nobody has.
     /// </summary>
     public DateTime? CancelledAt { get; set; }
 
-    /// <inheritdoc cref="CancelledAt"/>
+    /// <summary>
+    /// Who cancelled the change; null where nobody has, and for a cancellation made with an API key, which has no
+    /// person behind it.
+    /// </summary>
     public string? CancelledByName { get; set; }
 
     /// <summary>
@@ -142,6 +168,7 @@ public class PendingPasswordChangeResponse
             Status = header.Status,
             Origin = header.Origin,
             SyncRuleId = header.SyncRuleId,
+            ProvisionedConnectedSystemObjectId = header.ProvisionedConnectedSystemObjectId,
             Due = header.IsDue(asOf),
             Held = header.IsHeld,
             FailureReason = header.FailureReason,

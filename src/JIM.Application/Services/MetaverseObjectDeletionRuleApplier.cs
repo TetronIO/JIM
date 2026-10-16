@@ -89,6 +89,29 @@ public static class MetaverseObjectDeletionRuleApplier
     }
 
     /// <summary>
+    /// Records on a Metaverse Object whose deletion has just been scheduled the Run Profile Execution Item that
+    /// scheduled it: the item carrying its MvoDeletionScheduled outcome, or that would carry it were outcomes
+    /// tracked. Housekeeping deletes the object in a later Activity and records this item as the deletion's cause,
+    /// so the deletion can say which run decided on it (#1811).
+    /// </summary>
+    /// <remarks>
+    /// Recorded whatever the sync outcome tracking level, because the item exists either way. Items are given
+    /// their ids as they are persisted, which is after the object is marked, so the id is assigned here; every
+    /// persistence path keeps an id it is given.
+    /// </remarks>
+    /// <param name="mvo">The Metaverse Object whose deletion was scheduled.</param>
+    /// <param name="schedulingItem">The item recording the scheduling.</param>
+    public static void RecordSchedulingItem(MetaverseObject mvo, ActivityRunProfileExecutionItem schedulingItem)
+    {
+        ArgumentNullException.ThrowIfNull(mvo);
+        ArgumentNullException.ThrowIfNull(schedulingItem);
+
+        if (schedulingItem.Id == Guid.Empty)
+            schedulingItem.Id = Guid.NewGuid();
+        mvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItem.Id;
+    }
+
+    /// <summary>
     /// Builds the serialised decision-time deletion policy snapshot (#119) for a deletion rule evaluation:
     /// produced whenever the evaluation records an outcome (triggered, or evaluated against the source list
     /// without triggering); null for a plain non-event or an untyped Metaverse Object.

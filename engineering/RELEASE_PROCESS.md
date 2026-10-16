@@ -91,20 +91,26 @@ git push origin main --tags
    pwsh -File ./.github/scripts/check-apt-pins.ps1
    ```
 
-2. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
+2. **Re-validate the priority docs pages**: each records the release it was last checked against (`validated: vX.Y.Z`; PRI-1 in [`DOCUMENTATION_STANDARD.md`](DOCUMENTATION_STANDARD.md)). List those due:
+   ```bash
+   pwsh ./scripts/Get-DocsDueForValidation.ps1 -Version <version>
+   ```
+   Re-validate each page listed (read it against the product as this release ships it, correct it, and set `validated: v<version>`), or defer it with a one-line reason in the release pull request. A deferred page is listed again at the next release.
 
-3. **Update the version**: Edit the `VERSION` file
+3. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
 
-4. **Freeze the released migrations**: run `pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>` to append every migration shipping in this release to `src/JIM.PostgresData/Migrations/released-migrations.lock`. A listed migration has been applied to customer databases and is immutable; `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if one is later renamed, regenerated, edited or deleted, or if a new migration is sequenced before the newest released one. The script refuses to run if a frozen migration has already been changed; stop the release and investigate if it does.
+4. **Update the version**: Edit the `VERSION` file
 
-5. **Commit changes**:
+5. **Freeze the released migrations**: run `pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>` to append every migration shipping in this release to `src/JIM.PostgresData/Migrations/released-migrations.lock`. A listed migration has been applied to customer databases and is immutable; `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if one is later renamed, regenerated, edited or deleted, or if a new migration is sequenced before the newest released one. The script refuses to run if a frozen migration has already been changed; stop the release and investigate if it does.
+
+6. **Commit changes**:
    ```bash
    git add VERSION CHANGELOG.md src/JIM.PostgresData/Migrations/released-migrations.lock
    git commit -m "Release v0.3.0"
    git push origin main
    ```
 
-6. **Pass the release gates.** Do not tag before each enforced gate's script exits 0 for the release commit; `release.yml` would refuse the release anyway.
+7. **Pass the release gates.** Do not tag before each enforced gate's script exits 0 for the release commit; `release.yml` would refuse the release anyway.
 
    **The pre-release integration gate** (only while `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`): merging the release PR started `pre-release.yml` on the release commit by itself. Wait for it (about 1h 45m), then check:
    ```bash
@@ -120,17 +126,17 @@ git push origin main --tags
    ```
    If either script exits 1 it names the state and the run; fix the cause, run that workflow again and re-check. Once enforced, there is no override.
 
-7. **Create the release tag**:
+8. **Create the release tag**:
    ```bash
    git tag v0.3.0
    git push origin v0.3.0
    ```
 
-8. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
+9. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
 
-9. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+10. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
-10. **Verify the release**: Once complete, verify:
+11. **Verify the release**: Once complete, verify:
    - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
@@ -240,6 +246,21 @@ All images are signed using [cosign](https://github.com/sigstore/cosign) for sup
 ```bash
 cosign verify ghcr.io/tetronio/jim-web:0.2.0
 ```
+
+## Product Tour Screenshots
+
+Each release refreshes the screenshots on junctional.io's product tour, and the JIM screenshot on tetron.io's homepage, without anyone capturing them by hand ([#582](https://github.com/TetronIO/JIM/issues/582); design in [`PRD_SCREENSHOT_AUTOMATION.md`](prd/doing/PRD_SCREENSHOT_AUTOMATION.md)).
+
+- **When:** the `jim-screenshots` job in `pre-release.yml` runs once the pre-release suite has passed, on the same runner and the same commit, the one the release tags. It cannot hold up a release: the gate reads the `jim-pre-release` status, already posted by then.
+- **What it does:** `Capture-Screenshots.ps1 -PrepareData` loads integration Scenario 8 at `Scale100k50Groups`, rebuilds the JIM services at the release version with the portal in Production mode, and captures every image in `scripts/screenshots/manifest.json` at its published size. The whole library (78 images) is kept as the run's artefact for 90 days.
+- **What it refuses:** no one looks at the images before the sites show them, so the capture fails rather than publish an image at the wrong size, a blank one (its luminance barely varies), or a dark and light pair in the same theme (the light image is not clearly brighter); `scripts/screenshots/ScreenshotChecks.ps1` holds the last two checks and their thresholds. junctional.io is then built with the new images (`npm ci`, `npm run build`) before anything is committed, and tetron.io's pull request has its own check, the preview deployment, which builds the site with the new image.
+- **Where the images go:** a pull request on junctional.io, `Product tour screenshots for JIM v<version>`, from the branch `screenshots/v<version>`, made by `scripts/screenshots/Publish-TourScreenshots.ps1` with the `jim-automation` app. It adds `src/assets/tour/v<version>/` with only the images the tour shows, sets `imageVersion` in both dictionaries, writes the homepage images to `public/assets/screenshots/` (fixed addresses, for links from outside the site such as JIM's README), and removes the folders no step uses any more. And a pull request on tetron.io, `JIM screenshot for JIM v<version>`, from its own `screenshots/v<version>` branch, made by `scripts/screenshots/Publish-TetronScreenshots.ps1`: it replaces `assets/images/homepage-dark.png`, the homepage hero, after checking a page still shows it. Each commit is made through GitHub's API, so it is signed. The two sites have their own steps, so one failing does not hold the other back.
+- **When the sites change:** when the release is published, never before. `release.yml`'s `publish-screenshots` job runs `scripts/screenshots/Merge-ReleaseScreenshots.ps1` once the GitHub release exists, and merges each pull request once GitHub reports its checks passed (its mergeable state is `clean`; it waits up to 15 minutes). The tag can be pushed while `jim-screenshots` is still capturing, since the gate does not wait for it; in that case the job finds no pull request yet, says so in a notice, and `jim-screenshots` merges each pull request itself as it opens it, having found the release already published. Each site deploys on merge. A prerelease version's screenshots stay in the artefact; no pull request is opened.
+- **What you do:** nothing, unless the run says otherwise. A pull request that cannot be merged (a failed check, a conflict) is a warning on the release run naming why; the release itself is unaffected. Fix the cause, then re-run `publish-screenshots`, or merge the pull request by hand. To keep a release's screenshots off a site, close its pull request before the release is published. Each step's alt text on junctional.io is not updated automatically: when a release changes what a tour image shows, correct the step's `alt` in both dictionaries (the `/release` checklist reminds you).
+- **Running it again:** re-run the `jim-screenshots` job alone. It moves each branch to a fresh commit and updates the open pull requests rather than opening others, and merges them if the release is already published.
+- **Locally:** `pwsh ./scripts/Capture-Screenshots.ps1 -Version v<version> -PrepareData` in the devcontainer (it needs 20+ GB for `Scale100k50Groups`), then `Publish-TourScreenshots.ps1 -DryRun -Build` against a junctional.io checkout, or `Publish-TetronScreenshots.ps1 -DryRun` against a tetron.io one, to see what the pull request would change.
+
+**The runner, once** (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries, from `scripts/toolchain/install-playwright-for-runner.sh` there; the job installs Playwright itself, at the version `.devcontainer/setup.sh` pins. When that pin (`PLAYWRIGHT_MCP_VERSION`) moves, re-run the host script with the new version, in case the new Chromium needs another library. The `jim-automation` app needs **Contents** and **Pull requests** write on junctional.io and tetron.io (`notify-site` needs only the first, on junctional.io); merging needs nothing more. Neither site may require an approving review on `main`, or the merge is refused. The first run builds the `Scale100k50Groups` OpenLDAP snapshot and the runner keeps it.
 
 ## API Reference Publication
 

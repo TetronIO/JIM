@@ -127,12 +127,144 @@ public class ImportContentHashCalculatorTests
         objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "START_DATE", Type = AttributeDataType.DateTime, ConnectedSystemObjectType = objectType });
 
         var ticks = new DateTime(2026, 7, 24, 10, 0, 0).Ticks;
-        var a = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValue = new DateTime(ticks, DateTimeKind.Utc) } } };
-        var b = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValue = new DateTime(ticks, DateTimeKind.Unspecified) } } };
+        var a = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValues = { new DateTime(ticks, DateTimeKind.Utc) } } } };
+        var b = new ConnectedSystemImportObject { ObjectType = "TEST_TYPE", Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "START_DATE", DateTimeValues = { new DateTime(ticks, DateTimeKind.Unspecified) } } } };
 
         Assert.That(ImportContentHashCalculator.CalculateContentHash(a, objectType),
             Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(b, objectType)),
             "DateTime values differing only in Kind must hash identically, matching DateTime == semantics.");
+    }
+
+    /// <summary>
+    /// A date is hashed as its canonical value (#2153): one with a sub-microsecond part hashes as the microsecond
+    /// JIM holds, because that is what the stored Connected System Object holds and what the diff compares.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_DateTimeWithSubMicrosecondPart_HashesAsTheFlooredMicrosecond()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var whole = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
+
+        var a = BuildDateAndBooleanImportObject(whole, flag: null);
+        var b = BuildDateAndBooleanImportObject(whole.AddTicks(7), flag: null);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(b, objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(a, objectType)));
+    }
+
+    /// <summary>
+    /// A Local date hashes as the instant it names (#2153), so the same moment read with a different Kind is not a
+    /// change.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_LocalDate_HashesAsItsUtcInstant()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var utc = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var local = new DateTime(utc.ToLocalTime().Ticks, DateTimeKind.Local);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(BuildDateAndBooleanImportObject(local, flag: null), objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(BuildDateAndBooleanImportObject(utc, flag: null), objectType)));
+    }
+
+    /// <summary>
+    /// The golden hashes of algorithm version 1 (#2153, PRD section 4), computed before dates were canonicalised. A
+    /// single whole-microsecond UTC date and a single Boolean must keep encoding byte-identically, which is why
+    /// canonicalising dates needed no <see cref="ImportContentHashCalculator.ImportContentHashAlgorithmVersion"/>
+    /// bump. If this fails, the encoding of an unchanged payload has changed: bump the version (see the class doc).
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_Version1GoldenPayload_HashIsUnchanged()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var importObject = BuildDateAndBooleanImportObject(new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234560), flag: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ImportContentHashAlgorithmVersionUnderTest, Is.EqualTo(1));
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(importObject, objectType), Is.EqualTo(GoldenVersion1Hash));
+            Assert.That(ImportContentHashCalculator.CalculateTypeFingerprint(objectType), Is.EqualTo(GoldenVersion1Fingerprint));
+        }
+    }
+
+    /// <summary>
+    /// #2153 S5: every date of a multi-valued date attribute is part of the hash, so a second value changes it.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_SecondDate_ChangesTheHash()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var first = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var one = BuildDateAndBooleanImportObject(first, flag: null);
+        var two = BuildDateAndBooleanImportObject(first, flag: null);
+        two.Attributes[0].DateTimeValues.Add(first.AddDays(1));
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(two, objectType),
+            Is.Not.EqualTo(ImportContentHashCalculator.CalculateContentHash(one, objectType)));
+    }
+
+    /// <summary>
+    /// #2153 S5: dates hash as a set, as the diff compares them: order, a repeated value and Kind never matter.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_SameDatesInAnotherOrderWithADuplicate_SameHash()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var a = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var b = a.AddDays(1);
+        var c = a.AddDays(2);
+        var ordered = BuildDateAndBooleanImportObject(a, flag: null);
+        ordered.Attributes[0].DateTimeValues.AddRange([b, c]);
+        var shuffled = BuildDateAndBooleanImportObject(c, flag: null);
+        shuffled.Attributes[0].DateTimeValues.AddRange([a.ToLocalTime(), b, a]);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(shuffled, objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(ordered, objectType)));
+    }
+
+    /// <summary>
+    /// #2153 S5: Booleans hash as a set too; a repeated value is not a change, and a second value is.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_Booleans_HashAsASet()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var date = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var single = BuildDateAndBooleanImportObject(date, flag: true);
+        var repeated = BuildDateAndBooleanImportObject(date, flag: true);
+        repeated.Attributes[1].BoolValues.Add(true);
+        var both = BuildDateAndBooleanImportObject(date, flag: true);
+        both.Attributes[1].BoolValues.Add(false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(repeated, objectType), Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(single, objectType)));
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(both, objectType), Is.Not.EqualTo(ImportContentHashCalculator.CalculateContentHash(single, objectType)));
+        }
+    }
+
+    private const int ImportContentHashAlgorithmVersionUnderTest =ImportContentHashCalculator.ImportContentHashAlgorithmVersion;
+    private static readonly Guid GoldenVersion1Hash = new("a1301547-b9b5-82ce-c3ef-3c9634aa020e");
+    private static readonly Guid GoldenVersion1Fingerprint = new("aadbf2e1-8be7-576c-4cf7-65d4188eef1c");
+
+    private static ConnectedSystemObjectType BuildDateAndBooleanObjectType()
+    {
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "TEST_TYPE" };
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "WHEN_CHANGED", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = objectType, Selected = true });
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "ENABLED", Type = AttributeDataType.Boolean, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = objectType, Selected = true });
+        return objectType;
+    }
+
+    private static ConnectedSystemImportObject BuildDateAndBooleanImportObject(DateTime whenChanged, bool? flag)
+    {
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = "TEST_TYPE",
+            Attributes = new List<ConnectedSystemImportObjectAttribute> { new() { Name = "WHEN_CHANGED", DateTimeValues = { whenChanged } } }
+        };
+        if (flag.HasValue)
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ENABLED", BoolValues = { flag.Value } });
+        return importObject;
     }
 
     [Test]
@@ -396,8 +528,8 @@ public class ImportContentHashCalculatorTests
         else if (attr.DecimalValues.Count > 0) attr.DecimalValues[random.Next(attr.DecimalValues.Count)] += 1.23m;
         else if (attr.GuidValues.Count > 0) attr.GuidValues[random.Next(attr.GuidValues.Count)] = Guid.NewGuid();
         else if (attr.ByteValues.Count > 0) attr.ByteValues[random.Next(attr.ByteValues.Count)] = new byte[] { (byte)random.Next(256) };
-        else if (attr.DateTimeValue.HasValue) attr.DateTimeValue = attr.DateTimeValue.Value.AddDays(1);
-        else if (attr.BoolValue.HasValue) attr.BoolValue = !attr.BoolValue.Value;
+        else if (attr.DateTimeValues.Count > 0) attr.DateTimeValues[0] = attr.DateTimeValues[0].AddDays(1);
+        else if (attr.BoolValues.Count > 0) attr.BoolValues[0] = !attr.BoolValues[0];
     }
 
     private static void AddRandomValue(ConnectedSystemImportObjectAttribute attr, Random random)
@@ -435,10 +567,10 @@ public class ImportContentHashCalculatorTests
                 IntValues = new List<int>(a.IntValues),
                 LongValues = new List<long>(a.LongValues),
                 DecimalValues = new List<decimal>(a.DecimalValues),
-                DateTimeValue = a.DateTimeValue,
+                DateTimeValues = new List<DateTime>(a.DateTimeValues),
                 GuidValues = new List<Guid>(a.GuidValues),
                 ByteValues = a.ByteValues.Select(b => (byte[])b.Clone()).ToList(),
-                BoolValue = a.BoolValue
+                BoolValues = new List<bool>(a.BoolValues)
             }).ToList()
         };
     }
@@ -486,7 +618,7 @@ public class ImportContentHashCalculatorTests
                     for (var v = 0; v < count; v++) importAttr.DecimalValues.Add(random.Next(-100000, 100000) / 7m);
                     break;
                 case AttributeDataType.DateTime:
-                    importAttr.DateTimeValue = new DateTime(2020, 1, 1).AddDays(random.Next(0, 3000));
+                    importAttr.DateTimeValues.Add(new DateTime(2020, 1, 1).AddDays(random.Next(0, 3000)));
                     break;
                 case AttributeDataType.Binary:
                     for (var v = 0; v < count; v++)
@@ -503,7 +635,7 @@ public class ImportContentHashCalculatorTests
                         for (var v = 0; v < count; v++) importAttr.GuidValues.Add(Guid.NewGuid());
                     break;
                 case AttributeDataType.Boolean:
-                    importAttr.BoolValue = random.Next(2) == 0;
+                    importAttr.BoolValues.Add(random.Next(2) == 0);
                     break;
             }
 
@@ -554,8 +686,8 @@ public class ImportContentHashCalculatorTests
                         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DecimalValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.DateTime:
-                    if (importAttr.DateTimeValue.HasValue)
-                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DateTimeValue = importAttr.DateTimeValue, ConnectedSystemObject = cso });
+                    foreach (var v in importAttr.DateTimeValues)
+                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, DateTimeValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.Binary:
                     foreach (var v in importAttr.ByteValues)
@@ -566,8 +698,8 @@ public class ImportContentHashCalculatorTests
                         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, GuidValue = v, ConnectedSystemObject = cso });
                     break;
                 case AttributeDataType.Boolean:
-                    if (importAttr.BoolValue.HasValue)
-                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, BoolValue = importAttr.BoolValue, ConnectedSystemObject = cso });
+                    foreach (var v in importAttr.BoolValues)
+                        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schemaAttr.Id, Attribute = schemaAttr, BoolValue = v, ConnectedSystemObject = cso });
                     break;
             }
         }

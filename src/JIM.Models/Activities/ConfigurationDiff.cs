@@ -14,10 +14,10 @@ public class ConfigurationDiff
     /// <summary>The configuration object type, e.g. "SynchronisationRule" or "ConnectedSystem".</summary>
     public string ObjectType { get; set; } = null!;
 
-    /// <summary>The integer database identifier of the configuration object; zero for Guid-keyed objects (see <see cref="ObjectGuidId"/>).</summary>
+    /// <summary>The configuration object's numeric ID; zero for an object identified by a GUID (see <c>ObjectGuidId</c>).</summary>
     public int ObjectId { get; set; }
 
-    /// <summary>The Guid database identifier of the configuration object, for Guid-keyed objects (e.g. a Schedule); null otherwise.</summary>
+    /// <summary>The configuration object's GUID, for an object identified by one (a Schedule, for example); null otherwise.</summary>
     public Guid? ObjectGuidId { get; set; }
 
     /// <summary>The display name of the configuration object (from the newer snapshot).</summary>

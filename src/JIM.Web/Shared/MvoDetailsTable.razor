@@ -199,9 +199,9 @@
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {
             var dateTimeValue = attributeValue.DateTimeValue.Value;
-            <MudTooltip Text="@dateTimeValue.ToString("O")" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@JIM.Utilities.DateTimeAttributeValue.ToRoundTripString(dateTimeValue)" Arrow="true" Placement="Placement.Top">
                 <ChildContent>
-                    @dateTimeValue.ToFriendlyDate()
+                    @dateTimeValue.ToFriendlyAttributeDate()
                 </ChildContent>
             </MudTooltip>
         }
@@ -465,7 +465,7 @@
         if (!string.IsNullOrEmpty(value.StringValue))
             return value.StringValue;
         if (value.DateTimeValue.HasValue)
-            return value.DateTimeValue.Value.ToFriendlyDate();
+            return value.DateTimeValue.Value.ToFriendlyAttributeDate();
         if (value.IntValue.HasValue)
             return value.IntValue.Value.ToString(CultureInfo.InvariantCulture);
         if (value.LongValue.HasValue)

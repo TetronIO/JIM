@@ -378,6 +378,12 @@ $totalAdded = 0
 $ldifBuilder = [System.Text.StringBuilder]::new()
 $chunkIndex = 0
 
+# Active Directory refuses to create an enabled account (userAccountControl 512) with no password (0000052D), so
+# there every user is added with one; ldapadd runs over LDAPS, the only way Active Directory takes unicodePwd. The
+# password is Scenario 017's lab password: it meets a stock complexity rule and shares no token with the generated
+# names, which Active Directory would refuse. Samba accepts the entries without one, so its LDIF is unchanged.
+$adUserPasswordValue = if ($useActiveDirectory) { ConvertTo-UnicodePwdValue -Password 'Chalkstream-7-Vault!' } else { $null }
+
 for ($i = 0; $i -lt $createdUsers.Count; $i++) {
     $u = $createdUsers[$i]
     $companyDisplayName = $scenario8CompanyNames[$u.Company]
@@ -400,6 +406,9 @@ for ($i = 0; $i -lt $createdUsers.Count; $i++) {
     [void]$ldifBuilder.AppendLine("title: $($u.Title)")
     [void]$ldifBuilder.AppendLine("company: $companyDisplayName")
     [void]$ldifBuilder.AppendLine("userAccountControl: $($u.UserAccountControl)")
+    if ($adUserPasswordValue) {
+        [void]$ldifBuilder.AppendLine("unicodePwd:: $adUserPasswordValue")
+    }
 
     if ($null -ne $u.Pronouns) {
         [void]$ldifBuilder.AppendLine("extensionAttribute1: $($u.Pronouns)")
@@ -415,13 +424,10 @@ for ($i = 0; $i -lt $createdUsers.Count; $i++) {
         if ($useActiveDirectory) {
             # Active Directory: the LDIF built above is fed to ldapadd in the toolbox instead of ldbadd in
             # a container. "Already exists" (68) is tolerated, as it is for ldbadd; anything else throws.
-            # Active Directory: two things Samba accepts in this LDIF that a real domain controller may not.
-            # (1) userAccountControl 512 (enabled) is added with no password, and the domain's policy is
-            # left at the Windows defaults (complexity on); an enabled account with no password may be
-            # refused with result 19 (0000052D, WILL_NOT_PERFORM), in which case the users have to be added
-            # disabled (514) or with a unicodePwd. (2) sAMAccountName is limited to 20 characters and
-            # New-TestUser's names may exceed that. Neither is worked around here; the first run against
-            # the lab answers both, and the failure message names the entry and the directory's reason.
+            # Active Directory refuses an enabled account with no password, so its entries carry a unicodePwd
+            # (see $adUserPasswordValue above); without it the lab refused 901 of the first 1,000 (0000052D, 2026-10-16)
+            # without it. sAMAccountName is limited to 20 characters there; New-TestUser's names have not
+            # exceeded it yet, and if one does, the failure message names the entry and the directory's reason.
             Write-ActiveDirectoryLabLine "  Importing chunk $chunkIndex ($chunkCount users, total $($i + 1)/$($createdUsers.Count))..." -ForegroundColor Gray
             $chunkOutcome = Invoke-ActiveDirectoryLdifDelivery -DirectoryConfig $adConfig -Tool ldapadd -Ldif $ldifBuilder.ToString() `
                 -AcceptedResultCode 68 -Description "users chunk $chunkIndex (users $($i + 2 - $chunkCount) to $($i + 1))"

@@ -9,6 +9,7 @@ using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
@@ -23,8 +24,11 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
+using JIM.Models.Search;
 using JIM.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -40,6 +44,9 @@ public partial class ConnectedSystemServer
     /// production code never assigns it.
     /// </summary>
     internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
+
+    private readonly ObjectMatchingRuleValidator _objectMatchingRuleValidator = new(new DynamicExpressoEvaluator());
+    private readonly ScopingCriterionExpressionValidator _scopingCriterionExpressionValidator = new(new DynamicExpressoEvaluator());
 
     internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
@@ -75,7 +82,7 @@ public partial class ConnectedSystemServer
     {
         await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
-            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey)),
+            async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
@@ -92,7 +99,7 @@ public partial class ConnectedSystemServer
     // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
     // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
     // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
-    private async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
     {
         if (syncRuleId <= 0)
             return;
@@ -162,7 +169,7 @@ public partial class ConnectedSystemServer
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
-    private async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    internal async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
     {
         if (connectedSystemId <= 0)
             return;
@@ -220,7 +227,7 @@ public partial class ConnectedSystemServer
             async hashKey =>
             {
                 var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-                return connectedSystem == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+                return connectedSystem == null ? null : await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey);
             },
             $"Connected System {connectedSystemId}");
     }
@@ -663,7 +670,9 @@ public partial class ConnectedSystemServer
     /// payload; <see cref="UpdateConnectedSystemAsync(ConnectedSystem, MetaverseObject?)"/> does not persist
     /// object type/attribute changes. See issue #782.
     /// </summary>
-    public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    /// <returns>Expressions that read an attribute this save deselected (#2265), also recorded as the Activity's
+    /// warning; empty when there are none.</returns>
+    public async Task<IReadOnlyList<AttributeReader>> UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -682,6 +691,8 @@ public partial class ConnectedSystemServer
         // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
         ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
         await ThrowIfDeselectedObjectTypesStillManagedAsync(connectedSystem.Id, connectedSystem.ObjectTypes ?? []);
+        var deselectionWarnings = await GuardAttributeDeselectionAsync(connectedSystem.Id,
+            (connectedSystem.ObjectTypes ?? []).SelectMany(objectType => (objectType.Attributes ?? []).Select(attribute => (attribute, objectType.Id))));
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -702,7 +713,8 @@ public partial class ConnectedSystemServer
 
         // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
+        return deselectionWarnings;
     }
 
     /// <summary>
@@ -1935,6 +1947,138 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Judges the attributes a save deselects (#2265). A deselected attribute stops being imported: the values already
+    /// held stay but are never refreshed, and objects imported afterwards have none. A Scoping Criterion reading it,
+    /// directly or in an Expression, would therefore decide which objects a Synchronisation Rule manages on stale or
+    /// missing values, so the save is refused, naming each criterion. An Attribute Flow or Object Matching Rule
+    /// Expression reading it is only warned about: it flows what is held, as a direct mapping of the attribute does.
+    /// </summary>
+    /// <remarks>
+    /// Only attributes changing from selected to deselected count, judged against the stored selection, so an
+    /// attribute deselected before this refusal existed does not block an unrelated save.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System the attributes belong to.</param>
+    /// <param name="proposed">Each attribute as it will be saved, with the Object Type it belongs to.</param>
+    /// <returns>The other Expressions reading a newly deselected attribute, to be reported as a warning.</returns>
+    /// <exception cref="AttributeReadByConfigurationException">A Scoping Criterion reads a newly deselected attribute.</exception>
+    private async Task<IReadOnlyList<AttributeReader>> GuardAttributeDeselectionAsync(
+        int connectedSystemId, IEnumerable<(ConnectedSystemObjectTypeAttribute Attribute, int ObjectTypeId)> proposed)
+    {
+        var readers = await FindNewlyDeselectedAttributeReadersAsync(connectedSystemId, proposed);
+        var scopeReaders = readers.Where(reader => reader.Kind == AttributeReaderKind.ScopingCriterion).ToList();
+        if (scopeReaders.Count > 0)
+        {
+            Log.Information("GuardAttributeDeselectionAsync: refusing to deselect attributes of Connected System {ConnectedSystemId}; {Count} Scoping Criteria read them",
+                connectedSystemId, scopeReaders.Count);
+            throw new AttributeReadByConfigurationException(DeselectionRefusal, scopeReaders);
+        }
+
+        return readers.Where(reader => reader.Kind != AttributeReaderKind.ScopingCriterion).ToList();
+    }
+
+    private const string DeselectionRefusal =
+        "An attribute a Scoping Criterion reads cannot be deselected: it would stop being imported, so the criterion would decide scope on values that are never refreshed, and on no value at all for objects imported afterwards. Change these first:";
+
+    /// <summary>
+    /// The bulk form of <see cref="GuardAttributeDeselectionAsync"/>: a deselection a Scoping Criterion refuses is
+    /// reverted and reported as that attribute's error, as every other per-attribute refusal of a bulk update is,
+    /// while the rest of the batch is saved.
+    /// </summary>
+    private async Task<IReadOnlyList<AttributeReader>> GuardBulkAttributeDeselectionAsync(
+        int connectedSystemId, ConnectedSystemObjectType objectType, List<ConnectedSystemObjectTypeAttribute> updated, List<(int AttributeId, string Error)> errors)
+    {
+        var readersByAttribute = new List<(ConnectedSystemObjectTypeAttribute Attribute, IReadOnlyList<AttributeReader> Readers)>();
+        foreach (var attribute in updated.Where(a => !a.Selected))
+            readersByAttribute.Add((attribute, await FindNewlyDeselectedAttributeReadersAsync(connectedSystemId, [(attribute, objectType.Id)])));
+
+        foreach (var (attribute, readers) in readersByAttribute)
+        {
+            var scopeReaders = readers.Where(reader => reader.Kind == AttributeReaderKind.ScopingCriterion).ToList();
+            if (scopeReaders.Count == 0)
+                continue;
+
+            attribute.Selected = true;
+            updated.Remove(attribute);
+            errors.Add((attribute.Id, new AttributeReadByConfigurationException(DeselectionRefusal, scopeReaders).Message));
+        }
+
+        return readersByAttribute
+            .Where(entry => updated.Contains(entry.Attribute))
+            .SelectMany(entry => entry.Readers)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<AttributeReader>> FindNewlyDeselectedAttributeReadersAsync(
+        int connectedSystemId, IEnumerable<(ConnectedSystemObjectTypeAttribute Attribute, int ObjectTypeId)> proposed)
+    {
+        var deselected = proposed.Where(entry => !entry.Attribute.Selected && entry.Attribute.Id != 0).ToList();
+        if (deselected.Count == 0)
+            return [];
+
+        var stored = await Application.Repository.ConnectedSystems.GetAttributeSelectionStatesAsync(connectedSystemId);
+        var newlyDeselected = deselected.Where(entry => stored.TryGetValue(entry.Attribute.Id, out var wasSelected) && wasSelected).ToList();
+        if (newlyDeselected.Count == 0)
+            return [];
+
+        var index = await GetAttributeReaderIndexAsync();
+        return newlyDeselected
+            .SelectMany(entry => index.ForConnectedSystemAttribute(entry.Attribute.Id, entry.Attribute.Name, entry.ObjectTypeId))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Completes a save's Activity, with a warning naming the Expressions that read an attribute it deselected.
+    /// </summary>
+    private async Task CompleteWithDeselectionWarningsAsync(Activity activity, IReadOnlyList<AttributeReader> deselectionWarnings)
+    {
+        if (deselectionWarnings.Count == 0)
+        {
+            await Application.Activities.CompleteActivityAsync(activity);
+            return;
+        }
+
+        activity.WarningMessage = "A deselected attribute is still read by: " +
+            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)) +
+            ". It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.";
+        await Application.Activities.CompleteActivityWithWarningAsync(activity);
+    }
+
+    /// <summary>
+    /// Refuses changing the Object Types of a saved Synchronisation Rule (#2265). Its Scoping Criteria, Attribute
+    /// Flows and Object Matching Rules name attributes of those Object Types, so moving the rule to another type
+    /// would leave them reading attributes the new type does not have. Create a new Synchronisation Rule instead.
+    /// </summary>
+    /// <remarks>
+    /// Judged against the stored ids, read untracked, never against the caller's copy.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Either Object Type differs from the stored one.</exception>
+    private async Task ThrowIfSyncRuleObjectTypesChangedAsync(SyncRule syncRule)
+    {
+        if (syncRule.Id == 0)
+            return;
+
+        var stored = await Application.Repository.ConnectedSystems.GetSyncRuleObjectTypeIdsAsync(syncRule.Id);
+        if (stored is not { } storedIds)
+            return;
+
+        var proposedConnectedSystemObjectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
+        var proposedMetaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
+        var connectedSystemTypeChanged = proposedConnectedSystemObjectTypeId != 0 && proposedConnectedSystemObjectTypeId != storedIds.ConnectedSystemObjectTypeId;
+        var metaverseTypeChanged = proposedMetaverseObjectTypeId != 0 && proposedMetaverseObjectTypeId != storedIds.MetaverseObjectTypeId;
+        if (!connectedSystemTypeChanged && !metaverseTypeChanged)
+            return;
+
+        var changed = connectedSystemTypeChanged && metaverseTypeChanged
+            ? "Connected System Object Type and Metaverse Object Type"
+            : connectedSystemTypeChanged ? "Connected System Object Type" : "Metaverse Object Type";
+        var message = $"The {changed} of Synchronisation Rule '{syncRule.Name}' cannot be changed once it is saved: its " +
+                      "Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of its Object Types. " +
+                      "Create a new Synchronisation Rule for the other Object Type instead.";
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
+    /// <summary>
     /// Refuses a schema selection that leaves an enabled Synchronisation Rule bound to a deselected Object Type
     /// (#1474). Deselecting a type takes it out of management, so the next Full Import obsoletes its objects; a rule
     /// still enabled against it contradicts that, and an outbound one would act on the objects again as soon as they
@@ -2243,6 +2387,7 @@ public partial class ConnectedSystemServer
     public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, MetaverseObject? initiatedBy)
     {
         ArgumentNullException.ThrowIfNull(removeDependents);
+        await EnsureSchemaRefreshRemovalAllowedAsync(previewResult);
 
         var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
         await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy, initiatedByApiKey: null);
@@ -2256,10 +2401,29 @@ public partial class ConnectedSystemServer
     public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, ApiKey initiatedByApiKey)
     {
         ArgumentNullException.ThrowIfNull(removeDependents);
+        await EnsureSchemaRefreshRemovalAllowedAsync(previewResult);
 
         var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
         await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy: null, initiatedByApiKey);
         return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Refuses Apply and Remove, before anything is persisted, while configuration reads an attribute the refresh
+    /// removes (#2265). Checked against the configuration as it stands now rather than the plan the caller previewed,
+    /// so a Scoping Criterion added since the preview still refuses it. Deleting the attribute row would leave a
+    /// Scoping Criterion comparing nothing, which takes objects out of scope and deprovisions them, and an Expression
+    /// reading nothing; neither is removed on the administrator's behalf.
+    /// </summary>
+    /// <exception cref="AttributeReadByConfigurationException">Configuration reads a removed attribute.</exception>
+    private async Task EnsureSchemaRefreshRemovalAllowedAsync(SchemaRefreshResult previewResult)
+    {
+        ArgumentNullException.ThrowIfNull(previewResult);
+
+        var readers = SchemaRefreshDependentDetector.FindRemovedAttributeReaders(previewResult, await GetAttributeReaderIndexAsync());
+        if (readers.Count > 0)
+            throw new AttributeReadByConfigurationException(
+                "Apply and Remove is refused: configuration reads an attribute the Connected System no longer reports. Change these first, or apply without removing:", readers);
     }
 
     /// <summary>
@@ -2388,22 +2552,20 @@ public partial class ConnectedSystemServer
     /// </summary>
     private static (List<int> RemovedObjectTypeIds, List<int> RemovedAttributeIds) ResolveRemovedSchemaIds(SchemaRefreshResult previewResult)
     {
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
+        // The result names a type as the Connector now does; FindPreRefreshType follows a case-only rename back to
+        // the snapshot's name (#2051). Removed attribute names are the names JIM held, so they match exactly.
         var removedObjectTypeIds = previewResult.RemovedObjectTypes
-            .Where(preRefreshTypesByName.ContainsKey)
-            .Select(name => preRefreshTypesByName[name].Id)
+            .Select(previewResult.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
             .ToList();
 
         var removedAttributeIds = previewResult.RemovedAttributes
-            .Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key))
-            .SelectMany(kvp =>
-            {
-                var attributeNames = kvp.Value.ToHashSet();
-                return preRefreshTypesByName[kvp.Key].Attributes
-                    .Where(attribute => attributeNames.Contains(attribute.Name))
-                    .Select(attribute => attribute.Id);
-            })
+            .Select(kvp => (Type: previewResult.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value.ToHashSet(StringComparer.Ordinal)))
+            .Where(entry => entry.Type != null)
+            .SelectMany(entry => entry.Type!.Attributes
+                .Where(attribute => entry.AttributeNames.Contains(attribute.Name))
+                .Select(attribute => attribute.Id))
             .ToList();
 
         return (removedObjectTypeIds, removedAttributeIds);
@@ -2423,9 +2585,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(previewResult);
 
         var impact = new SchemaRefreshRemovalImpact();
-        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
-
-        foreach (var type in previewResult.RemovedObjectTypes.Where(preRefreshTypesByName.ContainsKey).Select(name => preRefreshTypesByName[name]))
+        foreach (var type in previewResult.RemovedObjectTypes.Select(previewResult.FindPreRefreshType).OfType<SchemaRefreshPreRefreshType>())
         {
             impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact
             {
@@ -2435,17 +2595,21 @@ public partial class ConnectedSystemServer
             });
         }
 
-        foreach (var kvp in previewResult.RemovedAttributes.Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key)))
+        foreach (var kvp in previewResult.RemovedAttributes)
         {
-            var type = preRefreshTypesByName[kvp.Key];
-            var attributeNames = kvp.Value.ToHashSet();
+            // FindPreRefreshType follows a case-only rename of the type back to the snapshot's name (#2051).
+            var type = previewResult.FindPreRefreshType(kvp.Key);
+            if (type == null)
+                continue;
+
+            var attributeNames = kvp.Value.ToHashSet(StringComparer.Ordinal);
             foreach (var attribute in type.Attributes.Where(attribute => attributeNames.Contains(attribute.Name)))
             {
                 impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact
                 {
                     AttributeId = attribute.Id,
                     AttributeName = attribute.Name,
-                    ObjectTypeName = type.Name,
+                    ObjectTypeName = kvp.Key,
                     StoredValueCount = await Application.Repository.ConnectedSystems.GetConnectedSystemAttributeValueCountAsync(connectedSystemId, attribute.Id)
                 });
             }
@@ -2643,13 +2807,20 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
-    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
+    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success,
+    /// or when the import changed how a selected Object Type is classified (#2049). The one-step import returns the
+    /// Connected System rather than the refresh result, so the Activity is how either reaches the REST API and
+    /// PowerShell.
     /// </summary>
     private async Task CompleteSchemaImportActivityAsync(Activity activity, SchemaRefreshResult result)
     {
-        if (result.DiscoveryWarnings.Count > 0)
+        var warnings = result.DiscoveryWarnings
+            .Concat(DescribeObjectTypeClassificationChanges(result))
+            .ToList();
+
+        if (warnings.Count > 0)
         {
-            activity.WarningMessage = string.Join(Environment.NewLine, result.DiscoveryWarnings);
+            activity.WarningMessage = string.Join(Environment.NewLine, warnings);
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         }
         else
@@ -2687,7 +2858,8 @@ public partial class ConnectedSystemServer
             Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
             {
                 Id = attribute.Id,
-                Name = attribute.Name
+                Name = attribute.Name,
+                CaseExact = attribute.CaseExact
             }).ToList()
         }).ToList();
 
@@ -2700,8 +2872,16 @@ public partial class ConnectedSystemServer
 
         // Keep track of existing object types for merging and change tracking
         var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        // Configuration names ignore case (#2051): an Object Type the Connector now reports under a name differing
+        // only in case is the one JIM already holds, and keeps its id.
+        var existingObjectTypesBySchemaName = PairBySchemaName(schema.ObjectTypes.Select(ot => ot.Name), existingObjectTypes, ot => ot.Name);
+
+        // The Object Types JIM imports entries of: a classification change can only move entries between these (#2049).
+        var selectedObjectTypeNames = existingObjectTypes
+            .Where(ot => ot.Selected)
+            .Select(ot => ot.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
 
@@ -2710,9 +2890,9 @@ public partial class ConnectedSystemServer
         var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
 
         // Track removed object types
-        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
+        foreach (var removedObjectType in existingObjectTypes.Except(existingObjectTypesBySchemaName.Values))
         {
-            result.RemovedObjectTypes.Add(removedObjectTypeName);
+            result.RemovedObjectTypes.Add(removedObjectType.Name);
         }
 
         foreach (var schemaObjectType in schema.ObjectTypes)
@@ -2720,17 +2900,23 @@ public partial class ConnectedSystemServer
             schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
 
             // Try to find an existing object type with the same name
-            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+            var existingObjectType = existingObjectTypesBySchemaName.GetValueOrDefault(schemaObjectType.Name);
 
             ConnectedSystemObjectType connectedSystemObjectType;
             if (existingObjectType != null)
             {
                 // Update existing object type, preserving its ID and merging attributes
+                if (existingObjectType.Name != schemaObjectType.Name)
+                {
+                    result.RenamedObjectTypes.Add(new SchemaNameChange { OldName = existingObjectType.Name, NewName = schemaObjectType.Name });
+                    existingObjectType.Name = schemaObjectType.Name;
+                }
+
                 result.UpdatedObjectTypes.Add(schemaObjectType.Name);
                 connectedSystemObjectType = existingObjectType;
                 var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+                var existingAttributesBySchemaName = PairBySchemaName(schemaObjectType.Attributes.Select(a => a.Name), existingAttributes, a => a.Name);
+                var matchedAttributes = existingAttributesBySchemaName.Values.ToHashSet();
 
                 // Attributes an administrator's selected auxiliary classes contribute are not in the discovered
                 // schema for this type, because an RFC 4512 directory attaches an auxiliary class to an entry rather
@@ -2741,9 +2927,9 @@ public partial class ConnectedSystemServer
                 connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
 
                 // Track removed attributes for this object type
-                var removedAttributeNames = existingAttributeNames
-                    .Except(newAttributeNames)
-                    .Except(contributedAttributes.Select(a => a.Name))
+                var removedAttributeNames = existingAttributes
+                    .Where(a => !matchedAttributes.Contains(a) && !contributedAttributes.Contains(a))
+                    .Select(a => a.Name)
                     .ToList();
                 if (removedAttributeNames.Count > 0)
                 {
@@ -2752,31 +2938,46 @@ public partial class ConnectedSystemServer
 
                 // Track added attributes for this object type
                 var addedAttributeNames = new List<string>();
+                var renamedAttributes = new List<SchemaNameChange>();
 
                 foreach (var schemaAttribute in schemaObjectType.Attributes)
                 {
                     // Try to find existing attribute by name
-                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                    var existingAttribute = existingAttributesBySchemaName.GetValueOrDefault(schemaAttribute.Name);
 
                     if (existingAttribute != null)
                     {
+                        // A case-only rename keeps the row, and so every mapping referring to it, and takes the
+                        // Connector's casing (#2051).
+                        if (existingAttribute.Name != schemaAttribute.Name)
+                        {
+                            renamedAttributes.Add(new SchemaNameChange { OldName = existingAttribute.Name, NewName = schemaAttribute.Name });
+                            existingAttribute.Name = schemaAttribute.Name;
+                        }
+
                         // Update existing attribute properties but preserve the ID. Definition changes (plurality
                         // and data type) are recorded on the result before being applied: they were applied
                         // silently for years, and a restated definition can invalidate an Attribute Flow mapping
                         // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
 
-                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        // The Boolean rule (#2153): the plurality follows the attribute's effective type, which is
+                        // the administrator's where they overrode it, so a Boolean is single-valued whatever the
+                        // Connected System declares.
+                        var effectivePlurality = AttributeDataTypeCapabilities.Constrain(
+                            existingAttribute.TypeSetByAdministrator ? existingAttribute.Type : schemaAttribute.Type,
+                            schemaAttribute.AttributePlurality);
+                        if (existingAttribute.AttributePlurality != effectivePlurality)
                         {
                             result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
                             {
                                 AttributeName = existingAttribute.Name,
                                 Aspect = SchemaAttributeChangeAspect.Plurality,
                                 OldValue = existingAttribute.AttributePlurality.ToString(),
-                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                                NewValue = effectivePlurality.ToString()
                             });
                         }
-                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
+                        existingAttribute.AttributePlurality = effectivePlurality;
 
                         // A refresh restates what the Connector discovered and leaves what the administrator
                         // decided, which is why Selected and IsExternalId are absent from this block. A data
@@ -2802,9 +3003,17 @@ public partial class ConnectedSystemServer
                             existingAttribute.Type = schemaAttribute.Type;
                         }
 
+                        // The case-exact declaration follows the same rule as the data type: discovered unless an
+                        // administrator decided it, and a refresh never overrules the administrator (#2051).
+                        if (!existingAttribute.CaseExactSetByAdministrator)
+                            existingAttribute.CaseExact = schemaAttribute.CaseExact;
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
+
+                        // Connector-owned, so a refresh restates it.
+                        existingAttribute.IsOperational = schemaAttribute.IsOperational;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -2815,11 +3024,13 @@ public partial class ConnectedSystemServer
                         {
                             Name = schemaAttribute.Name,
                             Description = schemaAttribute.Description,
-                            AttributePlurality = schemaAttribute.AttributePlurality,
+                            AttributePlurality = AttributeDataTypeCapabilities.Constrain(schemaAttribute.Type, schemaAttribute.AttributePlurality),
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
                             Writability = schemaAttribute.Writability,
-                            Required = schemaAttribute.Required
+                            Required = schemaAttribute.Required,
+                            CaseExact = schemaAttribute.CaseExact,
+                            IsOperational = schemaAttribute.IsOperational
                         });
                     }
                 }
@@ -2827,12 +3038,32 @@ public partial class ConnectedSystemServer
                 // Put the auxiliary contributions back, as the rows they already were. A directory that has since
                 // declared one of them on the structural class itself wins: that attribute is now native, and the
                 // discovery pass above has already carried its row across.
-                foreach (var contributedAttribute in contributedAttributes.Where(a => !newAttributeNames.Contains(a.Name)))
+                foreach (var contributedAttribute in contributedAttributes.Where(a => !matchedAttributes.Contains(a)))
+                {
+                    // The capability rule reaches carried rows too (#2153): a Boolean is single-valued.
+                    var contributedPlurality = AttributeDataTypeCapabilities.Constrain(contributedAttribute.Type, contributedAttribute.AttributePlurality);
+                    if (contributedAttribute.AttributePlurality != contributedPlurality)
+                    {
+                        result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                        {
+                            AttributeName = contributedAttribute.Name,
+                            Aspect = SchemaAttributeChangeAspect.Plurality,
+                            OldValue = contributedAttribute.AttributePlurality.ToString(),
+                            NewValue = contributedPlurality.ToString()
+                        });
+                        contributedAttribute.AttributePlurality = contributedPlurality;
+                    }
                     connectedSystemObjectType.Attributes.Add(contributedAttribute);
+                }
 
                 if (addedAttributeNames.Count > 0)
                 {
                     result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+
+                if (renamedAttributes.Count > 0)
+                {
+                    result.RenamedAttributes[schemaObjectType.Name] = renamedAttributes;
                 }
             }
             else
@@ -2846,11 +3077,13 @@ public partial class ConnectedSystemServer
                     {
                         Name = a.Name,
                         Description = a.Description,
-                        AttributePlurality = a.AttributePlurality,
+                        AttributePlurality = AttributeDataTypeCapabilities.Constrain(a.Type, a.AttributePlurality),
                         Type = a.Type,
                         ClassName = a.ClassName,
                         Writability = a.Writability,
-                        Required = a.Required
+                        Required = a.Required,
+                        CaseExact = a.CaseExact,
+                        IsOperational = a.IsOperational
                     }).ToList()
                 };
 
@@ -2873,7 +3106,23 @@ public partial class ConnectedSystemServer
                     declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
             }
 
-            MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+            // A selected Object Type's classification decides which Object Type an entry carrying more than one
+            // resolves to, so a change to it is recorded before the tags are replaced (#2049). Unselected and new
+            // types hold no imported entries, so nothing can move.
+            (List<string> ClassKinds, List<string> SuperiorClasses)? classificationBefore = existingObjectType is { Selected: true }
+                ? (TagValues(existingObjectType, ObjectTypeTags.Keys.ClassKind), TagValues(existingObjectType, ObjectTypeTags.Keys.SuperiorClass))
+                : null;
+
+            var classificationUpdated = MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+
+            if (classificationBefore is { } before)
+                RecordObjectTypeClassificationChanges(result, connectedSystemObjectType, before.ClassKinds, before.SuperiorClasses, selectedObjectTypeNames);
+
+            // Any other classification difference on a type JIM already holds is still worth applying: the selection
+            // preview reads the stored classification, so a refresh carrying only this must not be discarded as up to
+            // date (#2049).
+            if (existingObjectType != null && classificationUpdated && !result.ChangedObjectTypeClassifications.ContainsKey(connectedSystemObjectType.Name))
+                result.ObjectTypesWithClassificationUpdates.Add(connectedSystemObjectType.Name);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
@@ -2945,6 +3194,48 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Pairs each name a Connector reported with the stored Object Type or attribute it continues. Configuration names
+    /// ignore case (#2051), so a name differing only in case continues the stored one, but exact matches are paired
+    /// first: a Connected System whose own names are case-exact can hold two that differ only in case, and each keeps
+    /// its own row. A case-insensitive match is only taken when it is unambiguous, one unpaired stored name for one
+    /// unpaired reported name; anything else would be a guess, and is left as a removal and an addition.
+    /// </summary>
+    /// <returns>The stored item each paired reported name continues, keyed by the reported name.</returns>
+    internal static Dictionary<string, T> PairBySchemaName<T>(IEnumerable<string> reportedNames, IReadOnlyCollection<T> existing, Func<T, string> nameOf)
+        where T : class
+    {
+        var reported = reportedNames.Distinct(StringComparer.Ordinal).ToList();
+        var pairs = new Dictionary<string, T>(StringComparer.Ordinal);
+        var paired = new HashSet<T>(ReferenceEqualityComparer.Instance);
+
+        foreach (var name in reported)
+        {
+            var exact = existing.FirstOrDefault(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.Ordinal));
+            if (exact == null)
+                continue;
+
+            pairs[name] = exact;
+            paired.Add(exact);
+        }
+
+        var unpairedReported = reported.Where(name => !pairs.ContainsKey(name)).ToList();
+        foreach (var name in unpairedReported)
+        {
+            var candidates = existing
+                .Where(item => !paired.Contains(item) && string.Equals(nameOf(item), name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var rivals = unpairedReported.Count(other => string.Equals(other, name, StringComparison.OrdinalIgnoreCase));
+            if (candidates.Count != 1 || rivals != 1)
+                continue;
+
+            pairs[name] = candidates[0];
+            paired.Add(candidates[0]);
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
     /// The attributes on a persisted Object Type that got there by an administrator selecting an auxiliary class,
     /// rather than by the Connector discovering them.
     /// </summary>
@@ -3006,20 +3297,120 @@ public partial class ConnectedSystemServer
     /// key and value are unchanged are reused so that a refresh does not churn the table, and repeated tags are
     /// collapsed because the persisted tags are uniquely indexed per object type, key and value.
     /// </remarks>
-    private static void MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
+    /// <returns>Whether the classification differs from the one held before.</returns>
+    private static bool MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
     {
         var existingTagsByClassification = connectedSystemObjectType.Tags
             .GroupBy(t => (t.Key, t.Value))
             .ToDictionary(g => g.Key, g => g.First());
 
-        connectedSystemObjectType.Tags = schemaObjectType.Tags
+        var reported = schemaObjectType.Tags
             .Select(t => (t.Key, t.Value))
             .Distinct()
+            .ToList();
+
+        connectedSystemObjectType.Tags = reported
             .Select(classification => existingTagsByClassification.TryGetValue(classification, out var existingTag)
                 ? existingTag
                 : new ConnectedSystemObjectTypeTag { Key = classification.Key, Value = classification.Value })
             .ToList();
+
+        return !reported.ToHashSet().SetEquals(existingTagsByClassification.Keys);
     }
+
+    /// <summary>
+    /// The distinct values an Object Type carries under one classification key, sorted so that a comparison and a
+    /// report do not depend on the order the Connector listed them in.
+    /// </summary>
+    private static List<string> TagValues(ConnectedSystemObjectType objectType, string key)
+    {
+        return objectType.Tags
+            .Where(tag => tag.Key == key)
+            .Select(tag => tag.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Records what a refresh changed about how the Connected System classifies a selected Object Type, where that
+    /// can change which Object Type existing entries resolve to at the next import (#2049): a structural class takes
+    /// entries from an auxiliary one, and the more specific of two structural classes takes the entries carrying
+    /// both.
+    /// </summary>
+    /// <remarks>
+    /// A class kind change is recorded when the class becomes auxiliary or stops being one. An inheritance change is recorded only when a class gained or lost
+    /// names another selected Object Type, because only then can it move entries between two types JIM imports. That
+    /// restriction also stops the first refresh after JIM began recording inheritance from flagging every type at
+    /// once, since each type gains its whole chain then (see <see cref="ObjectTypeTags.Keys.SuperiorClass"/>).
+    /// </remarks>
+    private static void RecordObjectTypeClassificationChanges(
+        SchemaRefreshResult result,
+        ConnectedSystemObjectType objectType,
+        List<string> classKindsBefore,
+        List<string> superiorClassesBefore,
+        HashSet<string> selectedObjectTypeNames)
+    {
+        // Only whether a class is auxiliary decides resolution (a structural class takes entries from an auxiliary one),
+        // so a type gaining its first class kind, or moving between structural and abstract, cannot move entries.
+        var classKindsAfter = TagValues(objectType, ObjectTypeTags.Keys.ClassKind);
+        if (IsAuxiliaryClassKind(classKindsBefore) != IsAuxiliaryClassKind(classKindsAfter))
+        {
+            result.AddChangedClassification(objectType.Name, new SchemaObjectTypeClassificationChange
+            {
+                Aspect = SchemaObjectTypeClassificationAspect.ClassKind,
+                OldValues = classKindsBefore,
+                NewValues = classKindsAfter
+            });
+        }
+
+        var superiorClassesAfter = TagValues(objectType, ObjectTypeTags.Keys.SuperiorClass);
+        var gainedOrLost = superiorClassesBefore.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        gainedOrLost.SymmetricExceptWith(superiorClassesAfter);
+        var namesAnotherSelectedType = gainedOrLost.Any(className =>
+            selectedObjectTypeNames.Contains(className) &&
+            !string.Equals(className, objectType.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (namesAnotherSelectedType)
+        {
+            result.AddChangedClassification(objectType.Name, new SchemaObjectTypeClassificationChange
+            {
+                Aspect = SchemaObjectTypeClassificationAspect.Inheritance,
+                OldValues = superiorClassesBefore,
+                NewValues = superiorClassesAfter
+            });
+        }
+    }
+
+    private static bool IsAuxiliaryClassKind(List<string> classKinds) =>
+        classKinds.Contains(ObjectTypeTags.Values.ClassKindAuxiliary, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The lines a schema import's Activity carries for the Object Type classification changes it applied: one per
+    /// change, then what that means for the next import. Empty when there were none.
+    /// </summary>
+    private static List<string> DescribeObjectTypeClassificationChanges(SchemaRefreshResult result)
+    {
+        if (!result.HasObjectTypeClassificationChanges)
+            return [];
+
+        var lines = result.ChangedObjectTypeClassifications
+            .SelectMany(entry => entry.Value.Select(change => DescribeObjectTypeClassificationChange(entry.Key, change)))
+            .ToList();
+
+        lines.Add("These classification changes can change which Object Type existing entries resolve to. " +
+                  "By default, each object that would change Object Type is refused at the next import, reported as an Object Type Changed error and kept as it is; " +
+                  "to carry the change out, run a Full Import Run Profile with Allow Object Type Changes enabled.");
+        return lines;
+    }
+
+    private static string DescribeObjectTypeClassificationChange(string objectTypeName, SchemaObjectTypeClassificationChange change)
+    {
+        var aspect = change.Aspect == SchemaObjectTypeClassificationAspect.ClassKind ? "class kind" : "inherited classes";
+        return $"Object Type '{objectTypeName}': {aspect} changed from {DescribeClassificationValues(change.OldValues)} to {DescribeClassificationValues(change.NewValues)}.";
+    }
+
+    private static string DescribeClassificationValues(List<string> values) => values.Count == 0 ? "none" : string.Join(", ", values);
 
     /// <summary>
     /// Strips credential attributes out of an incoming Connected System schema so they can never be added to JIM
@@ -3065,10 +3456,12 @@ public partial class ConnectedSystemServer
 
             // Persisted attributes stay in the incoming schema so the merge matches and preserves them; everything
             // else is dropped before it can be added.
+            // Names ignore case (#2051), so a persisted attribute the Connector now reports in another case is still
+            // persisted, and is preserved for the merge to pair rather than dropped and reported as removed.
             var persistedAttributeNames = connectedSystem.ObjectTypes?
-                .FirstOrDefault(ot => ot.Name == schemaObjectType.Name)?
+                .FirstOrDefault(ot => string.Equals(ot.Name, schemaObjectType.Name, StringComparison.OrdinalIgnoreCase))?
                 .Attributes.Select(a => a.Name)
-                .ToHashSet() ?? [];
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
             foreach (var deniedAttribute in deniedAttributes.Where(a => !persistedAttributeNames.Contains(a.Name)))
                 schemaObjectType.Attributes.Remove(deniedAttribute);
@@ -4803,12 +5196,15 @@ public partial class ConnectedSystemServer
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
             Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
+        var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
+            ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
+            : [];
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
         await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
     }
 
     /// <summary>
@@ -4862,12 +5258,68 @@ public partial class ConnectedSystemServer
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
             Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
+        var deselectionWarnings = attribute.ConnectedSystemObjectType is { } owningType
+            ? await GuardAttributeDeselectionAsync(owningType.ConnectedSystemId, [(attribute, owningType.Id)])
+            : [];
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
         await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
+    }
+
+    /// <summary>
+    /// Validates and applies one attribute's part of a bulk update, returning why it was refused, or null once it is
+    /// applied. Shared by both bulk overloads so the user and API key paths cannot disagree on a rule.
+    /// </summary>
+    private static string? ApplyBulkAttributeUpdate(
+        ConnectedSystemObjectTypeAttribute attribute,
+        (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact) updates)
+    {
+        // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
+        if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+            (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            return $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.";
+
+        // Validate: Cannot unselect an External ID or Secondary External ID attribute
+        if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected.";
+        }
+
+        // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
+        if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
+            return $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact.";
+
+        if (updates.Selected.HasValue)
+            attribute.Selected = updates.Selected.Value;
+
+        if (updates.IsExternalId.HasValue)
+        {
+            attribute.IsExternalId = updates.IsExternalId.Value;
+            // External ID attributes must always be selected for sync operations to work
+            if (updates.IsExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.IsSecondaryExternalId.HasValue)
+        {
+            attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+            // Secondary External ID attributes must always be selected for sync operations to work
+            if (updates.IsSecondaryExternalId.Value)
+                attribute.Selected = true;
+        }
+
+        if (updates.CaseExact.HasValue)
+        {
+            attribute.CaseExact = updates.CaseExact.Value;
+            // The administrator's declaration, which a schema refresh then leaves alone.
+            attribute.CaseExactSetByAdministrator = true;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -4882,7 +5334,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
@@ -4917,44 +5369,19 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;
         }
+
+        var deselectionWarnings = await GuardBulkAttributeDeselectionAsync(connectedSystem.Id, objectType, updated, errors);
+        activity.ObjectsProcessed = updated.Count;
 
         if (updated.Count > 0)
         {
@@ -4965,10 +5392,10 @@ public partial class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
-        if (errors.Count > 0)
+        if (errors.Count > 0 && deselectionWarnings.Count == 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         else
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
 
         return (activity, updated, errors);
     }
@@ -4985,7 +5412,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
             ApiKey initiatedByApiKey)
     {
         if (connectedSystem == null)
@@ -5022,44 +5449,19 @@ public partial class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
-                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            var error = ApplyBulkAttributeUpdate(attribute, updates);
+            if (error != null)
             {
-                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                errors.Add((attributeId, error));
                 continue;
-            }
-
-            // Validate: Cannot unselect an External ID or Secondary External ID attribute
-            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-            {
-                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
-                continue;
-            }
-
-            if (updates.Selected.HasValue)
-                attribute.Selected = updates.Selected.Value;
-
-            if (updates.IsExternalId.HasValue)
-            {
-                attribute.IsExternalId = updates.IsExternalId.Value;
-                // External ID attributes must always be selected for sync operations to work
-                if (updates.IsExternalId.Value)
-                    attribute.Selected = true;
-            }
-
-            if (updates.IsSecondaryExternalId.HasValue)
-            {
-                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
-                // Secondary External ID attributes must always be selected for sync operations to work
-                if (updates.IsSecondaryExternalId.Value)
-                    attribute.Selected = true;
             }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;
         }
+
+        var deselectionWarnings = await GuardBulkAttributeDeselectionAsync(connectedSystem.Id, objectType, updated, errors);
+        activity.ObjectsProcessed = updated.Count;
 
         if (updated.Count > 0)
         {
@@ -5070,10 +5472,10 @@ public partial class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
-        if (errors.Count > 0)
+        if (errors.Count > 0 && deselectionWarnings.Count == 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         else
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteWithDeselectionWarningsAsync(activity, deselectionWarnings);
 
         return (activity, updated, errors);
     }
@@ -5333,7 +5735,8 @@ public partial class ConnectedSystemServer
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
-        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool? hasUnresolvedReferences = null)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeaders")
             .SetTag("connectedSystemId", connectedSystemId)
@@ -5343,10 +5746,11 @@ public partial class ConnectedSystemServer
             .SetTag("sortBy", sortBy ?? "default")
             .SetTag("hasStatusFilter", statusFilter != null)
             .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
-            .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
+            .SetTag("hasJoinTypeFilter", joinTypeFilter != null)
+            .SetTag("hasUnresolvedReferencesFilter", hasUnresolvedReferences != null);
         var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
-            objectTypeFilter, joinTypeFilter);
+            objectTypeFilter, joinTypeFilter, hasUnresolvedReferences);
         ResolveConnectionStates(result.Results);
         return result;
     }
@@ -5368,7 +5772,8 @@ public partial class ConnectedSystemServer
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        bool? hasUnresolvedReferences = null)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
             .SetTag("connectedSystemId", connectedSystemId)
@@ -5376,10 +5781,11 @@ public partial class ConnectedSystemServer
             .SetTag("count", count)
             .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
             .SetTag("sortBy", sortBy ?? "default")
-            .SetTag("includeTotalCount", includeTotalCount);
+            .SetTag("includeTotalCount", includeTotalCount)
+            .SetTag("hasUnresolvedReferencesFilter", hasUnresolvedReferences != null);
         var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
-            objectTypeFilter, joinTypeFilter, includeTotalCount);
+            objectTypeFilter, joinTypeFilter, includeTotalCount, hasUnresolvedReferences);
         ResolveConnectionStates(result.Results);
         return result;
     }
@@ -6126,6 +6532,76 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The deletion records for Connected System Objects deleted quietly: objects their Metaverse Object's deletion had
+    /// already disconnected, which the confirming import then found gone (#2100). They have no execution item, because
+    /// the disconnection was recorded when it happened, so each record stands alone, attributed to the run deleting them.
+    /// Without it, nothing would lead from the object's id to its execution items once its row is gone.
+    /// </summary>
+    /// <param name="connectedSystemObjects">The objects about to be deleted, with their attribute values loaded.</param>
+    /// <param name="activity">The run deleting them.</param>
+    /// <param name="changeTrackingEnabled">Whether Connected System Object changes are recorded at all.</param>
+    public List<ConnectedSystemObjectChange> BuildQuietDeletionChangeRecords(
+        IReadOnlyList<ConnectedSystemObject> connectedSystemObjects, Activity activity, bool changeTrackingEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObjects);
+        ArgumentNullException.ThrowIfNull(activity);
+
+        var changes = new List<ConnectedSystemObjectChange>();
+        if (!changeTrackingEnabled)
+            return changes;
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            try
+            {
+                changes.Add(NewDeletionChangeRecord(cso, activity));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Same boundary as LinkDeleteChangeRecords (#1386): one object's record must not cost the batch its
+                // deletion. With no execution item to carry the error, the log is where it is reported.
+                Log.Error(ex, "BuildQuietDeletionChangeRecords: could not record the deletion of Connected System Object {CsoId}; it is deleted without a deletion record",
+                    cso.Id);
+            }
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// A Connected System Object's deletion record, with every final value recorded as removed. Attribute values are
+    /// read now, because they are deleted with the object.
+    /// </summary>
+    private ConnectedSystemObjectChange NewDeletionChangeRecord(ConnectedSystemObject cso, Activity? activity)
+    {
+        // Name only, never NameOrId: the external id is captured separately alongside it. The guarded read throws a
+        // diagnostic error on a duplicated anchor, which each caller reports in its own way (#1386).
+        var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
+        var finalAttributeValues = cso.AttributeValues
+            .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+            .ToList();
+
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ChangeType = ObjectChangeType.Deleted,
+            ChangeTime = DateTime.UtcNow,
+            DeletedObjectType = cso.Type,
+            DeletedObjectExternalId = externalId,
+            DeletedObjectDisplayName = cso.Name,
+            DeletedConnectedSystemObjectId = cso.Id,
+            InitiatedByType = activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activity?.InitiatedById,
+            InitiatedByName = activity?.InitiatedByName
+        };
+
+        foreach (var av in finalAttributeValues)
+            AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+
+        return change;
+    }
+
+    /// <summary>
     /// Links RPEI change records to CSOs before deletion. Pure business logic — no data access.
     /// Captures final attribute snapshots for audit trail before the CSOs are deleted.
     /// Called by SyncServer before deleting CSOs via ISyncRepository.
@@ -6147,32 +6623,11 @@ public partial class ConnectedSystemServer
 
                 try
                 {
-                    // Name only, never NameOrId: the external id is captured separately alongside it.
-                    // The guarded read throws a diagnostic error on a duplicated anchor, recorded per
-                    // object below rather than escaping the run (#1386).
-                    var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
-                    var finalAttributeValues = cso.AttributeValues
-                        .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-                        .ToList();
-
-                    var change = new ConnectedSystemObjectChange
-                    {
-                        ConnectedSystemId = cso.ConnectedSystemId,
-                        ChangeType = ObjectChangeType.Deleted,
-                        ChangeTime = DateTime.UtcNow,
-                        DeletedObjectType = cso.Type,
-                        DeletedObjectExternalId = externalId,
-                        DeletedObjectDisplayName = cso.Name,
-                        DeletedConnectedSystemObjectId = cso.Id,
-                        ActivityRunProfileExecutionItem = executionItem,
-                        InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-                        InitiatedById = executionItem.Activity?.InitiatedById,
-                        InitiatedByName = executionItem.Activity?.InitiatedByName
-                    };
+                    // A duplicated anchor throws a diagnostic error, recorded per object below rather than
+                    // escaping the run (#1386).
+                    var change = NewDeletionChangeRecord(cso, executionItem.Activity);
+                    change.ActivityRunProfileExecutionItem = executionItem;
                     executionItem.ConnectedSystemObjectChange = change;
-
-                    foreach (var av in finalAttributeValues)
-                        AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -6409,6 +6864,21 @@ public partial class ConnectedSystemServer
     /// <param name="valueChangeType">The type of change, i.e. CREATE/UPDATE/DELETE.</param>
     private static void AddChangeAttributeValueObject(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue, ValueChangeType valueChangeType)
     {
+        // A value holding nothing in any column has nothing to record (#2183). Some other component stored it, so removing
+        // it records no value change and does not error the object; it is checked before the attribute change is created,
+        // so the history is not left with an attribute change that has no values. An addition holding nothing is still
+        // reported as corrupt below: nothing should be adding one.
+        if (valueChangeType == ValueChangeType.Remove && connectedSystemObjectAttributeValue.HeldDataType() == null)
+        {
+            Log.Warning("AddChangeAttributeValueObject: Connected System Object {CsoId} had a value of attribute {AttributeName} " +
+                "({AttributeType}) that held nothing; its removal records no value change. Such a value is stored only by a fault " +
+                "elsewhere.",
+                connectedSystemObjectChange.ConnectedSystemObjectId ?? connectedSystemObjectChange.DeletedConnectedSystemObjectId,
+                LogSanitiser.Sanitise(connectedSystemObjectAttributeValue.Attribute.Name),
+                connectedSystemObjectAttributeValue.Attribute.Type);
+            return;
+        }
+
         var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == connectedSystemObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
@@ -6423,7 +6893,16 @@ public partial class ConnectedSystemServer
             connectedSystemObjectChange.AttributeChanges.Add(attributeChange);
         }
 
-        switch (connectedSystemObjectAttributeValue.Attribute.Type)
+        // A value removed because it was stored while its attribute had another data type (#2128) holds nothing in the
+        // column of the attribute's current type. It is recorded as the value it was, so the history says what went,
+        // rather than reported as corrupt. Only a removal can be one: nothing adds a value under a type it no longer has.
+        var recordedType = valueChangeType == ValueChangeType.Remove &&
+                           !connectedSystemObjectAttributeValue.HoldsValueOfType(connectedSystemObjectAttributeValue.Attribute.Type) &&
+                           connectedSystemObjectAttributeValue.HeldDataType() is { } heldType
+            ? heldType
+            : connectedSystemObjectAttributeValue.Attribute.Type;
+
+        switch (recordedType)
         {
             case AttributeDataType.Text when connectedSystemObjectAttributeValue.StringValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
@@ -6522,6 +7001,56 @@ public partial class ConnectedSystemServer
     public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
     {
         return await Application.Repository.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+    }
+
+    /// <summary>
+    /// Validates and applies an administrator's override of a Connected System attribute's data type, the one rule set
+    /// the portal's Schema tab and the REST API (and so PowerShell) share. The attribute is changed in memory only; the
+    /// caller persists it through its own audited save.
+    /// </summary>
+    /// <remarks>
+    /// The data type may only be overridden where the Connector says its schema cannot state one definitively, and
+    /// only while nothing has been built on the type JIM inferred. A delimited file names no types at all; Oracle has
+    /// a single numeric type, so NUMBER(10) may be a whole number, a counter or a fractional figure and only the
+    /// administrator knows which (#1354). By the Boolean rule (#2153) a Boolean holds one value, so an override to
+    /// Boolean also makes the attribute single-valued.
+    /// </remarks>
+    public async Task<AttributeTypeOverrideResult> OverrideAttributeTypeAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectTypeAttribute attribute,
+        AttributeDataType newType)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        if (newType == AttributeDataType.NotSet)
+            return AttributeTypeOverrideResult.Refused(
+                "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds.");
+
+        // An absent Connector Definition is treated as not supporting the override: refusing a change JIM cannot
+        // justify is always safer than applying one it cannot check.
+        if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
+            return AttributeTypeOverrideResult.Refused(
+                $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
+                "Connected System's own schema, so it cannot be overridden.");
+
+        if (newType != attribute.Type && await IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            return AttributeTypeOverrideResult.Refused(
+                $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
+                "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again.");
+
+        attribute.Type = newType;
+
+        // Recorded, not inferred from the value being different: a schema refresh must leave this type alone even
+        // where the administrator happened to choose what discovery would have picked anyway, because the
+        // Connector's inference can change between releases.
+        attribute.TypeSetByAdministrator = true;
+
+        var plurality = AttributeDataTypeCapabilities.Constrain(newType, attribute.AttributePlurality);
+        var madeSingleValued = plurality != attribute.AttributePlurality;
+        attribute.AttributePlurality = plurality;
+
+        return AttributeTypeOverrideResult.Applied(madeSingleValued);
     }
     #endregion
 
@@ -7018,11 +7547,15 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -7069,11 +7602,15 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -7119,17 +7656,23 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
         // can flush the change.
         await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
         // The stored generation settings (#242, release 4), read before the Activity's save can flush the new ones.
         var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
+        // Likewise the stored Keep unique switch (#2023).
+        var previousKeepUnique = await ReadStoredKeepUniqueAsync([mapping]);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7151,6 +7694,7 @@ public partial class ConnectedSystemServer
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync([mapping], previousKeepUnique);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -7164,9 +7708,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedBy">The user who initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null, configurationTestGate);
     }
 
     /// <summary>
@@ -7177,9 +7722,10 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedByApiKey">The API key that initiated the change.</param>
     /// <returns>The updated mapping, or null when no mapping has that id.</returns>
     /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
-    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey)
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey);
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey, configurationTestGate);
     }
 
     /// <summary>
@@ -7191,7 +7737,8 @@ public partial class ConnectedSystemServer
     /// would save nothing while reporting success.
     /// </remarks>
     private async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsCoreAsync(
-        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey,
+        ConfigurationTestGateOptions? configurationTestGate)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -7205,6 +7752,7 @@ public partial class ConnectedSystemServer
         // The stored generation settings (#242, release 4), read before anything can flush the new ones: a changed
         // configuration releases the Needs Decision the flow's assignments wait on.
         var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
+        var keepUniqueBefore = mapping.KeepUnique;
 
         // Validation before the Activity, so a rejected update leaves no trace of an Update that never happened.
         ApplySyncRuleMappingSettings(mapping, settings);
@@ -7212,11 +7760,15 @@ public partial class ConnectedSystemServer
         ValidateMappingWritability(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
+        // check, which clears the mapping's save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
         // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
         // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
         // created: its save would flush this tracked mapping's changes, and "before" must be the stored configuration.
@@ -7224,6 +7776,13 @@ public partial class ConnectedSystemServer
         mapping.SaveDependentDerivedFlows.Clear();
         if (settings.Enabled == false || settings.Expression != null)
             await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
+
+        // The save gate (#2055 Phase 4b): the rule as stored, against the rule with this mapping as the update leaves
+        // it. Before the Activity below, whose save would flush this tracked mapping.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRulePartSaveAsync(
+            mapping.SyncRule?.Id ?? mapping.SyncRuleId,
+            proposed => ReplaceById(proposed.AttributeFlowRules, mapping, m => m.Id),
+            configurationTestGate);
 
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
@@ -7234,7 +7793,8 @@ public partial class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (initiatedByApiKey != null)
@@ -7256,7 +7816,10 @@ public partial class ConnectedSystemServer
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
+        if (mapping.KeepUnique != keepUniqueBefore)
+            await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, initiatedByApiKey);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -7290,6 +7853,9 @@ public partial class ConnectedSystemServer
         if (isImport && settings.InitialExportOnly.HasValue)
             throw new ArgumentException("Initial Export Only applies to export mappings only.");
 
+        if (settings.KeepUnique.HasValue && !CanKeepUnique(mapping))
+            throw new ArgumentException(KeepUniqueNotApplicableMessage);
+
         if (settings.Expression != null)
             expressionSources[0].Expression = settings.Expression;
 
@@ -7308,6 +7874,9 @@ public partial class ConnectedSystemServer
 
         if (settings.InitialExportOnly.HasValue)
             mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+
+        if (settings.KeepUnique.HasValue)
+            mapping.KeepUnique = settings.KeepUnique.Value;
 
         // Enabled applies to both directions (#1485), which is why it is absent from the direction guards
         // above. Re-enabling clears the recorded reason: it describes why the mapping is off, and re-enabled
@@ -8291,39 +8860,100 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates that every scoping criterion uses a comparison operator applicable to its attribute's data type,
-    /// using the shared <see cref="SearchComparisonOperators"/> rule. Throws <see cref="ArgumentException"/> on the
-    /// first invalid combination found, so a Synchronisation Rule with, for example, "Starts With" on a DateTime
-    /// attribute can never be persisted (the evaluator could never satisfy it, silently dropping objects from scope).
-    /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
-    /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
+    /// Checks every scoping criterion on the save path that the portal, the REST API and PowerShell share: the shared
+    /// <see cref="CriterionValidation"/> rule (#2053: an operator applicable to the attribute's type in scoping, the value
+    /// it compares against, a pattern JIM can run, and a relative date only on a date), and, for an expression criterion,
+    /// whether it could ever be evaluated for objects of the rule's scoped type (#2054,
+    /// <see cref="ScopingCriterionExpressionValidator"/>).
+    /// <para>
+    /// A problem with a new or changed criterion refuses the save (<see cref="ArgumentException"/>), since the evaluator
+    /// could never satisfy it and would silently drop objects from scope. A problem with a criterion the save leaves as it
+    /// was is only reported (<see cref="SyncRuleScopingCriteria.SaveWarnings"/>), as for Attribute Flow expressions
+    /// (#2055 Phase 3): a criterion can stop being valid after it was saved (an attribute's type changes, an attribute an
+    /// expression reads is renamed), and refusing it then would stop the rule being saved at all, disabling it included.
+    /// </para>
+    /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are still
+    /// populated, and before anything flushes, so the stored criteria read are what is stored and not the edit.
     /// </summary>
-    private static void ValidateScopingCriteriaOperators(SyncRule syncRule)
+    private async Task ValidateScopingCriteriaAsync(SyncRule syncRule)
     {
-        foreach (var group in syncRule.ObjectScopingCriteriaGroups)
-            ValidateScopingGroupOperators(group);
-    }
+        var criteria = AllScopingCriteria(syncRule.ObjectScopingCriteriaGroups).ToList();
+        if (criteria.Count == 0)
+            return;
 
-    private static void ValidateScopingGroupOperators(SyncRuleScopingCriteriaGroup group)
-    {
-        foreach (var criterion in group.Criteria)
+        var storedIds = criteria.Where(c => c.Id > 0).Select(c => c.Id).ToList();
+        var stored = storedIds.Count > 0
+            ? await Application.Repository.ConnectedSystems.GetSyncRuleScopingCriterionStatesAsync(storedIds) ?? []
+            : [];
+
+        (IReadOnlyCollection<string> AttributeNames, string ObjectTypeName)? scopedSchema = null;
+        foreach (var criterion in criteria)
         {
-            var attributeType = criterion.GetAttributeDataType();
-            if (attributeType == null)
+            criterion.SaveWarnings.Clear();
+            var problems = new List<(string Subject, string Reason)>();
+
+            if (criterion.GetAttributeDataType() is { } attributeType)
+            {
+                // A criterion whose operator takes no value is stored without one, whatever the caller sent.
+                CriterionValidation.ClearValues(criterion);
+                var attributeName = criterion.GetAttributeName() ?? "an attribute";
+                if (CriterionValidation.Validate(criterion, attributeType, CriterionContext.Scoping, attributeName) is { } reason)
+                    problems.Add((attributeName, reason));
+            }
+
+            if (criterion.IsExpression)
+            {
+                scopedSchema ??= await LoadScopedSchemaAsync(syncRule);
+                var (attributeNames, objectTypeName) = scopedSchema.Value;
+                if (_scopingCriterionExpressionValidator.DescribeProblem(criterion, syncRule.Direction, attributeNames, objectTypeName) is { } reason)
+                    problems.Add((criterion.Expression!, reason));
+            }
+
+            if (problems.Count == 0)
                 continue;
 
-            if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, attributeType.Value))
+            var unchanged = criterion.Id > 0 && stored.TryGetValue(criterion.Id, out var state) && state.IsUnchangedIn(criterion);
+            if (!unchanged)
             {
-                var message = $"Comparison operator '{criterion.ComparisonType}' is not valid for the {attributeType.Value} " +
-                              $"attribute '{criterion.GetAttributeName()}' on scoping criteria.";
-                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", message);
+                var message = $"Scoping criterion on '{problems[0].Subject}' cannot be saved: {problems[0].Reason}";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
                 throw new ArgumentException(message);
             }
+
+            foreach (var (subject, reason) in problems)
+            {
+                var warning = $"Scoping criterion on '{subject}' is not valid, and was left as it was: {reason}";
+                criterion.SaveWarnings.Add(warning);
+                Log.Warning("CreateOrUpdateSyncRuleAsync: Synchronisation Rule {SyncRuleId} saved with an unchanged invalid scoping criterion; {Warning}",
+                    syncRule.Id, LogSanitiser.Sanitise(warning));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The names of the rule's scoped object type's attributes and the type's name, for checking what an expression
+    /// criterion reads. The type is loaded with its attributes when the rule carries it without them.
+    /// </summary>
+    private async Task<(IReadOnlyCollection<string> AttributeNames, string ObjectTypeName)> LoadScopedSchemaAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction == SyncRuleDirection.Export)
+        {
+            var type = syncRule.MetaverseObjectType is { Attributes.Count: > 0 } loaded
+                ? loaded
+                : await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(syncRule.MetaverseObjectTypeId, includeChildObjects: true);
+            return (type?.Attributes.Select(a => a.Name).ToList() ?? [],
+                type?.Name ?? syncRule.MetaverseObjectType?.Name ?? "the Metaverse Object Type");
         }
 
-        foreach (var child in group.ChildGroups)
-            ValidateScopingGroupOperators(child);
+        var objectType = syncRule.ConnectedSystemObjectType is { Attributes.Count: > 0 } loadedType
+            ? loadedType
+            : await Application.Repository.ConnectedSystems.GetObjectTypeAsync(syncRule.ConnectedSystemObjectTypeId);
+        return (objectType?.Attributes.Select(a => a.Name).ToList() ?? [],
+            objectType?.Name ?? syncRule.ConnectedSystemObjectType?.Name ?? "the Connected System Object Type");
     }
+
+    private static IEnumerable<SyncRuleScopingCriteria> AllScopingCriteria(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+        groups.SelectMany(group => group.Criteria.Concat(AllScopingCriteria(group.ChildGroups)));
 
     /// <summary>
     /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
@@ -8822,6 +9452,18 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Synchronisation Rules
+    /// <summary>
+    /// Builds the index of what reads each attribute (#2265): Scoping Criteria, and the Expressions of Attribute
+    /// Flows, Object Matching Rules and Example Data Templates. Read fresh per call, so a refusal decides on the
+    /// configuration as it stands now.
+    /// </summary>
+    public async Task<AttributeReaderIndex> GetAttributeReaderIndexAsync()
+    {
+        var candidates = await Application.Repository.ConnectedSystems.GetAttributeReaderCandidatesAsync();
+        candidates.AddRange(await Application.Repository.ExampleData.GetAttributeReaderCandidatesAsync());
+        return new AttributeReaderIndex(candidates);
+    }
+
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
@@ -8864,7 +9506,7 @@ public partial class ConnectedSystemServer
     /// (#1537): the named mappings are deleted properly (rows and sources removed), and kept ones have their
     /// contributed values' provenance severed before the row deletion. Only valid when updating an existing rule.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -8882,10 +9524,11 @@ public partial class ConnectedSystemServer
         // each is refused rather than ignored.
         ValidateMappingRemovalChoices(syncRule, mappingRemovalChoices);
 
-        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
-        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
-        // can never satisfy, which would silently drop objects out of scope.
-        ValidateScopingCriteriaOperators(syncRule);
+        // reject any new or changed scoping criterion the evaluator could never satisfy (an operator invalid for its
+        // type, such as "Starts With" on a DateTime, or an expression that could never be evaluated, #2054), which would
+        // silently drop objects out of scope; one the save leaves as it was is only warned about, so the rule can always
+        // be saved, disabled or tidied.
+        await ValidateScopingCriteriaAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
@@ -8894,11 +9537,15 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        ValidateKeepUnique(syncRule);
         // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // Every mapping's expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about, so the
+        // rule can always be disabled or a mapping removed. After the derived flow check, which clears save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.
@@ -8907,6 +9554,8 @@ public partial class ConnectedSystemServer
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
+        // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
+        await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
@@ -8952,6 +9601,16 @@ public partial class ConnectedSystemServer
             await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
+        // Advanced mode keeps the rule's own Object Matching Rules, and the portal stores them only through this save,
+        // so they are refused here exactly as the Object Matching Rule endpoints refuse them (#2052). After the
+        // branches above, which clear the rules a simple mode system would never consult.
+        await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
+
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
         // initial password. Switching the setting off with the provisioning it depended on keeps the stored
         // configuration honest, rather than leaving one that reads as on and can never run.
@@ -8977,6 +9636,7 @@ public partial class ConnectedSystemServer
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
         var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
+        IReadOnlyDictionary<int, bool> previousKeepUnique = new Dictionary<int, bool>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -8989,7 +9649,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9018,6 +9679,7 @@ public partial class ConnectedSystemServer
             // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
             // assignments; read for the same reason, before anything below can flush the new settings.
             previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
+            previousKeepUnique = await ReadStoredKeepUniqueAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9042,12 +9704,16 @@ public partial class ConnectedSystemServer
 
         // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
         await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(syncRule.AttributeFlowRules, previousKeepUnique);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
+        // this change's Configuration History version.
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -9105,7 +9771,7 @@ public partial class ConnectedSystemServer
     /// The staged Attribute Flow mapping removals this save performs, each with its recall-or-keep choice
     /// (#1537); see the user-initiated overload above.
     /// </param>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices = null, ConfigurationTestGateOptions? configurationTestGate = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -9122,10 +9788,11 @@ public partial class ConnectedSystemServer
         // each is refused rather than ignored.
         ValidateMappingRemovalChoices(syncRule, mappingRemovalChoices);
 
-        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
-        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
-        // can never satisfy, which would silently drop objects out of scope.
-        ValidateScopingCriteriaOperators(syncRule);
+        // reject any new or changed scoping criterion the evaluator could never satisfy (an operator invalid for its
+        // type, such as "Starts With" on a DateTime, or an expression that could never be evaluated, #2054), which would
+        // silently drop objects out of scope; one the save leaves as it was is only warned about, so the rule can always
+        // be saved, disabled or tidied.
+        await ValidateScopingCriteriaAsync(syncRule);
 
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
@@ -9134,11 +9801,15 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        ValidateKeepUnique(syncRule);
         // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // Every mapping's expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about, so the
+        // rule can always be disabled or a mapping removed. After the derived flow check, which clears save warnings.
+        await EnsureAttributeFlowExpressionsAreValidAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.
@@ -9147,6 +9818,8 @@ public partial class ConnectedSystemServer
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
+        // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
+        await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
@@ -9184,10 +9857,21 @@ public partial class ConnectedSystemServer
             await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
+        // Advanced mode keeps the rule's own Object Matching Rules, and the portal stores them only through this save,
+        // so they are refused here exactly as the Object Matching Rule endpoints refuse them (#2052). After the
+        // branches above, which clear the rules a simple mode system would never consult.
+        await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
+
+        // The save gate (#2055 Phase 4b): refuse a save that stops a configuration test case passing, unless its new
+        // result is accepted or the save is made anyway. Last of the checks and before anything below flushes, so the
+        // rule as stored is still the "before"; a case that was already failing never stops it.
+        var configurationTestGateOutcome = await Application.ConfigurationTests.GateSyncRuleSaveAsync(syncRule, configurationTestGate);
+
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
         var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
+        IReadOnlyDictionary<int, bool> previousKeepUnique = new Dictionary<int, bool>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -9199,7 +9883,8 @@ public partial class ConnectedSystemServer
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id,
-            PreviewActivityId = previewActivityId
+            PreviewActivityId = previewActivityId,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
 
         if (syncRule.Id == 0)
@@ -9225,6 +9910,7 @@ public partial class ConnectedSystemServer
             // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
             // assignments; read for the same reason, before anything below can flush the new settings.
             previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
+            previousKeepUnique = await ReadStoredKeepUniqueAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9249,12 +9935,14 @@ public partial class ConnectedSystemServer
 
         // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
         await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(syncRule.AttributeFlowRules, previousKeepUnique);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
         // so the snapshot records the priorities as they end up (#1199).
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
@@ -9744,13 +10432,100 @@ public partial class ConnectedSystemServer
         await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
     }
 
-    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything: one of the wrong shape (#1458), or one whose
+    /// source and Metaverse attribute cannot be compared, or whose expression could never be worked out (#2052).
+    /// </summary>
+    /// <exception cref="InvalidDataException">The rule is unworkable, with the reason.</exception>
+    private async Task EnsureObjectMatchingRuleIsWorkableAsync(ObjectMatchingRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
         var invalidity = rule.DescribeInvalidity();
         if (invalidity != null)
             throw new InvalidDataException(invalidity);
+
+        var objectType = await ResolveObjectMatchingRuleObjectTypeAsync(rule);
+        var problem = await DescribeObjectMatchingRuleComparisonProblemAsync(rule, objectType);
+        if (problem != null)
+            throw new InvalidDataException(problem);
+    }
+
+    /// <summary>
+    /// Refuses a Synchronisation Rule whose own Object Matching Rules include one that could never match anything,
+    /// naming the rule by the position the portal shows it in.
+    /// </summary>
+    /// <exception cref="ArgumentException">One of the rules is unworkable, with which one and why.</exception>
+    private async Task EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(SyncRule syncRule)
+    {
+        if (syncRule.ObjectMatchingRules.Count == 0)
+            return;
+
+        var objectType = await GetObjectTypeWithAttributesAsync(syncRule.ConnectedSystemObjectType, syncRule.ConnectedSystemObjectTypeId);
+        foreach (var rule in syncRule.ObjectMatchingRules.OrderBy(r => r.Order))
+        {
+            // The rule's owner is this Synchronisation Rule, which a rule being added in the portal does not point
+            // back to yet, so only what it compares is checked.
+            var problem = rule.DescribeComparisonInvalidity() ?? await DescribeObjectMatchingRuleComparisonProblemAsync(rule, objectType);
+            if (problem != null)
+                throw new ArgumentException($"Object Matching Rule {rule.Order + 1}: {problem}");
+        }
+    }
+
+    /// <summary>
+    /// Why what <paramref name="rule"/> compares could never be worked out for objects of
+    /// <paramref name="objectType"/>, or null when it can. Reads the Metaverse attribute from the store when the
+    /// caller supplied only its id.
+    /// </summary>
+    private async Task<string?> DescribeObjectMatchingRuleComparisonProblemAsync(ObjectMatchingRule rule, ConnectedSystemObjectType? objectType)
+    {
+        if (objectType == null)
+            return "The Connected System Object Type this Object Matching Rule reads could not be found, so what it compares cannot be checked.";
+
+        var target = rule.TargetMetaverseAttribute;
+        if (target == null && rule.TargetMetaverseAttributeId is { } targetId)
+        {
+            target = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(targetId);
+            if (target == null)
+                return $"The Metaverse Attribute with id {targetId} does not exist.";
+        }
+
+        // DescribeComparisonInvalidity has already refused a rule naming no Metaverse attribute at all.
+        return target == null ? null : _objectMatchingRuleValidator.DescribeProblem(rule, objectType, target);
+    }
+
+    /// <summary>
+    /// The Connected System Object Type an Object Matching Rule reads, with its attributes: the type it belongs to in
+    /// simple mode, or its Synchronisation Rule's type in advanced mode.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType?> ResolveObjectMatchingRuleObjectTypeAsync(ObjectMatchingRule rule)
+    {
+        if (rule.ConnectedSystemObjectType != null || rule.ConnectedSystemObjectTypeId.HasValue)
+            return await GetObjectTypeWithAttributesAsync(rule.ConnectedSystemObjectType, rule.ConnectedSystemObjectTypeId);
+
+        var syncRule = rule.SyncRule;
+        if (syncRule == null && rule.SyncRuleId is { } syncRuleId)
+            syncRule = await GetSyncRuleAsync(syncRuleId);
+
+        return syncRule == null
+            ? null
+            : await GetObjectTypeWithAttributesAsync(syncRule.ConnectedSystemObjectType, syncRule.ConnectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// <paramref name="loaded"/> when it carries its attributes, otherwise the persisted type. Loaders differ on
+    /// whether they include an Object Type's attributes (<c>GetObjectMatchingRuleAsync</c> does not), and a type
+    /// whose attributes were never fetched must not read as one that has none.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType?> GetObjectTypeWithAttributesAsync(ConnectedSystemObjectType? loaded, int? id)
+    {
+        if (loaded is { Attributes.Count: > 0 })
+            return loaded;
+
+        var objectTypeId = id is int knownId && knownId > 0 ? knownId : loaded?.Id ?? 0;
+        return objectTypeId > 0
+            ? await Application.Repository.ConnectedSystems.GetObjectTypeAsync(objectTypeId)
+            : null;
     }
 
     /// <summary>
@@ -9822,7 +10597,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
         await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
@@ -9844,7 +10619,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
         await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
@@ -9864,20 +10639,23 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule.
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy, ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -9885,22 +10663,43 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Object Matching Rule (initiated by API key).
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey, ConfigurationTestGateOptions? configurationTestGate = null)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
+        var configurationTestGateOutcome = await GateObjectMatchingRuleSaveAsync(rule, configurationTestGate);
 
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConfigurationTestGateNote = configurationTestGateOutcome.Note
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The save gate (#2055 Phase 4b) for an Object Matching Rule update: in Synchronisation Rule mode, the rule as
+    /// stored against the rule holding this one as the update leaves it; in Simple mode, this rule alone.
+    /// </summary>
+    private Task<ConfigurationTestGateOutcome> GateObjectMatchingRuleSaveAsync(ObjectMatchingRule rule, ConfigurationTestGateOptions? configurationTestGate) =>
+        rule.SyncRuleId is { } syncRuleId
+            ? Application.ConfigurationTests.GateSyncRulePartSaveAsync(syncRuleId,
+                proposed => ReplaceById(proposed.ObjectMatchingRules, rule, r => r.Id), configurationTestGate)
+            : Application.ConfigurationTests.GateSimpleModeMatchingRuleSaveAsync(rule, configurationTestGate);
+
+    /// <summary>Puts <paramref name="replacement"/> in place of the item in <paramref name="items"/> with its id.</summary>
+    private static void ReplaceById<T>(List<T> items, T replacement, Func<T, int> id)
+    {
+        var index = items.FindIndex(item => id(item) == id(replacement));
+        if (index >= 0)
+            items[index] = replacement;
     }
 
     /// <summary>

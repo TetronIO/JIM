@@ -875,6 +875,27 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Service Setting keys an earlier release seeded and this one does not, removed from an existing installation
+    /// the next time it starts (see <see cref="SyncServiceSettingsAsync"/>). Literal strings, because the constants
+    /// that named them are gone; a key belongs here for as long as an installation might still hold its row.
+    /// <list type="bullet">
+    /// <item><c>Maintenance.IsEnabled</c>, <c>Security.CredentialEncryptionEnabled</c> and
+    /// <c>Sync.VerboseNoChangeRecording</c> were editable, and nothing read them (#2101). The startup gate is the
+    /// settings singleton's <c>IsServiceInMaintenanceMode</c>, which this does not touch; an administrator's pause on
+    /// background work is #1619.</item>
+    /// <item><c>SSO.UniqueIdentifierClaimType</c> always showed <c>sub</c>, while JIM matches users on the claim
+    /// <c>JIM_SSO_CLAIM_TYPE</c> names, which <c>SSO.ClaimType</c> shows (#2101).</item>
+    /// </list>
+    /// </summary>
+    internal static readonly string[] RetiredServiceSettingKeys =
+    [
+        "Maintenance.IsEnabled",
+        "Security.CredentialEncryptionEnabled",
+        "Sync.VerboseNoChangeRecording",
+        "SSO.UniqueIdentifierClaimType",
+    ];
+
+    /// <summary>
     /// The connectors JIM ships with, named once because seeding and the startup reconciliation must
     /// agree. A connector in one list and not the other would either never appear to administrators or
     /// never pick up settings added in a later release, and both failures are silent.
@@ -1214,17 +1235,6 @@ internal class SeedingServer
             IsReadOnly = true
         });
 
-        await SeedSettingAsync(new ServiceSetting
-        {
-            Key = Constants.SettingKeys.SsoUniqueIdentifierClaimType,
-            DisplayName = "SSO unique identifier claim type",
-            Description = "The claim type containing the unique identifier for SSO users (e.g., 'sub' or 'oid').",
-            Category = ServiceSettingCategory.SSO,
-            ValueType = ServiceSettingValueType.String,
-            DefaultValue = "sub",
-            IsReadOnly = true
-        });
-
         // SSO Settings (configurable)
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1356,26 +1366,16 @@ internal class SeedingServer
         });
 
         // Maintenance Settings
+        // Read by the Scheduler's stale task recovery (ServiceSettingsServer.GetStaleTaskTimeoutAsync), which fell back
+        // to five minutes on every installation while this was unseeded, invisible and impossible to change (#2060).
         await SeedSettingAsync(new ServiceSetting
         {
-            Key = Constants.SettingKeys.MaintenanceMode,
-            DisplayName = "Maintenance mode",
-            Description = "When enabled, JIM enters maintenance mode. Background jobs and synchronisation tasks are paused.",
+            Key = Constants.SettingKeys.StaleTaskTimeout,
+            DisplayName = "Stale task timeout",
+            Description = "How long a running Worker task may go without a heartbeat before JIM treats its Worker as crashed: the Scheduler then fails the task's Activity and removes the task, so the work can be run again. Format: d.hh:mm:ss.",
             Category = ServiceSettingCategory.Maintenance,
-            ValueType = ServiceSettingValueType.Boolean,
-            DefaultValue = "false",
-            IsReadOnly = false
-        });
-
-        // Synchronisation Settings - Verbose no-change recording
-        await SeedSettingAsync(new ServiceSetting
-        {
-            Key = Constants.SettingKeys.VerboseNoChangeRecording,
-            DisplayName = "Verbose no-change recording",
-            Description = "When enabled, creates detailed Activity execution items for exports where CSO already has current values. Default: disabled for performance.",
-            Category = ServiceSettingCategory.Synchronisation,
-            ValueType = ServiceSettingValueType.Boolean,
-            DefaultValue = "false",
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "00:05:00",
             IsReadOnly = false
         });
 
@@ -1428,17 +1428,6 @@ internal class SeedingServer
         });
 
         // Security Settings
-        await SeedSettingAsync(new ServiceSetting
-        {
-            Key = Constants.SettingKeys.CredentialEncryptionEnabled,
-            DisplayName = "Credential encryption",
-            Description = "When enabled, connector passwords are encrypted at rest using ASP.NET Core Data Protection with AES-256-GCM.",
-            Category = ServiceSettingCategory.Security,
-            ValueType = ServiceSettingValueType.Boolean,
-            DefaultValue = "true",
-            IsReadOnly = false
-        });
-
         await SeedSettingAsync(new ServiceSetting
         {
             Key = Constants.SettingKeys.EncryptionKeyPath,
@@ -1495,7 +1484,7 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.ProgressUpdateInterval,
             DisplayName = "Progress update interval",
-            Description = "The interval at which progress updates are reported and polled for in the UI. Affects both the Operations page polling frequency and background task progress reporting. Default: 1 second.",
+            Description = "How often JIM reports progress while it generates Example Data from a template. Format: d.hh:mm:ss.",
             Category = ServiceSettingCategory.UI,
             ValueType = ServiceSettingValueType.TimeSpan,
             DefaultValue = "00:00:01",
@@ -1551,6 +1540,14 @@ internal class SeedingServer
         {
             await Application.ServiceSettings.DeleteSettingAsync(staleFlag.Key);
             Log.Information("SyncServiceSettingsAsync: Removed feature flag setting '{Key}', which is no longer in FeatureFlagCatalogue.", staleFlag.Key);
+        }
+
+        // Remove settings an earlier release seeded that are no longer settings, so an upgraded installation stops
+        // showing them. Their change history stays on their Activities.
+        foreach (var retiredKey in RetiredServiceSettingKeys.Where(existingSettingKeys.Contains))
+        {
+            await Application.ServiceSettings.DeleteSettingAsync(retiredKey);
+            Log.Information("SyncServiceSettingsAsync: Removed retired service setting '{Key}'.", retiredKey);
         }
 
         // Record a System-attributed Create Activity and version-1 baseline for each built-in Service Setting created
@@ -2249,7 +2246,7 @@ internal class SeedingServer
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                 AttributeDependency = new ExampleDataTemplateAttributeDependency { 
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
-                    ComparisonType = ComparisonType.Equals,
+                    ComparisonType = SearchComparisonType.Equals,
                     StringValue = "Distribution"
                 },
                 PopulatedValuesPercentage = 100,

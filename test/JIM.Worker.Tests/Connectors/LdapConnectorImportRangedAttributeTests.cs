@@ -26,6 +26,29 @@ public class LdapConnectorImportRangedAttributeTests
     [Test]
     public void ConvertEntries_GroupAnsweredInRanges_ImportsEveryMemberUnderThePlainAttributeName()
     {
+        var imported = ConvertGroup(("member;range=0-1", ["CN=a", "CN=b"]));
+
+        Assert.That(imported.ErrorType, Is.Null, imported.ErrorMessage);
+        var member = imported.Attributes.SingleOrDefault(attribute => attribute.Name == "member");
+        Assert.That(member, Is.Not.Null, "The ranged attribute must be imported under its plain name.");
+        Assert.That(member!.ReferenceValues, Is.EqualTo(new[] { "CN=a", "CN=b", "CN=c", "CN=d" }));
+    }
+
+    [Test]
+    public void ConvertEntries_GroupAnsweredInRangesBesideAnEmptyPlainMember_ImportsOneMemberAttributeWithEveryValue()
+    {
+        // A directory may answer a group over MaxValRange with an empty plain member beside member;range=0-1499
+        // (#2041); the empty one must neither stand in for the ranged one nor be imported as a second member.
+        var imported = ConvertGroup(("member", []), ("member;range=0-1", ["CN=a", "CN=b"]));
+
+        Assert.That(imported.ErrorType, Is.Null, imported.ErrorMessage);
+        var members = imported.Attributes.Where(attribute => attribute.Name == "member").ToList();
+        Assert.That(members, Has.Count.EqualTo(1), "One directory attribute must import as one attribute.");
+        Assert.That(members[0].ReferenceValues, Is.EqualTo(new[] { "CN=a", "CN=b", "CN=c", "CN=d" }));
+    }
+
+    private static ConnectedSystemImportObject ConvertGroup(params (string Name, string[] Values)[] memberAttributes)
+    {
         var groupType = new ConnectedSystemObjectType { Id = 1, Name = "group", Selected = true };
         groupType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "objectClass", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, Selected = true, ConnectedSystemObjectType = groupType });
         groupType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "cn", Type = AttributeDataType.Text, Selected = true, ConnectedSystemObjectType = groupType });
@@ -49,16 +72,9 @@ public class LdapConnectorImportRangedAttributeTests
             });
         import.Executor = executor.Object;
 
-        var entries = LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn,
-            ("objectClass", ["top", "group"]),
-            ("cn", ["Everyone"]),
-            ("member;range=0-1", ["CN=a", "CN=b"]))).Entries;
+        (string Name, string[] Values)[] attributes = [("objectClass", ["top", "group"]), ("cn", ["Everyone"]), .. memberAttributes];
+        var entries = LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn, attributes)).Entries;
 
-        var imported = ((ILdapDeltaImportHost)import).ConvertEntries(entries, ObjectChangeType.NotSet, groupType).Single();
-
-        Assert.That(imported.ErrorType, Is.Null, imported.ErrorMessage);
-        var member = imported.Attributes.SingleOrDefault(attribute => attribute.Name == "member");
-        Assert.That(member, Is.Not.Null, "The ranged attribute must be imported under its plain name.");
-        Assert.That(member!.ReferenceValues, Is.EqualTo(new[] { "CN=a", "CN=b", "CN=c", "CN=d" }));
+        return ((ILdapDeltaImportHost)import).ConvertEntries(entries, ObjectChangeType.NotSet, groupType).Single();
     }
 }

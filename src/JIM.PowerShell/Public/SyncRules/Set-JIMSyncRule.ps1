@@ -4,67 +4,58 @@
 function Set-JIMSyncRule {
     <#
     .SYNOPSIS
-        Updates an existing Synchronisation Rule in JIM.
+        Changes a Synchronisation Rule.
 
     .DESCRIPTION
-        Updates the properties of an existing Synchronisation Rule.
-        Only the parameters provided will be updated.
+        Changes a Synchronisation Rule. What you leave out stays as it is.
 
-        Disabling a rule that holds the last enabled contributor of a Metaverse attribute that an Attribute Flow
-        deriving another Metaverse attribute reads still goes ahead; the cmdlet writes a warning naming each such
-        flow (a summary line, then one line per flow). Non-blocking warnings the save raised about the rule's
-        Attribute Flows are written with Write-Warning too. Both apply only while the Metaverse-Derived Attribute
-        Flows feature is enabled.
-
-        When the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
-        Disconnected (enabling it, or switching projection on), from a Connected System that is not one of the type's
-        authoritative sources, the update still goes ahead and the cmdlet writes a warning: objects only that system
-        holds will never be deleted, and objects it shares with an authoritative source are deleted when that source
-        disconnects.
+        Some changes go ahead with a warning rather than being refused. Disabling a rule that holds the last enabled
+        contributor of a Metaverse attribute that a Metaverse-Derived Attribute Flow reads writes a warning naming
+        each such flow. Taking the rule into projecting into a Metaverse Object Type deleted When Authoritative
+        Source Disconnected, from a Connected System that is not one of its authoritative sources, writes a warning
+        that objects only this system holds will never be deleted. Any other warning the save raises about the
+        rule's Attribute Flows is written too.
 
     .PARAMETER Id
-        The unique identifier of the Synchronisation Rule to update.
+        The ID of the Synchronisation Rule to change.
 
     .PARAMETER InputObject
-        Synchronisation Rule object to update (from pipeline).
+        A Synchronisation Rule from Get-JIMSyncRule, through the pipeline.
 
     .PARAMETER Name
-        The new name for the Synchronisation Rule.
+        The new name of the Synchronisation Rule.
 
     .PARAMETER Description
-        An optional description of what the Synchronisation Rule does.
-        Pass $null (or an empty string) to clear an existing description.
+        What the Synchronisation Rule is for, for administrators. $null or an empty string clears it.
 
     .PARAMETER Enable
-        Enables the Synchronisation Rule.
+        Enables the rule, so it takes part in synchronisation.
 
     .PARAMETER Disable
-        Disables the Synchronisation Rule.
+        Disables the rule, so synchronisation skips it.
 
     .PARAMETER ProjectToMetaverse
-        For Import rules, sets whether objects will be projected to the Metaverse.
+        On an import rule, whether it creates a Metaverse Object for each Connected System Object in scope that
+        matches none.
 
     .PARAMETER ProvisionToConnectedSystem
-        For Export rules, sets whether objects will be provisioned to the Connected System.
+        On an export rule, whether it creates a Connected System Object for each Metaverse Object in scope that has
+        none.
 
     .PARAMETER InboundOutOfScopeAction
-        For Import rules: action to take when a CSO falls out of this rule's scope.
-        Valid values:
-          - Disconnect: break the CSO -> MVO join. Whether attributes contributed by
-            this connected system are also recalled from the MVO depends on the CSO
-            type's RemoveContributedAttributesOnObsoletion flag, the MVO type's
-            deletion grace period, and whether the MVO is slated for immediate
-            deletion.
-          - RemainJoined: keep the join intact and stop further attribute flow.
+        On an import rule, what happens when a Connected System Object leaves the rule's scope. Disconnect breaks
+        the join; whether the values it contributed are recalled as well depends on the Connected System Object
+        Type's settings and the Metaverse Object Type's deletion settings. RemainJoined keeps the join and stops the
+        values flowing.
 
     .PARAMETER OutboundDeprovisionAction
-        For Export rules: action to take when an MVO falls out of this rule's scope or is deleted.
-        Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
-        Delete (queue a delete PendingExport so the CSO is removed from the target system).
+        On an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's
+        scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete
+        removes it from there.
 
     .PARAMETER EnforceState
-        For Export rules: whether inbound changes from the target system trigger re-evaluation
-        of this rule to detect and remediate drift.
+        On an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value
+        JIM exported is put back when the target drifts from it.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
@@ -74,15 +65,23 @@ function Set-JIMSyncRule {
         New-JIMConfigurationChangePreview -SyncRuleId. Recorded on the change's Activity so
         "previewed, then applied" is auditable rather than a claim.
 
+    .PARAMETER SaveAnyway
+        Saves even though the change stops configuration test cases passing. Without it, or
+        -AcceptNewResult, such a change is refused, nothing is saved, and the error names each case.
+        Configuration History records the cases saved past, by name.
+
+    .PARAMETER AcceptNewResult
+        Takes what the configuration now gives as what each configuration test case that stopped
+        passing expects, rewriting those cases, and saves. A case whose new result cannot be
+        expected (it needs review, could not run, or its Scope cannot be determined) still refuses
+        the change unless -SaveAnyway is given too.
+
     .PARAMETER PassThru
-        If specified, returns the updated Synchronisation Rule object.
+        Returns the rule as changed.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Synchronisation Rule object, including Warnings (non-blocking
-        warnings the save raised about the rule's Attribute Flows) and DependentDerivedFlows (Attribute Flows
-        deriving Metaverse attributes that the update left with a missing input) and DeletionSourceWarning (the
-        deletion source warning described above, or null). All three are also written with Write-Warning whether or
-        not -PassThru is supplied.
+        With -PassThru, the rule as changed; otherwise nothing. Its warnings are written to the warning stream
+        either way.
 
     .EXAMPLE
         Set-JIMSyncRule -Id 1 -Name "Updated Rule Name"
@@ -115,7 +114,7 @@ function Set-JIMSyncRule {
         Remove-JIMSyncRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SyncRuleSaveResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'Enable', ValueFromPipelineByPropertyName)]
@@ -161,6 +160,10 @@ function Set-JIMSyncRule {
 
         [Parameter()]
         [guid]$PreviewActivityId,
+
+        [switch]$SaveAnyway,
+
+        [switch]$AcceptNewResult,
 
         [switch]$PassThru
     )
@@ -232,6 +235,9 @@ function Set-JIMSyncRule {
             Write-Verbose "Updating Synchronisation Rule: $ruleId"
 
             try {
+                # The save gate (#2055 Phase 4b): what to do if the change stops configuration test cases passing.
+                if ($SaveAnyway) { $body.saveAnyway = $true }
+                if ($AcceptNewResult) { $body.acceptNewResults = $true }
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Synchronisation Rule: $ruleId"

@@ -119,6 +119,11 @@ public class SetPasswordRequestTests
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
             },
+            activity =>
+            {
+                activity.Status = ActivityStatus.CompleteWithWarning;
+                return Task.CompletedTask;
+            },
             new PasswordGeneratorService(),
             () => _protection);
     }
@@ -164,13 +169,14 @@ public class SetPasswordRequestTests
         return account;
     }
 
-    private SetPasswordRequest Request(IReadOnlyList<Guid>? targets, bool? enableAccount = null, string password = Password, ApiKey? apiKey = null) => new()
+    private SetPasswordRequest Request(IReadOnlyList<Guid>? targets, bool? enableAccount = null, string password = Password, ApiKey? apiKey = null,
+        PasswordExpiryBehaviour expiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn) => new()
     {
         MetaverseObjectId = _metaverseObjectId,
         DisplayName = "Ada Lovelace",
         Password = password,
         Targets = targets,
-        ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        ExpiryBehaviour = expiryBehaviour,
         EnableAccount = enableAccount,
         InitiatedBy = apiKey == null ? Administrator : null,
         InitiatedByApiKey = apiKey
@@ -204,6 +210,63 @@ public class SetPasswordRequestTests
             Assert.That(row.ExpiresAt - row.CreatedAt, Is.EqualTo(TimeSpan.FromDays(3)), "The time to live is the Connected System's.");
             Assert.That(_protection.UnprotectPassword(row.EncryptedPassword), Is.EqualTo(Password));
         }
+    }
+
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162). A disable would
+    /// override the account's Attribute Flows as a side effect of a password reset, so false is refused rather than
+    /// carried to the Connector, before anything is queued or recorded.
+    /// </summary>
+    [Test]
+    public void SetPasswordAsync_EnableAccountFalse_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD", enabled: null);
+        var account = ArrangeAccount(CorporateAdId);
+
+        var refusal = Assert.ThrowsAsync<ArgumentException>(() =>
+            _server.SetPasswordAsync(Request([account.Id], enableAccount: false), CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal!.Message, Does.Contain("enableAccount"));
+            Assert.That(refusal.ParamName, Is.Null, "the message goes to API callers as it is, so it names no parameter");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// A password set on every Connected System leaves "Password never expires" as each account has it (#2159), so Never
+    /// expires there would be accepted and then do nothing. Refused in the core, beside the disable refusal, so every
+    /// caller gets the same answer before anything is queued or recorded; named accounts may still ask for it.
+    /// </summary>
+    [Test]
+    public void SetPasswordAsync_PropagatedWithNeverExpires_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        var request = Request(null, expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        var refusal = Assert.ThrowsAsync<ArgumentException>(() => _server.SetPasswordAsync(request, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal!.Message, Does.Contain("NeverExpires"));
+            Assert.That(refusal.Message, Does.Contain("Password never expires"));
+            Assert.That(refusal.ParamName, Is.Null, "the message goes to API callers as it is, so it names no parameter");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task SetPasswordAsync_NamedAccountWithNeverExpires_QueuesTheChoiceAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD", enabled: null);
+        var account = ArrangeAccount(CorporateAdId);
+        var request = Request([account.Id], expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        await _server.SetPasswordAsync(request, CancellationToken.None);
+
+        Assert.That(QueuedRow().ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
     }
 
     [Test]
@@ -542,6 +605,47 @@ public class SetPasswordRequestTests
             Assert.That(rows.Single(r => r.ConnectedSystemId == HrPortalId).ConnectedSystemObjectId, Is.Null,
                 "No account there yet; the change waits for provisioning.");
             Assert.That(result.Targets.Single(t => t.ConnectedSystemId == HrPortalId).Enabled, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// Decision (#2160): the Initial Password wins over a password change that would be held by a paused system. A
+    /// propagated change therefore does not replace a first password still owed on a Connected System whose Password
+    /// Synchronisation is switched off; it is not queued there, the result does not claim it was, and the Activity
+    /// says why. Everywhere else it is queued as usual.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_NoTargets_PausedSystemStillOwingAFirstPassword_IsNotQueuedThereAndSaysSoAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD");
+        var hrPortal = ArrangeSystem(HrPortalId, "HR Portal", enabled: false);
+        ArrangeAccount(CorporateAdId);
+        var hrAccount = ArrangeAccount(HrPortalId);
+        _syncRepository.SeedConnectedSystem(hrPortal);
+        await _syncRepository.QueuePasswordChangesAsync([new PendingPasswordChange
+        {
+            MetaverseObjectId = _metaverseObjectId,
+            ConnectedSystemId = HrPortalId,
+            ConnectedSystemObjectId = hrAccount.Id,
+            ProvisionedConnectedSystemObjectId = hrAccount.Id,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = 7,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        }]);
+
+        var result = await _server.SetPasswordAsync(Request(null), CancellationToken.None);
+
+        var hrRow = _syncRepository.PendingPasswordChanges.Values.Single(r => r.ConnectedSystemId == HrPortalId);
+        var parent = _createdActivities.Single(a => a.Id == result.ActivityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hrRow.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned), "the Initial Password stays");
+            Assert.That(_syncRepository.PendingPasswordChanges.Values.Single(r => r.ConnectedSystemId == CorporateAdId).Origin,
+                Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(result.Targets.Select(t => t.ConnectedSystemId), Is.EquivalentTo(new[] { CorporateAdId }));
+            Assert.That(parent.Message, Does.Contain("Not queued for HR Portal"));
         }
     }
 

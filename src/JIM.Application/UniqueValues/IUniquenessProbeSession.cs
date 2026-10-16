@@ -12,12 +12,14 @@ namespace JIM.Application.UniqueValues;
 public interface IUniquenessProbeSession
 {
     /// <summary>
-    /// Asks <paramref name="target"/>'s Connected System which of <paramref name="candidates"/> (one object's, one to
-    /// ten of them) it already holds for the target attribute. Never throws for a fault in the Connected System: one
-    /// that cannot be probed answers <see cref="JIM.Models.Staging.UniquenessProbeOutcome.CouldNotDetermine"/>, and
-    /// one whose Connector does not probe at all answers <see cref="UniquenessProbeSessionResult.NotProbed"/>.
+    /// Asks Connected System <paramref name="connectedSystemId"/> which of each batch's candidates (one object's, one to
+    /// ten of them) it already holds in that batch's attribute, all in one call, so a Connector that can search several
+    /// attributes at once does (Generated Value Forms, #2023). Answers one result per batch, in the batches' order. Never
+    /// throws for a fault in the Connected System: one that cannot be probed answers
+    /// <see cref="JIM.Models.Staging.UniquenessProbeOutcome.CouldNotDetermine"/>, and a system or attribute that is not
+    /// probed at all answers <see cref="UniquenessProbeSessionResult.NotProbed"/>.
     /// </summary>
-    public Task<UniquenessProbeSessionResult> ProbeAsync(UniquenessProbeTarget target, IReadOnlyList<string> candidates);
+    public Task<IReadOnlyList<UniquenessProbeSessionResult>> ProbeAttributesAsync(int connectedSystemId, IReadOnlyList<UniquenessProbeBatch> batches);
 
     /// <summary>
     /// Records that a value was issued after <paramref name="connectedSystemId"/> answered

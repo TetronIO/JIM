@@ -34,6 +34,24 @@ public sealed class JoinRecord
     /// <summary>Where <see cref="SyncRuleName"/> came from.</summary>
     public JoinRecordSource Source { get; set; }
 
+    /// <summary>
+    /// The Object Matching Rule that found the match, for a join made by matching (#2052); null when not recorded or
+    /// since deleted (the value is kept in <see cref="MatchValue"/>).
+    /// </summary>
+    public int? ObjectMatchingRuleId { get; set; }
+
+    /// <summary>What the join matched on, as recorded when it was made (#2052).</summary>
+    public string? MatchValue { get; set; }
+
+    /// <summary>The Metaverse attribute the Object Matching Rule compares, while the rule exists.</summary>
+    public string? MatchedAttributeName { get; set; }
+
+    /// <summary>
+    /// What the Object Matching Rule compares the Metaverse attribute with, while the rule exists: the Connected System
+    /// attribute's name, or the expression.
+    /// </summary>
+    public string? MatchSource { get; set; }
+
     /// <summary>The Activity that made the join, while Activity history still holds it.</summary>
     public Guid? ActivityId { get; set; }
 

@@ -114,8 +114,9 @@ public class DeletionCascadeExportReportingTests
         Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
         Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
             "The outcome must name the Connected System the account is being deleted from; the identity is named by the parent node");
-        Assert.That(cascadeOutcome.DetailMessage, Is.EqualTo(TargetSystemId.ToString()),
-            "The outcome must carry the target Connected System id so the Activity can name the system being deprovisioned");
+        Assert.That(cascadeOutcome.DetailMessage, Is.EqualTo($"{TargetSystemId}|user"),
+            "The outcome must carry the target Connected System id so the Activity can name the system being deprovisioned, " +
+            "and the account's own type, read off the account itself, so it can name the account as a user");
         Assert.That(deletionRpei.SyncOutcomes, Does.Contain(cascadeOutcome),
             "The outcome must be attached to the disconnecting object's execution item so it persists with it");
     }

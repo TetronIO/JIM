@@ -176,6 +176,98 @@ public class SynchronisationControllerRunProfileTests
         Assert.That(dto.FilePath, Is.EqualTo("/data/export.csv"));
     }
 
+    [Test]
+    public async Task GetRunProfilesAsync_ExportRunProfile_MapsExportSafeguardsAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 10,
+            Name = "Export",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.Export,
+            MaxCreates = 5,
+            MaxUpdates = 0,
+            MaxDeletes = 100
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.Single();
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Safeguards.MaxCreates, Is.EqualTo(5));
+            Assert.That(dto!.Safeguards.MaxUpdates, Is.EqualTo(0), "a limit of zero is a real limit and must not read as unset");
+            Assert.That(dto!.Safeguards.MaxDeletes, Is.EqualTo(100));
+            Assert.That(dto!.Safeguards.MaxDetectedDeletions, Is.Null);
+            Assert.That(dto!.Safeguards.MaxDetectedDeletionsPercent, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetRunProfilesAsync_FullImportRunProfile_MapsFullImportSettingsAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 11,
+            Name = "Full Import (Object Type changes)",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            VerifyImportContentHashes = true,
+            AllowObjectTypeChanges = true,
+            MaxDetectedDeletions = 500,
+            MaxDetectedDeletionsPercent = 10
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.Single();
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.AllowObjectTypeChanges, Is.True);
+            Assert.That(dto!.VerifyImportContentHashes, Is.True);
+            Assert.That(dto!.Safeguards.MaxDetectedDeletions, Is.EqualTo(500));
+            Assert.That(dto!.Safeguards.MaxDetectedDeletionsPercent, Is.EqualTo(10));
+        }
+    }
+
+    [Test]
+    public async Task GetRunProfilesAsync_RunProfileNotAllowingObjectTypeChanges_MapsFalseAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 12,
+            Name = "Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.Single();
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.AllowObjectTypeChanges, Is.False, "an Object Type change is refused unless a Run Profile says otherwise");
+    }
+
     /// <summary>
     /// A Run Profile aimed at a partition the administrator has deselected cannot run. Automation has to be able to
     /// see that without executing it and reading the failure, which is the whole point of surfacing it here rather
@@ -905,6 +997,239 @@ public class SynchronisationControllerRunProfileTests
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Allow Object Type Changes (#2049)
+
+    /// <summary>
+    /// A Connected System whose Connector supports every Run Type, so a refusal can only come from the setting
+    /// under test rather than from the Connector being unable to run the profile at all.
+    /// </summary>
+    private static ConnectedSystem BuildSystemSupportingEveryRunType(int connectedSystemId) => new()
+    {
+        Id = connectedSystemId,
+        Name = "Contoso AD",
+        ConnectorDefinition = new ConnectorDefinition
+        {
+            Name = "Test Connector",
+            SupportsFullImport = true,
+            SupportsDeltaImport = true,
+            SupportsExport = true,
+            ExternalIdsUniqueAcrossObjectTypes = true
+        }
+    };
+
+    private static string? ErrorMessageOf(IActionResult result) =>
+        ((result as BadRequestObjectResult)?.Value as ApiErrorResponse)?.Message;
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public async Task CreateRunProfileAsync_AllowObjectTypeChangesOnNonFullImport_ReturnsBadRequestNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        var connectedSystemId = 1;
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Not a Full Import",
+            RunType = runType,
+            AllowObjectTypeChanges = true
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(ErrorMessageOf(result), Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)),
+            "the refusal must name the setting that caused it, not a generic Connector or Run Type error");
+        _mockConnectedSystemRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_AllowObjectTypeChangesOnFullImport_PersistsAndRoundTripsAsync()
+    {
+        var connectedSystemId = 1;
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Full Import (Object Type changes)",
+            RunType = ConnectedSystemRunType.FullImport,
+            AllowObjectTypeChanges = true
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()))
+            .Callback<ConnectedSystemRunProfile>(rp => rp.Id = 42)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = ((CreatedAtRouteResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.AllowObjectTypeChanges, Is.True, "the DTO must round-trip AllowObjectTypeChanges");
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp => rp.AllowObjectTypeChanges)),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_AllowObjectTypeChangesOmitted_CreatesRunProfileThatRefusesObjectTypeChangesAsync()
+    {
+        var connectedSystemId = 1;
+        var request = new CreateRunProfileRequest { Name = "Full Import", RunType = ConnectedSystemRunType.FullImport };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp => !rp.AllowObjectTypeChanges)),
+            Times.Once);
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public async Task UpdateRunProfileAsync_AllowObjectTypeChangesOnNonFullImportWithoutSafeguards_ReturnsBadRequestNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        // No Safeguards object in the request: the Run Type rule must be applied whatever else the request carries.
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Not a Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = runType,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { AllowObjectTypeChanges = true };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(ErrorMessageOf(result), Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)));
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_AllowObjectTypeChangesFalseOnNonFullImport_IsAcceptedAsync()
+    {
+        // Switching the setting off is never invalid, so a script that sends false to every Run Profile succeeds.
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Delta Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.DeltaImport,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { AllowObjectTypeChanges = false };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_AllowObjectTypeChangesTrueOnFullImport_PersistsAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { AllowObjectTypeChanges = true };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.AllowObjectTypeChanges, Is.True);
+        _mockConnectedSystemRepo.Verify(
+            r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp => rp.AllowObjectTypeChanges)),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_AllowObjectTypeChangesFalse_SwitchesItOffAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Full Import (Object Type changes)",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            PageSize = 100,
+            AllowObjectTypeChanges = true
+        };
+        var request = new UpdateRunProfileRequest { AllowObjectTypeChanges = false };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockConnectedSystemRepo.Verify(
+            r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp => !rp.AllowObjectTypeChanges)),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_AllowObjectTypeChangesOmitted_LeavesExistingValueUnchangedAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Full Import (Object Type changes)",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            PageSize = 100,
+            AllowObjectTypeChanges = true
+        };
+        var request = new UpdateRunProfileRequest { Name = "Renamed" }; // AllowObjectTypeChanges not set
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.AllowObjectTypeChanges, Is.True, "an omitted field must leave the existing value unchanged");
     }
 
     #endregion

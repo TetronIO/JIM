@@ -50,6 +50,14 @@
     {
         <div class="evt-sub">@Event.DetailMessage</div>
     }
+    @if (!string.IsNullOrWhiteSpace(Event.JoinMatchDetail))
+    {
+        <div class="evt-sub evt-match">@Event.JoinMatchDetail</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Note))
+    {
+        <div class="evt-sub evt-note">@Note</div>
+    }
     @{
         var chipLinks = Event.Links
             .Where(l => ChipKinds.Contains(l.Kind))
@@ -71,6 +79,7 @@
             }
         </div>
     }
+    @ChildContent
     @if (Event.AttributeRows.Count > 0 || actionLinks.Count > 0)
     {
         <div class="evt-foot">
@@ -159,6 +168,27 @@
     public bool HideTitle { get; set; }
 
     /// <summary>
+    /// The card's title where it speaks for more than its event's own label (the Lineage's After this run cards, #1811,
+    /// where one card stands for a removal across a cohort of Groups); null for the event's label.
+    /// </summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// A line beneath the event's own detail saying why it happened, where the caller knows something the event does
+    /// not say for itself (the Lineage's After this run cards, #1811).
+    /// </summary>
+    [Parameter]
+    public string? Note { get; set; }
+
+    /// <summary>
+    /// Content placed after the card's entity chips and before its footer (the Lineage's After this run cards, #1811,
+    /// put the setting that decided the outcome here). Carries nothing interactive, since the card itself is clickable.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
     /// Raised when a clickable card is activated (click, Enter or Space).
     /// </summary>
     [Parameter]
@@ -167,7 +197,7 @@
     /// <summary>
     /// The event's one name, in the portal's own vocabulary: no CSO or MVO wording appears anywhere.
     /// </summary>
-    private string Title => Event.Label;
+    private string Title => Label ?? Event.Label;
 
     private bool IsClickable => Event.AttributeRows.Count > 0 && OnSelect.HasDelegate;
 

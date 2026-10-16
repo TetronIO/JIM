@@ -181,6 +181,21 @@ public class SyncRuleMappingMissingInputBehaviourApiTests
             Is.EqualTo(new[] { "EvaluateAnyway", "ContributeNoValue", "FailMapping", "FailObject" }));
     }
 
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExpressionThatDoesNotParse_ReturnsBadRequestAndCreatesNothingAsync()
+    {
+        // #2055 Phase 3: every REST save path that takes an expression refuses one that does not parse with the same
+        // message; SyncRuleMappingUpdateApiTests pins the update path.
+        var request = BuildRequest(behaviour: null);
+        request.Sources[0].Expression = "Lower(mv[\"Display Name\"]";
+
+        var result = await _controller.CreateSyncRuleMappingAsync(SyncRuleId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.StartWith("Invalid expression:"));
+        _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
+    }
+
     private static CreateSyncRuleMappingRequest BuildRequest(MissingInputBehaviour? behaviour)
     {
         return new CreateSyncRuleMappingRequest

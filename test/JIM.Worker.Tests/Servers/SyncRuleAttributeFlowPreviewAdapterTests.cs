@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
@@ -46,6 +47,9 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     private const int CsFirstNameAttributeId = 101;
     private const int CsLastNameAttributeId = 102;
     private const int CsEmailAttributeId = 103;
+    private const int CsAccountControlAttributeId = 104;
+    private const int EnabledAccountControl = 512;
+    private const int DisabledAccountControl = 514;
     private const int MvEmailAttributeId = 201;
     private const int MvAlternateEmailAttributeId = 202;
     private const int MappingId = 900;
@@ -338,6 +342,76 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        // #2264: "Engineering" cannot be compared as a number, so the run would stop that object with its scope
+        // undecided; the preview says so, with the reason, and still previews the object it can decide.
+        GivenRuleScopedByNumericExpressionOn("cs[\"sn\"]");
+        var undecidable = GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local", firstName: "ada.lovelace@corp.local");
+        AddValue(undecidable, _csLastName, "Engineering");
+        var decidable = GivenJoinedCso(email: "alan@corp.local", currentMetaverseEmail: "alan@corp.local", firstName: "alan.turing@corp.local");
+        AddValue(decidable, _csLastName, "7");
+
+        var deltas = await EvaluateAsync(ProposalWritingEmailFrom(CsFirstNameAttributeId));
+
+        var failure = deltas.SingleOrDefault(d => d.ConnectedSystemObjectId == undecidable.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided").And.Contain("Engineering"));
+            Assert.That(_syncRepo.RequestedConnectedSystemObjectIds, Does.Not.Contain(undecidable.Id), "the run reaches no flow for it");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == decidable.Id).NewValue, Is.EqualTo("alan.turing@corp.local"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportExpressionCriterion_ReadsStreamedMetaverseValuesByNameAsync()
+    {
+        // The Metaverse Object stream carries each value's attribute id but not its attribute, and an expression
+        // criterion reads the object by attribute name. Read as no value, the object would fall outside the gate
+        // and its flow change would go unreported (#2264).
+        GivenExportRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = "mv[\"Email\"]",
+            CompareAs = AttributeDataType.Text,
+            ComparisonType = SearchComparisonType.StartsWith,
+            StringValue = "ada"
+        });
+        _rule.ObjectScopingCriteriaGroups.Add(group);
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local", targetStoredEmail: "ada@corp.local");
+        foreach (var value in _mvos[^1].AttributeValues)
+            value.Attribute = null!;
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        Assert.That(deltas.SingleOrDefault(d => d.AttributeName == "mail")?.NewValue, Is.EqualTo("ada.lovelace@corp.local"));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportScopeUndecidableForOneObject_ReportsItWouldFailAndPreviewsTheRestAsync()
+    {
+        GivenExportRule();
+        GivenRuleScopedByNumericExpressionOn("mv[\"Email\"]");
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local", targetStoredEmail: "ada@corp.local");
+        var undecidable = _mvos[^1];
+        GivenMvoWithJoinedTargetObject(email: "42", alternateEmail: "alan.turing@corp.local", targetStoredEmail: "42");
+        var decidable = _mvos[^1];
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        var failure = deltas.SingleOrDefault(d => d.MetaverseObjectId == undecidable.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure?.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(failure?.NewValue, Does.Contain("Scope could not be decided"));
+            Assert.That(deltas.Single(d => d.MetaverseObjectId == decidable.Id && d.AttributeName == "mail").NewValue,
+                Is.EqualTo("alan.turing@corp.local"));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ProposedExpressionFailsForOneObject_ReportsItRatherThanNoChangeAsync()
     {
         // The motivating case: an Expression that fails on a fraction of the population. Reported as no change,
@@ -437,6 +511,30 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
 
         Assert.That(deltas, Is.Empty);
+    }
+
+    [TestCase(66048, TestName = "{m}(ToAnotherValue)")]
+    [TestCase(DisabledAccountControl, TestName = "{m}(ToTheInterimValue)")]
+    public async Task EvaluateDeltasAsync_ProposalChangesTheValueOfAChangeHeldForAnInitialPassword_ReportsTheHeldValueAsTheOldOneAsync(int proposedValue)
+    {
+        // An account created disabled whose Pending Export holds the enabled value until its Initial Password is
+        // delivered (#2039). The stored configuration's evaluation restates the held value, which a real evaluation
+        // drops rather than stages, and the target holds only the interim value, so nothing is skipped as already
+        // current either. The held value is still what the stored configuration asserts, and the old side of the pair,
+        // whether the proposal sets another value or the interim value the target already holds.
+        GivenExportRuleSettingAccountControl(EnabledAccountControl.ToString());
+        var cso = GivenMvoWithJoinedTargetObjectHoldingAccountControl(DisabledAccountControl);
+        GivenAccountControlHeldForAnInitialPassword(cso, EnabledAccountControl);
+
+        var deltas = await EvaluateAsync(ProposalSettingAccountControl(proposedValue.ToString()));
+
+        var delta = deltas.SingleOrDefault(d => d.AttributeName == "userAccountControl");
+        Assert.That(delta, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta!.OldValue, Is.EqualTo(EnabledAccountControl.ToString()), "the held value the stored configuration asserts");
+            Assert.That(delta!.NewValue, Is.EqualTo(proposedValue.ToString()));
+        }
     }
 
     // ── Contract ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -768,6 +866,86 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         _rule.AttributeFlowRules.Add(mapping);
     }
 
+    /// <summary>
+    /// Turns the fixture's rule into an export rule setting the target system's userAccountControl attribute from an
+    /// Expression, and nothing else.
+    /// </summary>
+    private void GivenExportRuleSettingAccountControl(string expression)
+    {
+        GivenExportRule();
+        var accountControl = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = CsAccountControlAttributeId, Name = "userAccountControl", Type = AttributeDataType.Number
+        };
+        _csoType.Attributes.Add(accountControl);
+
+        _rule.AttributeFlowRules.Clear();
+        var mapping = new SyncRuleMapping
+        {
+            Id = MappingId,
+            SyncRule = _rule,
+            SyncRuleId = _rule.Id,
+            TargetConnectedSystemAttribute = accountControl,
+            TargetConnectedSystemAttributeId = accountControl.Id
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Id = MappingId, Order = 1, Expression = expression });
+        _rule.AttributeFlowRules.Add(mapping);
+    }
+
+    private static SyncRuleAttributeFlowProposal ProposalSettingAccountControl(string expression) =>
+        new([new SyncRuleMappingProposal(
+            null,
+            CsAccountControlAttributeId,
+            [new SyncRuleMappingSourceProposal(1, null, null, expression)])]);
+
+    private ConnectedSystemObject GivenMvoWithJoinedTargetObjectHoldingAccountControl(int accountControl)
+    {
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada@corp.local", targetStoredEmail: null);
+        var cso = _csos[^1];
+        var attribute = _csoType.Attributes.Single(a => a.Id == CsAccountControlAttributeId);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectedSystemObject = cso,
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            IntValue = accountControl
+        });
+        return cso;
+    }
+
+    /// <summary>
+    /// Queues an Update Pending Export for <paramref name="cso"/> holding <paramref name="accountControl"/> until the
+    /// account's Initial Password is delivered (#2039): sent with an interim value and awaiting its confirming import.
+    /// </summary>
+    private void GivenAccountControlHeldForAnInitialPassword(ConnectedSystemObject cso, int accountControl)
+    {
+        var attribute = _csoType.Attributes.Single(a => a.Id == CsAccountControlAttributeId);
+        _syncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.CreateVersion7(),
+                    AttributeId = attribute.Id,
+                    Attribute = attribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    IntValue = accountControl,
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
+    }
+
     private void GivenMvoWithJoinedTargetObject(string email, string alternateEmail, string? targetStoredEmail)
     {
         var mvo = new MetaverseObject { Id = Guid.CreateVersion7(), Type = _mvoType };
@@ -804,6 +982,23 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
             AttributeId = attribute.Id,
             StringValue = value
         });
+
+    /// <summary>
+    /// Scopes the rule on <paramref name="expression"/> compared as a Number greater than 5, so an object whose value
+    /// is not a number cannot have its scope decided (#2264).
+    /// </summary>
+    private void GivenRuleScopedByNumericExpressionOn(string expression)
+    {
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Expression = expression,
+            CompareAs = AttributeDataType.Number,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            IntValue = 5
+        });
+        _rule.ObjectScopingCriteriaGroups.Add(group);
+    }
 
     private void GivenRuleScopedToEngineering()
     {

@@ -28,14 +28,21 @@ public class SetConnectedSystemObjectPasswordRequest
     /// <summary>
     /// What should happen to the password once it is set. Omitted defaults to requiring a change at the next
     /// sign-in, which is the right default for a password somebody else chose. A Connected System that cannot
-    /// honour the request applies what it can and says so in the outcome's message.
+    /// honour the request applies what it can and says so in the outcome's message. On Active Directory and Samba AD,
+    /// <c>NeverExpires</c> sets "Password never expires" and the other two clear it; where a Synchronisation Rule
+    /// writes the account's userAccountControl with Enforce State on, the next synchronisation puts that Attribute
+    /// Flow's value back, and the outcome says so.
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether to enable the account as part of setting the password. Omitted leaves the account's enabled state
-    /// untouched, which is the right choice for a reset on an account that is already how the administrator
-    /// wants it. True is for an account that was created disabled awaiting a compliant password.
+    /// Whether to enable the account as part of setting the password, whatever its Attribute Flows say. Omitted leaves
+    /// the account's enabled state as it is, which is the right choice for a reset on an account that is already how
+    /// the administrator wants it. Two exceptions: an Active Directory account whose enable JIM held back until it had
+    /// a password, which the password enables as its Attribute Flow asks; and an account still waiting for its first
+    /// password, which the set then is, enabled as its Synchronisation Rule's Initial Password says. True is for an
+    /// account that was created disabled awaiting a compliant password. False is refused with a 400: setting a password
+    /// never disables an account.
     /// </summary>
     public bool? EnableAccount { get; set; }
 

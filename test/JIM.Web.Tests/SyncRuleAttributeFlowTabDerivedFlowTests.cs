@@ -11,7 +11,9 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.TestSupport;
+using JIM.Web.Models;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components.Web;
@@ -39,6 +41,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     private readonly FreshJimApplicationFactory _factory = new();
     private Mock<IConnectedSystemRepository> _csRepo = null!;
     private Mock<IMetaverseRepository> _mvRepo = null!;
+    private Mock<ISyncRepository> _syncRepo = null!;
 
     private static readonly MetaverseAttribute AccountName = new() { Id = 10, Name = "Account Name", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
     private static readonly MetaverseAttribute Email = new() { Id = 11, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
@@ -50,6 +53,11 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     {
         _csRepo = new Mock<IConnectedSystemRepository>();
         _mvRepo = new Mock<IMetaverseRepository>();
+        // A generated flow's row reads its retired values count (#242), so a rule holding one needs the sync repository.
+        _syncRepo = new Mock<ISyncRepository>();
+        _syncRepo.Setup(r => r.GetRetiredGeneratedValueCountsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<RetiredGeneratedValueCount>());
+        _factory.BuildSyncRepository = () => _syncRepo.Object;
         _factory.BuildRepository = () =>
         {
             var repo = new Mock<IRepository>();
@@ -332,12 +340,88 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
         Assert.That(UpdateButton(provider).Instance.Disabled, Is.False, "the edit dialog stays open for another go");
     }
 
+    // ─── Generated Value Forms (#2014, mock screen 3): the Derived Mapping Type filter ───
+
+    [Test]
+    public void Table_MappingTypeFilter_OffersDerivedApartFromOrdinaryExpressions()
+    {
+        Render<MudPopoverProvider>();
+        var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, BuildRule()));
+
+        var chips = tab.FindComponent<MudChipSet<AttributeFlowMappingType>>().FindComponents<MudChip<AttributeFlowMappingType>>()
+            .ToDictionary(c => c.Instance.Value, c => c.Markup);
+
+        // Account Name reads cs[...] only; Email and User Principal Name read the Metaverse.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chips.Keys, Is.EqualTo(new[] { AttributeFlowMappingType.ExpressionMapping, AttributeFlowMappingType.Derived }));
+            Assert.That(chips[AttributeFlowMappingType.ExpressionMapping], Does.Contain("(1)"));
+            Assert.That(chips[AttributeFlowMappingType.Derived], Does.Contain("(2)"));
+        }
+    }
+
+    [Test]
+    public async Task Table_DerivedAndGeneratedSelected_ListsBothKindsAndNothingElseAsync()
+    {
+        var rule = BuildRule();
+        rule.AttributeFlowRules[0].Generation = new SyncRuleMappingGeneration { Id = 90, TokenKind = GeneratedValueTokenKind.OnlyIfTaken };
+        AddExpression(rule, 4, Department, "Upper(cs[\"firstName\"])");
+        Render<MudPopoverProvider>();
+        var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, rule));
+
+        var chipSet = tab.FindComponent<MudChipSet<AttributeFlowMappingType>>();
+        await tab.InvokeAsync(() => chipSet.Instance.SelectedValuesChanged.InvokeAsync(
+            [AttributeFlowMappingType.Derived, AttributeFlowMappingType.GeneratedMapping]));
+        var grid = tab.FindComponent<VirtualisedDataGrid<SyncRuleMapping>>().Instance;
+        var window = await grid.LoadWindow(new VirtualisedWindowRequest(0, 50, null, "target", false, true), CancellationToken.None);
+
+        Assert.That(window.Items.Select(m => m.Id), Is.EquivalentTo(new[] { 1, 2, 3 }),
+            "the generated Account Name and the derived Email and User Principal Name; not the ordinary Department expression");
+    }
+
+    // ─── Generated Value Forms (#2014, mock screen 1): the "Built from generated value" block ───
+
+    [Test]
+    public void EditDialog_FlowBuiltFromAGeneratedValue_ShowsWhichOneWithItsKeepUniqueSwitch()
+    {
+        var rule = BuildRule();
+        rule.AttributeFlowRules[0].Generation = new SyncRuleMappingGeneration { Id = 90, TokenKind = GeneratedValueTokenKind.OnlyIfTaken };
+        var (provider, tab) = RenderCards(rule);
+
+        // Email reads the generated Account Name.
+        OpenEdit(tab, 1);
+
+        provider.WaitForState(() => provider.HasComponent<BuiltFromGeneratedValueBlock>()
+            && provider.FindComponent<BuiltFromGeneratedValueBlock>().Instance.Description != null);
+        var block = provider.FindComponent<BuiltFromGeneratedValueBlock>().Instance;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(block.Description!.GeneratedAttributeName, Is.EqualTo("Account Name"));
+            Assert.That(block.Mapping, Is.SameAs(rule.AttributeFlowRules[1]), "the switch edits the flow being edited");
+            Assert.That(provider.FindAll("[data-testid='built-from-generated-value-keep-unique']"), Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void EditDialog_FlowBuiltFromNoGeneratedValue_ShowsNoBlock()
+    {
+        // Nothing in the rule is generated, so Email is an ordinary derived flow.
+        var (provider, tab) = RenderCards(BuildRule());
+        OpenEdit(tab, 1);
+
+        provider.WaitForState(() => provider.HasComponent<DerivedFlowPanel>()
+            && provider.FindComponent<DerivedFlowPanel>().Instance.Analysis != null);
+        Assert.That(provider.FindAll("[data-testid='built-from-generated-value']"), Is.Empty);
+    }
+
     // ─── scaffolding ───
 
     private sealed class FreshJimApplicationFactory : IJimApplicationFactory
     {
         public Func<IRepository> BuildRepository { get; set; } = null!;
 
-        public JimApplication Create() => new(BuildRepository());
+        public Func<ISyncRepository> BuildSyncRepository { get; set; } = null!;
+
+        public JimApplication Create() => new(BuildRepository(), syncRepository: BuildSyncRepository());
     }
 }

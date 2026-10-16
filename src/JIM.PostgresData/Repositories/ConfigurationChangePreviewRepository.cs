@@ -97,7 +97,7 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             // Searched across the columns the drill-down actually renders, because the administrator typing here is
             // looking for an object by whatever they happen to know about it: its name, the attribute concerned, or
             // the value it would move to or from.
-            var pattern = $"%{EscapeLikeWildcards(search)}%";
+            var pattern = LikePattern.Contains(search);
             query = query.Where(d =>
                 (d.ObjectDisplayName != null && EF.Functions.ILike(d.ObjectDisplayName, pattern, LikeEscapeCharacter)) ||
                 (d.AttributeName != null && EF.Functions.ILike(d.AttributeName, pattern, LikeEscapeCharacter)) ||
@@ -115,6 +115,10 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             .ThenBy(d => d.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            // An ambiguous row's candidates (#2052), at most ten each and absent from every other row; split so a page
+            // is not repeated once per candidate.
+            .Include(d => d.MatchCandidates.OrderBy(c => c.Ordinal))
+            .AsSplitQuery()
             .ToListAsync();
 
         return new PagedResultSet<ConfigurationChangePreviewDelta>
@@ -125,9 +129,4 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             PageSize = pageSize
         };
     }
-
-    private static string EscapeLikeWildcards(string search) =>
-        search.Replace(LikeEscapeCharacter, LikeEscapeCharacter + LikeEscapeCharacter)
-            .Replace("%", LikeEscapeCharacter + "%")
-            .Replace("_", LikeEscapeCharacter + "_");
 }

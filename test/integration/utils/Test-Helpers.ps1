@@ -1335,7 +1335,11 @@ function Save-ActiveDirectoryCertificate {
         throw "Save-ActiveDirectoryCertificate: the LDAP toolbox container '$toolbox' is not running. Start it with the ad-lab compose profile. Cannot fetch ${vmName}'s certificate."
     }
 
-    $fetchOutput = docker exec $toolbox sh -c "openssl s_client -connect ${address}:${port} -servername ${hostName} -showcerts </dev/null" 2>&1
+    # s_client's diagnostics go to a file, printed after its output: docker exec carries stdout and stderr on
+    # separate streams and 2>&1 merges them in no fixed order, so a stderr line could otherwise land inside
+    # the PEM block and openssl x509 refuse it. The diagnostics still reach the error when no certificate comes.
+    $errorFile = "/tmp/s_client-${vmName}.err"
+    $fetchOutput = docker exec $toolbox sh -c "openssl s_client -connect ${address}:${port} -servername ${hostName} -showcerts </dev/null 2>${errorFile}; cat ${errorFile}" 2>&1
     $certificatePem = Get-FirstPemCertificate -Text @($fetchOutput | ForEach-Object { "$_" })
 
     $sanOutput = $certificatePem | docker exec -i $toolbox openssl x509 -noout -ext subjectAltName 2>&1

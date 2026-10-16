@@ -273,6 +273,34 @@ public class ScopingExplanationSummariserTests
             }
         });
 
+    /// <summary>
+    /// A matching join says what matched (#2052): the value, the Metaverse attribute and what it was compared with.
+    /// </summary>
+    [TestCase(7, "Payroll Import", "employeeNumber",
+        ExpectedResult = "Joined by matching, under the Synchronisation Rule \"Payroll Import\": matched \"48213\" on Employee ID (equals employeeNumber)")]
+    [TestCase(null, null, "Replace(cs[\"employeeNumber\"], \"EMP-\", \"\")",
+        ExpectedResult = "Joined by matching on the Connected System's Object Matching Rules: matched \"48213\" on Employee ID (equals Replace(cs[\"employeeNumber\"], \"EMP-\", \"\"))")]
+    public string DescribeJoin_RecordedMatch_NamesTheValueAndTheRule(int? ruleId, string? ruleName, string matchSource) =>
+        ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            JoinType = ConnectedSystemObjectJoinType.Joined, Method = ConnectedSystemObjectJoinMethod.InboundMatching,
+            SyncRuleId = ruleId, SyncRuleName = ruleName, Source = JoinRecordSource.Recorded,
+            ObjectMatchingRuleId = 3, MatchValue = "48213", MatchedAttributeName = "Employee ID", MatchSource = matchSource
+        });
+
+    [Test]
+    public void DescribeJoin_RecordedMatchWhoseRuleWasDeleted_StillNamesTheValue()
+    {
+        var text = ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            JoinType = ConnectedSystemObjectJoinType.Joined, Method = ConnectedSystemObjectJoinMethod.InboundMatching,
+            SyncRuleId = 7, SyncRuleName = "Payroll Import", Source = JoinRecordSource.Recorded, MatchValue = "48213"
+        });
+
+        Assert.That(text, Is.EqualTo(
+            "Joined by matching, under the Synchronisation Rule \"Payroll Import\": matched \"48213\" (the Object Matching Rule has since been deleted)"));
+    }
+
     [TestCase(ConnectedSystemObjectJoinType.Projected, ExpectedResult = "Projected; the Synchronisation Rule was not recorded")]
     [TestCase(ConnectedSystemObjectJoinType.Provisioned, ExpectedResult = "Provisioned; the Synchronisation Rule was not recorded")]
     [TestCase(ConnectedSystemObjectJoinType.Joined, ExpectedResult = "Joined; how was not recorded")]
@@ -395,7 +423,7 @@ public class ScopingExplanationSummariserTests
     {
         var explanation = Explain(Rule(
             All(Criterion(WorkerType, SearchComparisonType.NotEquals, "Test")),
-            All(Criterion(WorkerType, SearchComparisonType.NotContains, "Temp"), Criterion(CostCentre, SearchComparisonType.NotEquals, null))));
+            All(Criterion(WorkerType, SearchComparisonType.NotContains, "Temp"), Criterion(CostCentre, SearchComparisonType.HasValue, null))));
 
         Assert.That(PlainText(ScopingExplanationSummariser.ToComeIntoScope(explanation)), Is.EqualTo(new[]
         {
@@ -407,9 +435,9 @@ public class ScopingExplanationSummariserTests
     }
 
     [Test]
-    public void ToComeIntoScope_EmptyExpectedValueButAValueHeld_SaysItMustHaveNone()
+    public void ToComeIntoScope_HasNoValueButAValueHeld_SaysItMustHaveNone()
     {
-        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Region, SearchComparisonType.Equals, null)))));
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Region, SearchComparisonType.HasNoValue, null)))));
 
         Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Region must have no value (currently \"APAC\")" }));
     }
@@ -487,7 +515,7 @@ public class ScopingExplanationSummariserTests
     {
         var person = Person((Department, "Sales"), (Department, "Legal"));
 
-        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, null))), person));
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.HasNoValue, null))), person));
 
         Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Department must have no value (currently 2 values)" }));
     }

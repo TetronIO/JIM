@@ -3,12 +3,15 @@
 
 using System.Globalization;
 using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
@@ -155,13 +158,21 @@ internal sealed class CollisionRemediationRun
         var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, context.AllExportRules);
         var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId.Value, rejectedValue, TryParseNumeric(attribute.Type, rejectedValue),
             participatingTargets, _connectedSystem.Id, context.ConnectedSystems);
+        string? anchoringBuiltValue = null;
+        if (verdict.Anchoring != GeneratedValueAnchoring.Anchored && !assignment.RenameAuthorised)
+        {
+            var (builtVerdict, builtValueName) = await IsAnchoredThroughBuiltValuesAsync(generationServer, metaverseObjectId.Value, mapping, _connectedSystem.Id, context, repository);
+            if (builtVerdict.Anchoring == GeneratedValueAnchoring.Anchored || verdict.Anchoring == GeneratedValueAnchoring.Unanchored)
+                (verdict, anchoringBuiltValue) = (builtVerdict, builtValueName);
+        }
 
         if (verdict.Anchoring != GeneratedValueAnchoring.Unanchored && !assignment.RenameAuthorised)
         {
             var anchoringName = SystemName(context, verdict.ConnectedSystemId!.Value);
+            var what = anchoringBuiltValue == null ? "it" : $"the {anchoringBuiltValue} built from it";
             var why = verdict.Anchoring == GeneratedValueAnchoring.Anchored
-                ? $"{anchoringName} has already accepted it for this object, so changing it would rename an account already in use"
-                : $"JIM cannot tell whether {anchoringName} already holds it, because {anchoringName} has not completed a Full Import since its connector space was cleared";
+                ? $"{anchoringName} has already accepted {what} for this object, so changing it would rename an account already in use"
+                : $"JIM cannot tell whether {anchoringName} already holds {what}, because {anchoringName} has not completed a Full Import since its connector space was cleared";
             var reason = verdict.Anchoring == GeneratedValueAnchoring.Anchored
                 ? GeneratedValueNeedsDecisionReason.AnchoredElsewhere
                 : GeneratedValueNeedsDecisionReason.CannotTell;
@@ -178,10 +189,27 @@ internal sealed class CollisionRemediationRun
             AttributeName = attribute.Name,
             BaseValue = BaseValueFor(assignment, mapping.Generation),
             ConnectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList(),
-            RejectedValues = RejectedValuesFor(assignment)
+            RejectedValues = RejectedValuesFor(assignment),
+            FormSource = await BuildFormSourceAsync(mapping, metaverseObjectId.Value, attribution, context, repository)
         };
 
-        var outcome = await generationServer.RegenerateAsync(request, Options);
+        // The next value is checked with the values built from it (Generated Value Forms, #2023). One that cannot be
+        // worked out holds the correction back as an ordinary export error: a decision would ask an administrator to
+        // choose between values JIM cannot check yet.
+        GenerationOutcome outcome;
+        try
+        {
+            outcome = await generationServer.RegenerateAsync(request, Options);
+        }
+        catch (SyncExpressionEvaluationException ex)
+        {
+            return LogOrdinary(export, $"a value built from the next candidate could not be worked out ({ex.Message.TrimEnd('.')})");
+        }
+
+        if (outcome.Kind == GenerationOutcomeKind.Waiting && outcome.FormWaits.Count > 0)
+            return LogOrdinary(export, "the values built from the next candidate cannot be worked out until " +
+                string.Join(", ", outcome.FormWaits.Select(w => $"{w.InputName} (needed by {w.NeededBy})")) + " has a value");
+
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
                 GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
@@ -403,10 +431,103 @@ internal sealed class CollisionRemediationRun
     };
 
     /// <summary>
+    /// Whether another system has already accepted a value built from the generated value for this object (Generated
+    /// Value Forms, #2023): correcting the generated value moves every value built from it, whatever its "Keep unique"
+    /// switch, so a system holding one of them is an account the correction would rename. Each value built by a Derived
+    /// Attribute Flow is checked where it is exported unchanged, against the object's current value of it, exactly as the
+    /// generated value itself is. A value written only by an export expression has no stored value to compare and is not
+    /// checked yet.
+    /// </summary>
+    private static async Task<(GeneratedValueAnchoringVerdict Verdict, string? BuiltValueName)> IsAnchoredThroughBuiltValuesAsync(
+        UniqueValueGenerationServer generationServer, Guid metaverseObjectId, SyncRuleMapping generatedMapping, int rejectingConnectedSystemId, Context context, ISyncRepository repository)
+    {
+        var builtValues = context.BuiltValues.BuiltFrom(generatedMapping)
+            .Where(value => value.MetaverseAttributeId.HasValue && value.ExportedTo.Count > 0)
+            .ToList();
+        if (builtValues.Count == 0)
+            return (GeneratedValueAnchoringVerdict.Unanchored, null);
+
+        var metaverseObject = (await repository.GetMetaverseObjectsByIdsNoTrackingAsync([metaverseObjectId])).SingleOrDefault();
+        if (metaverseObject == null)
+            return (GeneratedValueAnchoringVerdict.Unanchored, null);
+
+        (GeneratedValueAnchoringVerdict Verdict, string? Name) cannotTell = (GeneratedValueAnchoringVerdict.Unanchored, null);
+        var heldValues = builtValues
+            .Select(value => (Value: value, Current: metaverseObject.AttributeValues.FirstOrDefault(av => av.AttributeId == value.MetaverseAttributeId)?.StringValue))
+            .Where(held => !string.IsNullOrEmpty(held.Current));
+        foreach (var (value, current) in heldValues)
+        {
+            var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId, current!, null, value.ExportedTo, rejectingConnectedSystemId, context.ConnectedSystems);
+            if (verdict.Anchoring == GeneratedValueAnchoring.Anchored)
+                return (verdict, value.MetaverseAttributeName);
+            if (verdict.Anchoring == GeneratedValueAnchoring.CannotTell && cannotTell.Verdict.Anchoring == GeneratedValueAnchoring.Unanchored)
+                cannotTell = (verdict, value.MetaverseAttributeName);
+        }
+
+        return cannotTell;
+    }
+
+    /// <summary>
     /// The base the next candidate is drawn from. An assignment made before the base was recorded falls back to its own
     /// value for an only-if-taken token, which is exact for a value issued without a suffix (the common case) and still
     /// yields a unique value otherwise.
     /// </summary>
+    /// <summary>
+    /// The form source for drawing the next value (Generated Value Forms, #2023): the values built from it on the
+    /// generated flow's own Synchronisation Rule, worked out by replaying that rule's system's derived flows on the
+    /// object as it stands, with the account in that system the flows read. Checked against JIM's records only: an
+    /// export run has no probe. A form the rejecting target refused carries the refused value as taken. Null when there
+    /// is nothing to check, or the object or its account in that system is gone.
+    /// </summary>
+    private static async Task<IGeneratedValueFormSource?> BuildFormSourceAsync(
+        SyncRuleMapping mapping, Guid metaverseObjectId, GeneratedValueRejectionAttributionResult attribution, Context context, ISyncRepository repository)
+    {
+        var forms = GeneratedValueParticipation.DescribeForms(mapping, context.BuiltValues, context.AllExportRules);
+        var hostRule = mapping.SyncRule ?? context.ImportRules.FirstOrDefault(rule => rule.Id == mapping.SyncRuleId);
+        if (forms.Count == 0 || hostRule?.ConnectedSystemObjectType == null)
+            return null;
+
+        var metaverseObject = (await repository.GetMetaverseObjectsByIdsNoTrackingAsync([metaverseObjectId])).SingleOrDefault();
+        var accounts = await repository.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync([metaverseObjectId], [hostRule.ConnectedSystemId]);
+        if (metaverseObject == null || !accounts.TryGetValue((metaverseObjectId, hostRule.ConnectedSystemId), out var account))
+            return null;
+
+        var hostAccount = new ConnectedSystemObject
+        {
+            Id = account.Id,
+            TypeId = account.TypeId,
+            ConnectedSystemId = account.ConnectedSystemId,
+            MetaverseObjectId = metaverseObjectId,
+            MetaverseObject = metaverseObject,
+            AttributeValues = account.AttributeValues.Count > 0 ? account.AttributeValues : await repository.GetCsoAttributeValuesByCsoIdsAsync([account.Id])
+        };
+
+        var refused = attribution.ThroughDerivation && attribution.CarryingChange != null ? CarriedValue(attribution.CarryingChange) : null;
+        var prepared = forms
+            .Select(form => form with
+            {
+                ProbeTargets = [],
+                RejectedValues = refused != null && form.ConnectorSpaceAttributeIds.Contains(attribution.CarryingChange!.AttributeId) ? [refused] : []
+            })
+            .ToList();
+
+        var pending = new PendingGeneratedValue
+        {
+            Mapping = mapping,
+            AttributeId = mapping.TargetMetaverseAttribute!.Id,
+            ContributedBySystemId = hostRule.ConnectedSystemId,
+            ContributedBySyncRuleId = hostRule.Id,
+            SourceConnectedSystemObjectId = account.Id
+        };
+
+        var inScopeRules = context.ImportRules
+            .Where(rule => rule.Enabled && rule.ConnectedSystemId == hostRule.ConnectedSystemId && rule.MetaverseObjectTypeId == hostRule.MetaverseObjectTypeId)
+            .ToList();
+
+        return GeneratedValueFormSource.Create(new SyncEngine(), hostAccount, pending, prepared, inScopeRules, [hostRule.ConnectedSystemObjectType],
+            new DynamicExpressoEvaluator(), context.PriorityContext);
+    }
+
     private static string? BaseValueFor(GeneratedValueAssignment assignment, SyncRuleMappingGeneration generation) =>
         assignment.BaseValue ?? (generation.TokenKind == GeneratedValueTokenKind.OnlyIfTaken ? assignment.Value : null);
 
@@ -481,7 +602,9 @@ internal sealed class CollisionRemediationRun
             ImportRules: allRules.Where(rule => rule.Direction == SyncRuleDirection.Import).ToList(),
             DerivedFlowGraph: graph,
             ConnectedSystems: connectedSystems,
-            GeneratedMappings: generatedMappings);
+            GeneratedMappings: generatedMappings,
+            BuiltValues: GeneratedValueBuiltValues.Create(allRules, graph),
+            PriorityContext: new AttributePriorityContext(allRules, honourNullAssertions: true, graph));
     }
 
     /// <summary>
@@ -493,7 +616,9 @@ internal sealed class CollisionRemediationRun
         List<SyncRule> ImportRules,
         DerivedFlowGraph? DerivedFlowGraph,
         Dictionary<int, ConnectedSystem> ConnectedSystems,
-        Dictionary<int, SyncRuleMapping> GeneratedMappings)
+        Dictionary<int, SyncRuleMapping> GeneratedMappings,
+        GeneratedValueBuiltValues BuiltValues,
+        AttributePriorityContext PriorityContext)
     {
         /// <summary>
         /// The attribute names the rejecting system can mean for this export: its object type's attributes, from the

@@ -9,7 +9,10 @@ using JIM.Models.Transactional.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// A Synchronisation Rule's initial-password configuration, as returned by the API.
+/// A Synchronisation Rule's initial password settings, and the Connected System Objects waiting on them. It carries
+/// no password: a generated one is stored nowhere, and a static one is write-only.
+/// </summary>
+/// <remarks>
 /// <para>
 /// A sub-resource of the rule rather than a field on <c>SyncRuleHeader</c>: the header is a flat list
 /// projection, and the query behind list endpoints does not load this navigation, so folding it in would
@@ -17,83 +20,89 @@ namespace JIM.Web.Models.Api;
 /// way that carries it.
 /// </para>
 /// <para>
-/// <b>Carries no password.</b> A generated password is produced at the moment it is set and stored nowhere; the
-/// one static password JIM does store (#1273) is write-only on every surface, so this reports only that one
-/// exists and when it last changed.
+/// A generated password is produced at the moment it is set and stored nowhere; the one static password JIM does
+/// store (#1273) is write-only on every surface, so this reports only that one exists and when it last changed.
 /// </para>
-/// </summary>
+/// </remarks>
 public class SyncRuleInitialPasswordResponse
 {
     /// <summary>
-    /// Whether JIM sets an initial password on the accounts this Synchronisation Rule provisions.
+    /// Whether JIM sets an initial password on the Connected System Objects this Synchronisation Rule provisions.
     /// </summary>
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Where the generator settings come from: the Connected System's discovered policy, or the settings saved
-    /// on this rule.
+    /// Where the password comes from: Discovered generates one from the Connected System's discovered policy,
+    /// Custom from the settings saved on this rule, and Static sets one stored password on every Connected System
+    /// Object.
     /// </summary>
     public InitialPasswordSource Source { get; set; }
 
     /// <summary>
-    /// The settings used when <see cref="Source"/> is Custom. Present regardless, since they are what would be
-    /// used if the source were switched.
+    /// The generator settings used when Source is Custom. Present whatever the source, since they are what would be
+    /// used if it were switched.
     /// </summary>
     public PasswordGenerationPolicyDto CustomPolicy { get; set; } = new();
 
     /// <summary>
-    /// What happens to the password once it is set.
+    /// What happens to the password once it is set. On Active Directory and Samba AD, "Password never expires" follows
+    /// this only where no export has written the account's userAccountControl by the time the password is delivered;
+    /// where one has, the Attribute Flow decides it. Requiring a change at the next sign-in always applies.
     /// </summary>
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether the account is enabled once the password is set.
+    /// Whether the Connected System Object is enabled once the password is set. It applies only where no export has
+    /// written the object's enabled state (such as userAccountControl) by the time the password is delivered; where
+    /// one has, the Attribute Flow decides. False leaves it as it was created. It also applies, as does whether the
+    /// password never expires, when a password change already waiting for the person is delivered as the object's first
+    /// password instead of the Initial Password.
     /// </summary>
     public bool EnableAccount { get; set; }
 
     /// <summary>
-    /// Whether one password is stored for every account this rule provisions.
-    /// <para>
-    /// The password itself is never returned, so this and <see cref="StaticPasswordSetAt"/> are what a caller has
-    /// to work with: enough to tell that a rule set to the static source is not going to park everything, and
-    /// enough to script a rotation check.
-    /// </para>
+    /// Whether one password is stored for every Connected System Object this rule provisions. The password itself
+    /// is never returned.
     /// </summary>
+    /// <remarks>
+    /// This and StaticPasswordSetAt are what a caller has to work with: enough to tell that a rule set to the
+    /// static source is not going to park everything, and enough to script a rotation check.
+    /// </remarks>
     public bool StaticPasswordSet { get; set; }
 
     /// <summary>
-    /// When the static password was last changed, in UTC, or null where none is set.
-    /// <para>
-    /// Reported precisely because the password is not. A shared password wants changing whenever somebody who
-    /// knew it leaves, and nothing else in JIM can say how long the current one has been in use.
-    /// </para>
+    /// When the stored password was last changed (UTC); null when none is set.
     /// </summary>
+    /// <remarks>
+    /// Reported precisely because the password is not. A shared password wants changing whenever somebody who knew
+    /// it leaves, and nothing else in JIM can say how long the current one has been in use.
+    /// </remarks>
     public DateTime? StaticPasswordSetAt { get; set; }
 
     /// <summary>
-    /// How many accounts this rule provisioned are waiting on a change to these settings, and what the target
-    /// said about each. Empty in the ordinary case.
-    /// <para>
+    /// The Connected System Objects waiting on a change to these settings, grouped by what the target said when it
+    /// refused the password, the biggest group first. Empty in the ordinary case.
+    /// </summary>
+    /// <remarks>
     /// Reported here rather than as its own endpoint because it is the same question as "what are these settings
     /// doing": an administrator scripting a check across every rule wants the answer in the response they were
     /// already fetching, not in a second call per rule.
-    /// </para>
-    /// </summary>
+    /// </remarks>
     public List<InitialPasswordRejectionDto> ParkedReasons { get; set; } = [];
 
     /// <summary>
-    /// The total across <see cref="ParkedReasons"/>, so a caller checking "does anything need me?" does not have
-    /// to sum the list itself.
+    /// How many Connected System Objects are waiting on a change to these settings: the total across ParkedReasons.
     /// </summary>
     public int ParkedAccountCount { get; set; }
 
     /// <summary>
-    /// How many accounts this rule provisioned were never given an initial password within its time to live.
-    /// <para>
-    /// Kept separate from the parked count deliberately: correcting these settings releases the parked accounts
-    /// and does nothing at all for the expired ones, which need a password by other means.
-    /// </para>
+    /// How many Connected System Objects this rule provisioned were never given an initial password within its time
+    /// to live. Correcting these settings does nothing for them; they need a password by other means.
     /// </summary>
+    /// <remarks>
+    /// Kept separate from the parked count deliberately: correcting these settings releases the parked Connected
+    /// System Objects and does nothing at all for the expired ones.
+    /// </remarks>
     public int ExpiredAccountCount { get; set; }
 
     /// <summary>
@@ -139,7 +148,7 @@ public class InitialPasswordRejectionDto
     public PasswordSetFailureReason? FailureReason { get; set; }
 
     /// <summary>
-    /// How many accounts are parked on this reason.
+    /// How many Connected System Objects are parked on this reason.
     /// </summary>
     public int AccountCount { get; set; }
 
@@ -184,12 +193,19 @@ public class UpdateSyncRuleInitialPasswordRequest
 
     /// <summary>
     /// What happens to the password once it is set. A Connector that cannot honour the choice reports what it
-    /// applied instead, per account, rather than the request being rejected here.
+    /// applied instead, per account, rather than the request being rejected here. On Active Directory and Samba AD,
+    /// "Password never expires" follows this only where no export has written the account's <c>userAccountControl</c>
+    /// by the time the password is delivered; where one has, the Attribute Flow decides it. Requiring a change at the
+    /// next sign-in always applies.
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether the account is enabled once the password is set.
+    /// Whether the account is enabled once the password is set. Applies only where no export has written the account's
+    /// enabled state (such as <c>userAccountControl</c>) by the time the password is delivered; where one has, the
+    /// Attribute Flow decides. False leaves the account as it was created. It also applies, as does whether the password
+    /// never expires, when a password change already waiting for the person is delivered as the account's first
+    /// password instead of the Initial Password.
     /// </summary>
     public bool? EnableAccount { get; set; }
 

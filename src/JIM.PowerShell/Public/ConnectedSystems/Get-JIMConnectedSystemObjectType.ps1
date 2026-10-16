@@ -4,43 +4,26 @@
 function Get-JIMConnectedSystemObjectType {
     <#
     .SYNOPSIS
-        Gets object types for a Connected System in JIM.
+        Gets a Connected System's Object Types.
 
     .DESCRIPTION
-        Retrieves object types from a Connected System's discovered schema. Object types
-        represent categories of objects in the external identity store (e.g. user, group).
-        Each object type contains attributes that can be selected for synchronisation.
+        Gets the Object Types in a Connected System's imported schema (such as user and group), with their
+        attributes.
 
-        Object types the Connected System classified as internal (a directory's own
-        configuration and operational classes, which an administrator would never manage)
-        are omitted by default, matching what the portal's schema screen shows. Use
-        -IncludeInternal to return them as well. An object type that is already Selected is
-        always returned, whatever its classification.
+        Object Types the Connected System marks as internal, such as a directory's own configuration and operational
+        classes, are left out unless -IncludeInternal is given, as the portal does. A selected Object Type is always
+        returned.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER IncludeInternal
-        Also return object types the Connected System classified as internal.
+        Also returns the Object Types the Connected System marks as internal.
 
     .OUTPUTS
-        PSCustomObject representing the object types and their attributes.
-
-        Each object carries a Tags collection of Key/Value classification pairs reported by
-        the Connected System (for example class-kind = structural, visibility = internal),
-        and an IsInternal boolean derived from them.
-
-        Each attribute carries a writability value of Writable, ReadOnly or WritableOnCreate.
-        ReadOnly attributes can be imported but cannot be targeted by an export Attribute Flow.
-        WritableOnCreate attributes can be targeted, but JIM sends the value only when it creates
-        the object and never again, because changing it would break the link to the object (a
-        table's primary key, a directory's relative distinguished name).
-
-        A Reference attribute additionally carries referencedObjectTypeId and
-        referencedObjectTypeName when the Connected System's schema declares which Object Type
-        the reference points at (the SQL Connector's referencesObjectType); import reference
-        resolution then resolves the reference within that Object Type alone. Both are null when
-        the schema does not say. Read-only: discovered from the schema, never settable.
+        The Object Types, each with its attributes. An attribute whose Writability is ReadOnly can be imported but
+        not exported; one that is WritableOnCreate is exported only when JIM creates the object, because changing it
+        would break the link to the object (a table's primary key, a directory entry's relative distinguished name).
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1
@@ -54,6 +37,16 @@ function Get-JIMConnectedSystemObjectType {
             Select-Object name, type
 
         Lists the attributes JIM may only set when it creates the object.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+            Where-Object { $_.name -eq 'inetOrgPerson' } |
+            ForEach-Object { $_.attributes } |
+            Where-Object { $_.isOperational } |
+            Select-Object id, name, type, selected
+
+        Lists the operational attributes an LDAP directory offers on inetOrgPerson, such as createTimestamp and
+        pwdFailureTime. They are discovered unselected; select one with Set-JIMConnectedSystemAttribute -Selected $true.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal
@@ -81,7 +74,7 @@ function Get-JIMConnectedSystemObjectType {
         Get-JIMConnectedSystem
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemObjectTypeDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

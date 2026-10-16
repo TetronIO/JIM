@@ -328,6 +328,39 @@ public class MetaverseServerProvenanceTests
         }
     }
 
+    /// <summary>
+    /// A date is shown in JIM's canonical text form (#2153), so the same instant held in two kinds or precisions is one
+    /// candidate, and a stale row held under another type is not shown, matching what the engine would flow.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingDates_ShowsCanonicalTextOncePerInstantAsync()
+    {
+        _attribute.Type = AttributeDataType.DateTime;
+        var mapping = NewAttributeMapping(1, 101);
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "startDate", Type = AttributeDataType.DateTime };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        var sourceDate = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc).AddTicks(1234567);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, DateTimeValue = sourceDate });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = csoAttribute, AttributeId = 101, DateTimeValue = new DateTime(sourceDate.Ticks - 7, DateTimeKind.Utc).ToLocalTime()
+        });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, StringValue = "stale text" });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        Assert.That(result!.Sources.Single().CandidateValues, Is.EqualTo(new[] { "2026-03-01 09:00:00.123456Z" }));
+    }
+
     [Test]
     public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingIsCurrentContributor_ReturnsInUseAsync()
     {
@@ -406,6 +439,59 @@ public class MetaverseServerProvenanceTests
             Assert.That(source.State, Is.EqualTo(AttributeSourceState.NotEvaluated));
             Assert.That(source.Note, Is.Not.Null.And.Not.Empty);
         }
+    }
+
+    /// <summary>
+    /// Arranges one expression mapping, evaluated against a joined Connected System Object holding <c>dept</c>.
+    /// </summary>
+    private void ArrangeExpressionSource(string expression, string dept)
+    {
+        var mapping = new SyncRuleMapping { Id = 1, SyncRuleId = _syncRule.Id, SyncRule = _syncRule, TargetMetaverseAttributeId = AttributeId, Enabled = true };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = expression, Order = 0 });
+
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "dept", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, StringValue = dept });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+    }
+
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_ExpressionResultTheEngineCannotStore_ReturnsNotEvaluatedWithMessageAsync()
+    {
+        // The inspector shares the engine's result handling (#2179): a value the engine would refuse is not shown
+        // as the value this source supplies.
+        _attribute.Type = AttributeDataType.Number;
+        ArrangeExpressionSource("cs[\"dept\"]", "Engineering");
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        var source = result!.Sources.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(source.CandidateValues, Is.Empty);
+            Assert.That(source.State, Is.EqualTo(AttributeSourceState.NotEvaluated));
+            Assert.That(source.Note, Does.Contain("Engineering"));
+        }
+    }
+
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_ExpressionResultForADateTarget_ShowsJimsDateTextFormAsync()
+    {
+        _attribute.Type = AttributeDataType.DateTime;
+        ArrangeExpressionSource("cs[\"dept\"]", "2026-03-15T11:30:00+01:00");
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        Assert.That(result!.Sources.Single().CandidateValues, Is.EqualTo(new[] { "2026-03-15 10:30:00Z" }),
+            "the inspector shows the value the engine would store, in JIM's text form for a date");
     }
 
     #endregion

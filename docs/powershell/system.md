@@ -1,10 +1,13 @@
 ---
 title: System
+description: "The cmdlets that report JIM's health, version, Service Health, authentication configuration and the signed-in user, and reset JIM."
+type: reference
+audience: automation-author
 ---
 
 # System
 
-System cmdlets provide access to JIM health checks, service health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service health and user info require an active connection.
+System cmdlets provide access to JIM health checks, Service Health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service Health and user info require an active connection.
 
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
@@ -15,33 +18,37 @@ System cmdlets provide access to JIM health checks, service health, version info
 
 Retrieves the health, readiness, or liveness status of a JIM instance. Does not require authentication.
 
+<!-- BEGIN GENERATED: Get-JIMHealth -->
 ### Syntax
 
 ```powershell
-# Basic health (default)
-Get-JIMHealth [-Url <string>]
+# Health (default)
+Get-JIMHealth [[-Url] <string>]
 
-# Readiness probe
-Get-JIMHealth [-Url <string>] -Ready
+# Ready
+Get-JIMHealth [[-Url] <string>] -Ready
 
-# Liveness probe
-Get-JIMHealth [-Url <string>] -Live
+# Live
+Get-JIMHealth [[-Url] <string>] -Live
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Url` | `string` | No (Position 0) | Session URL | Base URL of the JIM instance |
-| `Ready` | `switch` | Yes (Ready set) | | Check the readiness probe instead of basic health |
-| `Live` | `switch` | Yes (Live set) | | Check the liveness probe instead of basic health |
+| `Url` | `string` | No |  | The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted. Can be given by position, as the first argument. |
+| `Ready` | `switch` | Yes (Ready) |  | Checks readiness instead: that the database is reachable and JIM is not in maintenance mode. |
+| `Live` | `switch` | Yes (Live) |  | Checks liveness instead: that the process is running. |
 
 ### Output
 
+One object with the probe's Status and Timestamp. A readiness check that fails is reported as an error rather than returned.
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `Status` | `string` | Health status: `healthy`, `ready`/`not_ready`, or `alive` |
-| `Timestamp` | `string` | UTC timestamp of the check |
+| `Status` | `string` | The probe's verdict: healthy (the web tier answered), ready (it can serve requests: the database is reachable and JIM is not in maintenance mode) or alive (the process is running). |
+| `Timestamp` | `datetime` | When (UTC) the probe was answered. |
+<!-- END GENERATED: Get-JIMHealth -->
 
 ### Examples
 
@@ -49,7 +56,7 @@ Get-JIMHealth [-Url <string>] -Live
 Get-JIMHealth -Url "https://jim.example.com"
 ```
 
-```powershell title="Readiness probe for Kubernetes"
+```powershell title="Readiness probe"
 Get-JIMHealth -Url "https://jim.example.com" -Ready
 ```
 
@@ -64,8 +71,8 @@ Get-JIMHealth -Ready
 
 ### Notes
 
-- Use `-Ready` as a Kubernetes readiness probe or load balancer health check; it verifies database connectivity and maintenance mode status.
-- Use `-Live` as a Kubernetes liveness probe; it confirms the process is running.
+- Use `-Ready` as a load balancer or monitoring readiness check; it verifies database connectivity and maintenance mode status.
+- Use `-Live` as a liveness check; it confirms the process is running.
 - The basic health check (no switches) returns the general application health status.
 
 ---
@@ -76,13 +83,14 @@ Reports whether JIM's background services (the Worker and the Scheduler) are ali
 
 `Get-JIMHealth` answers a different question: it probes the web tier only, without authentication, and says nothing about the Worker or the Scheduler.
 
+<!-- BEGIN GENERATED: Get-JIMServiceHealth -->
 ### Syntax
 
 ```powershell
-# One object per service (default)
+# Services (default)
 Get-JIMServiceHealth
 
-# One summary object with the worst status present
+# Summary
 Get-JIMServiceHealth -Summary
 ```
 
@@ -90,36 +98,39 @@ Get-JIMServiceHealth -Summary
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Summary` | `switch` | Yes (Summary set) | | Return one object carrying `Overall`, `WebVersion`, `GeneratedAt` and `Services`, instead of one object per service |
+| `Summary` | `switch` | Yes (Summary) |  | Returns one object carrying Overall, WebVersion, GeneratedAt and Services, instead of one object per service. |
 
 ### Output
 
-By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerDelivery`, `Scheduler`. A service that has never reported is present as `Unhealthy` with the condition `NeverStarted` rather than missing, with the fields it cannot supply set to `$null`.
+One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to empty. With `-Summary`, one object whose Services holds those three.
+
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Service` | `string` | `WorkerSync` (the Worker's synchronisation loop), `WorkerDelivery` (the Worker's password delivery loop) or `Scheduler` |
-| `Status` | `string` | `Healthy`, `Degraded` or `Unhealthy`; the word to alert on. See [What Healthy, Degraded and Unhealthy mean](../configuration/operations.md#what-healthy-degraded-and-unhealthy-mean) |
-| `Condition` | `string` | Why it has that status: `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted` |
-| `Reason` | `string` | The condition in plain words with the figures that matter, e.g. `No heartbeat for 4 minutes` or `Never started` |
-| `CurrentWork` | `string?` | What the service was doing when it last reported, e.g. `Full Import: Corporate Directory`; `$null` when idle |
-| `CurrentWorkStartedAt` | `datetime?` | When the current work began (UTC) |
-| `LastSeenAt` | `datetime?` | When the service last reported (UTC) |
-| `StartedAt` | `datetime?` | When the reporting instance started (UTC) |
-| `HostName` | `string?` | The host the reporting instance runs on |
-| `Version` | `string?` | The JIM version the instance runs; compare with the summary's `WebVersion` |
-| `InstanceId` | `string?` | The reporting instance (host name plus a per-process id) |
-| `LastProgressAt` | `datetime?` | When the current work last moved forward (UTC); `$null` when the service cannot tell progress apart from liveness |
-| `Detail` | `string?` | Free text the service left beside its state, such as queue counts or why it is waiting |
+| `Service` | `string` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. One of `WorkerSync`, `WorkerDelivery` or `Scheduler`. |
+| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
+| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted`. |
+| `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
+| `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or empty when the service has never reported. |
+| `HostName` | `string` | The host the reporting instance runs on, or empty when the service has never reported. |
+| `Version` | `string` | The JIM version the reporting instance runs, or empty when the service has never reported. |
+| `StartedAt` | `datetime` | When (UTC) the reporting instance started, or empty when the service has never reported. |
+| `LastSeenAt` | `datetime` | When (UTC) the service last reported, or empty when it never has. |
+| `CurrentWork` | `string` | What the service said it was doing when it last reported, or empty when idle or never seen. |
+| `CurrentWorkStartedAt` | `datetime` | When (UTC) the current work began, or empty when idle or never seen. |
+| `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or empty when idle, never seen, or when the service cannot tell progress apart from liveness. |
+| `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or empty. |
 
-With `-Summary`, one `JIM.ServiceHealthSummary` object:
+**With `-Summary`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Overall` | `string` | The worst status among the services: `Healthy`, `Degraded` or `Unhealthy` |
-| `WebVersion` | `string` | The version of the web tier that answered |
-| `GeneratedAt` | `datetime` | When the verdicts were derived (UTC); every `Reason` is relative to it |
-| `Services` | `JIM.ServiceHealth[]` | The per-service objects described above |
+| `Overall` | `string` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. One of `Healthy`, `Degraded` or `Unhealthy`. |
+| `WebVersion` | `string` | The version of the web tier that answered, for comparison with each service's own version; a mismatch means a partial upgrade. |
+| `GeneratedAt` | `datetime` | When (UTC) the verdicts were derived. Every "last seen n seconds ago" reason is relative to this moment. |
+| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt` and `Detail`. |
+<!-- END GENERATED: Get-JIMServiceHealth -->
 
 ### Examples
 
@@ -162,24 +173,28 @@ $health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVers
 
 Retrieves the JIM application version. Does not require authentication.
 
+<!-- BEGIN GENERATED: Get-JIMVersion -->
 ### Syntax
 
 ```powershell
-Get-JIMVersion [-Url <string>]
+Get-JIMVersion [[-Url] <string>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Url` | `string` | No (Position 0) | Session URL | Base URL of the JIM instance |
+| `Url` | `string` | No |  | The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted. Can be given by position, as the first argument. |
 
 ### Output
 
+One object with Product and Version.
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `Product` | `string` | Product name (always `JIM`) |
-| `Version` | `string` | Semantic version number |
+| `Product` | `string` | The product's name: always JIM. |
+| `Version` | `string` | The version the instance runs, for example 0.15.0. |
+<!-- END GENERATED: Get-JIMVersion -->
 
 ### Examples
 
@@ -202,28 +217,32 @@ Write-Host "JIM version: $($v.Version)"
 
 Retrieves the OIDC/OAuth client discovery configuration. Does not require authentication. Useful for scripting SSO setup or validating configuration.
 
+<!-- BEGIN GENERATED: Get-JIMAuthConfig -->
 ### Syntax
 
 ```powershell
-Get-JIMAuthConfig [-Url <string>]
+Get-JIMAuthConfig [[-Url] <string>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Url` | `string` | No (Position 0) | Session URL | Base URL of the JIM instance |
+| `Url` | `string` | No |  | The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted. Can be given by position, as the first argument. |
 
 ### Output
 
+The settings a client needs to start a sign-in.
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `Authority` | `string` | OIDC authority URL |
-| `ClientId` | `string` | OAuth client ID |
-| `Scopes` | `array` | OAuth scopes to request |
-| `ResponseType` | `string` | OAuth response type (always `code`) |
-| `UsePkce` | `boolean` | Whether PKCE is required (always `true`) |
-| `CodeChallengeMethod` | `string` | PKCE challenge method (always `S256`) |
+| `Authority` | `string` | The OIDC authority URL (e.g., https://login.microsoftonline.com/{tenant}/v2.0). |
+| `ClientId` | `string` | The OAuth client ID for interactive authentication. |
+| `Scopes` | `string[]` | The OAuth scopes to request (e.g., ["openid", "profile", "api://client-id/access_as_user"]). |
+| `ResponseType` | `string` | The OAuth response type. Always "code" for Authorization Code flow. |
+| `UsePkce` | `bool` | Whether PKCE is required. Always true for public clients. |
+| `CodeChallengeMethod` | `string` | The PKCE code challenge method. Always "S256" (SHA256). |
+<!-- END GENERATED: Get-JIMAuthConfig -->
 
 ### Examples
 
@@ -244,6 +263,7 @@ Write-Host "Scopes: $($config.Scopes -join ', ')"
 
 Retrieves the current authenticated user's details, roles, and authorisation status. Requires an active `Connect-JIM` session.
 
+<!-- BEGIN GENERATED: Get-JIMUserInfo -->
 ### Syntax
 
 ```powershell
@@ -256,15 +276,18 @@ None.
 
 ### Output
 
+One object saying who the caller is to JIM. A caller with no JIM identity is answered rather than refused: Authorised is `$false` and Message says what to do.
+
 | Property | Type | Description |
 |----------|------|-------------|
-| `Authorised` | `boolean` | Whether the user has a JIM identity and can access the system |
-| `IsAdministrator` | `boolean` | Whether the user has the Administrator role |
-| `Name` | `string` | Display name |
-| `AuthMethod` | `string` | `oauth` or `api_key` |
-| `MetaverseObjectId` | `guid?` | The user's Metaverse Object ID (`$null` if not authorised) |
-| `Roles` | `array` | Role names assigned to the user |
-| `Message` | `string?` | Additional context (present when not authorised) |
+| `Authorised` | `bool` | Whether the caller has a JIM identity (a Metaverse Object) and so can use JIM. |
+| `IsAdministrator` | `bool` | Whether the caller holds the Administrator role. |
+| `Name` | `string` | The caller's name: the one their identity provider gives them, or the API key's name. |
+| `AuthMethod` | `string` | How the caller authenticated: oauth or api_key. |
+| `MetaverseObjectId` | `guid` | The caller's Metaverse Object; empty when they have no JIM identity. |
+| `Roles` | `string[]` | The names of the roles the caller holds; empty when they have no JIM identity. |
+| `Message` | `string` | Why a caller with no JIM identity cannot use JIM, and what to do about it. Present only when Authorised is false. |
+<!-- END GENERATED: Get-JIMUserInfo -->
 
 ### Examples
 
@@ -283,7 +306,7 @@ if ($user.IsAdministrator) {
 ```
 
 ```powershell title="List assigned roles"
-(Get-JIMUserInfo).roles
+(Get-JIMUserInfo).Roles
 ```
 
 ### Notes
@@ -298,25 +321,52 @@ if ($user.IsAdministrator) {
 
 Performs a factory reset against the connected JIM instance, wiping all data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
 
+<!-- BEGIN GENERATED: Reset-JIMSystem -->
 ### Syntax
 
 ```powershell
 Reset-JIMSystem [-Force] [-IncludeAdministrators] [-AcknowledgeAdministratorLockout] [-WhatIf] [-Confirm]
 ```
 
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
+
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-| `IncludeAdministrators` | `switch` | No | `$false` | Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true brand-new install. By default these are preserved |
-| `AcknowledgeAdministratorLockout` | `switch` | No | `$false` | Acknowledges the lockout risk so an administrator-inclusive wipe may proceed when no initial administrator is configured. Ignored unless `-IncludeAdministrators` is set |
+| `Force` | `switch` | No |  | Skips the confirmation prompt. |
+| `IncludeAdministrators` | `switch` | No |  | Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true brand-new install. By default these are preserved so you are not locked out of the portal. When set with no initial administrator configured (JIM_SSO_INITIAL_ADMIN), the reset is refused unless `-AcknowledgeAdministratorLockout` is also supplied. |
+| `AcknowledgeAdministratorLockout` | `switch` | No |  | Acknowledges the portal lockout risk so an administrator-inclusive wipe may proceed even when no initial administrator is configured (for example when access is retained via the infrastructure API key). Ignored unless `-IncludeAdministrators` is also set. |
 
 ### Output
 
-Returns a `PSCustomObject` containing the counts of removed entities (for example `ConnectedSystemsRemoved`, `SyncRulesRemoved`, `MetaverseObjectsRemoved`).
+One object counting what the reset removed, and how many administrators it kept or removed.
 
-**ShouldProcess impact level:** High. The cmdlet prompts for confirmation by default; pass `-Force` to suppress.
+| Property | Type | Description |
+|----------|------|-------------|
+| `ConnectedSystemsRemoved` | `int` | Connected Systems removed. |
+| `ConnectedSystemObjectsRemoved` | `int` | Connected System Objects removed. |
+| `MetaverseObjectsRemoved` | `int` | Metaverse Objects removed, counting the administrators when the wipe included them. |
+| `MetaverseObjectChangesRemoved` | `int` | Metaverse Object change records removed. |
+| `ConnectedSystemObjectChangesRemoved` | `int` | Connected System Object change records removed. |
+| `SyncRulesRemoved` | `int` | Synchronisation Rules removed. |
+| `ObjectMatchingRulesRemoved` | `int` | Object Matching Rules removed. |
+| `SchedulesRemoved` | `int` | Schedules removed. |
+| `ScheduleExecutionsRemoved` | `int` | Records of Schedule runs removed. |
+| `ActivitiesRemoved` | `int` | Activities removed. |
+| `PendingExportsRemoved` | `int` | Pending Exports removed. |
+| `CustomMetaverseObjectTypesRemoved` | `int` | Metaverse Object Types removed; the built-in ones are kept. |
+| `CustomMetaverseAttributesRemoved` | `int` | Metaverse Attributes removed; the built-in ones are kept. |
+| `CustomRolesRemoved` | `int` | Roles removed; the built-in ones are kept. |
+| `CustomConnectorDefinitionsRemoved` | `int` | Connector Definitions removed; the built-in ones are kept. |
+| `CustomPredefinedSearchesRemoved` | `int` | Predefined Searches removed; the built-in ones are kept. |
+| `CustomExampleDataSetsRemoved` | `int` | Example Data Sets removed; the built-in ones are kept. |
+| `CustomExampleDataTemplatesRemoved` | `int` | Example Data Templates removed; the built-in ones are kept. |
+| `CustomApiKeysRemoved` | `int` | API Keys removed; infrastructure keys are kept. |
+| `TrustedCertificatesRemoved` | `int` | Trusted Certificates removed. |
+| `AdministratorsRetained` | `int` | Number of Metaverse Objects holding the built-in Administrator role that were preserved by the reset. Zero when the reset was performed with administrators included in the wipe. |
+| `AdministratorsRemoved` | `int` | Number of Metaverse Objects holding the built-in Administrator role that were removed by the reset. Non-zero only when the reset was performed with administrators included in the wipe. |
+<!-- END GENERATED: Reset-JIMSystem -->
 
 ### Examples
 
@@ -348,6 +398,6 @@ $result = Reset-JIMSystem -Force
 
 ## See also
 
-- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, service health, factory reset)
+- [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, Service Health, factory reset)
 - [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means
 - [Connection](connection.md): establishing and managing connections to JIM

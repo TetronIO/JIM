@@ -9,10 +9,12 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -20,6 +22,7 @@ using Moq;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -64,6 +67,9 @@ public class SynchronisationControllerObjectMatchingRuleTests
         _apiKeyRepo = new Mock<IApiKeyRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        _repository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
@@ -197,6 +203,97 @@ public class SynchronisationControllerObjectMatchingRuleTests
     }
 
     [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveOmitted_IgnoresCaseAsync()
+    {
+        // The portal always created rules that ignore case while the REST API (and so PowerShell) defaulted to
+        // respecting it, so the same rule joined differently depending on which surface made it (#2051).
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(created(), Is.Not.Null);
+        Assert.That(created()!.CaseSensitive, Is.False, "an Object Matching Rule ignores case unless asked not to");
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveOmitted_IgnoresCaseAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(created(), Is.Not.Null);
+        Assert.That(created()!.CaseSensitive, Is.False, "an Object Matching Rule ignores case unless asked not to");
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveOmittedOnACaseExactSource_RespectsCaseAsync()
+    {
+        // The default follows the source attribute's declaration (#2051): an identifier the Connected System
+        // compares exactly is matched exactly.
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(created()!.CaseSensitive, Is.True);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveOmittedOnACaseExactSource_RespectsCaseAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(created()!.CaseSensitive, Is.True);
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveFalseOnACaseExactSource_StoresFalseAsync()
+    {
+        // An explicit answer always wins over the derived default.
+        _csoType.Attributes.Single(a => a.Id == EmployeeIdAttributeId).CaseExact = true;
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.CaseSensitive = false;
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.False);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CreateObjectMatchingRule_CaseSensitiveSupplied_StoresItAsync(bool caseSensitive)
+    {
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.CaseSensitive = caseSensitive;
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.EqualTo(caseSensitive));
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveSupplied_StoresItAsync(bool caseSensitive)
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+        var request = SyncRuleScopedRequest();
+        request.CaseSensitive = caseSensitive;
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.EqualTo(caseSensitive));
+    }
+
+    [Test]
     public async Task SwitchObjectMatchingMode_ApiKeyAuthenticated_SwitchesInsteadOfFailingAttributionAsync()
     {
         // The endpoint's auth gate accepts an API key, but it previously handed the application layer a null user,
@@ -212,6 +309,244 @@ public class SynchronisationControllerObjectMatchingRuleTests
         var switchResult = (JIM.Models.Staging.DTOs.ObjectMatchingModeSwitchResult)((OkObjectResult)result).Value!;
         Assert.That(switchResult.Success, Is.True);
         Assert.That(switchResult.NewMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
+    }
+
+    #region Expression sources (#2052)
+
+    [Test]
+    public async Task CreateObjectMatchingRule_ExpressionSource_CreatesTheRuleAndReturnsTheExpressionAsync()
+    {
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created()!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(created()!.Sources[0].ConnectedSystemAttributeId, Is.Null);
+            Assert.That(dto.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(dto.Sources[0].ConnectedSystemAttributeId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_ExpressionSource_CreatesTheRuleAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+        var request = SyncRuleScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(created()!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SourceWithAnAttributeAndAnExpression_ReturnsBadRequestAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, ConnectedSystemAttributeId = EmployeeIdAttributeId, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("not both"));
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SourceWithNeitherAnAttributeNorAnExpression_ReturnsBadRequestNamingBothAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = "  " }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message,
+            Does.Contain("ConnectedSystemAttributeId").And.Contain("Expression"));
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_ExpressionTheApplicationRefuses_ReturnsBadRequestWithItsReasonAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = "Trim(cs[\"employeeID\"]) + Trim(mv[\"Department\"])" }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("mv[\"Department\"]"));
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_SourcesReplacedWithAnExpression_StoresTheExpressionAsync()
+    {
+        var stored = StoredTypeScopedRule();
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        ObjectMatchingRule? updated = null;
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => updated = rule).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.Sources, Has.Count.EqualTo(1));
+            Assert.That(updated!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(updated!.Sources[0].ConnectedSystemAttributeId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleObjectMatchingRule_SourcesReplacedWithAnExpression_StoresTheExpressionAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var stored = StoredTypeScopedRule();
+        stored.ConnectedSystemObjectTypeId = null;
+        stored.ConnectedSystemObjectType = null;
+        stored.MetaverseObjectTypeId = null;
+        stored.SyncRuleId = SyncRuleId;
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        ObjectMatchingRule? updated = null;
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => updated = rule).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateSyncRuleObjectMatchingRuleAsync(SyncRuleId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(updated!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+    }
+
+    #region Save gate (#2055 Phase 4b)
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_ChangeStopsATestCasePassing_Returns409NamingTheCaseAndSavesNothingAsync()
+    {
+        var stored = GatedSimpleModeRule();
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        var conflict = result as ConflictObjectResult;
+        Assert.That(conflict, Is.Not.Null, result.GetType().Name);
+        var body = (ConfigurationTestGateResponse)conflict!.Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(body.Message, Does.Contain("Matches on employee ID"));
+            Assert.That(body.Regressions.Single().Result.TestCaseName, Is.EqualTo("Matches on employee ID"));
+            Assert.That(body.Regressions.Single().CanAccept, Is.True);
+            Assert.That(body.Regressions.Single().AcceptedExpectation!.Values, Is.EqualTo(new[] { "E12345" }));
+        }
+        _connectedSystemRepo.Verify(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_SaveAnyway_SavesAsync()
+    {
+        var stored = GatedSimpleModeRule();
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }],
+            SaveAnyway = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _connectedSystemRepo.Verify(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_AcceptNewResults_RewritesTheCaseAndSavesAsync()
+    {
+        var stored = GatedSimpleModeRule();
+        ConfigurationTestCase? rewritten = null;
+        _testRepository.Setup(r => r.UpdateTestCaseAsync(It.IsAny<ConfigurationTestCase>()))
+            .Callback<ConfigurationTestCase>(c => rewritten = c).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }],
+            AcceptNewResults = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(rewritten!.Expectation.Values, Is.EqualTo(new[] { "E12345" }));
+    }
+
+    private Mock<IConfigurationTestRepository> _testRepository = null!;
+
+    /// <summary>
+    /// A Simple mode rule matching on employee ID as it is, with a passing test case covering it.
+    /// </summary>
+    private ObjectMatchingRule GatedSimpleModeRule()
+    {
+        var stored = StoredTypeScopedRule();
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        // A fresh instance each read, as an untracked read gives: the stored rule, whatever the edit did to the one above.
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleUntrackedAsync(stored.Id)).ReturnsAsync(() => StoredTypeScopedRule());
+        _connectedSystemRepo.Setup(r => r.GetObjectTypeAsync(CsoTypeId)).ReturnsAsync(_csoType);
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+
+        _testRepository = new Mock<IConfigurationTestRepository>();
+        _testRepository.Setup(r => r.GetSimpleModeMatchingTestCasesAsync(ConnectedSystemId)).ReturnsAsync(
+        [
+            new ConfigurationTestCase
+            {
+                Id = 5,
+                Name = "Matches on employee ID",
+                Kind = ConfigurationTestCaseKind.ObjectMatchingRule,
+                ObjectMatchingRuleId = stored.Id,
+                Inputs = [new ConfigurationTestInput(null, "employeeID", ["12345"])],
+                Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values, ["12345"])
+            }
+        ]);
+        _testRepository.Setup(r => r.GetTestCasesForConnectedSystemAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _testRepository.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _repository.Setup(r => r.ConfigurationTests).Returns(_testRepository.Object);
+        return stored;
+    }
+
+    #endregion
+
+    private const string PrefixedEmployeeId = "\"E\" + Trim(cs[\"employeeID\"])";
+
+    private ObjectMatchingRule StoredTypeScopedRule() => new()
+    {
+        Id = 77,
+        Order = 0,
+        ConnectedSystemObjectTypeId = CsoTypeId,
+        ConnectedSystemObjectType = _csoType,
+        MetaverseObjectTypeId = MvoTypeId,
+        TargetMetaverseAttributeId = EmployeeIdMetaverseAttributeId,
+        TargetMetaverseAttribute = new MetaverseAttribute { Id = EmployeeIdMetaverseAttributeId, Name = "Employee ID", Type = AttributeDataType.Text },
+        Sources = [new ObjectMatchingRuleSource { Id = 1, Order = 0, ConnectedSystemAttributeId = EmployeeIdAttributeId }]
+    };
+
+    #endregion
+
+    private Func<ObjectMatchingRule?> CaptureCreatedRule()
+    {
+        ObjectMatchingRule? created = null;
+        _connectedSystemRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => created = rule)
+            .Returns(Task.CompletedTask);
+        return () => created;
     }
 
     private static CreateSyncRuleObjectMatchingRuleRequest SyncRuleScopedRequest() => new()

@@ -1,0 +1,473 @@
+@using System.Globalization
+@using JIM.Application.Expressions
+@using JIM.Application.Interfaces
+@using JIM.Application.Servers
+@using JIM.Models.Core
+@using JIM.Models.Expressions
+@using JIM.Models.Interfaces
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IExpressionEvaluator ExpressionEvaluator
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Composes one Object Matching Rule (#2052), for the Connected System's Matching tab (simple mode) and a
+   Synchronisation Rule's (advanced mode) alike. The rule compares a Connected System attribute, or an expression over
+   the Connected System Object, with a Metaverse attribute, for equality and nothing else. The host owns what happens
+   to the finished draft (saving it, or adding it to a Synchronisation Rule) and gates its own buttons on
+   Draft.CanAdd; this keeps Draft.Problem current, so a rule the save would refuse says why before anyone asks. *@
+
+<div class="d-flex align-center flex-wrap gap-3">
+    <MudText Typo="Typo.button" Class="mud-text-secondary">Match on</MudText>
+    <SegmentedToggle TValue="ObjectMatchingRuleSourceKind" Options="SourceKindOptions" Value="@Draft.SourceKind"
+                     ValueChanged="SetSourceKindAsync" AriaLabel="Match on" TestId="jim-matching-rule-source-kind" />
+</div>
+
+@* One geometry for both kinds of source, so switching between them swaps the left cell and nothing else: the
+   Metaverse attribute stays where the eye left it. *@
+<MudGrid Class="mt-1">
+    <MudItem xs="12" md="5">
+        @if (Draft.SourceKind == ObjectMatchingRuleSourceKind.Attribute)
+        {
+            @* Credential attributes are left out: JIM never imports them, so there would be no value to match on. *@
+            <MudSelect T="ConnectedSystemObjectTypeAttribute" Value="@Draft.SourceAttribute" ValueChanged="SetSourceAttributeAsync"
+                       Label="Connected System Attribute" Variant="Variant.Outlined"
+                       ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                       HelperText="Every value it holds is looked up">
+                @foreach (var csAttribute in SelectableAttributes)
+                {
+                    <MudSelectItem Value="@csAttribute">
+                        @csAttribute.Name <span class="mud-text-secondary">(@csAttribute.Type)</span>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        }
+        else
+        {
+            <ExpressionEditor @ref="_expressionEditor" @bind-Value="Draft.Expression" @bind-Value:after="OnDraftChangedAsync"
+                              Id="object-matching-rule-expression" Label="Expression" Required="true"
+                              Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText"
+                              ConnectedSystemAttributeNames="SuggestedAttributeNames" />
+            <div class="mt-1">
+                <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
+                <InsertAttributeMenu MetaverseAttributes="null"
+                                     ConnectedSystemAttributes="SelectableAttributes"
+                                     ConnectedSystemName="@ConnectedSystemName"
+                                     Direction="SyncRuleDirection.Import"
+                                     OnInsert="InsertIntoExpressionAsync" />
+            </div>
+        }
+    </MudItem>
+    @* Aligned to the inputs' row, not centred on the cell: an expression's cell grows with its helper text and the
+       Insert attribute menu, and centring would leave "equals" hanging below both fields. *@
+    <MudItem xs="12" md="2" Class="d-flex justify-center">
+        <MudText Typo="Typo.body1" Class="mud-text-secondary jim-matching-rule-equals">equals</MudText>
+    </MudItem>
+    <MudItem xs="12" md="5">
+        @TargetAttributeSelect
+    </MudItem>
+</MudGrid>
+
+@if (MetaverseObjectTypes != null)
+{
+    @* Where the rule looks. A simple mode rule has no Synchronisation Rule to take this from, so one that names no
+       type searches nothing and silently matches nothing (#1458). *@
+    <MudGrid Class="mt-1">
+        <MudItem xs="12" md="5">
+            <MudSelect T="MetaverseObjectType" Value="@Draft.MetaverseObjectType" ValueChanged="SetMetaverseObjectTypeAsync"
+                       Label="Metaverse Object Type" Variant="Variant.Outlined"
+                       ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                       HelperText="The type of Metaverse Object this rule searches">
+                @foreach (var objectTypeOption in MetaverseObjectTypes.OrderBy(t => t.Name))
+                {
+                    <MudSelectItem Value="@objectTypeOption">@objectTypeOption.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+}
+
+<MudCheckBox T="bool" Value="@Draft.CaseSensitive" ValueChanged="SetCaseSensitiveAsync"
+             Label="Case sensitive" Color="Color.Primary" Class="mt-3" />
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+    Follows the source: on when the source attribute's values are case-exact, otherwise off, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.
+</MudText>
+
+@if (Draft.Problem != null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-matching-rule-problem">@Draft.Problem</MudAlert>
+}
+
+@* ─── Try it: what the rule would compare for an object holding these values ─── *@
+@if (Draft.IsComplete && Draft.Problem == null)
+{
+    <MudText Typo="Typo.subtitle2" Class="mt-5">Try it</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Give each attribute the rule reads a value, or load them from an object, and see what it would match on and
+        which Metaverse Object a synchronisation would join, worked out exactly as a synchronisation would. Tick
+        No value to see what happens to an object that holds none.
+    </MudText>
+    <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
+                     AriaLabel="Where the values come from" Dense="true" />
+    @if (_fromObject)
+    {
+        <TestObjectPicker Kind="ObjectChipKind.ConnectedSystemObject" ConnectedSystemId="ObjectType.ConnectedSystemId"
+                          ConnectedSystemObjectType="ObjectType" Label="@($"Find a {ObjectType.Name} in {ConnectedSystemName ?? "the Connected System"}")"
+                          OnPicked="LoadObjectAsync" Class="mt-3" />
+    }
+    <MudSimpleTable Dense="true" Outlined="true" Class="mt-3" Style="overflow-x: auto">
+        <thead>
+            <tr><th>Input</th><th>Type</th><th>Value</th><th>No value</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var input in TryItInputs)
+            {
+                var descriptor = input;
+                var accessor = $"cs[\"{descriptor.AttributeName}\"]";
+                var state = StateOf(descriptor.AttributeName);
+                <tr @key="descriptor.AttributeName">
+                    <td><AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@descriptor.AttributeName" /></td>
+                    <td class="mud-text-secondary">@descriptor.Type · @(descriptor.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")</td>
+                    <td style="min-width: 16rem">
+                        <TestInputValueEditor Label="@accessor" Type="descriptor.Type" Plurality="descriptor.Plurality" State="state" OnChanged="ClearTryIt" />
+                    </td>
+                    <td>
+                        <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValue(state, v))" Dense="true"
+                                     aria-label="@($"{accessor} has no value")" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+    @if (CanLookUp)
+    {
+        <MudCheckBox T="bool" Value="_lookUp" ValueChanged="SetLookUp" Class="mt-2" Dense="true"
+                     Label="Also find the Metaverse Object a synchronisation would join" />
+    }
+    <div class="mt-3" data-testid="jim-matching-rule-try-it">
+        <MudButton Variant="Variant.Outlined" OnClick="TryItAsync">Try it</MudButton>
+    </div>
+
+    @if (_tryItTest is { Resolution: null } inputProblem)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">
+            @foreach (var inputError in inputProblem.InputErrors)
+            {
+                <MudText Typo="Typo.body2">@inputError</MudText>
+            }
+        </MudAlert>
+    }
+
+    @if (_tryItTest?.Resolution is { } result)
+    {
+        <div class="mt-3" data-testid="jim-matching-rule-try-it-result">
+            @switch (result.Kind)
+            {
+                case MatchValueResolutionKind.Values:
+                    <MudPaper Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Would match on</MudText>
+                        @foreach (var matchValue in result.Values)
+                        {
+                            <MudText Typo="Typo.body1" Class="jim-expression-output">@Convert.ToString(matchValue, CultureInfo.InvariantCulture)</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @result.ValueType</MudText>
+                    </MudPaper>
+                    break;
+                case MatchValueResolutionKind.NoValue:
+                    <MudAlert Severity="Severity.Info">
+                        No value to match on, so this rule would be skipped for an object like this and the next rule tried.
+                    </MudAlert>
+                    break;
+                default:
+                    <MudAlert Severity="Severity.Error">
+                        An object like this would stop with an Object Matching Rule Failed error, neither joined nor
+                        projected: @result.FailureMessage
+                    </MudAlert>
+                    break;
+            }
+        </div>
+    }
+
+    @if (_tryItTest?.Lookup is { } lookup)
+    {
+        <MudPaper Outlined="true" Class="pa-3 mt-3" data-testid="jim-matching-rule-try-it-lookup">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">In the Metaverse</MudText>
+            <div class="d-flex align-center flex-wrap gap-2 mt-1">
+                <MudChip T="string" Variant="Variant.Text" Color="@LookupColour(lookup.Outcome)" Class="ma-0">@LookupLabel(lookup.Outcome)</MudChip>
+                @if (lookup.MetaverseObjectId is { } identityId)
+                {
+                    <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@lookup.MetaverseObjectTypeName"
+                                Name="@(lookup.MetaverseObjectName ?? identityId.ToString())" Href="@IdentityHref(identityId)" Class="ma-0" />
+                }
+            </div>
+            <MudText Typo="Typo.body2" Class="mt-2">@lookup.Description</MudText>
+            @if (lookup.Candidates.Count > 0)
+            {
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+                    @foreach (var candidate in lookup.Candidates)
+                    {
+                        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@candidate.TypeNameSnapshot"
+                                    Name="@(candidate.DisplayNameSnapshot ?? candidate.CandidateId.ToString())" Href="@IdentityHref(candidate.CandidateId)" Class="ma-0" />
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    /// <summary>The rule being composed. Edited in place; <see cref="OnChanged"/> is raised after each edit.</summary>
+    [Parameter, EditorRequired]
+    public ObjectMatchingRuleDraft Draft { get; set; } = null!;
+
+    /// <summary>The Connected System Object Type the rule reads, with its attributes.</summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemObjectType ObjectType { get; set; } = null!;
+
+    /// <summary>The Metaverse attributes the rule can compare with. Those of a type matching cannot compare are listed but disabled.</summary>
+    [Parameter]
+    public IEnumerable<MetaverseAttribute> MetaverseAttributes { get; set; } = [];
+
+    /// <summary>
+    /// The Metaverse Object Types a simple mode rule can search. Null in advanced mode, where the Synchronisation Rule
+    /// supplies the type, so the editor does not ask.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<MetaverseObjectType>? MetaverseObjectTypes { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object Type a Try it lookup matches against in advanced mode, where the Synchronisation Rule
+    /// supplies it. In simple mode the draft's own type is used, and this is left unset.
+    /// </summary>
+    [Parameter]
+    public MetaverseObjectType? LookupMetaverseObjectType { get; set; }
+
+    /// <summary>The Connected System's name, for the Insert attribute menu.</summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>Raised after each edit, so the host's gated buttons follow the draft.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<ObjectMatchingRuleSourceKind>> SourceKindOptions =
+    [
+        new(ObjectMatchingRuleSourceKind.Attribute, "Attribute", "jim-matching-rule-source-attribute",
+            Tooltip: "Match on the values a Connected System attribute holds"),
+        new(ObjectMatchingRuleSourceKind.Expression, "Expression", "jim-matching-rule-source-expression",
+            Tooltip: "Match on a value worked out from the Connected System Object, for identifiers that differ in format between systems")
+    ];
+
+    private const string ExpressionPlaceholder = "e.g. \"E\" + Trim(cs[\"employeeId\"])";
+    private const string ExpressionHelperText =
+        "Reads the Connected System Object only, as cs[\"attributeName\"]. Its result is converted to the Metaverse attribute's type.";
+
+    private ExpressionEditor? _expressionEditor;
+    private ObjectMatchingRuleValidator? _validator;
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
+    [
+        new(false, "Sample values"),
+        new(true, "From an object")
+    ];
+
+    private readonly Dictionary<string, TestInputState> _states = new(StringComparer.OrdinalIgnoreCase);
+    private bool _fromObject;
+    private bool _lookUp = true;
+    private ConnectedSystemObject? _testedObject;
+    private ObjectMatchingTestResult? _tryItTest;
+
+    /// <summary>
+    /// The names the expression editor suggests inside <c>cs["</c> (#2053): the attributes Insert attribute offers.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedAttributeNames => SelectableAttributes.Select(a => a.Name).ToList();
+
+    /// <summary>The attributes a rule can read: those JIM imports, never a credential.</summary>
+    private IReadOnlyList<ConnectedSystemObjectTypeAttribute> SelectableAttributes =>
+    [
+        .. ObjectType.Attributes
+            .Where(a => a.Selected && !CredentialAttributes.IsCredentialAttribute(a.Name))
+            .OrderBy(a => a.Name)
+    ];
+
+    /// <summary>The attributes Try it asks a value for: the one the rule reads, or each one its expression reads.</summary>
+    private IReadOnlyList<AttributeSampleDescriptor> TryItInputs { get; set; } = [];
+
+    /// <summary>The Metaverse Object Type a lookup matches against: the draft's own, or the Synchronisation Rule's.</summary>
+    private MetaverseObjectType? LookupType => Draft.MetaverseObjectType ?? LookupMetaverseObjectType;
+
+    /// <summary>A lookup needs to know which Metaverse Object Type to search.</summary>
+    private bool CanLookUp => LookupType != null;
+
+    private RenderFragment TargetAttributeSelect => __builder =>
+    {
+        <MudSelect T="MetaverseAttribute" Value="@Draft.TargetAttribute" ValueChanged="SetTargetAttributeAsync"
+                   Label="Metaverse Attribute" Variant="Variant.Outlined"
+                   ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                   HelperText="The Metaverse attribute the value is compared with">
+            @foreach (var mvAttribute in MetaverseAttributes.OrderBy(a => a.Name))
+            {
+                var matchable = ObjectMatchingRule.IsMatchableType(mvAttribute.Type);
+                <MudSelectItem Value="@mvAttribute" Disabled="@(!matchable)">
+                    @mvAttribute.Name <span class="mud-text-secondary">(@mvAttribute.Type@(matchable ? "" : ", cannot be matched on"))</span>
+                </MudSelectItem>
+            }
+        </MudSelect>
+    };
+
+    protected override void OnParametersSet()
+    {
+        _validator ??= new ObjectMatchingRuleValidator(ExpressionEvaluator);
+        RefreshProblem();
+    }
+
+    private Task SetSourceKindAsync(ObjectMatchingRuleSourceKind kind)
+    {
+        Draft.SourceKind = kind;
+        return OnDraftChangedAsync();
+    }
+
+    private Task SetSourceAttributeAsync(ConnectedSystemObjectTypeAttribute? attribute)
+    {
+        Draft.SourceAttribute = attribute;
+        return OnDraftChangedAsync();
+    }
+
+    private Task SetTargetAttributeAsync(MetaverseAttribute? attribute)
+    {
+        Draft.TargetAttribute = attribute;
+        return OnDraftChangedAsync();
+    }
+
+    private Task SetMetaverseObjectTypeAsync(MetaverseObjectType? objectType)
+    {
+        Draft.MetaverseObjectType = objectType;
+        return OnDraftChangedAsync();
+    }
+
+    private Task SetCaseSensitiveAsync(bool caseSensitive)
+    {
+        Draft.CaseSensitive = caseSensitive;
+        return OnDraftChangedAsync();
+    }
+
+    private Task InsertIntoExpressionAsync(string accessor) =>
+        _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;
+
+    private async Task OnDraftChangedAsync()
+    {
+        // An answer belongs to the rule that produced it; kept beside a changed rule it would answer a question
+        // nobody asked.
+        _tryItTest = null;
+        RefreshProblem();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Judges the draft as the save would, once it names what it compares. An incomplete draft is not a problem, only
+    /// unfinished, and saying otherwise while it is being filled in would be noise.
+    /// </summary>
+    private void RefreshProblem()
+    {
+        Draft.Problem = Draft.IsComplete && Draft.TargetAttribute is { } target && _validator != null
+            ? _validator.DescribeProblem(Draft.ToRule(0), ObjectType, target)
+            : null;
+
+        if (Draft.IsComplete && Draft.Problem == null)
+        {
+            using var jim = JimFactory.Create();
+            TryItInputs = jim.ObjectMatching.DescribeTestInputs(Draft.ToRule(0), ObjectType);
+        }
+        else
+        {
+            TryItInputs = [];
+        }
+    }
+
+    private TestInputState StateOf(string attributeName)
+    {
+        if (!_states.TryGetValue(attributeName, out var state))
+            _states[attributeName] = state = new TestInputState();
+        return state;
+    }
+
+    private void ClearTryIt() => _tryItTest = null;
+
+    private void SetNoValue(TestInputState state, bool noValue)
+    {
+        state.NoValue = noValue;
+        ClearTryIt();
+    }
+
+    private void SetLookUp(bool lookUp)
+    {
+        _lookUp = lookUp;
+        ClearTryIt();
+    }
+
+    private void SetFromObject(bool fromObject) => _fromObject = fromObject;
+
+    /// <summary>
+    /// Fills the inputs from a real Connected System Object: every value it holds for each attribute the rule reads,
+    /// and "No value" for an attribute it holds none for.
+    /// </summary>
+    private async Task LoadObjectAsync(TestObjectPicker.PickedObject found)
+    {
+        using var jim = JimFactory.Create();
+        _testedObject = await jim.ConnectedSystems.GetConnectedSystemObjectAsync(ObjectType.ConnectedSystemId, found.Id);
+        if (_testedObject != null)
+        {
+            foreach (var input in jim.ObjectMatching.TestInputsFromConnectedSystemObject(_testedObject, Draft.ToRule(0), ObjectType))
+                StateOf(input.AttributeName).Load(input.Values.Select(ToEditableText));
+        }
+
+        ClearTryIt();
+    }
+
+    /// <summary>
+    /// A loaded value as text the input converts back to the same value: JIM's text form, and base64 for Binary.
+    /// </summary>
+    private static string ToEditableText(object value) => value switch
+    {
+        byte[] bytes => Convert.ToBase64String(bytes),
+        _ => ExpressionText.TryFormat(value, out var text) ? text ?? string.Empty : value.ToString() ?? string.Empty
+    };
+
+    private async Task TryItAsync()
+    {
+        if (!Draft.IsComplete || Draft.Problem != null)
+            return;
+
+        var rule = Draft.ToRule(0);
+        rule.MetaverseObjectType ??= LookupType;
+        var inputs = TryItInputs
+            .Select(input => new AttributeSample(input.AttributeName, StateOf(input.AttributeName).TestValues))
+            .ToList();
+
+        using var jim = JimFactory.Create();
+        _tryItTest = await jim.ObjectMatching.TestAsync(rule, ObjectType, inputs, _lookUp && CanLookUp, _testedObject);
+    }
+
+    /// <summary>The page of a Metaverse Object the lookup found; null when its type is not known here.</summary>
+    private string? IdentityHref(Guid id) =>
+        LookupType?.PluralName is { Length: > 0 } pluralName ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, pluralName) : null;
+
+    private static string LookupLabel(ObjectMatchingLookupOutcome outcome) => outcome switch
+    {
+        ObjectMatchingLookupOutcome.WouldJoin => "Would join",
+        ObjectMatchingLookupOutcome.AlreadyJoined => "Already joined",
+        ObjectMatchingLookupOutcome.JoinedToAnother => "Joined to another",
+        ObjectMatchingLookupOutcome.NoMatch => "No match",
+        _ => "Ambiguous"
+    };
+
+    private static Color LookupColour(ObjectMatchingLookupOutcome outcome) => outcome switch
+    {
+        ObjectMatchingLookupOutcome.WouldJoin or ObjectMatchingLookupOutcome.AlreadyJoined => Color.Success,
+        ObjectMatchingLookupOutcome.NoMatch => Color.Default,
+        _ => Color.Error
+    };
+}

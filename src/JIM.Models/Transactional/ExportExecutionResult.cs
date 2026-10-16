@@ -98,6 +98,17 @@ public class ExportExecutionResult
     public int ClassMembershipRefusedCount { get; set; }
 
     /// <summary>
+    /// Number of Pending Exports refused before being sent, because each carried more than one change for a
+    /// single-valued attribute (#2182).
+    /// </summary>
+    /// <remarks>
+    /// Counted apart from <see cref="ClassMembershipRefusedCount"/> because it points at a fault in JIM rather than at
+    /// configuration: export staging gives a single-valued attribute exactly one change, so an export carrying two
+    /// means staging or merging went wrong. Nothing an administrator configures should ever make it non-zero.
+    /// </remarks>
+    public int SingleValuedContradictionRefusedCount { get; set; }
+
+    /// <summary>
     /// Queued attribute changes withdrawn before the export ran because nothing authorised them any more: their export
     /// Synchronisation Rule was deleted or disabled, its Attribute Flow for the attribute was removed or disabled, or the
     /// account was no longer joined (it left the rule's scope with the Disconnect action).
@@ -161,11 +172,30 @@ public class ExportExecutionResult
     /// <para>
     /// Contained, but never silent. The accounts were created in the Connected System and their exports
     /// succeeded, so this must not fail the batch; unlike the optimistic apply above, though, nothing
-    /// self-heals a password that nobody knows is owed, so the count is reported on the Activity and an
-    /// administrator can re-stage by exporting again.
+    /// self-heals a password that nobody knows is owed, so the count is reported on the export Activity as a
+    /// warning and the service log names the accounts. Exporting again does not re-stage the passwords, because
+    /// only the Create that provisions an account stages one; an administrator sets them with the set-password
+    /// action instead.
     /// </para>
     /// </summary>
     public int InitialPasswordStagingFailedCount { get; set; }
+
+    /// <summary>
+    /// Number of exports that wrote an account's enabled state (#2064) whose owed first password JIM failed to mark as
+    /// set by an Attribute Flow. Contained like a staging failure: the directory has changed and the exports succeeded.
+    /// Not silent, because a password delivered to such an account would follow the provisioning Synchronisation
+    /// Rule's Enable Account instead of the flow, until Enforce State corrects it.
+    /// </summary>
+    public int InitialPasswordMarkingFailedCount { get; set; }
+
+    /// <summary>
+    /// Number of newly provisioned accounts whose first password is a password change already waiting for the person
+    /// (#2160): their own password, or an administrator's set naming the account, now carrying the Initial Password's
+    /// promises about the account. No Initial Password was queued for them, and none is counted in
+    /// <see cref="InitialPasswordsStagedCount"/>.
+    /// </summary>
+    public int InitialPasswordsCarriedCount { get; set; }
+
 
     /// <summary>
     /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was
@@ -297,6 +327,12 @@ public class ProcessedExportItem
     public Guid? QueuedByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// Every synchronisation that staged the Pending Export, oldest first, copied from
+    /// <see cref="PendingExport.StagedByRunProfileExecutionItemIds"/>.
+    /// </summary>
+    public List<Guid> StagedByRunProfileExecutionItemIds { get; set; } = [];
+
+    /// <summary>
     /// The Synchronisation Rule whose provisioning decision produced this export, copied from
     /// <see cref="PendingExport.ProvisioningSyncRuleId"/>. Only ever set for a create.
     /// </summary>
@@ -319,6 +355,7 @@ public class ProcessedExportItem
         PendingExportId = export.Id;
         SourceMetaverseObjectId = export.SourceMetaverseObjectId;
         QueuedByRunProfileExecutionItemId = export.QueuedByRunProfileExecutionItemId;
+        StagedByRunProfileExecutionItemIds = [.. export.Stagers()];
         ProvisioningSyncRuleId = export.ProvisioningSyncRuleId;
         return this;
     }

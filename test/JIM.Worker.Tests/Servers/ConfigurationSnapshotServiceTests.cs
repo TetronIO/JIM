@@ -13,6 +13,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -38,6 +39,7 @@ public class ConfigurationSnapshotServiceTests
         TestUtilities.SetEnvironmentVariables();
         _protection = new RoundTripCredentialProtection();
         _repository = new Mock<IRepository>();
+        _repository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _jim = new JimApplication(_repository.Object) { CredentialProtection = _protection };
         _service = _jim.ConfigurationSnapshots;
     }
@@ -153,6 +155,38 @@ public class ConfigurationSnapshotServiceTests
         var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
         Assert.That(Child(flow, "initialExportOnly")!.Value, Is.EqualTo("true"));
         Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_CapturesExpressionMappingKeepUnique()
+    {
+        // Keep unique (#2023) decides whether a value built from a generated value is corrected with it, so a toggle
+        // must appear in the configuration change history.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5, KeepUnique = false };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" });
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "keepUnique")!.Value, Is.EqualTo("false"));
+        Assert.That(Child(flow, "keepUnique")!.Label, Is.EqualTo("Keep unique"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_OmitsKeepUniqueWhereItCannotApply()
+    {
+        // A direct flow can never build a value from a generated value, so the switch is not recorded for it.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5 };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttributeId = 9 });
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "keepUnique"), Is.Null);
     }
 
     [Test]
@@ -338,6 +372,69 @@ public class ConfigurationSnapshotServiceTests
         _repository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
         return connectedSystems;
     }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_ExpressionCriterion_CapturesItsExpressionAndCompareAsType()
+    {
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, Expression = "Lower(Trim(cs[\"department\"]))", CompareAs = AttributeDataType.Text,
+            ComparisonType = JIM.Models.Search.SearchComparisonType.StartsWith, StringValue = "fin"
+        });
+
+        var criterion = SnapshotCriterion(_service.CreateSnapshot(rule, HashKey));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(criterion, "expression")?.Value, Is.EqualTo("Lower(Trim(cs[\"department\"]))"));
+            Assert.That(Child(criterion, "compareAs")?.Value, Is.EqualTo(nameof(AttributeDataType.Text)));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_RelativeDateCriterion_CapturesItsRelativeValue()
+    {
+        // A relative-date criterion's meaning is its relative value; a snapshot without it would show no change when
+        // "within 30 days" becomes "within 90 days".
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, MetaverseAttributeId = 3, ComparisonType = JIM.Models.Search.SearchComparisonType.GreaterThan,
+            ValueMode = DateCriteriaValueMode.Relative, RelativeCount = 30, RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.Ago
+        });
+
+        var criterion = SnapshotCriterion(_service.CreateSnapshot(rule, HashKey));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(criterion, "valueMode")?.Value, Is.EqualTo(nameof(DateCriteriaValueMode.Relative)));
+            Assert.That(Child(criterion, "relativeCount")?.Value, Is.EqualTo("30"));
+            Assert.That(Child(criterion, "relativeUnit")?.Value, Is.EqualTo(nameof(RelativeDateUnit.Days)));
+            Assert.That(Child(criterion, "relativeDirection")?.Value, Is.EqualTo(nameof(RelativeDateDirection.Ago)));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_AbsoluteCriterion_RecordsNoValueMode()
+    {
+        // Snapshots taken before the value mode was captured hold no such key; an absolute criterion must not differ.
+        var rule = RuleWithCriterion(new SyncRuleScopingCriteria
+        {
+            Id = 7, MetaverseAttributeId = 3, ComparisonType = SearchComparisonType.Equals, StringValue = "x"
+        });
+
+        Assert.That(Child(SnapshotCriterion(_service.CreateSnapshot(rule, HashKey)), "valueMode"), Is.Null);
+    }
+
+    private static SyncRule RuleWithCriterion(SyncRuleScopingCriteria criterion)
+    {
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup { Id = 5, Criteria = [criterion] });
+        return rule;
+    }
+
+    private static ConfigurationSnapshotNode SnapshotCriterion(ConfigurationSnapshot snapshot) =>
+        Child(Child(snapshot.Root, "objectScopingCriteriaGroups")!.Children![0], "criteria")!.Children!.Single();
 
     private static SyncRule RuleWithGeneratedMapping(params int[] excludedConnectedSystemIds)
     {
@@ -597,6 +694,93 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesFullImportRunProfileSettings()
+    {
+        // Allow Object Type Changes (#2049), Verification Mode and the deletion-detection limits (#1618) all change
+        // what a Full Import does, so switching any of them has to be attributable in the change history.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3, Name = "AD", ConnectorDefinitionId = 4,
+            RunProfiles =
+            [
+                new ConnectedSystemRunProfile
+                {
+                    Id = 50, Name = "Full Import (Object Type changes)", RunType = ConnectedSystemRunType.FullImport,
+                    AllowObjectTypeChanges = true,
+                    VerifyImportContentHashes = true,
+                    MaxDetectedDeletions = 500,
+                    MaxDetectedDeletionsPercent = 0
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var runProfile = Child(snapshot.Root, "runProfiles")!.Children!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(runProfile, "allowObjectTypeChanges")?.Value, Is.EqualTo("true"));
+            Assert.That(Child(runProfile, "verifyImportContentHashes")?.Value, Is.EqualTo("true"));
+            Assert.That(Child(runProfile, "maxDetectedDeletions")?.Value, Is.EqualTo("500"));
+            Assert.That(Child(runProfile, "maxDetectedDeletionsPercent")?.Value, Is.EqualTo("0"),
+                "a limit of zero is a real limit and must be recorded, not skipped as empty");
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesExportRunProfileLimits()
+    {
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3, Name = "AD", ConnectorDefinitionId = 4,
+            RunProfiles =
+            [
+                new ConnectedSystemRunProfile
+                {
+                    Id = 51, Name = "Export", RunType = ConnectedSystemRunType.Export,
+                    MaxCreates = 5,
+                    MaxUpdates = 0,
+                    MaxDeletes = 100
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var runProfile = Child(snapshot.Root, "runProfiles")!.Children!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(runProfile, "maxCreates")?.Value, Is.EqualTo("5"));
+            Assert.That(Child(runProfile, "maxUpdates")?.Value, Is.EqualTo("0"));
+            Assert.That(Child(runProfile, "maxDeletes")?.Value, Is.EqualTo("100"));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_RunProfileAtItsDefaults_RecordsNoLineForTheseSettings()
+    {
+        // A Run Profile that has never enabled a Full Import setting or set a limit records nothing for them. That keeps
+        // every creation history free of "Allow Object Type Changes: false" lines, and means a snapshot captured
+        // before these settings were recorded agrees with one captured after for every Run Profile still at its
+        // defaults, so the first save after an upgrade does not report a change nobody made.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3, Name = "AD", ConnectorDefinitionId = 4,
+            RunProfiles = [new ConnectedSystemRunProfile { Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport }]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var runProfile = Child(snapshot.Root, "runProfiles")!.Children!.Single();
+        string[] unsetKeys =
+        [
+            "allowObjectTypeChanges", "verifyImportContentHashes", "maxCreates", "maxUpdates", "maxDeletes",
+            "maxDetectedDeletions", "maxDetectedDeletionsPercent"
+        ];
+        Assert.That(runProfile.Children!.Select(c => c.Key).Intersect(unsetKeys), Is.Empty);
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_CapturesWritableOnCreateAttributeWritability()
     {
         // A schema refresh that changes an attribute's writability changes what JIM may export to it, so the
@@ -630,6 +814,50 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(writability.Value, Is.EqualTo("WritableOnCreate"));
         Assert.That(writability.DisplayValue, Is.EqualTo("Writable On Create"),
             "the diff shows administrators the display value, so it must read as words rather than an enum name");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void CreateSnapshot_ConnectedSystem_RecordsACaseExactAttributeOnly(bool caseExact)
+    {
+        // #2051: the declaration decides how identity comparisons treat the attribute, so a change to it is a change
+        // to configuration. Recorded only when true, so a snapshot captured before the declaration existed agrees
+        // with one captured after for every attribute that ignores case, and an upgrade reports no change nobody made.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "HR",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "person", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "login", Type = AttributeDataType.Text, Selected = true, CaseExact = caseExact
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var node = Child(attribute, "caseExact");
+        if (caseExact)
+        {
+            Assert.That(node, Is.Not.Null);
+            Assert.That(node!.Value, Is.EqualTo("true"));
+            Assert.That(node.Label, Is.EqualTo("Case-exact"));
+        }
+        else
+        {
+            Assert.That(node, Is.Null);
+        }
     }
 
     [Test]
@@ -867,6 +1095,20 @@ public class ConfigurationSnapshotServiceTests
     }
 
     // -- Connector Definition scope ------------------------------------------------------------------------------------
+
+    [TestCase(true, "true")]
+    [TestCase(false, "false")]
+    public void CreateSnapshot_ConnectorDefinition_CapturesExternalIdsUniqueAcrossObjectTypes(bool unique, string expected)
+    {
+        // Whether an External ID names one object across every Object Type (#2049) decides whether an import refuses
+        // an Object Type change, so a Connector upgrade that changes it belongs in the definition's history.
+        var definition = new ConnectorDefinition { Id = 7, Name = "LDAP", ExternalIdsUniqueAcrossObjectTypes = unique };
+
+        var snapshot = _service.CreateSnapshot(definition, HashKey);
+
+        var capabilities = Child(snapshot.Root, "capabilities")!;
+        Assert.That(Child(capabilities, "externalIdsUniqueAcrossObjectTypes")?.Value, Is.EqualTo(expected));
+    }
 
     [Test]
     public void CreateSnapshot_ConnectorDefinition_CapturesMetadataCapabilitiesSettingsAndFiles()

@@ -21,32 +21,18 @@ function Get-JIMMetaverseObjectProvenance {
         use), and the attribute's change history.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Metaverse Object.
+        The ID of the Metaverse Object.
 
     .PARAMETER AttributeName
-        The name of a Metaverse Attribute to get detailed provenance for. Resolved against the
-        Metaverse Object's own attributes (an exact, case-insensitive match); an attribute the
-        object holds no value for, or that does not exist, returns a clear error rather than a
-        404. Cannot be used with -AttributeId.
+        The name of the attribute to inspect, matched exactly but ignoring case among the attributes the object
+        holds a value for. An attribute it holds no value for is an error. Cannot be used with -AttributeId.
 
     .PARAMETER AttributeId
-        The unique identifier of a Metaverse Attribute to get detailed provenance for. Cannot be
-        used with -AttributeName.
+        The ID of the attribute to inspect. Cannot be used with -AttributeName.
 
     .OUTPUTS
-        With just -Id: a PSCustomObject with MetaverseObjectId and Attributes (each with
-        AttributeId, AttributeName and Origins, an array of {Kind, ConnectedSystemId,
-        ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue, Corrected}).
-        Kind is NotRecorded, SynchronisationRule, GeneratedValue or SetByPerson.
-
-        With -AttributeName or -AttributeId: a PSCustomObject with MetaverseObjectId,
-        MetaverseObjectTypeId, AttributeId, AttributeName, AttributeType, AttributePlurality,
-        CurrentValues (each with DisplayValue, ReferenceMetaverseObjectId, ReferenceTypeName,
-        Origin), CurrentValueTotalCount, ContributingConnectedSystemObject, LastSet (the Activity
-        that set the current value), Sources (each mapping's Rank, SyncRuleId, SyncRuleName,
-        ConnectedSystemId, ConnectedSystemName, IsExpression, IsGeneratedValue, Expression, State,
-        CandidateValues, Note), History (newest first; IsGeneratedValue marks a generated value) and
-        HistoryTruncated.
+        With just -Id, a summary: each attribute that holds a value, with the distinct origins of its values. With
+        -AttributeName or -AttributeId, everything the portal's attribute inspector shows for that attribute.
 
     .EXAMPLE
         Get-JIMMetaverseObjectProvenance -Id "12345678-1234-1234-1234-123456789abc"
@@ -82,7 +68,9 @@ function Get-JIMMetaverseObjectProvenance {
         Get-JIMMetaverseObjectChangeHistory
     #>
     [CmdletBinding(DefaultParameterSetName = 'Summary')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseObjectProvenanceDto', ParameterSetName = 'Summary')]
+    [OutputType('JIM.MetaverseAttributeProvenanceDto', ParameterSetName = 'ByAttributeName')]
+    [OutputType('JIM.MetaverseAttributeProvenanceDto', ParameterSetName = 'ByAttributeId')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

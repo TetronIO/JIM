@@ -4,49 +4,54 @@
 function New-JIMMatchingRule {
     <#
     .SYNOPSIS
-        Creates a new Object Matching Rule in JIM.
+        Creates an Object Matching Rule on a Connected System Object Type (simple mode).
 
     .DESCRIPTION
-        Creates a new Object Matching Rule for a Connected System Object Type.
-        Object Matching Rules define how objects from a Connected System are correlated
-        with Metaverse Objects during import (join) and export (provisioning) operations.
-
-        The Connected System must be in simple matching mode: JIM refuses to create a
-        per-object-type rule on a system in advanced matching mode, because such a rule
-        would never be consulted. Switch the mode first with Switch-JIMMatchingMode, or
-        use New-JIMSyncRuleMatchingRule to create a per-Synchronisation Rule rule instead.
+        Creates an Object Matching Rule on a Connected System Object Type. The Connected System must be in simple
+        mode: JIM refuses a rule on an Object Type in advanced mode, because it would never be consulted. Switch the
+        mode with Switch-JIMMatchingMode, or use New-JIMSyncRuleMatchingRule.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .PARAMETER ObjectTypeId
-        The unique identifier of the Object Type this rule applies to.
+        The ID of the Connected System Object Type the rule is for.
 
     .PARAMETER MetaverseObjectTypeId
-        The Metaverse Object Type ID to search when evaluating this rule.
-        Required for simple mode matching rules.
+        The ID of the Metaverse Object Type whose objects the rule searches.
 
     .PARAMETER SourceAttributeId
-        The Connected System attribute ID to use as the source for matching. Matched against
-        -TargetMetaverseAttributeId, for both import and export matching.
+        The ID of the Connected System attribute whose values are matched against -TargetMetaverseAttributeId, for
+        import and export matching alike. Give this or -SourceExpression.
+
+    .PARAMETER SourceExpression
+        An expression computing the value to match on, instead of a Connected System attribute, for an identifier
+        held differently in each system: for example '"E" + Trim(cs["employeeId"])'. It reads the Connected System
+        Object only, through cs["attributeName"]. Its result is converted to the type of
+        -TargetMetaverseAttributeId, and a list of text values is matched value by value. JIM refuses an expression
+        that does not parse, reads mv["..."], reads no cs["..."] attribute or one the Object Type does not have, or
+        calls a function that returns a different value each time.
 
     .PARAMETER TargetMetaverseAttributeId
-        The Metaverse attribute ID to match against.
+        The ID of the Metaverse attribute the source is matched against.
 
     .PARAMETER Order
-        The evaluation order for this rule (lower values are evaluated first).
-        If not specified, the rule will be added at the end.
+        Where the rule comes in the order JIM tries the rules, lowest first. Without it, the rule goes after the
+        existing ones.
 
     .PARAMETER CaseSensitive
-        Whether the matching should be case-sensitive.
-        When false (default), 'emp123' matches 'EMP123'.
-        When true, 'emp123' does NOT match 'EMP123'.
+        Whether the comparison respects case: with $true, 'emp123' does not match 'EMP123'. When omitted, follows
+        the source: respects case when a source attribute's values are declared case-exact, and ignores it otherwise.
 
     .PARAMETER PassThru
-        If specified, returns the created Matching Rule object.
+        Returns the rule created.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Matching Rule object.
+        With -PassThru, the rule created; otherwise nothing.
+
+        JIM.ObjectTypeMatchingRule
+        ConnectedSystemId (int): The ID of the Connected System the rule belongs to, so the rule can be piped to
+            Set-JIMMatchingRule and Remove-JIMMatchingRule.
 
     .EXAMPLE
         New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10 -MetaverseObjectTypeId 1 -SourceAttributeId 25 -TargetMetaverseAttributeId 5
@@ -58,14 +63,20 @@ function New-JIMMatchingRule {
 
         Creates a matching rule at order 0 and returns the created rule.
 
+    .EXAMPLE
+        New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10 -MetaverseObjectTypeId 1 -SourceExpression '"E" + Trim(cs["employeeId"])' -TargetMetaverseAttributeId 5
+
+        Creates a matching rule that joins a directory account holding "1007" to the Metaverse Object whose
+        attribute 5 holds "E1007".
+
     .LINK
         Get-JIMMatchingRule
         Set-JIMMatchingRule
         Remove-JIMMatchingRule
         Switch-JIMMatchingMode
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'Attribute')]
+    [OutputType('JIM.ObjectTypeMatchingRule')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
@@ -76,8 +87,13 @@ function New-JIMMatchingRule {
         [Parameter(Mandatory)]
         [int]$MetaverseObjectTypeId,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Attribute')]
         [int]$SourceAttributeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'Expression')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+        [string]$SourceExpression,
 
         [Parameter(Mandatory)]
         [int]$TargetMetaverseAttributeId,
@@ -98,9 +114,13 @@ function New-JIMMatchingRule {
             return
         }
 
-        $source = @{
-            order = 0
-            connectedSystemAttributeId = $SourceAttributeId
+        # A source is an attribute or an expression, never both (#2052); the parameter sets enforce that.
+        $source = @{ order = 0 }
+        if ($PSCmdlet.ParameterSetName -eq 'Expression') {
+            $source.expression = $SourceExpression
+        }
+        else {
+            $source.connectedSystemAttributeId = $SourceAttributeId
         }
 
         $body = @{

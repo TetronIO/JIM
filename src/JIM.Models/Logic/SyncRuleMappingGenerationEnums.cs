@@ -19,7 +19,7 @@ public enum GeneratedValueTokenKind
     OnlyIfTaken = 0,
 
     /// <summary>
-    /// The token is the next number drawn from the target attribute's <see cref="GeneratedValueSequence"/>
+    /// The token is the next number drawn from the target attribute's <see cref="JIM.Models.Transactional.GeneratedValueSequence"/>
     /// counter, always appended (never suffixing a collision), and never reused once issued.
     /// </summary>
     Sequence = 1,

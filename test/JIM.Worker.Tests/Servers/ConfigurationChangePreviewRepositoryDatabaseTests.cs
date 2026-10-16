@@ -156,6 +156,81 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
     }
 
     [Test]
+    public async Task GetPreviewDeltasAsync_AmbiguousRow_ReadsBackEveryCandidateFieldInRecordedOrderAsync()
+    {
+        // #2052: written with the delta in the same unit of work, read back with the page, and snapshot in full so a
+        // candidate deleted after the preview ran still reads.
+        var activityId = await SeedPreviewAsync();
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+
+        Guid groupId;
+        await using (var context = NewContext())
+        {
+            var group = NewGroup(activityId, ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, 1, "Ada");
+            group.Deltas.Single().MatchCandidates =
+            [
+                new ConfigurationChangePreviewDeltaMatchCandidate
+                {
+                    CandidateKind = MatchCandidateKind.ConnectedSystemObject, CandidateId = second, DisplayNameSnapshot = "aking2",
+                    TypeNameSnapshot = "user", ConnectedSystemId = 4, ConnectedSystemNameSnapshot = "Directory", MatchedValue = "E1, E2",
+                    ObjectMatchingRuleId = 3, ObjectMatchingRuleDescriptionSnapshot = "employeeId = Employee ID", Ordinal = 1, CandidateTotal = 14
+                },
+                new ConfigurationChangePreviewDeltaMatchCandidate
+                {
+                    CandidateKind = MatchCandidateKind.ConnectedSystemObject, CandidateId = first, DisplayNameSnapshot = "aking",
+                    TypeNameSnapshot = "user", ConnectedSystemId = 4, ConnectedSystemNameSnapshot = "Directory", MatchedValue = "E1",
+                    ObjectMatchingRuleId = 3, ObjectMatchingRuleDescriptionSnapshot = "employeeId = Employee ID", Ordinal = 0, CandidateTotal = 14
+                }
+            ];
+            await new ConfigurationChangePreviewRepository(context).CreatePreviewResultsAsync([group]);
+            groupId = group.Id;
+        }
+
+        await using var read = NewContext();
+        var row = (await new ConfigurationChangePreviewRepository(read).GetPreviewDeltasAsync(activityId, groupId, 1, 10)).Results.Single();
+
+        Assert.That(row.MatchCandidates.Select(c => c.CandidateId), Is.EqualTo(new[] { first, second }), "read back in recorded order");
+        var stored = row.MatchCandidates[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.CandidateKind, Is.EqualTo(MatchCandidateKind.ConnectedSystemObject));
+            Assert.That(stored.DisplayNameSnapshot, Is.EqualTo("aking2"));
+            Assert.That(stored.TypeNameSnapshot, Is.EqualTo("user"));
+            Assert.That(stored.ConnectedSystemId, Is.EqualTo(4));
+            Assert.That(stored.ConnectedSystemNameSnapshot, Is.EqualTo("Directory"));
+            Assert.That(stored.MatchedValue, Is.EqualTo("E1, E2"));
+            Assert.That(stored.ObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(stored.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("employeeId = Employee ID"));
+            Assert.That(stored.Ordinal, Is.EqualTo(1));
+            Assert.That(stored.CandidateTotal, Is.EqualTo(14));
+        }
+    }
+
+    [Test]
+    public async Task DeletingAPreviewsActivity_RemovesItsDeltaCandidatesAsync()
+    {
+        // Preview housekeeping removes a preview by its Activity; the candidates hang off the delta rows and go with
+        // them, or the delete would fail on their foreign key.
+        var activityId = await SeedPreviewAsync();
+        await using (var context = NewContext())
+        {
+            var group = NewGroup(activityId, ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, 1, "Ada");
+            group.Deltas.Single().MatchCandidates =
+            [
+                new ConfigurationChangePreviewDeltaMatchCandidate { CandidateKind = MatchCandidateKind.MetaverseObject, CandidateId = Guid.CreateVersion7(), CandidateTotal = 1 }
+            ];
+            await new ConfigurationChangePreviewRepository(context).CreatePreviewResultsAsync([group]);
+        }
+
+        await using (var delete = NewContext())
+            await delete.Activities.Where(a => a.Id == activityId).ExecuteDeleteAsync();
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConfigurationChangePreviewDeltaMatchCandidates.CountAsync(), Is.Zero);
+    }
+
+    [Test]
     public async Task GetPreviewDeltasAsync_PagedByGroup_ReturnsStableNonOverlappingPagesAsync()
     {
         var activityId = await SeedPreviewAsync();

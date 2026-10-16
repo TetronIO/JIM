@@ -12,10 +12,10 @@ function Get-JIMServiceSetting {
         tracking, sync page sizes, history retention, and other operational parameters.
 
     .PARAMETER Key
-        The unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").
+        The key of the one setting to return, such as "ChangeTracking.CsoChanges.Enabled".
 
     .OUTPUTS
-        PSCustomObject representing service setting(s).
+        Each service setting, with its default, its stored value and the value in effect.
 
     .EXAMPLE
         Get-JIMServiceSetting
@@ -37,7 +37,7 @@ function Get-JIMServiceSetting {
         Reset-JIMServiceSetting
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ServiceSettingDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ByKey', Position = 0)]
         [string]$Key

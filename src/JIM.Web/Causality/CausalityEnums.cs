@@ -159,3 +159,51 @@ public enum CausalityTableFilter
     ObjectChanges,
     Destructive
 }
+
+/// <summary>
+/// What a card in a Lineage object's After this run section says (#1811): something a later run did, the confirming
+/// import that settled an export, or where a branch stopped and why.
+/// </summary>
+public enum CausalityLineageConsequenceKind
+{
+    /// <summary>
+    /// Something a later run recorded doing to the object.
+    /// </summary>
+    Outcome,
+
+    /// <summary>
+    /// The import that confirmed an export landed: folded by default, since it changes nothing.
+    /// </summary>
+    Confirmation,
+
+    /// <summary>
+    /// The branch is waiting on something that will happen without anyone acting: a run, a retry, a grace period.
+    /// </summary>
+    Waiting,
+
+    /// <summary>
+    /// The branch stopped at an export that failed or was parked, and nothing will happen until someone acts.
+    /// </summary>
+    NeedsAttention,
+
+    /// <summary>
+    /// The branch has finished with nothing further to follow.
+    /// </summary>
+    Settled,
+
+    /// <summary>
+    /// The branch goes further than the walk read.
+    /// </summary>
+    FurtherThanShown
+}
+
+/// <summary>
+/// What the Causality Explorer (#2100) is focused on: an execution item, whose Lineage it shows, or an object, whose
+/// causal timeline it shows.
+/// </summary>
+public enum CausalityFocusKind
+{
+    Item,
+    ConnectedSystemObject,
+    MetaverseObject
+}

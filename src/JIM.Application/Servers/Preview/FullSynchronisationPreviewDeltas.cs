@@ -286,7 +286,8 @@ internal static class FullSynchronisationPreviewDeltas
                 SyncPreviewMessageCode.ExpressionEvaluationError
                     or SyncPreviewMessageCode.MultiValuedToSingleValuedFlow
                     or SyncPreviewMessageCode.GeneratedValueWouldFail => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow,
-                SyncPreviewMessageCode.AmbiguousMatch => ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
+                SyncPreviewMessageCode.AmbiguousMatch
+                    or SyncPreviewMessageCode.AmbiguousProvisioningMatch => ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
                 _ => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail
             },
             ObjectDisplayName: item.DisplayName,
@@ -294,7 +295,9 @@ internal static class FullSynchronisationPreviewDeltas
             ConnectedSystemObjectId: item.ConnectedSystemObjectId,
             ConnectedSystemId: connectedSystemId,
             AttributeName: error.AttributeName,
-            NewValue: error.Detail);
+            NewValue: error.Detail,
+            // An ambiguous match names what it found (#2052); no other error carries candidates.
+            MatchCandidates: error.MatchCandidates.Count > 0 ? error.MatchCandidates : null);
 
     private static PreviewDelta WouldNotChange(FullSyncPreviewItem item, int connectedSystemId) =>
         new(ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange,

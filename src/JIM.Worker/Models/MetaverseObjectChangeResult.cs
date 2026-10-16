@@ -118,11 +118,24 @@ public readonly struct MetaverseObjectChangeResult
     public string? MvoDeletionPolicySnapshotJson { get; init; }
 
     /// <summary>
+    /// The Metaverse Object whose deletion this disconnection scheduled, when it scheduled one. The caller records
+    /// on it the item this disconnection is reported on, which the housekeeping deletion that follows names as its
+    /// cause (#1811); the item does not exist until the caller creates or finds it. Null otherwise.
+    /// </summary>
+    public MetaverseObject? MvoScheduledForDeletion { get; init; }
+
+    /// <summary>
     /// Set when this join cancelled a previously scheduled grace-period deletion (#119, #1620): the detail
     /// message for the <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled"/>
     /// child outcome the caller attaches under the Joined root. Null for an ordinary join.
     /// </summary>
     public string? CancelledMvoDeletionDetailMessage { get; init; }
+
+    /// <summary>
+    /// Set on a join made by matching (#2052): the match it was made on, so whichever site builds the Joined root
+    /// outcome records the Object Matching Rule and the value. Null for any other change.
+    /// </summary>
+    public ImportMatch? JoinMatch { get; init; }
 
     /// <summary>
     /// When a scheduled deletion becomes due (UTC), so the outcome node can state the date rather than
@@ -190,18 +203,21 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="attributesRemoved">The number of MVO attributes that were removed alongside the join.</param>
     /// <param name="cancelledMvoDeletionDetailMessage">The detail message for an MvoDeletionCancelled child outcome, when this join cancelled a previously scheduled deletion (#1620); null otherwise.</param>
     /// <param name="mvoDeletionPolicySnapshotJson">The scheduled deletion's decision-time policy snapshot, carried through unchanged so the causality panel can still show the rule that had scheduled it (#1620); null otherwise.</param>
+    /// <param name="joinMatch">The match the join was made on (#2052); null when the join was not made by matching.</param>
     public static MetaverseObjectChangeResult Joined(
         int attributesAdded = 0,
         int attributesRemoved = 0,
         string? cancelledMvoDeletionDetailMessage = null,
-        string? mvoDeletionPolicySnapshotJson = null) => new()
+        string? mvoDeletionPolicySnapshotJson = null,
+        ImportMatch? joinMatch = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.Joined,
         AttributesAdded = attributesAdded,
         AttributesRemoved = attributesRemoved,
         CancelledMvoDeletionDetailMessage = cancelledMvoDeletionDetailMessage,
-        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson
+        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
+        JoinMatch = joinMatch
     };
 
     /// <summary>
@@ -240,6 +256,7 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionGracePeriod">The grace period applied when the deletion was scheduled (#1086).</param>
     /// <param name="mvoDeletionPolicySnapshotJson">The serialised decision-time deletion policy snapshot, when the evaluation recorded an outcome (#119).</param>
     /// <param name="mvoDeletionEligibleDate">When a scheduled deletion becomes due (UTC), for the outcome node's detail message (#119).</param>
+    /// <param name="mvoScheduledForDeletion">The Metaverse Object whose deletion this disconnection scheduled, for the caller to record the scheduling item on (#1811).</param>
     /// <param name="preservedNoSourceAttributeCount">How many values were preserved as last known state because no import source remains (#1570).</param>
     /// <param name="generatedValueOutcomes">One tuple per Generated result from a re-elected survivor's own generated mapping (#242, Phase 2 work package J).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
@@ -255,6 +272,7 @@ public readonly struct MetaverseObjectChangeResult
         TimeSpan? mvoDeletionGracePeriod = null,
         string? mvoDeletionPolicySnapshotJson = null,
         DateTime? mvoDeletionEligibleDate = null,
+        MetaverseObject? mvoScheduledForDeletion = null,
         int preservedNoSourceAttributeCount = 0,
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes = null) => new()
     {
@@ -273,6 +291,7 @@ public readonly struct MetaverseObjectChangeResult
         MvoDeletionGracePeriod = mvoDeletionGracePeriod,
         MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
         MvoDeletionEligibleDate = mvoDeletionEligibleDate,
+        MvoScheduledForDeletion = mvoScheduledForDeletion,
         PreservedNoSourceAttributeCount = preservedNoSourceAttributeCount,
         GeneratedValueOutcomes = generatedValueOutcomes
     };

@@ -81,6 +81,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired", CausalityTone.Warning, Icons.Material.Filled.Archive),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, "Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, "Value held back", CausalityTone.Warning, Icons.Material.Filled.HourglassTop),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, "Candidate passed over", CausalityTone.Info, Icons.Material.Filled.SkipNext),
         (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue, "New contributor, value changes", CausalityTone.Warning, Icons.Material.Filled.ChangeCircle),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue, "New contributor, same value", CausalityTone.Secondary, Icons.Material.Filled.CompareArrows),

@@ -1,5 +1,6 @@
 ﻿@page "/admin/connected-systems/{CsId:int}/connector-space/{CsoId}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application.Services
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -33,7 +34,7 @@
     </LongLoadMessage>
     <Loaded>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Object:</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
-    <PageInfo Title="Connected System Object">
+    <PageInfo Title="Connected System Object" DocsPage="configuration/connector-space.md#connected-system-objects">
         A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.
     </PageInfo>
 </MudText>
@@ -103,12 +104,20 @@
                 </MudStack>
             }
 
-            <MudSpacer />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+        </MudStack>
+
+        @* Second row: what can be done with the object. None of them is the page's main action, so all are outlined in the neutral colour: primary marks a main action alone. *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap mt-3" Spacing="2">
+            <MudButton Variant="Variant.Outlined" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
             </MudButton>
+
+            @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
+            <MudButton Variant="Variant.Outlined" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
+                       data-testid="jim-cso-explore-causality">Explore causality</MudButton>
 
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
@@ -116,7 +125,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                <MudButton Variant="Variant.Outlined" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -129,6 +138,16 @@
         <div class="mt-6">
             <SyncPreviewPanel PreviewResult="_previewResult" Context="BuildPreviewContext()" OnClose="ClosePreview" />
         </div>
+    }
+
+    @* What could not be linked, and why (#959). Above the Pending Exports and the attributes, because it is the one
+       thing on this page that is wrong rather than merely in progress. *@
+    @if (_unresolvedReferenceContext != null)
+    {
+        <UnresolvedReferencesSection ConnectedSystemId="@CsId"
+                                     ConnectedSystemObjectId="@_connectedSystemObjectId"
+                                     Context="@_unresolvedReferenceContext"
+                                     Class="mt-6" />
     }
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)
@@ -247,6 +266,7 @@
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
             @* One row per attribute. The object's attribute values were loaded with the rest of the page (capped
                per multi-valued attribute), so the search and the five sorts run over that list in memory. *@
+            <CascadingValue Value="@_unresolvedReferenceCauses">
             <AttributeTable TItem="AttributeGroup"
                             Items="@_attributeGroups"
                             Matches="MatchesAttributeSearch"
@@ -320,6 +340,7 @@
                                      SecondaryText="Values appear here once an Import brings them in from the Connected System." />
                 </EmptyContent>
             </AttributeTable>
+            </CascadingValue>
         </MudTabPanel>
         <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @* mt-5 here matches the gap the Attributes grid gives itself above, since the panels carry none. *@
@@ -341,7 +362,6 @@
                 {
                     <div class="d-flex justify-center mt-3">
                         <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Primary"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)
@@ -455,7 +475,8 @@
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
             { x => x.SetPassword, SetPasswordAsync },
-            { x => x.StopTrying, StopPasswordChangeAsync }
+            { x => x.StopTrying, StopPasswordChangeAsync },
+            { x => x.ConfirmStopTrying, ConfirmStopPasswordChangeAsync }
         };
 
         await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
@@ -495,6 +516,22 @@
             EnableAccount = submission.EnableAccount,
             InitiatedBy = user
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Asked before the dialog's Stop trying: where the person's change is this Connected System Object's first password
+    /// (#2160), cancelling it leaves the object without one, so the administrator is asked first.
+    /// </summary>
+    private async Task<bool> ConfirmStopPasswordChangeAsync(int connectedSystemId)
+    {
+        if (ConnectedSystemObject?.MetaverseObjectId is not { } metaverseObjectId)
+            return true;
+
+        PendingPasswordChangeHeader? queued;
+        using (var jim = JimFactory.Create())
+            queued = await PasswordChangeCancellation.FindQueuedAsync(jim, metaverseObjectId, connectedSystemId);
+
+        return await PasswordChangeCancellation.ConfirmAsync(DialogService, queued);
     }
 
     /// <summary>
@@ -547,6 +584,18 @@
         // re-grouping every value each time would do the same work again for no new information.
         _attributeGroups = GetGroupedAttributes();
         _connectedSystemObjectId = ConnectedSystemObject.Id;
+
+        _unresolvedReferenceContext = null;
+        _unresolvedReferenceCauses = null;
+        if (await jim.ConnectedSystems.GetConnectedSystemObjectUnresolvedReferenceCountAsync(connectedSystemObjectId) > 0)
+        {
+            _unresolvedReferenceContext = await jim.ConnectedSystems.GetUnresolvedReferenceContextAsync(CsId, connectedSystemObjectId);
+            if (_unresolvedReferenceContext != null)
+            {
+                _unresolvedReferenceCauses = new UnresolvedReferenceCauses(_unresolvedReferenceContext);
+                await _unresolvedReferenceCauses.DiagnoseAsync(jim, _attributeGroups.SelectMany(group => group.Values));
+            }
+        }
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
@@ -672,6 +721,11 @@
 
     private List<AttributeGroup> _attributeGroups = new();
     private Guid _connectedSystemObjectId;
+
+    // Built only for an object holding unresolved references (#959): it reads the Connected System's scope, which an
+    // object with none has no use for. Shared by the Unresolved References panel and the attribute table's cause chips.
+    private ConnectedSystemObjectUnresolvedReferenceContext? _unresolvedReferenceContext;
+    private UnresolvedReferenceCauses? _unresolvedReferenceCauses;
 
     /// <summary>
     /// Whether an attribute matches the table's search: its name, or any of its loaded values.
@@ -816,25 +870,8 @@
         return new VirtualisedWindow<PendingExportAttributeValueChange>(result.Results, result.TotalResults);
     }
 
-    private static string GetAttributeValue(PendingExportAttributeValueChange change)
-    {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
-
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
-    }
+    private static string GetAttributeValue(PendingExportAttributeValueChange change) =>
+        PendingExportValueDisplay.Text(change) ?? "[null]";
 
     private static MudBlazor.Color GetAttributeChangeTypeColor(PendingExportAttributeChangeType changeType)
     {

@@ -119,7 +119,8 @@ public class ConfigurationSnapshotService
             .SelectMany(m => m.Generation!.Exclusions)
             .Any(e => e.ConnectedSystem == null);
         var connectedSystemNames = needsNames ? await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync() : null;
-        return CreateSnapshot(rule, hashKey, connectedSystemNames);
+        var testCases = rule.Id > 0 ? await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(rule.Id) : [];
+        return CreateSnapshot(rule, hashKey, connectedSystemNames, testCases);
     }
 
     /// <summary>
@@ -129,9 +130,20 @@ public class ConfigurationSnapshotService
     /// <see cref="CreateSnapshotAsync(SyncRule, byte[])"/>, which looks the names up. The preflight can use this one: it
     /// diffs ids, and reports an exclusion by its kind rather than its name.
     /// </summary>
-    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey) => CreateSnapshot(rule, hashKey, connectedSystemNames: null);
+    /// <remarks>This overload records no saved test cases. Change capture uses
+    /// <see cref="CreateSnapshotAsync(SyncRule, byte[])"/>, which reads them; a caller comparing against captured history
+    /// passes them to <see cref="CreateSnapshot(SyncRule, byte[], IReadOnlyList{ConfigurationTestCase})"/>.</remarks>
+    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey) => CreateSnapshot(rule, hashKey, connectedSystemNames: null, testCases: []);
 
-    private ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyDictionary<int, string>? connectedSystemNames)
+    /// <summary>
+    /// Builds a scoped snapshot of a Synchronisation Rule with the saved configuration test cases that cover it (#2055
+    /// Phase 4): those of its Scope, its Attribute Flows and its own Object Matching Rules.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyList<ConfigurationTestCase> testCases) =>
+        CreateSnapshot(rule, hashKey, connectedSystemNames: null, testCases);
+
+    private ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyDictionary<int, string>? connectedSystemNames,
+        IReadOnlyList<ConfigurationTestCase> testCases)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
@@ -155,6 +167,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules, connectedSystemNames));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
+        AddTestCases(children, testCases, rule.AttributeFlowRules, hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -244,6 +257,12 @@ public class ConfigurationSnapshotService
             // configuration and must appear in the change history; without them a disable diffs as "no change".
             Add(children, "enabled", Render(mapping.Enabled), "Enabled");
             Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
+
+            // Keep unique (Generated Value Forms, #2023) decides whether a value built from a generated value is
+            // corrected with it after a refusal, so a toggle is configuration. Recorded only where it can apply (an
+            // expression mapping), so the many mappings it can never affect do not each gain a line.
+            if (mapping.Generation == null && mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression)))
+                Add(children, "keepUnique", Render(mapping.KeepUnique), "Keep unique");
 
             if (mapping.Generation != null)
                 children.Add(BuildGeneration(mapping.Generation, connectedSystemNames));
@@ -369,6 +388,8 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             AddReference(children, "metaverseAttributeId", criterion.MetaverseAttributeId, criterion.MetaverseAttribute?.Name, "Metaverse Attribute");
             AddReference(children, "connectedSystemAttributeId", criterion.ConnectedSystemAttributeId, criterion.ConnectedSystemAttribute?.Name, "Connected System Attribute");
+            Add(children, "expression", criterion.Expression, "Expression");
+            AddEnum(children, "compareAs", criterion.CompareAs, "Compare as");
             AddEnum(children, "comparisonType", criterion.ComparisonType, "Comparison");
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
@@ -378,6 +399,13 @@ public class ConfigurationSnapshotService
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
             Add(children, "caseSensitive", Render(criterion.CaseSensitive), "Case sensitive");
+            // Recorded only when Relative: snapshots taken before the value mode was captured hold no key, so recording
+            // the Absolute default would show every existing criterion as changed by the first save after upgrade.
+            if (criterion.ValueMode != DateCriteriaValueMode.Absolute)
+                AddEnum(children, "valueMode", criterion.ValueMode, "Value mode");
+            Add(children, "relativeCount", Render(criterion.RelativeCount), "Relative count");
+            AddEnum(children, "relativeUnit", criterion.RelativeUnit, "Relative unit");
+            AddEnum(children, "relativeDirection", criterion.RelativeDirection, "Relative direction");
             items.Add(ConfigurationSnapshotNode.ObjectNode("criterion", children, "Criterion", criterion.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("criteria", items, "Criteria");
@@ -390,9 +418,33 @@ public class ConfigurationSnapshotService
     /// (using <paramref name="hashKey"/>) is recorded instead. The high-volume operational collections (Objects,
     /// Pending Exports) and PersistedConnectorData are excluded.
     /// </summary>
-    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey)
+    /// <remarks>This overload records no saved test cases. Change capture uses
+    /// <see cref="CreateSnapshotAsync(ConnectedSystem, byte[])"/>, which reads them; a caller comparing against captured
+    /// history passes them to <see cref="CreateSnapshot(ConnectedSystem, byte[], IReadOnlyList{ConfigurationTestCase})"/>.</remarks>
+    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey) => CreateSnapshot(connectedSystem, hashKey, []);
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Connected System as <see cref="CreateSnapshot(ConnectedSystem, byte[])"/> does,
+    /// with the saved configuration test cases of its Simple mode Object Matching Rules (#2055 Phase 4), read from the
+    /// database. Every change capture path uses this overload.
+    /// </summary>
+    public async Task<ConfigurationSnapshot> CreateSnapshotAsync(ConnectedSystem connectedSystem, byte[] hashKey)
     {
         ArgumentNullException.ThrowIfNull(connectedSystem);
+        var testCases = connectedSystem.Id > 0
+            ? await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(connectedSystem.Id)
+            : [];
+        return CreateSnapshot(connectedSystem, hashKey, testCases);
+    }
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Connected System with the saved configuration test cases of its Simple mode Object
+    /// Matching Rules (#2055 Phase 4). A Synchronisation Rule's own cases are in its own snapshot.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ConnectedSystem connectedSystem, byte[] hashKey, IReadOnlyList<ConfigurationTestCase> testCases)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(testCases);
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", connectedSystem.Name, "Name");
@@ -412,6 +464,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
         children.Add(BuildPartitions(connectedSystem.Partitions));
+        AddTestCases(children, testCases, attributeFlows: [], hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -502,6 +555,57 @@ public class ConfigurationSnapshotService
         return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(plaintext)));
     }
 
+    // -- Configuration test cases (#2055 Phase 4) -------------------------------------------------------------------
+
+    /// <summary>
+    /// Records saved configuration test cases as a top-level collection of the snapshot of what owns them. Top level,
+    /// not beside the Attribute Flow or Object Matching Rule each covers, because classification takes the class of
+    /// every node a change passes through: a case nested in an Attribute Flow would make adding it a Class B change to
+    /// the flow, when a test case changes nothing that synchronises. Omitted when there are none, so a snapshot
+    /// captured before test cases existed compares as unchanged.
+    /// <para>
+    /// A case's inputs and expected values can be personal data loaded from a real object, so each is recorded as a
+    /// keyed hash, as a secret is: history says they changed, and never what they were. Each is hashed from its
+    /// parsed form re-serialised, because PostgreSQL's jsonb rewrites the stored text (key order, spacing), and a
+    /// hash of that text would differ for the same case.
+    /// </para>
+    /// </summary>
+    private static void AddTestCases(List<ConfigurationSnapshotNode> nodes, IReadOnlyList<ConfigurationTestCase> testCases,
+        IReadOnlyList<SyncRuleMapping> attributeFlows, byte[] hashKey)
+    {
+        if (testCases.Count == 0)
+            return;
+
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var testCase in testCases.OrderBy(c => c.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "name", testCase.Name, "Name");
+            Add(children, "description", testCase.Description, "Description");
+            AddEnum(children, "testCaseKind", testCase.Kind, "Tests");
+            var flow = attributeFlows.FirstOrDefault(m => m.Id == testCase.SyncRuleMappingId);
+            AddReference(children, "testCaseAttributeFlowId", testCase.SyncRuleMappingId,
+                flow?.TargetMetaverseAttribute?.Name ?? flow?.TargetConnectedSystemAttribute?.Name, "Attribute Flow");
+            AddReference(children, "testCaseObjectMatchingRuleId", testCase.ObjectMatchingRuleId, null, "Object Matching Rule");
+            Add(children, "testCaseRunAsOf", Render(testCase.RunAsOfUtc), "Run as of");
+
+            var expectation = testCase.Expectation;
+            AddEnum(children, "testCaseExpectation", expectation.Kind, "Expects");
+            if (expectation.Kind == ConfigurationTestExpectationKind.Values)
+            {
+                Add(children, "testCaseInOrder", Render(expectation.InOrder), "In this order");
+                children.Add(ConfigurationSnapshotNode.Secret("testCaseExpectedValues",
+                    ComputePlaintextHash(JsonSerializer.Serialize(expectation.Values, SerialiserOptions), hashKey), "Expected values"));
+            }
+
+            children.Add(ConfigurationSnapshotNode.Secret("testCaseInputs",
+                ComputePlaintextHash(JsonSerializer.Serialize(testCase.Inputs, SerialiserOptions), hashKey), "Inputs"));
+            items.Add(ConfigurationSnapshotNode.ObjectNode("testCase", children, testCase.Name, testCase.Id));
+        }
+
+        nodes.Add(ConfigurationSnapshotNode.CollectionNode("testCases", items, "Test cases"));
+    }
+
     private ConfigurationSnapshotNode BuildRunProfiles(List<ConnectedSystemRunProfile>? runProfiles)
     {
         var items = new List<ConfigurationSnapshotNode>();
@@ -513,6 +617,21 @@ public class ConfigurationSnapshotService
             Add(children, "pageSize", Render(runProfile.PageSize), "Page size");
             Add(children, "filePath", runProfile.FilePath, "File path");
             AddReference(children, "partitionId", runProfile.Partition?.Id, runProfile.Partition?.Name, "Partition");
+            // The two Full Import switches are recorded by presence rather than by value, as a container's selection
+            // is, so a Run Profile that has never turned one on carries no line for it. Creation histories are then not
+            // littered with "false", and a snapshot captured before these settings were recorded agrees with a later
+            // one for every Run Profile still at its defaults, so the first save after an upgrade reports no change
+            // nobody made. Validation keeps both false on every other Run Type, so presence also means Full Import.
+            if (runProfile.AllowObjectTypeChanges)
+                Add(children, "allowObjectTypeChanges", Render(true), "Allow Object Type Changes");
+            if (runProfile.VerifyImportContentHashes)
+                Add(children, "verifyImportContentHashes", Render(true), "Verification Mode");
+            // Run Profile Safeguards (#1618). Null is "no limit" and records nothing; zero is a real limit and is kept.
+            Add(children, "maxCreates", Render(runProfile.MaxCreates), "Max creates");
+            Add(children, "maxUpdates", Render(runProfile.MaxUpdates), "Max updates");
+            Add(children, "maxDeletes", Render(runProfile.MaxDeletes), "Max deletes");
+            Add(children, "maxDetectedDeletions", Render(runProfile.MaxDetectedDeletions), "Max detected deletions");
+            Add(children, "maxDetectedDeletionsPercent", Render(runProfile.MaxDetectedDeletionsPercent), "Max detected deletions (% of Connector Space)");
             items.Add(ConfigurationSnapshotNode.ObjectNode("runProfile", children, "Run Profile", runProfile.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("runProfiles", items, "Run Profiles");
@@ -550,6 +669,12 @@ public class ConfigurationSnapshotService
             Add(children, "isExternalId", Render(attribute.IsExternalId), "External ID");
             Add(children, "isSecondaryExternalId", Render(attribute.IsSecondaryExternalId), "Secondary external ID");
             AddEnum(children, "writability", attribute.Writability, "Writability");
+
+            // Recorded only when true (#2051), so a snapshot captured before the declaration existed agrees with one
+            // captured after for every attribute that ignores case, and an upgrade reports no change nobody made.
+            if (attribute.CaseExact)
+                Add(children, "caseExact", Render(attribute.CaseExact), "Case-exact");
+
             items.Add(ConfigurationSnapshotNode.ObjectNode("attribute", children, attribute.Name, attribute.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");
@@ -1143,6 +1268,7 @@ public class ConfigurationSnapshotService
         Add(children, "supportsPasswordPolicyDiscovery", Render(definition.SupportsPasswordPolicyDiscovery), "Password policy discovery");
         Add(children, "supportsUniquenessProbe", Render(definition.SupportsUniquenessProbe), "Uniqueness probe");
         Add(children, "supportsUniquenessRejectionClassification", Render(definition.SupportsUniquenessRejectionClassification), "Uniqueness rejection classification");
+        Add(children, "externalIdsUniqueAcrossObjectTypes", Render(definition.ExternalIdsUniqueAcrossObjectTypes), "External IDs unique across Object Types");
         return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
     }
 
@@ -1272,7 +1398,6 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             AddReference(children, "metaverseAttributeId", attribute.MetaverseAttribute?.Id, attribute.MetaverseAttribute?.Name, "Metaverse Attribute");
-            AddReference(children, "connectedSystemObjectTypeAttributeId", attribute.ConnectedSystemObjectTypeAttribute?.Id, attribute.ConnectedSystemObjectTypeAttribute?.Name, "Connected System Attribute");
             Add(children, "populatedValuesPercentage", Render(attribute.PopulatedValuesPercentage), "Populated values (%)");
             Add(children, "pattern", attribute.Pattern, "Pattern");
             Add(children, "expression", attribute.Expression, "Expression");

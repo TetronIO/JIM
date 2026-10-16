@@ -67,8 +67,33 @@ public class ScimResourceReaderTests
         // JIM stores every date and time in UTC; a provider is free to send an offset.
         var result = ReadUser("""{ "id": "1", "meta": { "lastModified": "2026-02-04T15:53:42+02:00" } }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValue,
+        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValues.Single(),
             Is.EqualTo(new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc)));
+    }
+
+    [Test]
+    public void Read_MultiValuedDateTimeArray_StagesEveryElement()
+    {
+        // #2153 S5: assigning inside the loop kept only the last element.
+        var attribute = new ScimFlattenedAttribute("loginTimes", "loginTimes", AttributeDataType.DateTime, AttributePlurality.MultiValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "loginTimes": [ "2026-02-04T13:53:42Z", "2026-02-05T13:53:42.5+01:00" ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "loginTimes").DateTimeValues, Is.EqualTo(new[]
+        {
+            new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc),
+            new DateTime(2026, 2, 5, 12, 53, 42, 500, DateTimeKind.Utc)
+        }));
+    }
+
+    [Test]
+    public void Read_BooleanArrayHoldingBoth_StagesEachForJimToReport()
+    {
+        var attribute = new ScimFlattenedAttribute("flags", "flags", AttributeDataType.Boolean, AttributePlurality.SingleValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "flags": [ true, false ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "flags").BoolValues, Is.EqualTo(new[] { true, false }));
     }
 
     [Test]
@@ -94,7 +119,7 @@ public class ScimResourceReaderTests
     {
         var result = ReadUser("""{ "id": "1", "active": true }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.True);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.True);
     }
 
     [Test]
@@ -104,7 +129,7 @@ public class ScimResourceReaderTests
         // consequential attribute JIM synchronises.
         var result = ReadUser("""{ "id": "1", "active": "false" }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.False);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.False);
     }
 
     [Test]
@@ -355,16 +380,48 @@ public class ScimResourceReaderTests
     }
 
     [Test]
-    public void Read_DecimalBeyondWhatJimCanHold_FailsTheObjectRatherThanRounding()
+    public void Read_DecimalBeyondWhatJimCanHold_IsReportedRatherThanRounded()
     {
-        // Rounding would corrupt the value with nothing to show for it. Synchronisation integrity
-        // outranks importing the object at all.
+        // Rounding would corrupt the value with nothing to show for it. The value is reported instead, and JIM leaves
+        // the attribute as it already held it (#2066).
         var result = ScimResourceReader.Read(Resource("""{ "field": "1e40" }"""), TypedSchema(ScimAttributeTypes.Decimal));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.Error, Is.Not.Null);
+            Assert.That(result.Error, Is.Null, "One unreadable value is not a reason to fail the whole object.");
             Assert.That(result.Attributes, Is.Empty);
+            Assert.That(result.UnreadableValues.Select(v => (v.AttributeName, v.Value)), Is.EqualTo(new[] { ("field", "1e40") }));
+        }
+    }
+
+    [TestCase(ScimAttributeTypes.Integer, "\"abc\"", "abc")]
+    [TestCase(ScimAttributeTypes.DateTime, "\"not a date\"", "not a date")]
+    [TestCase(ScimAttributeTypes.Binary, "\"not base 64 !!\"", "not base 64 !!")]
+    [TestCase(ScimAttributeTypes.Boolean, "\"maybe\"", "maybe")]
+    public void Read_ValueThatCannotBeConverted_IsReportedRatherThanDropped(string scimType, string json, string expectedValue)
+    {
+        // Dropping it without a word left the attribute missing from the object, which JIM read as "the provider holds
+        // no value" and removed the value it held.
+        var result = ScimResourceReader.Read(Resource($$"""{ "field": {{json}} }"""), TypedSchema(scimType));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Attributes, Is.Empty);
+            Assert.That(result.UnreadableValues.Select(v => (v.AttributeName, v.Value)), Is.EqualTo(new[] { ("field", expectedValue) }));
+            Assert.That(result.UnreadableValues.Select(v => v.Reason), Has.All.Not.Empty);
+        }
+    }
+
+    [Test]
+    public void Read_ResourceWithAnUnreadableValue_StillReadsItsOtherAttributes()
+    {
+        var result = ReadUser("""{ "id": "1", "userName": "sam", "meta": { "lastModified": "not a date" } }""");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Attributes.Select(a => a.Name), Does.Contain("id").And.Contain("userName"),
+                "Without its id the object cannot be matched, and a Full Import would find the object JIM holds for it missing.");
+            Assert.That(result.UnreadableValues.Select(v => v.AttributeName), Is.EqualTo(new[] { "meta.lastModified" }));
         }
     }
 
@@ -376,14 +433,6 @@ public class ScimResourceReaderTests
         var result = ScimResourceReader.Read(Resource($$"""{ "field": "{{encoded}}" }"""), TypedSchema(ScimAttributeTypes.Binary));
 
         Assert.That(Encoding.UTF8.GetString(result.Attributes.Single().ByteValues.Single()), Is.EqualTo("certificate bytes"));
-    }
-
-    [Test]
-    public void Read_BinaryAttributeThatIsNotBase64_IsSkippedRatherThanStagedAsRubbish()
-    {
-        var result = ScimResourceReader.Read(Resource("""{ "field": "not base 64 !!" }"""), TypedSchema(ScimAttributeTypes.Binary));
-
-        Assert.That(result.Attributes, Is.Empty);
     }
 
     [Test]

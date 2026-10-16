@@ -92,6 +92,96 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void PreviewPanel_WithOnlyClassificationChanges_ShowsThemAndOffersAPlainApply()
+    {
+        // A refresh that only reclassifies a selected Object Type (#2049) used to read "up to date" and offer only
+        // Close, which discarded the new classification. It must be shown and offered for applying, with a warning,
+        // but it is not destructive, so the three-way decision does not apply.
+        var result = ClassificationOnlyResult();
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, result));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("up to date"), "A classification change is a change.");
+            Assert.That(cut.FindAll("[data-testid=jim-close-schema-refresh]"), Is.Empty,
+                "Close would discard the classification change without applying it.");
+            Assert.That(cut.Markup, Does.Contain("posixAccount"), "The reclassified Object Type must be named.");
+            Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Has.Count.EqualTo(1),
+                "A classification change is applied with the plain apply.");
+            Assert.That(cut.FindAll("[data-testid=jim-apply-remove-schema-refresh]"), Is.Empty,
+                "Nothing is removed, so Apply & Remove would be a dead affordance.");
+            Assert.That(cut.FindAll("[data-testid=jim-apply-disable-schema-refresh]"), Is.Empty);
+            Assert.That(cut.FindAll("[data-testid=jim-schema-refresh-reclassified-warning]"), Has.Count.EqualTo(1),
+                "The administrator must be told what applying a classification change does to the next import.");
+        }
+    }
+
+    [Test]
+    public void PreviewPanel_WithOnlyClassificationUpdates_OffersAPlainApplyWithoutWarning()
+    {
+        // A classification difference that cannot move entries (#2049) still has to be applied, or the inheritance
+        // the selection preview relies on is never stored; it carries no warning because nothing can change Object Type.
+        var result = new SchemaRefreshResult { Success = true, ObjectTypesWithClassificationUpdates = ["computer"] };
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, result));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("up to date"));
+            Assert.That(cut.Markup, Does.Contain("computer"));
+            Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("[data-testid=jim-close-schema-refresh]"), Is.Empty);
+            Assert.That(cut.FindAll("[data-testid=jim-schema-refresh-reclassified-warning]"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void PreviewPanel_WithClassificationChanges_RaisesThePanelToWarning()
+    {
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, ClassificationOnlyResult()));
+
+        var panel = cut.FindComponents<MudAlert>().First(alert => alert.Instance.Class?.Contains("jim-alert-schema-refresh-preview") == true);
+        Assert.That(panel.Instance.Severity, Is.EqualTo(Severity.Warning),
+            "A change that can move entries between Object Types warrants a warning, not an informational panel.");
+    }
+
+    [Test]
+    public void PreviewPanel_WithAdditionsOnly_ShowsNoClassificationWarning()
+    {
+        var result = new SchemaRefreshResult
+        {
+            Success = true,
+            AddedAttributes = new Dictionary<string, List<string>> { ["user"] = ["mobile"] }
+        };
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, result));
+
+        var panel = cut.FindComponents<MudAlert>().First(alert => alert.Instance.Class?.Contains("jim-alert-schema-refresh-preview") == true);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid=jim-schema-refresh-reclassified-warning]"), Is.Empty);
+            Assert.That(panel.Instance.Severity, Is.EqualTo(Severity.Info));
+        }
+    }
+
+    [Test]
+    public void Discard_WithOnlyClassificationChanges_InvokesOnDiscardWithoutAskingForConfirmation()
+    {
+        // Cancelling keeps the classification JIM has stored, which is what matching reads, so nothing drifts and a
+        // confirmation would be friction with no protective value.
+        var discarded = false;
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p
+            .Add(c => c.Result, ClassificationOnlyResult())
+            .Add(c => c.OnDiscard, () => discarded = true));
+
+        cut.Find("[data-testid=jim-discard-schema-refresh]").Click();
+
+        Assert.That(discarded, Is.True);
+    }
+
+    [Test]
     public void Discard_WithAdditionsOnly_InvokesOnDiscardWithoutAskingForConfirmation()
     {
         // Discarding additions costs nothing (the next refresh finds them again), so a confirmation dialog here
@@ -140,6 +230,46 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
                 "A destructive diff with dependents must offer the protective middle option.");
             Assert.That(cut.Markup, Does.Contain("Directory Computers Inbound"),
                 "The dependents are named on the review so the cost is visible before any dialog opens.");
+        }
+    }
+
+    [Test]
+    public void PreviewPanel_WithReadersOfARemovedAttribute_TurnsApplyAndRemoveOffAndNamesThem()
+    {
+        // #2265: deleting the attribute row would leave the Scoping Criterion comparing nothing, so Apply and Remove is
+        // refused while it reads the attribute; Apply and Disable keeps the row and stays available.
+        var result = new SchemaRefreshResult
+        {
+            Success = true,
+            TotalObjectTypes = 1,
+            TotalAttributes = 1,
+            RemovedAttributes = new Dictionary<string, List<string>> { ["user"] = ["department"] }
+        };
+        var dependents = new SchemaRefreshDependents
+        {
+            RemovedAttributeReaders =
+            [
+                new JIM.Models.Core.DTOs.AttributeReader
+                {
+                    Kind = JIM.Models.Core.DTOs.AttributeReaderKind.ScopingCriterion,
+                    ItemId = 70,
+                    SyncRuleId = 11,
+                    SyncRuleName = "HR Users Inbound",
+                    Description = "Scoping Criterion on 'department' in Synchronisation Rule 'HR Users Inbound'"
+                }
+            ]
+        };
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p
+            .Add(c => c.Result, result)
+            .Add(c => c.Dependents, dependents));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("[data-testid=jim-apply-remove-schema-refresh]").HasAttribute("disabled"), Is.True);
+            Assert.That(cut.Find("[data-testid=jim-schema-refresh-removal-refused]"), Is.Not.Null);
+            Assert.That(cut.Markup, Does.Contain("Scoping Criterion on 'department' in Synchronisation Rule 'HR Users Inbound'"));
+            Assert.That(cut.Find("[data-testid=jim-apply-disable-schema-refresh]").HasAttribute("disabled"), Is.False);
         }
     }
 
@@ -279,5 +409,17 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
         cut.Find("[data-testid=jim-apply-schema-refresh]").Click();
 
         Assert.That(applied, Is.True);
+    }
+
+    private static SchemaRefreshResult ClassificationOnlyResult()
+    {
+        var result = new SchemaRefreshResult { Success = true, TotalObjectTypes = 1, TotalAttributes = 4 };
+        result.AddChangedClassification("posixAccount", new SchemaObjectTypeClassificationChange
+        {
+            Aspect = SchemaObjectTypeClassificationAspect.ClassKind,
+            OldValues = ["structural"],
+            NewValues = ["auxiliary"]
+        });
+        return result;
     }
 }

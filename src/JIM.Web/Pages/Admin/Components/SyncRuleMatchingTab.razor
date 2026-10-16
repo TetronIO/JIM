@@ -2,6 +2,7 @@
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -61,67 +62,61 @@
         }
 
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
-            OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Primary" Class="mt-5" DropShadow="false"
+            OnClick="HandleOpenAddMatchingRuleMappingDialog" Class="mt-5" DropShadow="false"
             Disabled="@(SyncRule.MetaverseObjectType == null || SyncRule.ConnectedSystemObjectType == null)">Add Matching
             Rule</MudButton>
 
         @foreach (var objectMatchingRule in SyncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
         {
-            var sourceType = objectMatchingRule.GetSourceType();
-            <MudPaper Class="pa-4 mt-5" Outlined="true">
-                @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping && objectMatchingRule.TargetMetaverseAttribute !=
-                        null)
-                {
-                    var source = objectMatchingRule.Sources[0];
-                    if (source.ConnectedSystemAttribute != null)
-                    {
-                        <MudGrid Spacing="0">
-                            <MudItem xs="6">
-                                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                                    @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                            </MudItem>
-                            <MudItem xs="6" Class="d-flex align-center justify-end">
-                                <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
-                            </MudItem>
-                            <MudItem xs="12" Class="d-flex align-center">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
-                                        <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                        </MudTooltip>
-                                    </AvatarContent>
-                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                </MudChip>
-                                <MudChip T="string" Size="Size.Medium">
-                                    <MudIcon Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
-                                </MudChip>
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
-                                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                        </MudTooltip>
-                                    </AvatarContent>
-                                    <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                                </MudChip>
-                                <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
-                                    ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
-                                    Label="Case Sensitive" Color="Color.Primary" Class="ms-4" />
-                                <MudSpacer />
-                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
-                                    Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
-                                    Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
-                                    Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
-                                    Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                                    aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
-                                </MudIconButton>
-                            </MudItem>
-                        </MudGrid>
-                    }
-                }
+            var source = objectMatchingRule.Sources.FirstOrDefault();
+            <MudPaper Class="pa-4 mt-5" Outlined="true" @key="objectMatchingRule">
+                <MudGrid Spacing="0">
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">MATCH ON:</span>
+                            @(string.IsNullOrWhiteSpace(source?.Expression) ? "ATTRIBUTE" : "EXPRESSION")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" Class="d-flex align-center justify-end">
+                        <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
+                    </MudItem>
+                    <MudItem xs="12" Class="d-flex align-center flex-wrap gap-2">
+                        @* What the rule compares (#2052): a Connected System attribute's values, or an expression's
+                           result, with the Metaverse attribute it is compared against. *@
+                        @if (!string.IsNullOrWhiteSpace(source?.Expression))
+                        {
+                            <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" Class="ma-0" />
+                        }
+                        else if (source?.ConnectedSystemAttribute is { } sourceAttribute)
+                        {
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@sourceAttribute.Name" Class="ma-0" />
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">equals</MudText>
+                        @if (objectMatchingRule.TargetMetaverseAttribute is { } targetAttribute)
+                        {
+                            <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@targetAttribute.Name" Class="ma-0" />
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                        <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
+                            ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
+                            Label="Case Sensitive" Color="Color.Primary" Class="ms-4" />
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
+                            Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
+                            Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
+                            Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
+                            Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                            aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
+                        </MudIconButton>
+                    </MudItem>
+                </MudGrid>
             </MudPaper>
         }
     }
@@ -134,66 +129,20 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-
-        <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this matching rule"
-            Required="true" ValueChanged="HandleAddMatchingRuleMappingTypeValueChange" Variant="Variant.Outlined">
-            <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
-            <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
-        </MudSelect>
-
-        @if (_matchingRuleMapping != null && _matchingRuleMappingSource != null)
+        @if (SyncRule.ConnectedSystemObjectType != null)
         {
-            @switch (_matchingRuleMappingSourceType)
-            {
-                case "Attribute":
-                    {
-                        <MudSelect T="MetaverseAttribute" @bind-Value="_matchingRuleMapping.TargetMetaverseAttribute"
-                            Label="Metaverse Attribute" Placeholder="Please select a Metaverse attribute" Required="true" Class="mt-5"
-                            Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
-                            @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality
-                                        == AttributePlurality.SingleValued).OrderBy(a => a.Name))
-                            {
-                                <MudSelectItem Value="@metaverseAttribute">
-                                    @metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                        @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
-                                </MudSelectItem>
-                            }
-                        </MudSelect>
-
-                        if (_matchingRuleMapping.TargetMetaverseAttribute != null)
-                        {
-                            <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                @bind-Value="_matchingRuleMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
-                                Placeholder="Please select the Connected System attribute" Required="true" Class="mt-5"
-                                Variant="Variant.Outlined">
-                                @* Credential attributes are excluded: JIM never imports them, so there would be no value to match on *@
-                                @foreach (var connectedSystemObjectTypeAttribute in SyncRule.ConnectedSystemObjectType.Attributes.Where(a
-                                            => a.AttributePlurality == AttributePlurality.SingleValued &&
-                                               !CredentialAttributes.IsCredentialAttribute(a.Name)).OrderBy(a => a.Name))
-                                {
-                                    <MudSelectItem Value="@connectedSystemObjectTypeAttribute"
-                                        Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">
-                                        @connectedSystemObjectTypeAttribute.Name <span
-                                            style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemObjectTypeAttribute.Type :
-                                            @connectedSystemObjectTypeAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
-                                    </MudSelectItem>
-                                }
-                            </MudSelect>
-
-                            <MudCheckBox T="bool" @bind-Value="_matchingRuleMapping.CaseSensitive" Label="Case Sensitive" Class="mt-5" />
-                        }
-                        break;
-                    }
-                case "Expression":
-                    <MudText Class="mt-5">Sorry, expressions are not yet supported.</MudText>
-                    break;
-            }
+            <ObjectMatchingRuleEditor Draft="_draft"
+                                      ObjectType="SyncRule.ConnectedSystemObjectType"
+                                      MetaverseAttributes="@(SyncRule.MetaverseObjectType?.Attributes ?? [])"
+                                      LookupMetaverseObjectType="SyncRule.MetaverseObjectType"
+                                      ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
+                                      OnChanged="StateHasChanged" />
         }
     </DialogContent>
     <DialogActions>
         <MudButton DropShadow="false"
             OnClick="@(() => _addMatchingRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
-        <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled"
+        <MudButton Disabled="@(!_draft.CanAdd(requireMetaverseObjectType: false))" DropShadow="false" Variant="Variant.Filled"
             Color="Color.Primary" OnClick="HandleAddMappingButtonClick">Add Matching Rule</MudButton>
     </DialogActions>
 </MudDialog>
@@ -206,71 +155,30 @@
     public EventCallback OnChanged { get; set; }
 
     private bool _addMatchingRuleDialogVisible;
-    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
-    private ObjectMatchingRule? _matchingRuleMapping;
-    private ObjectMatchingRuleSource? _matchingRuleMappingSource;
-    private string? _matchingRuleMappingSourceType;
+    // Medium, as the Attribute Flow dialog is: the editor lays out source, "equals" and target side by side, and at
+    // the default Small width an expression wraps mid-name.
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
+    // The rule being composed in the Add Matching Rule dialog (#2052). Added to the Synchronisation Rule, which saves it
+    // with everything else, so the Synchronisation Rule save is what refuses an unworkable one; the editor says why
+    // first, and the button stays off until it is workable.
+    private readonly ObjectMatchingRuleDraft _draft = new();
 
     private void HandleOpenAddMatchingRuleMappingDialog()
     {
-        if (_matchingRuleMapping == null)
-        {
-            _matchingRuleMapping = new ObjectMatchingRule
-            {
-                Order = SyncRule.ObjectMatchingRules.Count == 0 ? 0 : SyncRule.ObjectMatchingRules.Select(q => q.Order).Max() + 1
-            };
-            _matchingRuleMappingSource = new ObjectMatchingRuleSource();
-        }
-        else
-        {
-            if (_matchingRuleMappingSource == null)
-                return;
-        }
-
-        _matchingRuleMapping.Sources.Add(_matchingRuleMappingSource);
+        _draft.Reset();
         _addMatchingRuleDialogVisible = true;
-    }
-
-    private void HandleAddMatchingRuleMappingTypeValueChange(string mappingType)
-    {
-        _matchingRuleMappingSource ??= new ObjectMatchingRuleSource();
-        _matchingRuleMappingSourceType = mappingType;
-    }
-
-    private bool DisableAddMappingButton()
-    {
-        if (_matchingRuleMapping == null)
-            return true;
-
-        if (_matchingRuleMappingSource == null)
-            return true;
-
-        if (_matchingRuleMapping.TargetMetaverseAttribute == null)
-            return true;
-
-        // the rest depends on what type of source has been chosen by the user
-        // Must have either a Connected System attribute or an expression
-        if (_matchingRuleMappingSource.ConnectedSystemAttribute == null &&
-        string.IsNullOrWhiteSpace(_matchingRuleMappingSource.Expression))
-            return true;
-
-        return false;
     }
 
     private async Task HandleAddMappingButtonClick()
     {
-        if (_matchingRuleMapping == null)
+        if (!_draft.CanAdd(requireMetaverseObjectType: false))
             return;
 
-        // add the mapping to the rule
-        SyncRule.ObjectMatchingRules.Add(_matchingRuleMapping);
+        var order = SyncRule.ObjectMatchingRules.Count == 0 ? 0 : SyncRule.ObjectMatchingRules.Max(q => q.Order) + 1;
+        SyncRule.ObjectMatchingRules.Add(_draft.ToRule(order));
 
-        // close the add mapping dialog
         _addMatchingRuleDialogVisible = false;
-
-        // re-initialise the mapping rule and source, ready for the next use
-        _matchingRuleMapping = null;
-        _matchingRuleMappingSource = null;
+        _draft.Reset();
         await OnChanged.InvokeAsync();
     }
 

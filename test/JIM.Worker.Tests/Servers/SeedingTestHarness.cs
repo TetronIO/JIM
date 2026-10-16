@@ -223,6 +223,11 @@ internal sealed class SeedingTestHarness : IDisposable
         ServiceSettingsRepository.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()))
             .Callback<ServiceSetting>(s => Settings[s.Key] = s)
             .Returns(Task.CompletedTask);
+        ServiceSettingsRepository.Setup(r => r.DeleteSettingAsync(It.IsAny<string>()))
+            .Callback<string>(key => Settings.Remove(key))
+            .Returns(Task.CompletedTask);
+        ServiceSettingsRepository.Setup(r => r.GetSettingsByCategoryAsync(It.IsAny<ServiceSettingCategory>()))
+            .ReturnsAsync((ServiceSettingCategory category) => Settings.Values.Where(s => s.Category == category).ToList());
         ServiceSettingsRepository.Setup(r => r.GetOrCreateSettingAsync(It.IsAny<ServiceSetting>()))
             .ReturnsAsync((ServiceSetting s) =>
             {

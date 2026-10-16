@@ -33,7 +33,7 @@ public class LdapConnectorExportObjectClassTests
     {
         var pendingExport = PendingExportWithClasses("inetOrgPerson", "posixAccount");
 
-        var (addRequest, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+        var (addRequest, _, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
 
         var objectClass = ObjectClassValues(addRequest);
         Assert.That(objectClass, Is.EqualTo(new[] { "inetOrgPerson", "posixAccount" }),
@@ -45,7 +45,7 @@ public class LdapConnectorExportObjectClassTests
     {
         var pendingExport = PendingExportWithClasses("inetOrgPerson");
 
-        var (addRequest, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+        var (addRequest, _, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
 
         Assert.That(ObjectClassValues(addRequest), Is.EqualTo(new[] { "inetOrgPerson" }));
     }
@@ -57,7 +57,7 @@ public class LdapConnectorExportObjectClassTests
         // fail to create over something JIM could simply not have sent.
         var pendingExport = PendingExportWithClasses("inetOrgPerson", "posixAccount", "POSIXACCOUNT");
 
-        var (addRequest, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+        var (addRequest, _, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
 
         Assert.That(ObjectClassValues(addRequest), Is.EqualTo(new[] { "inetOrgPerson", "posixAccount" }));
     }
@@ -81,7 +81,7 @@ public class LdapConnectorExportObjectClassTests
             ]
         };
 
-        var (addRequest, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+        var (addRequest, _, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
 
         Assert.That(ObjectClassValues(addRequest), Is.EqualTo(new[] { "inetOrgPerson" }));
     }
@@ -97,7 +97,7 @@ public class LdapConnectorExportObjectClassTests
         pendingExport.AttributeValueChanges.Add(
             Change(new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "uidNumber", ClassName = "posixAccount", ConnectedSystemObjectType = objectType }, "5001"));
 
-        var (addRequest, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+        var (addRequest, _, _) = CreateExport().BuildAddRequestWithOverflow(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
 
         var uidNumber = addRequest.Attributes.Cast<DirectoryAttribute>().SingleOrDefault(a => a.Name == "uidNumber");
         using (Assert.EnterMultipleScope())

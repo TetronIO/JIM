@@ -284,20 +284,29 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             .Select(cso => (Cso: cso, Mvo: cso.MetaverseObjectId is { } metaverseObjectId &&
                 metaverseObjectsById.TryGetValue(metaverseObjectId, out var mvo) ? mvo : null))
             .Where(pair => pair.Mvo != null && pair.Mvo.Type?.Id == rule.MetaverseObjectTypeId)
-            .Select(pair => (pair.Cso, Mvo: pair.Mvo!, InScope: _application.ScopingEvaluation.IsMvoInScopeForExportRule(pair.Mvo!, rule, asAt)))
+            .Select(pair => (pair.Cso, Mvo: pair.Mvo!, Scope: PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(pair.Mvo!, rule, asAt))))
             .ToList();
 
         // A scope exit's fate also turns on a Delete already queued for the object (#1970), so the engine decides each
         // one with it, exactly as the run will.
-        var leavingIds = governed.Where(g => !g.InScope).Select(g => g.Cso.Id).ToList();
+        var leavingIds = governed.Where(g => !g.Scope.Undecided && !g.Scope.InScope).Select(g => g.Cso.Id).ToList();
         var queuedByCsoId = leavingIds.Count == 0
             ? []
             : await _application.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(leavingIds);
 
-        foreach (var (cso, mvo, inScope) in governed)
+        foreach (var (cso, mvo, scope) in governed)
         {
+            // An object whose export scope cannot be decided is one the run stops with an error (#2264): it is neither
+            // provisioned nor deprovisioned, so neither action reaches it. Said, with the reason, rather than guessed.
+            if (scope.Undecided)
+            {
+                deltas.Add(OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, cso, mvo,
+                    PreviewScopeAnswer.AttributeName, null, scope.Describe()));
+                continue;
+            }
+
             ActivityRunProfileExecutionItemSyncOutcomeType transition;
-            if (inScope)
+            if (scope.InScope)
             {
                 transition = ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction;
             }
@@ -314,21 +323,24 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                     : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
             }
 
-            deltas.Add(new PreviewDelta(
-                transition,
-                ObjectDisplayName: cso.NameOrId,
-                ObjectTypeName: cso.Type?.Name,
-                MetaverseObjectTypeId: mvo.Type?.Id,
-                MetaverseObjectId: mvo.Id,
-                ConnectedSystemObjectId: cso.Id,
-                ConnectedSystemId: rule.ConnectedSystemId,
-                AttributeName: DeprovisioningActionAttributeName,
-                OldValue: oldValue,
-                NewValue: newValue));
+            deltas.Add(OutboundDelta(transition, rule, cso, mvo, DeprovisioningActionAttributeName, oldValue, newValue));
         }
 
         return deltas;
     }
+
+    private static PreviewDelta OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType transition, SyncRule rule,
+        ConnectedSystemObject cso, MetaverseObject mvo, string attributeName, string? oldValue, string newValue) =>
+        new(transition,
+            ObjectDisplayName: cso.NameOrId,
+            ObjectTypeName: cso.Type?.Name,
+            MetaverseObjectTypeId: mvo.Type?.Id,
+            MetaverseObjectId: mvo.Id,
+            ConnectedSystemObjectId: cso.Id,
+            ConnectedSystemId: rule.ConnectedSystemId,
+            AttributeName: attributeName,
+            OldValue: oldValue,
+            NewValue: newValue);
 
     /// <summary>
     /// The inbound walk: every joined object of the import rule's type, classified by whether the next
@@ -381,7 +393,23 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 // deterministic first rule carrying Scoping Criteria (HandleCsoOutOfScopeAsync, #1085).
                 if (rulesWithCriteria.Count == 0 || rulesWithCriteria.Count < siblings.Count)
                     continue;
-                if (rulesWithCriteria.Any(r => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, r, asAt)))
+
+                // Every rule with criteria is decided, as the run decides them (GetInScopeImportRulesAsync), because
+                // one the run cannot decide stops the object whatever the others say: an error, its join kept, and
+                // no Out-of-Scope Action applied (#2264). Reported only where the proposal changes that action.
+                var scopes = rulesWithCriteria
+                    .Select(r => PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, r, asAt)))
+                    .ToList();
+                var undecided = scopes.FirstOrDefault(scope => scope.Undecided);
+                if (undecided.Undecided)
+                {
+                    if (governance.ScopeExitActionCurrent != governance.ScopeExitActionProposed)
+                        yield return InboundDelta(cso, rule, ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail,
+                            null, undecided.Describe(), PreviewScopeAnswer.AttributeName);
+                    continue;
+                }
+
+                if (scopes.Any(scope => scope.InScope))
                     continue;
 
                 currentAction = governance.ScopeExitActionCurrent;
@@ -419,14 +447,15 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     }
 
     private static PreviewDelta InboundDelta(ConnectedSystemObject cso, SyncRule rule,
-        ActivityRunProfileExecutionItemSyncOutcomeType transition, string oldValue, string newValue) =>
+        ActivityRunProfileExecutionItemSyncOutcomeType transition, string? oldValue, string newValue,
+        string attributeName = OutOfScopeActionAttributeName) =>
         new(transition,
             ObjectDisplayName: cso.NameOrId,
             ObjectTypeName: cso.Type?.Name,
             MetaverseObjectId: cso.MetaverseObjectId,
             ConnectedSystemObjectId: cso.Id,
             ConnectedSystemId: rule.ConnectedSystemId,
-            AttributeName: OutOfScopeActionAttributeName,
+            AttributeName: attributeName,
             OldValue: oldValue,
             NewValue: newValue);
 

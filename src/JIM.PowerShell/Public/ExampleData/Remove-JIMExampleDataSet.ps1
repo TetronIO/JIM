@@ -11,14 +11,14 @@ function Remove-JIMExampleDataSet {
         This action cannot be undone.
 
     .PARAMETER Id
-        The unique identifier of the Example Data Set to remove.
+        The Example Data Set to delete.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
-        configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change
+        History.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .OUTPUTS
         None.
@@ -44,6 +44,7 @@ function Remove-JIMExampleDataSet {
         Set-JIMExampleDataSet
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -71,7 +72,7 @@ function Remove-JIMExampleDataSet {
             # Continue with ID if we can't get the name
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($dataSetName, "Remove Example Data Set")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $dataSetName -Action "Remove Example Data Set" -Force:$Force) {
             Write-Verbose "Removing Example Data Set: $Id ($dataSetName)"
 
             try {

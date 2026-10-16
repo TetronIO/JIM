@@ -19,24 +19,25 @@ function Watch-JIMLog {
         for the pipeline, use Get-JIMLogEntry instead.
 
     .PARAMETER Service
-        Filter by service name (web, worker, scheduler). Omit for all services.
+        The service whose entries to show: web, worker, scheduler or database. Omit it for every service.
 
     .PARAMETER Level
-        Specific log levels to include (Verbose, Debug, Information, Warning, Error, Fatal).
-        Omit for all levels.
+        The log levels to include: Verbose, Debug, Information, Warning, Error or Fatal. Omit it for every
+        level.
 
     .PARAMETER Search
-        Text to search for in the log message (case-insensitive).
+        Text the message or its exception must contain, ignoring case.
 
     .PARAMETER IntervalSeconds
-        Number of seconds to wait between polls (1-300). Defaults to 2.
+        The number of seconds to wait between polls.
 
     .PARAMETER MaxPolls
-        Maximum number of poll cycles to run before stopping. Omit to run until
-        interrupted with Ctrl+C. Useful for bounded watches in scripts.
+        The number of polls to run before stopping. Omit it to run until interrupted with Ctrl+C;
+        useful for bounded watches in scripts.
 
     .OUTPUTS
-        None. Log entries are written to the console as formatted, colour-coded lines.
+        None. Each new entry is written to the console as [timestamp] [LEVEL] [service] message,
+        coloured by level.
 
     .EXAMPLE
         Watch-JIMLog

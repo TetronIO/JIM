@@ -23,7 +23,10 @@ public class UniqueValueGenerationServerProbeGateTests
     private const int SamAccountNameId = 700;
     private const int UidId = 800;
 
+    private const int MailNicknameId = 701;
+
     private static readonly UniquenessProbeTarget CorporateAd = new(CorporateAdId, SamAccountNameId);
+    private static readonly UniquenessProbeTarget CorporateAdMailNickname = new(CorporateAdId, MailNicknameId);
     private static readonly UniquenessProbeTarget PartnerLdap = new(PartnerLdapId, UidId);
 
     // ---- Ordering ----
@@ -133,6 +136,87 @@ public class UniqueValueGenerationServerProbeGateTests
             Assert.That(session.ValuesChosenWithoutProbe, Is.Empty,
                 "a system that is not probed at all is checked against JIM's own records, as before release 3, and is not reported");
         }
+    }
+
+    [Test]
+    public async Task ResolveAsync_FirstSystemFindsTheCandidate_DoesNotAskTheNextSystemAboutItAsync()
+    {
+        var session = new FakeUniquenessProbeSession()
+            .WithSystem(CorporateAdId, "Corporate AD", "joe.bloggs")
+            .WithSystem(PartnerLdapId, "Partner LDAP");
+
+        var outcomes = await Server().ResolveAsync([Request(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), CorporateAd, PartnerLdap)], Options(session));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs1"));
+            Assert.That(session.Calls.Where(c => c.Target == PartnerLdap).SelectMany(c => c.Candidates), Does.Not.Contain("joe.bloggs"));
+        }
+    }
+
+    // ---- One call per Connected System (#2023) ----
+
+    /// <summary>
+    /// A value bound for two attributes of one Connected System (an account name as both sAMAccountName and
+    /// mailNickname, say) is asked about in one call, which the Connector can answer with one search.
+    /// </summary>
+    [Test]
+    public async Task ResolveAsync_TwoTargetsInOneSystem_AsksAboutBothInOneCallAsync()
+    {
+        var session = new FakeUniquenessProbeSession().WithSystem(CorporateAdId, "Corporate AD");
+
+        var outcomes = await Server().ResolveAsync(
+            [Request(UniqueValueTestHelpers.Generation(attemptLimit: 3), UniqueValueTestHelpers.NextAttributeId(), CorporateAd, CorporateAdMailNickname)], Options(session));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs"));
+            Assert.That(session.SystemCalls, Has.Count.EqualTo(1));
+            Assert.That(session.SystemCalls[0].ConnectedSystemId, Is.EqualTo(CorporateAdId));
+            Assert.That(session.SystemCalls[0].AttributeIds, Is.EqualTo(new[] { SamAccountNameId, MailNicknameId }));
+            Assert.That(session.Calls.Select(c => c.Candidates), Is.All.EqualTo(new[] { "joe.bloggs", "joe.bloggs1", "joe.bloggs2" }),
+                "each attribute is asked about the same window");
+        }
+    }
+
+    [Test]
+    public async Task ResolveAsync_TwoTargetsInOneSystemAndOneElsewhere_MakesOneCallPerSystemAsync()
+    {
+        var session = new FakeUniquenessProbeSession()
+            .WithSystem(CorporateAdId, "Corporate AD")
+            .WithSystem(PartnerLdapId, "Partner LDAP");
+
+        await Server().ResolveAsync(
+            [Request(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), CorporateAd, PartnerLdap, CorporateAdMailNickname)], Options(session));
+
+        Assert.That(session.SystemCalls.Select(c => c.ConnectedSystemId), Is.EqualTo(new[] { CorporateAdId, PartnerLdapId }),
+            "the targets of one system are asked together, in the order the first of them was given");
+    }
+
+    [Test]
+    public async Task ResolveAsync_TwoTargetsInOneSystemFindTheCandidateInTheSecond_RejectsItAsync()
+    {
+        var session = new FakeUniquenessProbeSession().WithSystem(CorporateAdId, "Corporate AD", "joe.bloggs");
+
+        var outcomes = await Server().ResolveAsync(
+            [Request(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), CorporateAd, CorporateAdMailNickname)], Options(session));
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs1"));
+    }
+
+    /// <summary>
+    /// The run's warning counts values chosen without a probe, per Connected System: one value is one, however many of
+    /// the system's attributes it was bound for.
+    /// </summary>
+    [Test]
+    public async Task ResolveAsync_TwoTargetsInAnUndeterminedSystem_RecordsTheValueOnceAsync()
+    {
+        var session = new FakeUniquenessProbeSession().WithUndeterminedSystem(CorporateAdId, "Corporate AD");
+
+        await Server().ResolveAsync(
+            [Request(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), CorporateAd, CorporateAdMailNickname)], Options(session));
+
+        Assert.That(session.ValuesChosenWithoutProbe, Is.EqualTo(new[] { CorporateAdId }));
     }
 
     // ---- Window batching ----

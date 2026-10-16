@@ -2,7 +2,8 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The portal's one info affordance: a small info button that opens a padded popover holding a title, a
-   short explanation and, where there is one, a link to the docs glossary. <TermHint /> (a JIM term, beside
+   short explanation and, where there are any, links into the docs: the page that covers what is being
+   explained, then its glossary entry. <TermHint /> (a JIM term, beside
    the label where it is first met) and <PageInfo /> (what a page is for, in its title bar) are both this
    component with different content, so the padding, measure, link treatment and the button's alignment
    with the text beside it are fixed here once. Opens on click rather than on hover because the content
@@ -12,12 +13,22 @@
     <div class="jim-info-popover">
         <div class="jim-info-popover-title">@Title</div>
         <div class="jim-info-popover-body">@ChildContent</div>
-        @if (!string.IsNullOrEmpty(GlossaryAnchor))
+        @if (!string.IsNullOrEmpty(DocsUrl) || !string.IsNullOrEmpty(GlossaryAnchor))
         {
-            <MudLink Href="@($"https://docs.junctional.io/reference/glossary/#{GlossaryAnchor}")"
-                     Target="_blank" rel="noopener" Class="jim-info-popover-link">
-                Glossary
-            </MudLink>
+            <div class="jim-info-popover-links">
+                @if (!string.IsNullOrEmpty(DocsUrl))
+                {
+                    <MudLink Href="@DocsUrl" Target="_blank" rel="noopener" Class="jim-info-popover-link">
+                        Documentation
+                    </MudLink>
+                }
+                @if (!string.IsNullOrEmpty(GlossaryAnchor))
+                {
+                    <MudLink Href="@DocsSite.GlossaryUrl(GlossaryAnchor)" Target="_blank" rel="noopener" Class="jim-info-popover-link">
+                        Glossary
+                    </MudLink>
+                }
+            </div>
         }
     </div>
 </MudMenu>
@@ -40,4 +51,12 @@
     /// </summary>
     [Parameter]
     public string? GlossaryAnchor { get; set; }
+
+    /// <summary>
+    /// The address of the docs page that covers what is being explained (see <see cref="DocsSite.PageUrl"/>). No
+    /// link renders when null or empty. It comes before the glossary link: it is about the whole subject, the
+    /// glossary entry about one term.
+    /// </summary>
+    [Parameter]
+    public string? DocsUrl { get; set; }
 }

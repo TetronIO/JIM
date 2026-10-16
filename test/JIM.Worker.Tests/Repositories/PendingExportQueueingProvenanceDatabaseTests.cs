@@ -82,9 +82,8 @@ public class PendingExportQueueingProvenanceDatabaseTests
                 ConnectedSystemId = systemId,
                 ChangeType = PendingExportChangeType.Update,
                 Status = PendingExportStatus.Pending,
-                CreatedAt = DateTime.UtcNow,
-                QueuedByRunProfileExecutionItemId = queueingItemId
-            }
+                CreatedAt = DateTime.UtcNow
+            }.StagedBy(queueingItemId)
         ]);
 
         await using var verify = NewContext();
@@ -112,9 +111,8 @@ public class PendingExportQueueingProvenanceDatabaseTests
                 ConnectedSystemId = systemId,
                 ChangeType = PendingExportChangeType.Delete,
                 Status = PendingExportStatus.Pending,
-                CreatedAt = DateTime.UtcNow,
-                QueuedByRunProfileExecutionItemId = purgedItemId
-            }
+                CreatedAt = DateTime.UtcNow
+            }.StagedBy(purgedItemId)
         ]);
 
         await using var verify = NewContext();
@@ -169,9 +167,8 @@ public class PendingExportQueueingProvenanceDatabaseTests
                 ConnectedSystemId = systemId,
                 ChangeType = PendingExportChangeType.Update,
                 Status = PendingExportStatus.Pending,
-                CreatedAt = DateTime.UtcNow,
-                QueuedByRunProfileExecutionItemId = queueingItemId
-            }
+                CreatedAt = DateTime.UtcNow
+            }.StagedBy(queueingItemId)
         ]);
 
         await using var update = NewContext();
@@ -188,6 +185,8 @@ public class PendingExportQueueingProvenanceDatabaseTests
         {
             Assert.That(stored.ErrorCount, Is.EqualTo(1), "the update itself must have taken");
             Assert.That(stored.QueuedByRunProfileExecutionItemId, Is.EqualTo(queueingItemId));
+            Assert.That(stored.StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { queueingItemId }),
+                "the runs that staged it are as much a fact about how it came to exist");
         }
     }
 
@@ -237,6 +236,80 @@ public class PendingExportQueueingProvenanceDatabaseTests
             Assert.That(stamped[firstExportId], Is.EqualTo(firstItemId));
             Assert.That(stamped[secondExportId], Is.EqualTo(secondItemId));
         }
+    }
+
+    /// <summary>
+    /// The same fix-up adds the run to the export's stagers after any already listed (#2100): an export can carry
+    /// changes from several runs, and each caused it.
+    /// </summary>
+    [Test]
+    public async Task SetPendingExportQueueingItemsAsync_ExportStagedEarlier_AddsTheRunAfterTheEarlierOneAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var earlierRunId = Guid.NewGuid();
+        var laterRunId = Guid.NewGuid();
+        var exportId = Guid.NewGuid();
+
+        await using var write = NewContext();
+        var repository = new PostgresDataRepository(write);
+        await repository.Sync.CreatePendingExportsAsync([Export(exportId, systemId).StagedBy(earlierRunId)]);
+
+        await repository.Sync.SetPendingExportQueueingItemsAsync([(exportId, laterRunId)]);
+
+        var stored = await ReadAsync(exportId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.QueuedByRunProfileExecutionItemId, Is.EqualTo(laterRunId));
+            Assert.That(stored.StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { earlierRunId, laterRunId }));
+        }
+    }
+
+    [Test]
+    public async Task SetPendingExportQueueingItemsAsync_TheSameRunAgain_RecordsItOnceAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var runId = Guid.NewGuid();
+        var exportId = Guid.NewGuid();
+
+        await using var write = NewContext();
+        var repository = new PostgresDataRepository(write);
+        await repository.Sync.CreatePendingExportsAsync([Export(exportId, systemId).StagedBy(runId)]);
+
+        await repository.Sync.SetPendingExportQueueingItemsAsync([(exportId, runId)]);
+
+        Assert.That((await ReadAsync(exportId)).StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { runId }));
+    }
+
+    [Test]
+    public async Task SetPendingExportQueueingItemsAsync_MoreRunsThanItKeeps_KeepsTheMostRecentAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var exportId = Guid.NewGuid();
+        var earlier = Enumerable.Range(0, PendingExport.MaxRecordedStagers).Select(_ => Guid.NewGuid()).ToArray();
+        var latest = Guid.NewGuid();
+
+        await using var write = NewContext();
+        var repository = new PostgresDataRepository(write);
+        await repository.Sync.CreatePendingExportsAsync([Export(exportId, systemId).StagedBy(earlier)]);
+
+        await repository.Sync.SetPendingExportQueueingItemsAsync([(exportId, latest)]);
+
+        Assert.That((await ReadAsync(exportId)).StagedByRunProfileExecutionItemIds, Is.EqualTo(earlier.Skip(1).Append(latest)));
+    }
+
+    private static PendingExport Export(Guid id, int systemId) => new()
+    {
+        Id = id,
+        ConnectedSystemId = systemId,
+        ChangeType = PendingExportChangeType.Update,
+        Status = PendingExportStatus.Pending,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    private async Task<PendingExport> ReadAsync(Guid exportId)
+    {
+        await using var verify = NewContext();
+        return await verify.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
     }
 
     private async Task<int> SeedSystemAsync()

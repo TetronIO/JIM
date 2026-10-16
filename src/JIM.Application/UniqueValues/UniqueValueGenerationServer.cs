@@ -67,6 +67,7 @@ public sealed class UniqueValueGenerationServer
         var ownerId = options.DryRun ? Guid.NewGuid() : options.ReservationOwnerId;
         var claimedThisCall = new HashSet<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)>();
         var outcomes = new GenerationOutcome?[requests.Count];
+        var completed = false;
 
         try
         {
@@ -97,12 +98,22 @@ public sealed class UniqueValueGenerationServer
 
             await ResolveGenerationRoundsAsync(requests, toGenerate, outcomes, options, ownerId, claimedThisCall);
 
+            completed = true;
             return outcomes!;
         }
         finally
         {
             if (options.DryRun)
+            {
                 options.Reservations.ReleaseAll(ownerId);
+            }
+            else if (!completed)
+            {
+                // A form whose expression failed (Generated Value Forms, #2023) fails the whole object, so nothing this
+                // call claimed is issued: release it, rather than holding values no object has for the rest of the run.
+                foreach (var (scope, attributeId, normalisedValue) in claimedThisCall)
+                    options.Reservations.Release(ownerId, scope, attributeId, normalisedValue);
+            }
         }
     }
 
@@ -619,7 +630,7 @@ public sealed class UniqueValueGenerationServer
     {
         var attemptsMade = new int[requests.Count];
         var lastCandidate = new string?[requests.Count];
-        var lastRejectionGate = new string?[requests.Count];
+        var rejections = new CandidateRejections(requests);
 
         // A Sequence request's last drawn number, and the floor it resumes drawing from once a skip over a run of
         // held numbers has found where that run ends (#2031).
@@ -635,8 +646,8 @@ public sealed class UniqueValueGenerationServer
         var undeterminedSystems = new Dictionary<int, List<int>>();
 
         // 'active' is the set of requests still to try this round; a request leaves it for good either by
-        // getting a terminal outcome (Exhausted, NoBaseValue, WidthExceeded, Generated) or, when a gate rejects
-        // its candidate, by carrying forward into next round's 'active' to draw a fresh one.
+        // getting a terminal outcome (Exhausted, NoBaseValue, WidthExceeded, Waiting, Generated) or, when a gate
+        // rejects its candidate, by carrying forward into next round's 'active' to draw a fresh one.
         var active = pending;
 
         while (active.Count > 0)
@@ -645,7 +656,7 @@ public sealed class UniqueValueGenerationServer
             foreach (var i in active)
             {
                 if (attemptsMade[i] >= requests[i].Generation.AttemptLimit)
-                    outcomes[i] = BuildExhaustedOutcome(requests[i], lastCandidate[i], lastRejectionGate[i]);
+                    outcomes[i] = rejections.Exhausted(i, lastCandidate[i]);
                 else
                     withinLimit.Add(i);
             }
@@ -678,24 +689,48 @@ public sealed class UniqueValueGenerationServer
                 drawn.Add(i);
             }
 
+            // Generated Value Forms (#2023): each candidate's forms are worked out before any gate runs, so every gate
+            // checks them with it. A form that needs an input the object has no value for holds the generated value
+            // back: no candidate can be checked until it arrives, so the request waits (PRD requirement 3). A form whose
+            // expression fails throws, and the candidate is never issued (requirement 6).
+            var formChecks = new Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>>();
+            foreach (var i in drawn.Where(i => requests[i].FormSource != null).ToList())
+            {
+                var evaluation = requests[i].FormSource!.Evaluate(candidates[i].Text, candidates[i].Numeric);
+                if (evaluation.IsWaiting)
+                {
+                    outcomes[i] = new GenerationOutcome(requests[i], GenerationOutcomeKind.Waiting, null, null, null, null)
+                    {
+                        FormWaits = evaluation.Waits,
+                        SkippedCandidates = rejections.SkippedCandidates(i)
+                    };
+                    drawn.Remove(i);
+                    continue;
+                }
+
+                if (evaluation.Checks.Count > 0)
+                    formChecks[i] = evaluation.Checks;
+            }
+
             // Gates (a) to (e) in order (reservation, retired, Metaverse or connector-space value, connector space,
             // other live assignments), each narrowing the survivor list; a request a gate rejects is
             // never passed to a later gate this round (the short-circuit the test suite proves), and is instead
-            // retried with a fresh candidate next round.
-            var survivors = FilterReservationGate(drawn, requests, candidates, options, ownerId, claimedThisCall, lastRejectionGate);
+            // retried with a fresh candidate next round. A candidate survives a gate only if its forms do too (PRD
+            // requirement 5).
+            var survivors = FilterReservationGate(drawn, requests, candidates, formChecks, options, ownerId, claimedThisCall, rejections);
             var reachedRecordGates = survivors;
 
             if (survivors.Count > 0)
-                survivors = await FilterRetiredGateAsync(survivors, requests, candidates, lastRejectionGate);
+                survivors = await FilterRetiredGateAsync(survivors, requests, candidates, rejections);
 
             if (survivors.Count > 0)
-                survivors = await FilterValueGateAsync(survivors, requests, candidates, lastRejectionGate);
+                survivors = await FilterValueGateAsync(survivors, requests, candidates, formChecks, rejections);
 
             if (survivors.Count > 0)
-                survivors = await FilterConnectorSpaceGateAsync(survivors, requests, candidates, lastRejectionGate);
+                survivors = await FilterConnectorSpaceGateAsync(survivors, requests, candidates, formChecks, rejections);
 
             if (survivors.Count > 0)
-                survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, lastRejectionGate);
+                survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, formChecks, rejections);
 
             // A Sequence number held in JIM's own records (gates b to e) is usually the start of a run of them, for
             // example after Start again over a population that still holds its numbers: find where the run ends in
@@ -709,31 +744,34 @@ public sealed class UniqueValueGenerationServer
             // The ProbeGate is last, after every local gate, so a candidate JIM already knows is taken never costs a
             // search of a target system (plan Phase 7 item 4).
             if (survivors.Count > 0 && probeSession != null)
-                survivors = await FilterProbeGateAsync(survivors, requests, candidates, attemptsMade, probeSession, probeAnswers, undeterminedSystems, lastRejectionGate);
+                survivors = await FilterProbeGateAsync(survivors, requests, candidates, formChecks, attemptsMade, probeSession, probeAnswers, undeterminedSystems, rejections);
 
             var rejectedThisRound = drawn.Except(survivors).ToList();
 
-            // Every request still surviving here cleared every gate this round: claim the candidate and
-            // finalise the outcome. A request that loses the reservation race here (a genuinely concurrent
-            // parallel batch claimed the same value first) simply retries next round too.
+            // Every request still surviving here cleared every gate this round: claim the candidate and its forms, all
+            // or none, and finalise the outcome. A request that loses the reservation race here (a genuinely
+            // concurrent parallel batch claimed the same value first) simply retries next round too.
             foreach (var i in survivors)
             {
                 var request = requests[i];
-                var (attributeId, scope) = AttributeAndScope(request);
                 var candidate = candidates[i];
                 var normalisedValue = candidate.Text.ToLowerInvariant();
+                var keys = ReservationKeysOf(request, normalisedValue, formChecks.GetValueOrDefault(i));
 
-                if (!options.Reservations.TryReserve(ownerId, scope, attributeId, normalisedValue))
+                if (!options.Reservations.TryReserveAll(ownerId, keys))
                 {
-                    lastRejectionGate[i] = "another object in this run";
+                    rejections.Generated(i, "another object in this run");
                     rejectedThisRound.Add(i);
                     continue;
                 }
 
-                claimedThisCall.Add((scope, attributeId, normalisedValue));
+                claimedThisCall.UnionWith(keys);
 
                 var assignment = BuildAssignment(request, candidate.Text, normalisedValue);
-                outcomes[i] = new GenerationOutcome(request, GenerationOutcomeKind.Generated, candidate.Text, candidate.Numeric, assignment, null);
+                outcomes[i] = new GenerationOutcome(request, GenerationOutcomeKind.Generated, candidate.Text, candidate.Numeric, assignment, null)
+                {
+                    SkippedCandidates = rejections.SkippedCandidates(i)
+                };
 
                 // Only a value actually issued counts towards the run's "chosen using JIM's own records only" warning.
                 if (probeSession != null && undeterminedSystems.Remove(i, out var systemIds))
@@ -747,14 +785,35 @@ public sealed class UniqueValueGenerationServer
         }
     }
 
+    /// <summary>
+    /// The reservation keys a candidate claims: its own, then each form's (Generated Value Forms, #2023), without
+    /// repeats. The values two objects in one run are issued must differ in every one of them.
+    /// </summary>
+    private static List<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)> ReservationKeysOf(
+        GenerationRequest request, string normalisedValue, IReadOnlyList<GeneratedValueFormCheck>? formChecks)
+    {
+        var (attributeId, scope) = AttributeAndScope(request);
+        var keys = new List<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)> { (scope, attributeId, normalisedValue) };
+        if (formChecks != null)
+            keys.AddRange(formChecks.Select(ReservationKeyOf));
+
+        return [.. keys.Distinct()];
+    }
+
+    private static (UniqueValueScope Scope, int AttributeId, string NormalisedValue) ReservationKeyOf(GeneratedValueFormCheck check) =>
+        (check.Mode == GeneratedValueMode.Import ? UniqueValueScope.MetaverseAttribute : UniqueValueScope.ConnectedSystemAttribute,
+            check.AttributeId,
+            check.Value.ToLowerInvariant());
+
     private static List<int> FilterReservationGate(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
+        Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks,
         UniqueValueResolveOptions options,
         Guid ownerId,
         HashSet<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)> claimedThisCall,
-        string?[] lastRejectionGate)
+        CandidateRejections rejections)
     {
         var survivors = new List<int>(active.Count);
         foreach (var i in active)
@@ -766,14 +825,32 @@ public sealed class UniqueValueGenerationServer
             // say; that is the whole of what the rejection told JIM.
             if (requests[i].RejectedValues.Contains(candidates[i].Text, StringComparer.OrdinalIgnoreCase))
             {
-                lastRejectionGate[i] = "the Connected System that rejected it";
+                rejections.Generated(i, "the Connected System that rejected it");
                 continue;
             }
 
             if (options.Reservations.IsReservedByAnotherOwner(ownerId, scope, attributeId, normalisedValue)
                 || claimedThisCall.Contains((scope, attributeId, normalisedValue)))
             {
-                lastRejectionGate[i] = "another object in this run";
+                rejections.Generated(i, "another object in this run");
+                continue;
+            }
+
+            var refusedForm = formChecks.GetValueOrDefault(i)?.FirstOrDefault(c => c.RejectedValues.Contains(c.Value, StringComparer.OrdinalIgnoreCase));
+            if (refusedForm != null)
+            {
+                rejections.Form(i, candidates[i].Text, refusedForm, "the Connected System that rejected it");
+                continue;
+            }
+
+            var claimedForm = formChecks.GetValueOrDefault(i)?.FirstOrDefault(c =>
+            {
+                var key = ReservationKeyOf(c);
+                return options.Reservations.IsReservedByAnotherOwner(ownerId, key.Scope, key.AttributeId, key.NormalisedValue) || claimedThisCall.Contains(key);
+            });
+            if (claimedForm != null)
+            {
+                rejections.Form(i, candidates[i].Text, claimedForm, "another object in this run");
                 continue;
             }
 
@@ -789,13 +866,15 @@ public sealed class UniqueValueGenerationServer
     /// ("Never reuse a value" on, or a Sequence token, which always never reuses). A flow with the switch off skips
     /// the gate, so a rehire may receive a previous holder's value; that is the switch's whole purpose. Batched per
     /// attribute (one query per attribute per round, whichever objects ask), and never excludes the requesting
-    /// object: a retired value belongs to nobody, so not even the object that once held it gets it back.
+    /// object: a retired value belongs to nobody, so not even the object that once held it gets it back. The register
+    /// holds generated values only, so forms are not checked here: a retired generated value is never drawn, so
+    /// neither are its forms (PRD requirement 4).
     /// </summary>
     private async Task<List<int>> FilterRetiredGateAsync(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
-        string?[] lastRejectionGate)
+        CandidateRejections rejections)
     {
         var taken = new HashSet<int>();
 
@@ -809,7 +888,7 @@ public sealed class UniqueValueGenerationServer
 
             // taken.Add doubles as the predicate and the record of the rejection.
             foreach (var i in group.Where(i => retired.Contains(candidates[i].Text.ToLowerInvariant())).Where(taken.Add))
-                lastRejectionGate[i] = "the retired values register (it was issued before and is never reused)";
+                rejections.Generated(i, "the retired values register (it was issued before and is never reused)");
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
@@ -824,13 +903,17 @@ public sealed class UniqueValueGenerationServer
 
     /// <summary>
     /// Gate (c): batched per (attribute, excluded object id) so that, in the common case of a page of brand new
-    /// objects sharing <c>excludingId = null</c>, every request against one attribute costs a single query.
+    /// objects sharing <c>excludingId = null</c>, every request against one attribute costs a single query. A form
+    /// held in a Metaverse attribute is checked against every other Metaverse Object's value for that attribute, one
+    /// query per (attribute, excluded object id) likewise (Generated Value Forms, #2023); an export expression's form,
+    /// held only in a Connected System, is checked by the connector space gate.
     /// </summary>
     private async Task<List<int>> FilterValueGateAsync(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
-        string?[] lastRejectionGate)
+        Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks,
+        CandidateRejections rejections)
     {
         var taken = new HashSet<int>();
         var isNumberTarget = active.ToDictionary(i => i, i => requests[i].TargetType is AttributeDataType.Number or AttributeDataType.LongNumber);
@@ -850,7 +933,7 @@ public sealed class UniqueValueGenerationServer
                 if (!takenValues.Contains(candidates[i].Text))
                     continue;
                 taken.Add(i);
-                lastRejectionGate[i] = mode == GeneratedValueMode.Import ? "another Metaverse Object" : "a Connected System Object";
+                rejections.Generated(i, mode == GeneratedValueMode.Import ? "another Metaverse Object" : "a Connected System Object");
             }
         }
 
@@ -867,8 +950,21 @@ public sealed class UniqueValueGenerationServer
                 if (!takenValues.Contains(candidates[i].Numeric!.Value))
                     continue;
                 taken.Add(i);
-                lastRejectionGate[i] = mode == GeneratedValueMode.Import ? "another Metaverse Object" : "a Connected System Object";
+                rejections.Generated(i, mode == GeneratedValueMode.Import ? "another Metaverse Object" : "a Connected System Object");
             }
+        }
+
+        var formsToCheck = FormChecksOf(active.Where(i => !taken.Contains(i)), formChecks)
+            .Where(f => f.Check.Mode == GeneratedValueMode.Import)
+            .GroupBy(f => (f.Check.AttributeId, ExcludingObjectId(requests[f.Request])));
+        foreach (var group in formsToCheck)
+        {
+            var values = group.Select(f => f.Check.Value.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var takenValues = await _repository.GetMetaverseAttributeValuesInUseAsync(group.Key.AttributeId, values, group.Key.Item2);
+
+            // taken.Add doubles as the predicate and the dedup record (a request can fail on more than one form).
+            foreach (var (i, check) in group.Where(f => takenValues.Contains(f.Check.Value)).Where(f => taken.Add(f.Request)))
+                rejections.Form(i, candidates[i].Text, check, "another Metaverse Object");
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
@@ -883,16 +979,21 @@ public sealed class UniqueValueGenerationServer
     /// (<see cref="GenerationRequest.OwnConnectedSystemObjectIds"/>, which covers a join or projection not saved
     /// yet, including a brand-new Metaverse Object with no id) or its saved join names the object, unless it is
     /// <see cref="GenerationRequest.DisconnectingConnectedSystemObjectId"/>. One holder lookup per attribute
-    /// serves the whole batch; the per-request decision is made in memory.
+    /// serves the whole batch; the per-request decision is made in memory. Each form is checked the same way in the
+    /// attributes it is written to (Generated Value Forms, #2023).
     /// </summary>
     private async Task<List<int>> FilterConnectorSpaceGateAsync(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
-        string?[] lastRejectionGate)
+        Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks,
+        CandidateRejections rejections)
     {
         var relevant = active.Where(i => requests[i].Mode == GeneratedValueMode.Import && requests[i].ConnectorSpaceAttributeIds.Count > 0).ToList();
-        if (relevant.Count == 0)
+        var formsToCheck = FormChecksOf(active.Where(i => requests[i].Mode == GeneratedValueMode.Import), formChecks)
+            .Where(f => f.Check.ConnectorSpaceAttributeIds.Count > 0)
+            .ToList();
+        if (relevant.Count == 0 && formsToCheck.Count == 0)
             return active;
 
         var taken = new HashSet<int>();
@@ -919,7 +1020,7 @@ public sealed class UniqueValueGenerationServer
             // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
             // more than one participating attribute).
             foreach (var i in indices.Where(i => holdersByValue[candidates[i].Text.ToLowerInvariant()].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
-                lastRejectionGate[i] = "a Connected System Object";
+                rejections.Generated(i, "a Connected System Object");
         }
 
         foreach (var (csAttributeId, indices) in numberByAttribute)
@@ -930,7 +1031,20 @@ public sealed class UniqueValueGenerationServer
             // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
             // more than one participating attribute).
             foreach (var i in indices.Where(i => holdersByValue[candidates[i].Numeric!.Value].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
-                lastRejectionGate[i] = "a Connected System Object";
+                rejections.Generated(i, "a Connected System Object");
+        }
+
+        var formsByAttribute = formsToCheck
+            .Where(f => !taken.Contains(f.Request))
+            .SelectMany(f => f.Check.ConnectorSpaceAttributeIds, (f, csAttributeId) => (f.Request, f.Check, CsAttributeId: csAttributeId))
+            .GroupBy(f => f.CsAttributeId);
+        foreach (var group in formsByAttribute)
+        {
+            var values = group.Select(f => f.Check.Value.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var holdersByValue = (await _repository.GetConnectedSystemAttributeValueHoldersAsync(group.Key, values))
+                .ToLookup(h => h.NormalisedValue!, StringComparer.OrdinalIgnoreCase);
+            foreach (var (i, check, _) in group.Where(f => holdersByValue[f.Check.Value.ToLowerInvariant()].Any(h => !IsOwnAccount(requests[f.Request], h))).Where(f => taken.Add(f.Request)))
+                rejections.Form(i, candidates[i].Text, check, "a Connected System Object");
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
@@ -956,13 +1070,16 @@ public sealed class UniqueValueGenerationServer
     /// Gate (e): every other object's live assignment for the same attribute, batched per (attribute, excluding
     /// id) over the targeted, indexed <see cref="ISyncRepository.GetGeneratedValueAssignmentValuesInUseAsync"/>
     /// read; scoped by attribute rather than by which generation row asked, since two different generation rows
-    /// can target the same attribute (decision 3) and must not be able to issue it the same value twice.
+    /// can target the same attribute (decision 3) and must not be able to issue it the same value twice. A form is
+    /// checked against assignments for its own attribute, which catches that attribute being generated elsewhere
+    /// (Generated Value Forms, #2023).
     /// </summary>
     private async Task<List<int>> FilterOtherAssignmentsGateAsync(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
-        string?[] lastRejectionGate)
+        Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks,
+        CandidateRejections rejections)
     {
         var taken = new HashSet<int>();
 
@@ -981,12 +1098,33 @@ public sealed class UniqueValueGenerationServer
                     continue;
 
                 taken.Add(i);
-                lastRejectionGate[i] = "another generated value assignment";
+                rejections.Generated(i, "another generated value assignment");
             }
+        }
+
+        var formsToCheck = FormChecksOf(active.Where(i => !taken.Contains(i)), formChecks)
+            .GroupBy(f => (f.Check.AttributeId, f.Check.Mode, ExcludingObjectId(requests[f.Request])));
+        foreach (var group in formsToCheck)
+        {
+            var values = group.Select(f => f.Check.Value.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var mvAttributeId = group.Key.Mode == GeneratedValueMode.Import ? group.Key.AttributeId : (int?)null;
+            var csAttributeId = group.Key.Mode == GeneratedValueMode.Export ? group.Key.AttributeId : (int?)null;
+
+            var takenValues = await _repository.GetGeneratedValueAssignmentValuesInUseAsync(mvAttributeId, csAttributeId, values, group.Key.Item3);
+
+            foreach (var (i, check) in group.Where(f => takenValues.Contains(f.Check.Value.ToLowerInvariant())).Where(f => taken.Add(f.Request)))
+                rejections.Form(i, candidates[i].Text, check, "another generated value assignment");
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
     }
+
+    /// <summary>
+    /// Each form check of each request in <paramref name="indices"/>, with its request.
+    /// </summary>
+    private static IEnumerable<(int Request, GeneratedValueFormCheck Check)> FormChecksOf(
+        IEnumerable<int> indices, Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks) =>
+        indices.SelectMany(i => formChecks.GetValueOrDefault(i) ?? [], (i, check) => (i, check));
 
     /// <summary>
     /// What a probe said about one candidate for one target: the outcome, whether the target was probed at all, and
@@ -995,49 +1133,67 @@ public sealed class UniqueValueGenerationServer
     private readonly record struct ProbeAnswer(UniquenessProbeOutcome Outcome, bool IsProbed, string ConnectedSystemName);
 
     /// <summary>
-    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each of a request's
-    /// <see cref="GenerationRequest.ProbeTargets"/>, in order, whether the target system already holds the candidate.
-    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System;
-    /// <see cref="UniquenessProbeOutcome.NotFound"/> and <see cref="UniquenessProbeOutcome.CouldNotDetermine"/> accept
-    /// it, the latter noted against the request so the session hears of it once the value is issued. A candidate in
-    /// <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
+    /// One value the ProbeGate asks about for a request's current candidate: the candidate itself, or one of its forms
+    /// (<paramref name="Form"/>), with the targets it is probed in and the values a batch carries for it (the current
+    /// value first, then the lazy window's).
+    /// </summary>
+    private sealed record ProbeCheck(IReadOnlyList<UniquenessProbeTarget> Targets, string Value, IReadOnlyList<string> Window, GeneratedValueFormCheck? Form);
+
+    /// <summary>
+    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each Connected System among the targets of a
+    /// request's candidate and its forms (Generated Value Forms, #2023), in the order its first target was given,
+    /// whether it already holds any of them, in one call per system however many attributes that covers.
+    /// <see cref="UniquenessProbeOutcome.Found"/> rejects the candidate, naming the Connected System and the form, and
+    /// no later system is asked; <see cref="UniquenessProbeOutcome.NotFound"/> and
+    /// <see cref="UniquenessProbeOutcome.CouldNotDetermine"/> accept it, the latter noted against the request, once per
+    /// system, so the session hears of it once the value is issued. A value in the check's exempt values is accepted
+    /// without a probe.
     /// </summary>
     private static async Task<List<int>> FilterProbeGateAsync(
         List<int> active,
         IReadOnlyList<GenerationRequest> requests,
         Dictionary<int, (string Text, long? Numeric)> candidates,
+        Dictionary<int, IReadOnlyList<GeneratedValueFormCheck>> formChecks,
         int[] attemptsMade,
         IUniquenessProbeSession session,
         Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers,
         Dictionary<int, List<int>> undeterminedSystems,
-        string?[] lastRejectionGate)
+        CandidateRejections rejections)
     {
         var survivors = new List<int>(active.Count);
         foreach (var i in active)
         {
             var request = requests[i];
             var candidate = candidates[i].Text;
-            string? foundIn = null;
+            ProbeAnswer? found = null;
+            ProbeCheck? foundBy = null;
             List<int>? undeterminedHere = null;
 
-            var targets = IsProbeExempt(request, candidate) ? [] : request.ProbeTargets;
-            foreach (var target in targets)
+            // attemptsMade has already been advanced past this round's draw.
+            var checks = ProbeChecksOf(request, candidate, attemptsMade[i] - 1, formChecks.GetValueOrDefault(i));
+            foreach (var system in checks.SelectMany(c => c.Targets, (check, target) => (Check: check, Target: target)).GroupBy(x => x.Target.ConnectedSystemId))
             {
-                // attemptsMade has already been advanced past this round's draw.
-                var answer = await GetProbeAnswerAsync(i, request, target, candidate, attemptsMade[i] - 1, session, answers);
-                if (answer.Outcome == UniquenessProbeOutcome.Found)
+                await EnsureProbeAnswersAsync(i, system.Key, [.. system], session, answers);
+
+                var answersHere = system.Select(x => (x.Check, Answer: answers[(i, x.Target)][x.Check.Value])).ToList();
+                var hit = answersHere.FindIndex(a => a.Answer.Outcome == UniquenessProbeOutcome.Found);
+                if (hit >= 0)
                 {
-                    foundIn = answer.ConnectedSystemName;
+                    (foundBy, found) = answersHere[hit];
                     break;
                 }
 
-                if (answer.Outcome == UniquenessProbeOutcome.CouldNotDetermine && answer.IsProbed)
-                    (undeterminedHere ??= []).Add(target.ConnectedSystemId);
+                if (answersHere.Exists(a => a.Answer.Outcome == UniquenessProbeOutcome.CouldNotDetermine && a.Answer.IsProbed))
+                    (undeterminedHere ??= []).Add(system.Key);
             }
 
-            if (foundIn != null)
+            if (found != null)
             {
-                lastRejectionGate[i] = $"an account in {foundIn}";
+                var gate = $"an account in {found.Value.ConnectedSystemName}";
+                if (foundBy!.Form != null)
+                    rejections.Form(i, candidate, foundBy.Form, gate);
+                else
+                    rejections.Generated(i, gate);
                 continue;
             }
 
@@ -1051,37 +1207,119 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// The answer for one candidate against one target, from the request's cached window when an earlier round's
-    /// batch already covered it, otherwise from a new batch (<see cref="BuildProbeBatch"/>), whose every answer is
-    /// cached for later rounds.
+    /// What the ProbeGate asks about a request's current candidate: the candidate in the request's own targets, then
+    /// each form's value in the form's targets, each with its lazy window (<see cref="BuildProbeBatch"/>): for a form,
+    /// the forms of the window's candidates. A value the object's own accounts hold is not asked about at all.
     /// </summary>
-    private static async Task<ProbeAnswer> GetProbeAnswerAsync(
+    private static List<ProbeCheck> ProbeChecksOf(GenerationRequest request, string candidate, int attemptIndex, IReadOnlyList<GeneratedValueFormCheck>? formChecks)
+    {
+        var window = BuildProbeBatch(request, candidate, attemptIndex);
+        var checks = new List<ProbeCheck>
+        {
+            new(IsProbeExempt(request, candidate) ? [] : request.ProbeTargets, candidate, window, null)
+        };
+
+        if (formChecks == null)
+            return checks;
+
+        var windowForms = WindowFormsOf(request, window);
+        foreach (var form in formChecks.Where(f => f.ProbeTargets.Count > 0 && !f.ProbeExemptValues.Contains(f.Value, StringComparer.OrdinalIgnoreCase)))
+        {
+            var formWindow = windowForms
+                .Select(forms => forms.FirstOrDefault(f => f.Mode == form.Mode && f.AttributeId == form.AttributeId)?.Value)
+                .Where(value => value != null && !form.ProbeExemptValues.Contains(value, StringComparer.OrdinalIgnoreCase))
+                .Select(value => value!)
+                .Prepend(form.Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(UniquenessProbeRequest.MaximumCandidates)
+                .ToList();
+            checks.Add(new ProbeCheck(form.ProbeTargets, form.Value, formWindow, form));
+        }
+
+        return checks;
+    }
+
+    /// <summary>
+    /// The forms of each candidate in a probe window after the first, while they can be worked out: the window stops at
+    /// a candidate whose forms wait or fail, which its own round reports when it is drawn.
+    /// </summary>
+    private static List<IReadOnlyList<GeneratedValueFormCheck>> WindowFormsOf(GenerationRequest request, List<string> window)
+    {
+        var forms = new List<IReadOnlyList<GeneratedValueFormCheck>>();
+        foreach (var candidate in window.Skip(1))
+        {
+            GeneratedValueFormEvaluation evaluation;
+            try
+            {
+                evaluation = request.FormSource!.Evaluate(candidate, null);
+            }
+            catch (SyncExpressionEvaluationException)
+            {
+                break;
+            }
+
+            if (evaluation.IsWaiting)
+                break;
+
+            forms.Add(evaluation.Checks);
+        }
+
+        return forms;
+    }
+
+    /// <summary>
+    /// Makes sure every (check, target) of one Connected System has an answer for the check's current value: from the
+    /// request's cached window where an earlier round's batch already covered it, otherwise from one call to the
+    /// session for every target that needs one, each carrying its checks' windows, whose every answer is cached for
+    /// later rounds.
+    /// </summary>
+    private static async Task EnsureProbeAnswersAsync(
         int requestIndex,
-        GenerationRequest request,
-        UniquenessProbeTarget target,
-        string candidate,
-        int attemptIndex,
+        int connectedSystemId,
+        IReadOnlyList<(ProbeCheck Check, UniquenessProbeTarget Target)> checksHere,
         IUniquenessProbeSession session,
         Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers)
     {
-        if (!answers.TryGetValue((requestIndex, target), out var known))
-            answers[(requestIndex, target)] = known = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
-
-        if (known.TryGetValue(candidate, out var cached))
-            return cached;
-
-        var batch = BuildProbeBatch(request, candidate, attemptIndex);
-        var result = await session.ProbeAsync(target, batch);
-
-        // A session answers one outcome per candidate. Should one ever not, nothing it said can be matched to a
-        // candidate, so the whole batch is treated as unanswered rather than guessed at.
-        for (var k = 0; k < batch.Count; k++)
+        var batches = new List<(UniquenessProbeTarget Target, List<string> Values)>();
+        foreach (var byTarget in checksHere.GroupBy(x => x.Target))
         {
-            var outcome = result.Outcomes.Count == batch.Count ? result.Outcomes[k] : UniquenessProbeOutcome.CouldNotDetermine;
-            known[batch[k]] = new ProbeAnswer(outcome, result.IsProbed, result.ConnectedSystemName);
+            if (!answers.TryGetValue((requestIndex, byTarget.Key), out var known))
+                answers[(requestIndex, byTarget.Key)] = known = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
+
+            if (byTarget.All(x => known.ContainsKey(x.Check.Value)))
+                continue;
+
+            // The current values first, so they are never the ones a full batch leaves out.
+            var values = byTarget.Select(x => x.Check.Value)
+                .Concat(byTarget.SelectMany(x => x.Check.Window))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(v => !known.ContainsKey(v))
+                .Take(UniquenessProbeRequest.MaximumCandidates)
+                .ToList();
+            batches.Add((byTarget.Key, values));
         }
 
-        return known[candidate];
+        if (batches.Count == 0)
+            return;
+
+        var results = await session.ProbeAttributesAsync(connectedSystemId,
+            [.. batches.Select(b => new UniquenessProbeBatch(b.Target.ConnectedSystemObjectTypeAttributeId, b.Values))]);
+
+        // A session answers one result per attribute and one outcome per candidate. Should one ever not, nothing it
+        // said can be matched to a candidate, so the batch is treated as unanswered rather than guessed at.
+        var matched = results.Count == batches.Count;
+        for (var n = 0; n < batches.Count; n++)
+        {
+            var (target, values) = batches[n];
+            var result = matched ? results[n] : null;
+            var name = result?.ConnectedSystemName ?? $"Connected System {connectedSystemId}";
+            var known = answers[(requestIndex, target)];
+            for (var c = 0; c < values.Count; c++)
+            {
+                var outcome = result != null && result.Outcomes.Count == values.Count ? result.Outcomes[c] : UniquenessProbeOutcome.CouldNotDetermine;
+                known[values[c]] = new ProbeAnswer(outcome, result?.IsProbed ?? true, name);
+            }
+        }
     }
 
     /// <summary>
@@ -1111,6 +1349,58 @@ public sealed class UniqueValueGenerationServer
 
     private static bool IsProbeExempt(GenerationRequest request, string candidate) =>
         request.ProbeExemptValues.Contains(candidate, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What rejected each request's candidates in one call, for the exhausted outcome's message and the run's record of
+    /// candidates skipped because of a value built from them (Generated Value Forms, #2023).
+    /// </summary>
+    private sealed class CandidateRejections(IReadOnlyList<GenerationRequest> requests)
+    {
+        private readonly string?[] _lastGate = new string?[requests.Count];
+        private readonly string?[] _lastForm = new string?[requests.Count];
+        private readonly List<string>?[] _skipped = new List<string>?[requests.Count];
+
+        /// <summary>
+        /// The candidate itself is taken, by what <paramref name="gate"/> names.
+        /// </summary>
+        public void Generated(int i, string gate)
+        {
+            _lastGate[i] = gate;
+            _lastForm[i] = null;
+        }
+
+        /// <summary>
+        /// A value built from the candidate is taken, by what <paramref name="gate"/> names.
+        /// </summary>
+        public void Form(int i, string candidate, GeneratedValueFormCheck check, string gate)
+        {
+            var builtFrom = $"{check.Name} (built from {requests[i].AttributeName})";
+            _lastGate[i] = gate;
+            _lastForm[i] = $"its {builtFrom}, \"{check.Value}\",";
+            (_skipped[i] ??= []).Add($"{candidate}: {builtFrom} is already held by {gate}");
+        }
+
+        /// <summary>
+        /// The candidates passed over because a value built from them was taken, each with why, in the order tried.
+        /// </summary>
+        public IReadOnlyList<string> SkippedCandidates(int i) => _skipped[i] ?? [];
+
+        public GenerationOutcome Exhausted(int i, string? lastCandidate)
+        {
+            var request = requests[i];
+            var candidateText = lastCandidate ?? "(no candidate was tried)";
+            var gateText = _lastGate[i] ?? "another object";
+            var message = _lastForm[i] == null
+                ? $"No free value was found for {request.AttributeName} after {request.Generation.AttemptLimit} attempts; " +
+                  $"the last candidate, \"{candidateText}\", is already held by {gateText}."
+                : $"No free value was found for {request.AttributeName} after {request.Generation.AttemptLimit} attempts; " +
+                  $"the last candidate, \"{candidateText}\", was passed over because {_lastForm[i]} is already held by {gateText}.";
+            return new GenerationOutcome(request, GenerationOutcomeKind.Exhausted, null, null, null, message)
+            {
+                SkippedCandidates = SkippedCandidates(i)
+            };
+        }
+    }
 
     // ---- Held sequence runs (#2031) ----
 
@@ -1303,15 +1593,6 @@ public sealed class UniqueValueGenerationServer
     private static GenerationOutcome WidthExceeded(GenerationRequest request, string candidate, int fixedWidth) =>
         new(request, GenerationOutcomeKind.WidthExceeded, null, null, null,
             $"The next value for {request.AttributeName} would be \"{candidate}\", which no longer fits the configured fixed width of {fixedWidth} digits.");
-
-    private static GenerationOutcome BuildExhaustedOutcome(GenerationRequest request, string? lastCandidate, string? lastRejectionGate)
-    {
-        var candidateText = lastCandidate ?? "(no candidate was tried)";
-        var gateText = lastRejectionGate ?? "another object";
-        var message = $"No free value was found for {request.AttributeName} after {request.Generation.AttemptLimit} attempts; " +
-                      $"the last candidate, \"{candidateText}\", is already held by {gateText}.";
-        return new GenerationOutcome(request, GenerationOutcomeKind.Exhausted, null, null, null, message);
-    }
 
     // ---- Shared helpers ----
 

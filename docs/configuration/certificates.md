@@ -1,12 +1,15 @@
 ---
 title: Certificates
+description: Add the certificate authorities JIM's Connectors trust, uploaded or from a file, and track when each expires, since JIM never disables one.
+type: object
+audience: administrator
 ---
 
 # Certificates
 
 **Certificates** store trusted CA and intermediate certificates used by [connectors](../connectors/index.md) for LDAP and HTTPS authentication. Each certificate can be enabled or disabled independently without removing it.
 
-Certificates added here are trusted **in addition to** the operating system's own trust store, never in place of it, so adding one can only ever allow more connections to succeed. A directory server's own self-signed certificate can be added directly, not just the certificate authority that issued it. Certificate validation itself cannot be switched off for an individual Connected System; see [certificate validation](../connectors/jim-ldap-connector.md#certificate-validation) in the LDAP Connector documentation for what is checked.
+Certificates added here are trusted **in addition to** the operating system's own trust store, never in place of it, so adding one can only ever allow more connections to succeed. A directory server's own self-signed certificate can be added directly, not just the certificate authority that issued it. Certificate validation itself cannot be switched off for an individual Connected System; see [certificate validation](../connectors/jim-ldap-connector-certificates.md#certificate-validation) in the LDAP Connector documentation for what is checked.
 
 ## Two source types
 
@@ -31,7 +34,7 @@ A separate validation operation lets you check a certificate's chain and validit
 
 ## Change history
 
-Every change to the certificate store is recorded in [configuration change history](activities.md#configuration-change-history): adding, editing, enabling, disabling, or deleting a certificate captures a versioned snapshot of its metadata (name, thumbprint, subject, issuer, validity window, source, enabled state and notes) alongside who made the change, when, and an optional reason. The raw certificate material is never stored in the history; the thumbprint alone identifies the exact certificate, so a swap is always visible.
+Every change to the certificate store is recorded in [Configuration Change History](activities.md#configuration-change-history): adding, editing, enabling, disabling, or deleting a certificate captures a versioned snapshot of its metadata (name, thumbprint, subject, issuer, validity window, source, enabled state and notes) alongside who made the change, when, and an optional reason. The raw certificate material is never stored in the history; the thumbprint alone identifies the exact certificate, so a swap is always visible.
 
 Open a certificate's history from the Change History action on its row, or retrieve it with `Get-JIMConfigurationChangeHistory -Type TrustedCertificate` or the REST API. The optional "Reason for change" prompt appears when uploading, adding, editing, or deleting a certificate in the admin portal; automation can pass the same reason via `-ChangeReason` on the certificate write cmdlets.
 
@@ -53,9 +56,9 @@ Open a certificate's history from the Change History action on its row, or retri
 ## Manage Certificates
 
 - **JIM portal**<br /> Certificates area of the admin UI
-- **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `New-JIMCertificate`, `Test-JIMCertificate`, etc.)
+- **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `Add-JIMCertificate`, `Test-JIMCertificate`, etc.)
 - **REST API**<br /> Certificates endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
-- [Connectors](../connectors/index.md) -- the connectors that use the certificate trust set
+- [Connectors](../connectors/index.md): the connectors that use the certificate trust set

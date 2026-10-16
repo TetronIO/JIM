@@ -14,20 +14,20 @@ namespace JIM.Web.Models.Api;
 public class SyncPreviewResponse
 {
     /// <summary>
-    /// The speculative causal outcome tree, in the same shape a really-recorded Run Profile Execution
-    /// Item's outcomes render from.
+    /// The outcomes the synchronisation would produce, as a tree, in the same shape as the outcomes recorded on a
+    /// Run Profile Execution Item.
     /// </summary>
     public List<SyncOutcomeNodeDto> OutcomeTree { get; set; } = [];
 
     /// <summary>
-    /// The inbound summary: would the object project or join, and what attribute flows would result. Null
+    /// The inbound summary: would the object project or join, and what Attribute Flows would result. Null
     /// for a Metaverse Object preview, which has no inbound chain.
     /// </summary>
     public SyncPreviewInboundSummaryDto? Inbound { get; set; }
 
     /// <summary>
     /// The Pending Exports that would be staged per target Connected System, were the real synchronisation
-    /// to run. None of these are persisted.
+    /// to run. None of them is staged: the preview changes nothing.
     /// </summary>
     public List<SyncPreviewProposedExportDto> ProposedExports { get; set; } = [];
 

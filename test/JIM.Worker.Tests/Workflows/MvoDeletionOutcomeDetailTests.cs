@@ -329,6 +329,130 @@ public class MvoDeletionOutcomeDetailTests : WorkflowTestBase
 
     #endregion
 
+    #region Scheduling Item (#1811)
+
+    /// <summary>
+    /// A deletion scheduled by a Connected System Object's obsoletion records the item that scheduled it, so the
+    /// housekeeping deletion that follows in a later Activity can say which run decided on it. Recorded whatever the
+    /// outcome tracking level: the item exists either way, and why an object was deleted is not detail an
+    /// administrator can turn off.
+    /// </summary>
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task ProcessObsoleteConnectedSystemObject_ScheduledMvoDeletion_MetaverseObjectRecordsTheSchedulingItemAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person", MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, gracePeriod: TimeSpan.FromDays(7));
+        await CreateImportSyncRuleWithDisplayNameFlowAsync(sourceSystem, sourceType, mvType);
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        SyncRepo.SetSyncOutcomeTrackingLevel(trackingLevel);
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+        cso.LastUpdated = DateTime.UtcNow;
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        var schedulingItem = deltaSyncActivity.RunProfileExecutionItems.Single(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
+        var markedMvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(markedMvo!.LastConnectorDisconnectedDate, Is.Not.Null, "the deletion is scheduled, not carried out");
+            Assert.That(schedulingItem.Id, Is.Not.EqualTo(Guid.Empty));
+            Assert.That(markedMvo!.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItem.Id),
+                "the Metaverse Object names the item that scheduled its deletion");
+        }
+    }
+
+    /// <summary>
+    /// A deletion scheduled by a Connected System Object leaving scope records the item that scheduled it, on the
+    /// item the scope exit is recorded on.
+    /// </summary>
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task HandleCsoOutOfScope_ScheduledMvoDeletion_MetaverseObjectRecordsTheSchedulingItemAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person", MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, gracePeriod: TimeSpan.FromDays(7));
+        await CreateScopedImportSyncRuleAsync(sourceSystem, sourceType, mvType);
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        SyncRepo.SetSyncOutcomeTrackingLevel(trackingLevel);
+        cso.AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId").StringValue = "OUT_OF_SCOPE";
+        cso.LastUpdated = DateTime.UtcNow;
+        var fullSync2Profile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var fullSync2Activity = await CreateActivityAsync(sourceSystem.Id, fullSync2Profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSync2Profile, fullSync2Activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var schedulingItem = fullSync2Activity.RunProfileExecutionItems.Single(r => r.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope);
+        var markedMvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(markedMvo!.LastConnectorDisconnectedDate, Is.Not.Null, "the deletion is scheduled, not carried out");
+            Assert.That(schedulingItem.Id, Is.Not.EqualTo(Guid.Empty));
+            Assert.That(markedMvo!.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItem.Id),
+                "the Metaverse Object names the item that scheduled its deletion");
+        }
+    }
+
+    /// <summary>
+    /// A deletion carried out at once has nothing to link: no housekeeping follows it, and the deletion is recorded
+    /// on the scheduling run's own item.
+    /// </summary>
+    [Test]
+    public async Task ProcessObsoleteConnectedSystemObject_ImmediateMvoDeletion_RecordsNoSchedulingItemAsync()
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person", MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, gracePeriod: TimeSpan.Zero);
+        await CreateImportSyncRuleWithDisplayNameFlowAsync(sourceSystem, sourceType, mvType);
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        cso = await ReloadEntityAsync(cso);
+        var mvo = cso.MetaverseObject!;
+
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+        cso.LastUpdated = DateTime.UtcNow;
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.Null);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>

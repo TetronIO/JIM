@@ -56,14 +56,26 @@ public class RunProfileDto
     public string? FilePath { get; set; }
 
     /// <summary>
-    /// SPEC-1082 D10: whether Verification Mode is enabled. Only meaningful when <see cref="RunType"/>
-    /// is <c>FullImport</c>.
+    /// Whether Verification Mode is enabled: the Full Import skips no object whose content looks unchanged, and
+    /// instead raises an error for any object whose stored content hash disagrees with what was read. Only
+    /// meaningful when <c>RunType</c> is <c>FullImport</c>.
     /// </summary>
+    /// <remarks>SPEC-1082 D10.</remarks>
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618): the limits on what this Run Profile may attempt. Always present.
+    /// Whether this Full Import carries out an Object Type change rather than refusing it. Only ever true when
+    /// <c>RunType</c> is <c>FullImport</c>, and only has an effect on a Connected System whose Connector can tell an
+    /// Object Type change from a new object, as the LDAP Connector can.
     /// </summary>
+    /// <remarks>Allow Object Type Changes, #2049. See <see cref="CreateRunProfileRequest.AllowObjectTypeChanges"/> for
+    /// behaviour.</remarks>
+    public bool AllowObjectTypeChanges { get; set; }
+
+    /// <summary>
+    /// The limits on what this Run Profile may attempt. Always present.
+    /// </summary>
+    /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public RunProfileSafeguardsDto Safeguards { get; set; } = new();
 
     /// <summary>
@@ -82,6 +94,7 @@ public class RunProfileDto
             TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges,
             Safeguards = new RunProfileSafeguardsDto
             {
                 MaxCreates = runProfile.MaxCreates,
@@ -135,12 +148,12 @@ public class RunProfileSafeguardsDto
 public class RunProfileExecutionResponse
 {
     /// <summary>
-    /// The activity ID for tracking the execution.
+    /// The Activity that records the execution, and reports its progress and outcome.
     /// </summary>
     public Guid ActivityId { get; set; }
 
     /// <summary>
-    /// The worker task ID for the queued execution.
+    /// The worker task queued to carry out the execution.
     /// </summary>
     public Guid TaskId { get; set; }
 
@@ -150,8 +163,8 @@ public class RunProfileExecutionResponse
     public string Message { get; set; } = null!;
 
     /// <summary>
-    /// Any warning messages about the execution (e.g., partition validation warnings).
-    /// Empty if no warnings.
+    /// Warnings about the execution, such as a partition validation warning, or that the preview it cites was out
+    /// of date. Empty when there are none.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 }

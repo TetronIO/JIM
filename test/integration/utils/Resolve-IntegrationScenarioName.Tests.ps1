@@ -164,27 +164,61 @@ Describe 'Get-IntegrationScenarioSetupScript' {
 }
 
 Describe 'Get-IntegrationScenarioSetupParameters' {
-    It 'gives Scenario 001 generated and derived identifiers, as the scenario itself runs' {
-        $parameters = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+    It 'gives Scenario 001 generated and derived identifiers on <DirectoryType>, as the scenario itself runs' -ForEach @(
+        @{ DirectoryType = 'SambaAD' }
+        @{ DirectoryType = 'OpenLDAP' }
+        @{ DirectoryType = 'DirectoryServer389' }
+        @{ DirectoryType = 'ActiveDirectory' }
+    ) {
+        $parameters = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryType
         $parameters.GenerateAccountName | Should -BeTrue
         $parameters.DeriveFromAccountName | Should -BeTrue
     }
 
-    It 'adds nothing for a scenario whose setup runs with its defaults' {
-        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 4).Count | Should -Be 0
-        (Get-IntegrationScenarioSetupParameters -ScenarioNumber $null).Count | Should -Be 0
+    # Real Active Directory refuses to create an enabled account with no password (#2039), and Scenario 001's
+    # userAccountControl Attribute Flow asks for an enabled one, so the lab runs with an Initial Password. Samba AD
+    # runs with one too, because it is where an Initial Password once enabled an account the flow creates disabled
+    # (#2064): the HR data always holds an Archived joiner, and Test 1 asserts its account stays disabled.
+    It 'gives Scenario 001 an Initial Password on <DirectoryType>' -ForEach @(
+        @{ DirectoryType = 'ActiveDirectory' }
+        @{ DirectoryType = 'SambaAD' }
+    ) {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryType).InitialPassword | Should -BeTrue
+    }
+
+    It 'leaves Scenario 001 without an Initial Password on <DirectoryType>, which has no userAccountControl' -ForEach @(
+        @{ DirectoryType = 'OpenLDAP' }
+        @{ DirectoryType = 'DirectoryServer389' }
+    ) {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryType).ContainsKey('InitialPassword') | Should -BeFalse
+    }
+
+    It 'leaves Scenario 001 without an Initial Password when the directory configuration names no type' {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType '').ContainsKey('InitialPassword') | Should -BeFalse
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $null).ContainsKey('InitialPassword') | Should -BeFalse
+    }
+
+    It 'adds nothing for a scenario whose setup runs with its defaults, whatever the directory' {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 4 -DirectoryType 'SambaAD').Count | Should -Be 0
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 17 -DirectoryType 'ActiveDirectory').Count | Should -Be 0
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber $null -DirectoryType 'ActiveDirectory').Count | Should -Be 0
     }
 
     It 'returns a fresh table each call, so a caller adding to it cannot change what the next caller gets' {
-        $first = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+        $first = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType 'ActiveDirectory'
         $first.Extra = $true
-        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1).ContainsKey('Extra') | Should -BeFalse
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType 'ActiveDirectory').ContainsKey('Extra') | Should -BeFalse
     }
 
-    It 'names only switches the real Setup-Scenario-001.ps1 declares' {
+    It 'names only switches the real Setup-Scenario-001.ps1 declares, on <DirectoryType>' -ForEach @(
+        @{ DirectoryType = 'SambaAD' }
+        @{ DirectoryType = 'OpenLDAP' }
+        @{ DirectoryType = 'DirectoryServer389' }
+        @{ DirectoryType = 'ActiveDirectory' }
+    ) {
         $setupScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'Setup-Scenario-001.ps1'
         $declared = (Get-Command $setupScript).Parameters.Keys
-        foreach ($name in (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1).Keys) {
+        foreach ($name in (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryType).Keys) {
             $declared | Should -Contain $name
         }
     }

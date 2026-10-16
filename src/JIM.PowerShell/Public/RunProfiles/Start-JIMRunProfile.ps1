@@ -14,41 +14,38 @@ function Start-JIMRunProfile {
         Use the -Wait parameter to block until the operation completes.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The Connected System the Run Profile belongs to.
 
     .PARAMETER ConnectedSystemName
-        The name of the Connected System. Must be an exact match.
+        The name of the Connected System the Run Profile belongs to. Must be an exact match.
 
     .PARAMETER RunProfileId
-        The unique identifier of the Run Profile to execute.
-        Alias: Id (for pipeline input from Get-JIMRunProfile).
+        The Run Profile to execute.
 
     .PARAMETER RunProfileName
         The name of the Run Profile to execute. Must be an exact match.
 
     .PARAMETER Wait
-        If specified, waits for the Run Profile execution to complete before returning.
-        Shows live progress while waiting (phase, object counts, throughput and estimated
-        time remaining), polling the lightweight Activity progress endpoint every 2 seconds.
+        Waits for the execution to finish, showing its progress: the step it is on, object counts, throughput and
+        the estimated time remaining.
 
     .PARAMETER Timeout
-        Maximum time in seconds to wait for completion when using -Wait.
-        If not specified, waits indefinitely until completion.
+        How many seconds -Wait waits before it throws an error naming the Activity, which may still be running. Omit
+        it to wait until the execution finishes.
 
     .PARAMETER PreviewActivityId
-        The Full Synchronisation preview this run was started after reading. Recorded on the
-        run's Activity so "previewed, then run" is auditable rather than a claim. Only a
-        Full Synchronisation Run Profile can cite one, and it must be a completed Full
-        Synchronisation preview of the same Connected System; anything else is refused and
-        the run is not queued. A preview that a later run or configuration change has
-        overtaken is still recorded, and the run's Activity says it was out of date and what
-        overtook it; the cmdlet writes a warning saying so.
+        The Full Synchronisation preview this run was started after reading, recorded on the run's Activity so that
+        it shows what informed the run. Only a Full Synchronisation Run Profile can cite one, and it must be a
+        completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is
+        not queued. A preview that a later run or configuration change has overtaken is still recorded, and the
+        cmdlet warns what overtook it.
 
     .PARAMETER PassThru
-        If specified, returns the execution result object.
+        Returns the response to queuing the run.
 
     .OUTPUTS
-        If -PassThru is specified, returns the execution response with ActivityId and TaskId.
+        With -PassThru, the response to queuing the run; Get-JIMActivity -Follow follows its ActivityId. Otherwise
+        nothing. Warnings in the response are also written as PowerShell warnings.
 
     .EXAMPLE
         Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1
@@ -88,7 +85,7 @@ function Start-JIMRunProfile {
         Get-JIMActivityStats
     #>
     [CmdletBinding(DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RunProfileExecutionResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ByIdAndName', ValueFromPipelineByPropertyName)]

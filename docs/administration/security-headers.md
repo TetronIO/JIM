@@ -1,5 +1,8 @@
 ---
 title: Security Headers
+description: The security headers JIM sends on every response, its Content Security Policy, and what to check behind a reverse proxy.
+type: reference
+audience: security-assessor
 ---
 
 # Security Headers
@@ -27,7 +30,7 @@ JIM does not overwrite it; the more specific value wins.
 JIM's Content Security Policy (CSP) is currently in **stage one**: a restrictive, same-origin-only policy
 compatible with Blazor Server and MudBlazor as they stand today.
 
-```
+```text
 default-src 'self';
 script-src 'self' 'unsafe-inline';
 style-src 'self' 'unsafe-inline';
@@ -53,7 +56,7 @@ keeps the UI live) works identically whether JIM is reached over plain HTTP (loc
 
 ## Reverse proxies and corporate networks
 
-If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy)),
+If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](tls-and-reverse-proxy.md)),
 JIM's headers pass through unchanged unless your proxy is explicitly configured to strip or rewrite them. A
 corporate web proxy or browser security extension that inspects or blocks unrecognised `Content-Security-Policy`
 directives may need an allowance for JIM's origin; the policy above is the complete list of directives JIM sends,

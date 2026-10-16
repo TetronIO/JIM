@@ -40,6 +40,18 @@ public class ConnectedSystemActivityTests
         _mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+
+        _mockCsRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _mockCsRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _mockRepository.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
 
         // Capture the activity when CreateActivityAsync is called
@@ -348,6 +360,130 @@ public class ConnectedSystemActivityTests
         Assert.That(_capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
         Assert.That(_capturedActivity.ConnectedSystemRunProfileId, Is.EqualTo(1));
         Assert.That(_capturedActivity.ConnectedSystemId, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Allow Object Type Changes validation (#2049)
+
+    // The portal calls the server directly rather than going through the REST API, so the Full-Import-only rule has
+    // to hold here on its own: a refusal on every create and update overload, naming the setting, with nothing
+    // persisted and no Activity recorded.
+
+    private static ConnectedSystemRunProfile BuildRunProfileAllowingObjectTypeChanges(ConnectedSystemRunType runType) => new()
+    {
+        Id = 1,
+        Name = "Object Type changes",
+        ConnectedSystemId = 1,
+        RunType = runType,
+        AllowObjectTypeChanges = true
+    };
+
+    private void ArrangeConnectedSystemSupportingEveryRunType()
+    {
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>()))
+            .ReturnsAsync(new ConnectedSystem
+            {
+                Id = 1,
+                Name = "Contoso AD",
+                ConnectorDefinition = new ConnectorDefinition
+                {
+                    Name = "Test Connector",
+                    SupportsFullImport = true,
+                    SupportsDeltaImport = true,
+                    SupportsExport = true,
+                    ExternalIdsUniqueAcrossObjectTypes = true
+                }
+            });
+    }
+
+    private static ApiKey BuildApiKey() => new() { Id = Guid.NewGuid(), Name = "Test API Key" };
+
+    private void AssertNothingPersistedOrRecorded()
+    {
+        _mockCsRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+        _mockCsRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+        Assert.That(_capturedActivity, Is.Null, "a refused Run Profile must not leave an Activity behind");
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public void CreateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnNonFullImportByUser_ThrowsNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() =>
+            _jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(BuildRunProfileAllowingObjectTypeChanges(runType), _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)));
+        AssertNothingPersistedOrRecorded();
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public void CreateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnNonFullImportByApiKey_ThrowsNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() =>
+            _jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(BuildRunProfileAllowingObjectTypeChanges(runType), BuildApiKey()));
+
+        Assert.That(ex!.Message, Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)));
+        AssertNothingPersistedOrRecorded();
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public void UpdateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnNonFullImportByUser_ThrowsNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() =>
+            _jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(BuildRunProfileAllowingObjectTypeChanges(runType), _initiatedBy));
+
+        Assert.That(ex!.Message, Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)));
+        AssertNothingPersistedOrRecorded();
+    }
+
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    public void UpdateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnNonFullImportByApiKey_ThrowsNamingTheFieldAsync(ConnectedSystemRunType runType)
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() =>
+            _jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(BuildRunProfileAllowingObjectTypeChanges(runType), BuildApiKey()));
+
+        Assert.That(ex!.Message, Does.Contain(nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)));
+        AssertNothingPersistedOrRecorded();
+    }
+
+    [Test]
+    public async Task CreateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnFullImport_PersistsItAsync()
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        await _jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(
+            BuildRunProfileAllowingObjectTypeChanges(ConnectedSystemRunType.FullImport), _initiatedBy);
+
+        _mockCsRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(
+            It.Is<ConnectedSystemRunProfile>(rp => rp.AllowObjectTypeChanges && rp.RunType == ConnectedSystemRunType.FullImport)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_AllowObjectTypeChangesOnFullImport_PersistsItAsync()
+    {
+        ArrangeConnectedSystemSupportingEveryRunType();
+
+        await _jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(
+            BuildRunProfileAllowingObjectTypeChanges(ConnectedSystemRunType.FullImport), BuildApiKey());
+
+        _mockCsRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(
+            It.Is<ConnectedSystemRunProfile>(rp => rp.AllowObjectTypeChanges)), Times.Once);
     }
 
     #endregion

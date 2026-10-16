@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Models
@@ -21,11 +22,15 @@
    below) as page actions on its right. A row of their own left a gap under the audit chips; the tab bar has no room
    to take them without scrolling further. They wrap under the title on a narrow screen. *@
 <div class="d-flex justify-space-between align-center flex-wrap gap-3">
-    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span></MudText>
+    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span>
+        <PageInfo Title="Connected System" DocsPage="configuration/connected-systems.md">
+            A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.
+        </PageInfo>
+    </MudText>
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+            <MudButton Variant="Variant.Outlined"
                        StartIcon="@Icons.Material.Filled.Storage"
                        DropShadow="false"
                        Size="Size.Small"
@@ -33,7 +38,7 @@
                 Connector Space
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+            <MudButton Variant="Variant.Outlined"
                        StartIcon="@Icons.Material.Filled.Outbox"
                        DropShadow="false"
                        Size="Size.Small"
@@ -41,6 +46,29 @@
                 Pending Exports
                 <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
             </MudButton>
+            @* The Connector Space's unresolved references (#959), shown only while there are some. A button among the
+               data views rather than a notice: unresolved references are chronic rather than urgent, and an
+               always-on notice would become wallpaper and override an administrator who chose Ignore. Amber where
+               Unresolved Reference Handling asks for them to be reported, as Pending Exports is when exports wait. *@
+            @if (_unresolvedReferenceTotals is { ReferenceCount: > 0 } unresolvedReferences)
+            {
+                var amber = UnresolvedReferenceDisplay.SignpostTone(_connectedSystem.UnresolvedReferenceHandling) == UnresolvedReferenceTone.Warning;
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <ChildContent>
+                        <MudButton Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.LinkOff"
+                                   DropShadow="false"
+                                   Size="Size.Small"
+                                   Href="@UnresolvedReferenceDisplay.ConnectorSpaceHref(_connectedSystem.Id)">
+                            Unresolved References
+                            <span class="@(amber ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@unresolvedReferences.ReferenceCount.ToString("N0")</span>
+                        </MudButton>
+                    </ChildContent>
+                    <TooltipContent>
+                        <TooltipText Text="@UnresolvedReferenceDisplay.SignpostTooltip(unresolvedReferences, _connectedSystem.UnresolvedReferenceHandling)" />
+                    </TooltipContent>
+                </MudTooltip>
+            }
         </MudStack>
     }
 </div>
@@ -361,6 +389,7 @@ else if (_drift is { TrackingDisabled: true })
     private string? _partitionAndHierarchyText;
     private int _pendingExportCount;
     private int _connectedSystemObjectCount;
+    private ConnectedSystemUnresolvedReferenceTotals? _unresolvedReferenceTotals;
     private int _obsoleteConnectedSystemObjectCount;
 
     // Run Profile Safeguards (#1618): the most recent completed Export Activity, so a backlog of
@@ -456,6 +485,7 @@ else if (_drift is { TrackingDisabled: true })
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
+        _unresolvedReferenceTotals = await jim.ConnectedSystems.GetUnresolvedReferenceTotalsAsync(Id);
         _latestExportActivity = await jim.Activities.GetLatestCompletedExportActivityAsync(Id);
         _obsoleteConnectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(Id);
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);

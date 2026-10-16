@@ -349,6 +349,6 @@ public class RunProgressMetricsTests : JimComponentTestContext
     {
         var cut = RenderMetrics(secondsRemaining: 3720d);
 
-        Assert.That(Values(cut).Any(v => v.StartsWith("~1 hr")), Is.True);
+        Assert.That(Values(cut).Any(v => v.StartsWith("~1 hr", StringComparison.Ordinal)), Is.True);
     }
 }

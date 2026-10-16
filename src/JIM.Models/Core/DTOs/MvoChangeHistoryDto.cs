@@ -8,64 +8,94 @@ using JIM.Models.Staging;
 namespace JIM.Models.Core.DTOs;
 
 /// <summary>
-/// Flat projection of a Metaverse Object change record for display and API consumption.
-/// Includes denormalised initiator, Synchronisation Rule, and Run Profile context so consumers can
-/// render a row without further joins, and a list of attribute-level changes.
+/// One change to a Metaverse Object: what changed, when, who or what made it, and the value changes it made to each
+/// attribute.
 /// </summary>
 public class MvoChangeHistoryDto
 {
+    /// <summary>
+    /// The unique identifier of the change.
+    /// </summary>
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// What the change did to the Metaverse Object.
+    /// </summary>
     public ObjectChangeType ChangeType { get; set; }
 
+    /// <summary>
+    /// When the change was made (UTC).
+    /// </summary>
     public DateTime ChangeTime { get; set; }
 
+    /// <summary>
+    /// The kind of principal that made the change: a User, an API key, or JIM itself (System).
+    /// </summary>
     public ActivityInitiatorType InitiatedByType { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the principal that made the change; null for System.
+    /// </summary>
     public Guid? InitiatedById { get; set; }
 
+    /// <summary>
+    /// The name of the principal that made the change, as it was then.
+    /// </summary>
     public string? InitiatedByName { get; set; }
 
+    /// <summary>
+    /// What within JIM made the change, such as a Synchronisation Rule, a User or Example Data.
+    /// </summary>
     public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the Synchronisation Rule that made the change, when one did.
+    /// </summary>
     public int? SyncRuleId { get; set; }
 
+    /// <summary>
+    /// That Synchronisation Rule's name.
+    /// </summary>
     public string? SyncRuleName { get; set; }
 
+    /// <summary>
+    /// The Activity execution item that recorded the change, when a Run Profile made it.
+    /// </summary>
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
-    /// The CSO id, if this change was raised by a sync Run Profile execution item.
+    /// The unique identifier of the Connected System Object whose synchronisation made the change, when one did.
     /// </summary>
     public Guid? CsoId { get; set; }
 
     /// <summary>
-    /// The CSO external id snapshot (preserved even if the CSO is later deleted).
+    /// That Connected System Object's external id, as it was then; kept after the object is deleted.
     /// </summary>
     public string? CsoExternalId { get; set; }
 
     /// <summary>
-    /// The Connected System id behind the activity, if the change was sync-initiated.
+    /// The unique identifier of the Connected System the Run Profile belonged to, when one made the change.
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The Connected System name (taken from <c>Activity.TargetContext</c>).
+    /// That Connected System's name.
     /// </summary>
     public string? ConnectedSystemName { get; set; }
 
     /// <summary>
-    /// The Run Profile name (taken from <c>Activity.TargetName</c>).
+    /// The name of the Run Profile that made the change, when one did.
     /// </summary>
     public string? RunProfileName { get; set; }
 
     /// <summary>
-    /// The Connected System run type for sync-initiated changes; used to render the
-    /// change mechanism (Import / SynchronisationRule / Export) when the initiator
-    /// type is the default <c>NotSet</c> sync value.
+    /// The kind of Run Profile that made the change, when one did.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
+    /// <summary>
+    /// The attributes the change touched, each with the values it added and removed.
+    /// </summary>
     public List<MvoAttributeChangeDto> AttributeChanges { get; set; } = new();
 }
 
@@ -156,7 +186,7 @@ public class MvoValueChangeDto
             return StringValue;
 
         if (DateTimeValue.HasValue)
-            return DateTimeValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return JIM.Models.Utility.AttributeDateDisplay.Format(DateTimeValue.Value);
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);

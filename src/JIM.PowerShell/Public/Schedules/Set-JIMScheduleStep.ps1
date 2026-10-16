@@ -24,19 +24,20 @@ function Set-JIMScheduleStep {
         The unique identifier (GUID) of the step to change, as shown in the Schedule's Steps.
 
     .PARAMETER OnFailure
-        What the step does to the Schedule when it fails:
-        - FollowSchedule: whatever the Schedule is set to do (its OnStepFailure)
-        - Stop: stop the Schedule, even if the Schedule is set to continue
-        - Continue: carry on with the remaining steps, even if the Schedule is set to stop
+        What the Schedule does when this step fails. FollowSchedule does
+        whatever the Schedule is set to do (its OnStepFailure). Stop stops the
+        Schedule, even one set to continue. Continue carries on with the
+        remaining steps, even when the Schedule is set to stop.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the updated Schedule object.
+        Returns the updated Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Schedule object (the same shape as Get-JIMSchedule -Id).
+        With -PassThru, the updated Schedule in full; otherwise nothing. If the Schedule has no step with that
+        StepId, the cmdlet reports an error and changes nothing.
 
     .EXAMPLE
         $schedule = Get-JIMSchedule -Id "12345678-..."
@@ -57,7 +58,7 @@ function Set-JIMScheduleStep {
         Remove-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         # The Id alias is what lets a Schedule piped from Get-JIMSchedule bind here (pipeline binding matches on
         # property name). It also makes -Id a valid spelling of -ScheduleId, which on a step cmdlet could be misread as

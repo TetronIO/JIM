@@ -17,11 +17,10 @@ function Get-JIMConnectedSystemDirectoryServer {
         Preferred Domain Controller setting; setting it is a separate call to Set-JIMConnectedSystem.
 
     .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+        The ID of the Connected System.
 
     .OUTPUTS
-        PSCustomObject per discovered domain controller: hostName (its FQDN) and site (the Active
-        Directory Site it belongs to, or $null for directories without Sites).
+        One entry per domain controller found: its HostName, and the Active Directory Site it belongs to.
 
     .EXAMPLE
         Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1
@@ -43,7 +42,7 @@ function Get-JIMConnectedSystemDirectoryServer {
         Set-JIMConnectedSystem
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConnectedSystemDirectoryServerDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]

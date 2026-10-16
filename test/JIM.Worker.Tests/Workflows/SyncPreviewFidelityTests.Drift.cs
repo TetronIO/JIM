@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -134,6 +135,86 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
+    /// <summary>
+    /// The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection entirely
+    /// (#2039), because a correction for any attribute would replace the Pending Export holding the change. The preview
+    /// proposes no correction for it either, or an administrator reads a correction the run will not make.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeAwaitingInitialPassword_ProposesNoCorrectionTheRunDoesNotMakeAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+        var displayNameAttribute = targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").Attribute;
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Target.Id,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = displayNameAttribute.Id,
+                    Attribute = displayNameAttribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    StringValue = "John Smith",
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+        var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.False, "arrange: the run makes no drift correction for an object holding a change");
+            Assert.That(preview.DriftCorrections, Is.Empty, "the preview proposes no correction the run does not make");
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty);
+            Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
+                Has.No.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
+        }
+    }
+
+    /// <summary>
+    /// Where the enforced export expression fails, or Fail this mapping stops it, the run records the error against the
+    /// object and stages no correction (#2180). The preview says the same, rather than failing itself or proposing a
+    /// correction the run does not make.
+    /// </summary>
+    [TestCase("ToFileTime(42)", MissingInputBehaviour.EvaluateAnyway)]
+    [TestCase("mv[\"Nickname\"]", MissingInputBehaviour.FailMapping)]
+    [TestCase("mv[\"Nickname\"]", MissingInputBehaviour.FailObject)]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectWhoseEnforcedExpressionCannotBeEvaluated_ReportsTheErrorAndProposesNoCorrectionAsync(
+        string expression, MissingInputBehaviour missingInputBehaviour)
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var source = ctx.ExportRule.AttributeFlowRules.Single().Sources.Single();
+        source.MetaverseAttribute = null;
+        source.MetaverseAttributeId = null;
+        source.Expression = expression;
+        source.MissingInputBehaviour = missingInputBehaviour;
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preview.Errors.Any(e => e.Code == SyncPreviewMessageCode.ExpressionEvaluationError && e.AttributeName == "DisplayName"),
+                Is.True, "the error the run records against the object is reported");
+            Assert.That(preview.DriftCorrections, Is.Empty, "the run stages no correction");
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty);
+        }
+    }
+
     [Test]
     public async Task PreviewFullSyncAsync_OfATargetObjectThatWouldJoin_ProposesTheDriftCorrectionTheRunMakesAsync()
     {
@@ -187,7 +268,7 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
-    private sealed record DriftContext(ConnectedSystem Source, ConnectedSystem Target);
+    private sealed record DriftContext(ConnectedSystem Source, ConnectedSystem Target, SyncRule ExportRule);
 
     /// <summary>
     /// HR projects John Smith and flows his display name to a provisioned, confirmed Active Directory account, whose
@@ -227,7 +308,7 @@ public partial class SyncPreviewFidelityTests
         targetCso.LastUpdated = DateTime.UtcNow;
         SyncRepo.ClearAllPendingExports();
 
-        return new DriftContext(source, target);
+        return new DriftContext(source, target, exportRule);
     }
 
     private int UpdatesStagedFor(ConnectedSystem system) => SyncRepo.PendingExports.Values

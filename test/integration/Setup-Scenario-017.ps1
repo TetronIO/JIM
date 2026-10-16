@@ -7,8 +7,8 @@
 
 .DESCRIPTION
     Configures JIM to set an Initial Password on every account its outbound Synchronisation Rule
-    provisions, so that Scenario 017 (Samba AD only) and Scenario 020 (either directory) can prove the
-    account holder can actually use it.
+    provisions, so that Scenario 017 (Samba AD and the Active Directory lab) and Scenario 020 (either
+    directory) can prove the account holder can actually use it.
 
     The provisioning substrate is Scenario 001's: HR CSV source, directory target, an Export
     Synchronisation Rule that provisions Users. This script composes Setup-Scenario-001.ps1 rather than
@@ -267,14 +267,21 @@ try {
     # Step 2c: Let the Initial Password be the only writer of the account's enabled state
     #
     # Setup-Scenario-001 exports userAccountControl through an expression, to exercise integer attribute flow.
-    # The Initial Password's EnableAccount option writes the same attribute, so leaving both in place gives
-    # one attribute two writers: the export asserts the flow's value, the password channel then writes its
-    # own, and the confirming import reports "We exported a change, but did not get confirmation of it ...
-    # 1 attribute(s): userAccountControl. Will attempt to reassert the change on the next export run."
+    # This scenario removes it, to prove the configuration where the Initial Password alone owns the enabled
+    # state: no flow, and EnableAccount enabling the account once its password is set.
     #
-    # Removing the mapping here is what an administrator provisioning through the Initial Password should do:
-    # the account's enabled state belongs to whichever mechanism sets the password, because Active Directory
-    # will not enable an account that does not already hold a policy-compliant one.
+    # Removing the flow is a choice this scenario makes, not something an Initial Password requires. Keeping
+    # both works (#2039): on real Active Directory, which will not create an enabled account with no password,
+    # JIM creates the account disabled because an Initial Password follows it, the delivery enables it, and the
+    # confirming import holds the flow's value until the password is delivered rather than reporting it as
+    # unconfirmed. Scenario 001 proves that configuration on the Active Directory lab (Setup-Scenario-001.ps1
+    # -InitialPassword).
+    #
+    # This scenario still needs the flow gone: without it, Step 2 of this scenario's chain (ACCOUNTDISABLE clear) is
+    # evidence that the password write landed, because nothing else enables the account. It is also what lets the
+    # Initial Password's expiry decide "Password never expires" (#2159): with a userAccountControl flow kept, the
+    # delivery would leave that flag to the flow, and Scenario 020, which composes this with NeverExpires, would
+    # get accounts whose password ages by the domain's policy.
     Write-TestStep "Step 2c" "Removing the userAccountControl Attribute Flow so the Initial Password owns the enabled state"
 
     $exportRuleName = "$($DirectoryConfig.ConnectedSystemName) Export Users"
@@ -295,13 +302,13 @@ try {
         catch {
             # Deleting a Synchronisation Rule Mapping currently fails with an Entity Framework tracking
             # conflict on SyncRuleMappingSource. Naming it here saves the next person diagnosing an opaque
-            # HTTP 400 from the setup script; there is no way to configure around it, because the mapping has
-            # to go for the Initial Password to own the account's enabled state, and EnableAccount cannot
-            # simply be switched off (false means "disable the account", not "leave it alone").
+            # HTTP 400 from the setup script; there is no way to configure around it within this scenario,
+            # because the mapping has to go for the Initial Password to be the account's only enabler (see
+            # above): while a userAccountControl flow sets the account's enabled state, the flow decides it and
+            # the Initial Password's EnableAccount does not apply (#2064).
             throw "Could not remove the userAccountControl Attribute Flow from '$exportRuleName', so this " +
-                  "scenario cannot run: the Initial Password's EnableAccount option and that flow would both " +
-                  "write the same attribute, and the confirming import would report the export as " +
-                  "unconfirmed. Underlying error: $($_.Exception.Message)"
+                  "scenario cannot run: it proves the Initial Password as the only writer of the account's " +
+                  "enabled state, which that flow would contradict. Underlying error: $($_.Exception.Message)"
         }
         Write-Host "  ✓ Removed the userAccountControl Attribute Flow (mapping $($accountControlMapping.Id))" -ForegroundColor Green
     }

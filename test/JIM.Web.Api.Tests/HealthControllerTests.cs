@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Web.Controllers.Api;
+using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -9,6 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NUnit.Framework;
 using System;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace JIM.Web.Api.Tests;
@@ -38,11 +41,10 @@ public class HealthControllerTests
         var controller = new HealthController(application);
 
         var result = controller.Get() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as HealthStatusResponse;
 
         Assert.That(value, Is.Not.Null);
-        var statusProperty = value!.GetType().GetProperty("status");
-        Assert.That(statusProperty?.GetValue(value), Is.EqualTo("healthy"));
+        Assert.That(value!.Status, Is.EqualTo("healthy"));
     }
 
     #endregion
@@ -81,11 +83,10 @@ public class HealthControllerTests
         var controller = new HealthController(application);
 
         var result = await controller.ReadyAsync() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as HealthStatusResponse;
 
         Assert.That(value, Is.Not.Null);
-        var statusProperty = value!.GetType().GetProperty("status");
-        Assert.That(statusProperty?.GetValue(value), Is.EqualTo("ready"));
+        Assert.That(value!.Status, Is.EqualTo("ready"));
     }
 
     [Test]
@@ -199,11 +200,10 @@ public class HealthControllerTests
         var controller = new HealthController(application);
 
         var result = controller.Live() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as HealthStatusResponse;
 
         Assert.That(value, Is.Not.Null);
-        var statusProperty = value!.GetType().GetProperty("status");
-        Assert.That(statusProperty?.GetValue(value), Is.EqualTo("alive"));
+        Assert.That(value!.Status, Is.EqualTo("alive"));
     }
 
     #endregion
@@ -230,11 +230,10 @@ public class HealthControllerTests
         var controller = new HealthController(application);
 
         var result = controller.Version() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as VersionResponse;
 
         Assert.That(value, Is.Not.Null);
-        var versionProperty = value!.GetType().GetProperty("version");
-        var version = versionProperty?.GetValue(value) as string;
+        var version = value!.Version;
         Assert.That(version, Is.Not.Null.And.Not.Empty);
     }
 
@@ -246,11 +245,56 @@ public class HealthControllerTests
         var controller = new HealthController(application);
 
         var result = controller.Version() as OkObjectResult;
-        var value = result?.Value;
+        var value = result?.Value as VersionResponse;
 
         Assert.That(value, Is.Not.Null);
-        var productProperty = value!.GetType().GetProperty("product");
-        Assert.That(productProperty?.GetValue(value), Is.EqualTo("JIM"));
+        Assert.That(value!.Product, Is.EqualTo("JIM"));
+    }
+
+    #endregion
+
+    #region Wire format
+
+    // The 200 responses were anonymous objects until they were given types, so that the OpenAPI document
+    // describes them. The JSON a client reads must be what it was.
+
+    [Test]
+    public void Get_SerialisesAsStatusAndTimestamp()
+    {
+        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+
+        var value = (controller.Get() as OkObjectResult)?.Value;
+
+        Assert.That(SerialisedPropertyNames(value), Is.EqualTo(new[] { "status", "timestamp" }));
+    }
+
+    [Test]
+    public void Live_SerialisesAsStatusAndTimestamp()
+    {
+        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+
+        var value = (controller.Live() as OkObjectResult)?.Value;
+
+        Assert.That(SerialisedPropertyNames(value), Is.EqualTo(new[] { "status", "timestamp" }));
+    }
+
+    [Test]
+    public void Version_SerialisesAsProductAndVersion()
+    {
+        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+
+        var value = (controller.Version() as OkObjectResult)?.Value;
+
+        Assert.That(SerialisedPropertyNames(value), Is.EqualTo(new[] { "product", "version" }));
+    }
+
+    internal static string[] SerialisedPropertyNames(object? value)
+    {
+        Assert.That(value, Is.Not.Null);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonConfiguration.Configure(options);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(value, value!.GetType(), options));
+        return document.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
     }
 
     #endregion

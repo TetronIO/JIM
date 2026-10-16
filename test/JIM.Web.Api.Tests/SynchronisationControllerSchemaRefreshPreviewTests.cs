@@ -60,6 +60,18 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+
+        _connectedSystemRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _connectedSystemRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _repository.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
@@ -168,6 +180,85 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
                 "A preview must not persist the merged schema.");
             _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
                 "A preview changes nothing in JIM, so it must not record an Activity.");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSchemaImport_WithOnlyAClassificationChange_ReportsItWithoutDependentsAsync()
+    {
+        // A selected Object Type the Connected System reclassifies (#2049): the caller must see the change and the
+        // flag, and since cancelling keeps things as they are, it is not a destructive diff and carries no
+        // dependents or removal impact.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                // Auxiliary, so the File Connector restating it as unclassified changes whether it is auxiliary.
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }],
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text }
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)?.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.ChangedObjectTypeClassifications, Does.ContainKey("user"));
+        var change = dto!.ChangedObjectTypeClassifications["user"].Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Aspect, Is.EqualTo("ClassKind"));
+            Assert.That(change.OldValues, Is.EqualTo(new[] { ObjectTypeTags.Values.ClassKindAuxiliary }));
+            Assert.That(change.NewValues, Is.Empty);
+            Assert.That(dto!.HasObjectTypeClassificationChanges, Is.True);
+            Assert.That(dto!.HasChanges, Is.True);
+            Assert.That(dto!.HasRemovalsOrDefinitionChanges, Is.False);
+            Assert.That(dto!.Dependents, Is.Null, "A classification change is not destructive, so it names no dependents.");
+            Assert.That(dto!.RemovalImpact, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSchemaImport_WithOnlyAClassificationUpdate_ListsTheObjectTypeWithoutWarningAsync()
+    {
+        // Structural restated as unclassified cannot change which Object Type an entry resolves to (#2049): the caller
+        // sees it listed as an update to apply, without the classification-change flag.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text }
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)?.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.ObjectTypesWithClassificationUpdates, Is.EqualTo(new[] { "user" }));
+            Assert.That(dto!.HasObjectTypeClassificationChanges, Is.False);
+            Assert.That(dto!.HasChanges, Is.True);
         }
     }
 

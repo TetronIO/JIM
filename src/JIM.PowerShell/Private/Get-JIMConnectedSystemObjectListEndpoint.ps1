@@ -30,7 +30,8 @@ function Get-JIMConnectedSystemObjectListEndpoint {
         [int]$ObjectTypeId,
         [string]$JoinType,
         [string]$SortBy,
-        [switch]$Ascending
+        [switch]$Ascending,
+        [switch]$HasUnresolvedReference
     )
 
     $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space?page=$Page&pageSize=$PageSize"
@@ -57,6 +58,10 @@ function Get-JIMConnectedSystemObjectListEndpoint {
 
     if ($Ascending) {
         $endpoint += "&sortDescending=false"
+    }
+
+    if ($HasUnresolvedReference) {
+        $endpoint += "&hasUnresolvedReferences=true"
     }
 
     $endpoint

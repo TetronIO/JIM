@@ -62,6 +62,37 @@
     two same-named people get marisol.fenwick / marisol.fenwick@panoply.local and marisol.fenwick1 /
     marisol.fenwick1@panoply.local, never mismatched suffixes. Without this switch nothing changes.
 
+.PARAMETER InitialPassword
+    Opt-in (#2039). Gives the provisioning Synchronisation Rule ("<Connected System> Export Users") a Static
+    Initial Password that enables the account once it is set (EnableAccount), and leaves the
+    userAccountControl Attribute Flow exactly as it is.
+
+    Real Active Directory refuses to create an enabled account that has no password (0000052D), and that flow
+    asks for an enabled one (512), so without an Initial Password every joiner's Create is refused there. With
+    one, JIM creates the account disabled (514, the flow's value with ACCOUNTDISABLE added), the Password
+    Delivery Service sets the password and enables the account, and the confirming import holds the interim
+    value meanwhile rather than reporting the export as unconfirmed. Enabling and disabling accounts from HR
+    data (Scenario 001's Tests 2d and 2e) keeps working, because the flow keeps writing the enabled state, and an
+    account the flow creates disabled (an Archived joiner) stays disabled when its password is delivered, because
+    the flow, not EnableAccount, decides the enabled state (#2064). Get-IntegrationScenarioSetupParameters turns
+    this on for Scenario 001 on the Active Directory and Samba AD labs: Samba AD accepts an enabled account with no
+    password, but is where #2064 reproduced. OpenLDAP and 389 Directory Server have no userAccountControl.
+
+    The password's expiry is -InitialPasswordExpiry, ExpiresAccordingToTargetPolicy unless told otherwise.
+    Any of the three works with the flow kept (#2159): because an export wrote the account's userAccountControl,
+    the delivery leaves "Password never expires" (0x10000) to the flow, so the account holds exactly what the flow
+    asserts (512, or 514 for an Archived joiner) whatever the expiry, the confirming import confirms it, and Tests
+    2d and 2e still match 514 and 512 exactly. Run it with NeverExpires to prove that the delivery no longer
+    writes 66048 over the flow's 512. Without this switch nothing changes, except on real Active Directory
+    (DirectoryType ActiveDirectory), where the Initial Password is always given: every scenario that composes this
+    setup provisions enabled accounts, and none of them could create one there without it. A scenario that needs a
+    different Initial Password (017, 020, 022, 024) sets its own afterwards, which replaces this one.
+
+.PARAMETER InitialPasswordExpiry
+    The Initial Password's expiry behaviour, used only with -InitialPassword. Defaults to
+    ExpiresAccordingToTargetPolicy. See -InitialPassword for why every choice leaves the flow's
+    userAccountControl as it asserts it.
+
 .NOTES
     This script requires the JIM PowerShell module and assumes:
     - JIM is running and accessible
@@ -93,7 +124,14 @@ param(
     [switch]$GenerateAccountName,
 
     [Parameter(Mandatory=$false)]
-    [switch]$DeriveFromAccountName
+    [switch]$DeriveFromAccountName,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$InitialPassword,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("RequireChangeAtNextSignIn", "ExpiresAccordingToTargetPolicy", "NeverExpires")]
+    [string]$InitialPasswordExpiry = "ExpiresAccordingToTargetPolicy"
 )
 
 Set-StrictMode -Version Latest
@@ -995,16 +1033,21 @@ try {
             @(
                 @{
                     # DN uses Department to place users in department OUs under OU=Users,OU=Corp
-                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
+                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL
+                    # The domain components are deliberately upper case against the lab's lower-case domain: the
+                    # directory reports a DN in the case it stored, and JIM must still confirm the export, not stage
+                    # it again, and not see the stored case as drift (#2195). The real AD lab's domain is upper case.
                     LdapAttr = "distinguishedName"
-                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=PANOPLY,DC=LOCAL"'
                 }
                 @{
                     # userAccountControl: Conditional expression based on Status
-                    # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2) on the existing value
-                    # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
+                    # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2): 514
+                    # - All other statuses → EnableUser() clears it: 512
+                    # An export flow reads only the Metaverse Object, so the value is built from 512 (a normal account)
+                    # rather than from the directory's current value, which the flow cannot see.
                     LdapAttr = "userAccountControl"
-                    Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))'
+                    Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(512), EnableUser(512))'
                 }
                 @{
                     LdapAttr = "accountExpires"
@@ -1584,6 +1627,58 @@ catch {
     Write-Host "    Leaver and Reconnection tests may fail without deletion rules configured" -ForegroundColor DarkYellow
 }
 
+# Step 6e: Give the provisioning Synchronisation Rule an Initial Password (-InitialPassword, and always on real Active Directory; #2039)
+#
+# The userAccountControl Attribute Flow configured in Step 6c stays: on real Active Directory JIM creates the account
+# disabled because this Initial Password follows it, and the password's delivery enables it (EnableAccount). The
+# delivery leaves "Password never expires" to that flow whatever -InitialPasswordExpiry says; see -InitialPassword above.
+#
+# The password is the one Setup-Scenario-017.ps1 uses, for the reasons given there: it satisfies a stock Active
+# Directory complexity rule on its own merits, and shares no token with the account names the HR template
+# generates, which Active Directory would refuse. It is a throwaway credential for a throwaway lab directory.
+$initialPasswordExpiry = $InitialPasswordExpiry
+# Always on real Active Directory, which refuses to create an enabled account with no password; see -InitialPassword.
+$useInitialPassword = $InitialPassword -or (([string]$DirectoryConfig['DirectoryType']) -eq 'ActiveDirectory')
+if ($useInitialPassword) {
+    Write-TestStep "Step 6e" "Enabling the Initial Password on the Export Synchronisation Rule"
+
+    try {
+        if (-not $exportRule) {
+            throw "The Export Synchronisation Rule was not created in Step 6b, so there is no rule to give an Initial Password."
+        }
+
+        Set-JIMSyncRuleInitialPassword `
+            -Id $exportRule.id `
+            -Enable `
+            -Source Static `
+            -StaticPassword (ConvertTo-SecureString -String 'Chalkstream-7-Vault!' -AsPlainText -Force) `
+            -ExpiryBehaviour $initialPasswordExpiry `
+            -EnableAccount $true `
+            -ChangeReason "Integration test substrate: real Active Directory creates an enabled account only once it has a password" | Out-Null
+
+        # Read back what the joiners depend on. The password itself is write-only and never returned, so what is
+        # checked is that the rule is switched on and carrying these settings; a rule that silently kept its
+        # previous ones would otherwise surface as every Create refused several steps later.
+        $storedInitialPassword = Get-JIMSyncRuleInitialPassword -Id $exportRule.id
+        Assert-Condition -Condition ($storedInitialPassword.enabled -eq $true) `
+            -Message "Initial Password is enabled on '$($exportRule.name)'"
+        Assert-Equal -Actual $storedInitialPassword.source -Expected "Static" `
+            -Message "Initial Password source is Static"
+        Assert-Equal -Actual $storedInitialPassword.expiryBehaviour -Expected $initialPasswordExpiry `
+            -Message "Expiry behaviour is $initialPasswordExpiry"
+        Assert-Condition -Condition ($storedInitialPassword.enableAccount -eq $true) `
+            -Message "The account is enabled once the password is set"
+        Assert-Condition -Condition ($storedInitialPassword.staticPasswordSet -eq $true) `
+            -Message "A static password is stored (the value itself is never returned)"
+
+        Write-Host "  ✓ Initial Password enabled (Source: Static, Expiry: $initialPasswordExpiry, account enabled once it is set); the userAccountControl Attribute Flow is kept" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ✗ Failed to configure the Initial Password: $_" -ForegroundColor Red
+        throw
+    }
+}
+
 # Step 7: Create Run Profiles
 # Run profiles are scoped to Connected Systems, so we use simple names without prefixes
 Write-TestStep "Step 7" "Creating Run Profiles"
@@ -1841,6 +1936,10 @@ Write-Host "  Training CSV (Source): $($trainingSystem.id)" -ForegroundColor Gra
 Write-Host "  Samba AD (Target):     $($ldapSystem.id)" -ForegroundColor Gray
 Write-Host "  Cross-Domain (Target): $($crossDomainSystem.id)" -ForegroundColor Gray
 Write-Host ""
+if ($useInitialPassword) {
+    Write-Host "Initial Password:      Static, $initialPasswordExpiry, enables the account (Export Synchronisation Rule $($exportRule.id))" -ForegroundColor Cyan
+    Write-Host ""
+}
 Write-Host "✓ Scenario 001 setup complete (4 connected systems)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow

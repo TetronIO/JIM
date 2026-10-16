@@ -746,12 +746,358 @@ Describe 'Get-JIMActivityExecutionItem' {
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$second" }
             }
         }
+
+        It 'Returns an ambiguous match''s candidates with what each is joined to' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                $candidateId = [guid]::NewGuid()
+                # The wire shape: camelCase, candidates nested in the item, joined objects nested in each candidate.
+                $wire = @{
+                    id = $itemId
+                    errorType = 'AmbiguousMatch'
+                    matchCandidates = @(
+                        @{
+                            candidateKind = 'MetaverseObject'; candidateId = $candidateId; displayNameSnapshot = 'Ann Bloggs'
+                            matchedValue = '48213'; candidateTotal = 2; exists = $true
+                            joinedObjects = @(@{ connectedSystemName = 'Corporate Directory'; externalId = 'abloggs' })
+                        }
+                    )
+                } | ConvertTo-Json -Depth 5
+                Mock Invoke-RestMethod { $wire | ConvertFrom-Json }
+
+                $result = Get-JIMActivityExecutionItem -Id $itemId
+
+                $candidate = @($result.MatchCandidates)[0]
+                $candidate.PSObject.Properties.Name | Should -Contain 'DisplayNameSnapshot'
+                $candidate.CandidateId | Should -Be $candidateId
+                $candidate.Exists | Should -BeTrue
+                @($candidate.JoinedObjects)[0].PSObject.Properties.Name | Should -Contain 'ConnectedSystemName'
+                @($candidate.JoinedObjects)[0].ExternalId | Should -Be 'abloggs'
+            }
+        }
+    }
+
+    Context 'Causes and consequences' {
+
+        It 'Has the item as its default parameter set, with Causes and Consequences beside it' {
+            $command = Get-Command Get-JIMActivityExecutionItem
+            $command.DefaultParameterSet | Should -Be 'Item'
+            $command.ParameterSets.Name | Should -Contain 'Causes'
+            $command.ParameterSets.Name | Should -Contain 'Consequences'
+        }
+
+        It 'Requests the causes and flattens nested cohorts into one row per cohort, by level' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        runProfileExecutionItemId = $itemId
+                        isTruncatedByDepth = $false
+                        cohorts = @(
+                            [PSCustomObject]@{
+                                edgeType = 'MetaverseObjectDeletionCausedReferenceRemoval'; reasonCode = 'AuthoritativeSourceDisconnected'
+                                connectedSystemName = 'Yellowstone APAC'; objectTypeName = 'User'; objectTypePluralName = 'Users'
+                                attributeName = 'Static Members'; memberCount = 1
+                                members = @(
+                                    [PSCustomObject]@{
+                                        displayName = 'Tina Adams'; resolution = 'Resolved'
+                                        causes = @(
+                                            [PSCustomObject]@{
+                                                sourceImportChangeType = 'Deleted'; connectedSystemName = 'Yellowstone APAC'; memberCount = 1
+                                                members = @([PSCustomObject]@{ displayName = 'Tina Adams'; resolution = 'NoFurtherCauses'; causes = @() })
+                                            }
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -Id $itemId -Causes)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId/causes" }
+                $rows.Count | Should -Be 2
+                $rows[0].Level | Should -Be 1
+                $rows[0].EdgeType | Should -Be 'MetaverseObjectDeletionCausedReferenceRemoval'
+                $rows[0].Count | Should -Be 1
+                $rows[0].ObjectType | Should -Be 'User'
+                $rows[0].Attribute | Should -Be 'Static Members'
+                $rows[0].Members | Should -Be @('Tina Adams')
+                $rows[1].Level | Should -Be 2
+                $rows[1].SourceImportChangeType | Should -Be 'Deleted'
+                $rows[1].Resolution | Should -Be 'NoFurtherCauses'
+                $rows[1].ExecutionItemId | Should -Be $itemId
+            }
+        }
+
+        It 'Requests the consequences and flattens them with each branch''s ending and cohort key' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        runProfileExecutionItemId = $itemId
+                        hasWaitingBranches = $true
+                        endings = @()
+                        cohorts = @(
+                            [PSCustomObject]@{
+                                cohortKey = 'key-1'; hopKind = 'Edge'; edgeType = 'MetaverseObjectDeletionCausedReferenceRemoval'
+                                objectTypeName = 'Group'; objectTypePluralName = 'Groups'; attributeName = 'Static Members'
+                                memberCount = 4218; members = @([PSCustomObject]@{ displayName = 'Project Pulse' }); ending = $null
+                                endings = @([PSCustomObject]@{ ending = 'NoFurtherConsequences'; memberCount = 2 })
+                                isFurtherThanShown = $false
+                                consequences = @(
+                                    [PSCustomObject]@{
+                                        cohortKey = 'key-2'; hopKind = 'OutstandingPendingExport'; pendingExportStatus = 'Pending'
+                                        connectedSystemName = 'Glitterband EMEA'; memberCount = 4216; members = @(); ending = 'WaitingForExport'
+                                        endings = @(); consequences = @(); isFurtherThanShown = $false
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -Id $itemId -Consequences)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId/consequences" }
+                $rows.Count | Should -Be 2
+                $rows[0].Level | Should -Be 1
+                $rows[0].Count | Should -Be 4218
+                $rows[0].ObjectType | Should -Be 'Groups'
+                $rows[0].Ending | Should -Be 'NoFurtherConsequences (2)'
+                $rows[0].CohortKey | Should -Be 'key-1'
+                $rows[0].ExecutionItemId | Should -Be $itemId
+                $rows[1].Level | Should -Be 2
+                $rows[1].HopKind | Should -Be 'OutstandingPendingExport'
+                $rows[1].ConnectedSystem | Should -Be 'Glitterband EMEA'
+                $rows[1].Ending | Should -Be 'WaitingForExport'
+            }
+        }
+
+        It 'Returns the item''s own ending as a row when it caused nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        runProfileExecutionItemId = $itemId; cohorts = @()
+                        endings = @([PSCustomObject]@{ ending = 'WaitingForSynchronisation'; memberCount = 1; connectedSystemName = 'Yellowstone APAC' })
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -Id $itemId -Consequences)
+
+                $rows.Count | Should -Be 1
+                $rows[0].Level | Should -Be 0
+                $rows[0].Ending | Should -Be 'WaitingForSynchronisation'
+                $rows[0].ConnectedSystem | Should -Be 'Yellowstone APAC'
+            }
+        }
+    }
+
+    Context 'Causal timeline' {
+
+        It 'Keeps the item as its default parameter set, with the timeline sets beside it' {
+            $command = Get-Command Get-JIMActivityExecutionItem
+            $command.DefaultParameterSet | Should -Be 'Item'
+            foreach ($set in 'ConnectedSystemObjectTimeline', 'ConnectedSystemObjectTimelineAll', 'MetaverseObjectTimeline', 'MetaverseObjectTimelineAll') {
+                $command.ParameterSets.Name | Should -Contain $set
+            }
+        }
+
+        It 'Requests a page of a Connected System Object''s timeline and returns its rows' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $csoId = [guid]::NewGuid()
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        object = [PSCustomObject]@{ kind = 'ConnectedSystemObject'; id = $csoId; isDeleted = $false }
+                        items = @([PSCustomObject]@{ id = $itemId; because = 'Tina Adams was deleted' })
+                        totalCount = 1; page = 2; pageSize = 10; hasNextPage = $false
+                        metaverseObjectChangesNotRecorded = $false
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -ConnectedSystemId 3 -ConnectedSystemObjectId $csoId -Page 2 -PageSize 10)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/synchronisation/connected-systems/3/connector-space/$csoId/causal-timeline?page=2&pageSize=10"
+                }
+                $rows.Count | Should -Be 1
+                $rows[0].id | Should -Be $itemId
+                $rows[0].because | Should -Be 'Tina Adams was deleted'
+            }
+        }
+
+        It 'Pages through a whole Metaverse Object timeline with -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    $page = if ($Endpoint -match 'page=(\d+)') { [int]$Matches[1] } else { 0 }
+                    [PSCustomObject]@{
+                        items = @([PSCustomObject]@{ id = [guid]::NewGuid(); page = $page })
+                        totalCount = 2; page = $page; pageSize = 1; totalPages = 2; hasNextPage = ($page -lt 2)
+                        metaverseObjectChangesNotRecorded = $false
+                    }
+                }
+
+                $rows = @(Get-JIMActivityExecutionItem -MetaverseObjectId $mvoId -All -PageSize 1)
+
+                $rows.Count | Should -Be 2
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/causal-timeline?page=1&pageSize=1" }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/causal-timeline?page=2&pageSize=1" }
+            }
+        }
+
+        It 'Warns once that a Metaverse Object timeline is incomplete where its changes are not recorded' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    $page = if ($Endpoint -match 'page=(\d+)') { [int]$Matches[1] } else { 0 }
+                    [PSCustomObject]@{
+                        items = @([PSCustomObject]@{ id = [guid]::NewGuid() })
+                        totalCount = 2; page = $page; pageSize = 1; totalPages = 2; hasNextPage = ($page -lt 2)
+                        metaverseObjectChangesNotRecorded = $true
+                    }
+                }
+
+                $null = Get-JIMActivityExecutionItem -MetaverseObjectId ([guid]::NewGuid()) -All -PageSize 1 -WarningVariable warnings -WarningAction SilentlyContinue
+
+                @($warnings).Count | Should -Be 1
+                "$($warnings[0])" | Should -BeLike '*Metaverse Object changes*'
+            }
+        }
+
+        It 'Pipes each timeline row into -Causes by the row''s own execution item id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ runProfileExecutionItemId = $itemId; cohorts = @() } }
+                # The row shape: the item's id beside the ids of the objects it was about.
+                $row = [PSCustomObject]@{
+                    Id = $itemId; ConnectedSystemId = 3; ConnectedSystemObjectId = [guid]::NewGuid(); MetaverseObjectId = [guid]::NewGuid()
+                }
+
+                $row | Get-JIMActivityExecutionItem -Causes | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId/causes" }
+            }
+        }
+
+        It 'Fetches the item for a piped timeline row given no switch, not a timeline' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = $itemId } }
+                $row = [PSCustomObject]@{
+                    Id = $itemId; ConnectedSystemId = 3; ConnectedSystemObjectId = [guid]::NewGuid(); MetaverseObjectId = [guid]::NewGuid()
+                }
+
+                $row | Get-JIMActivityExecutionItem | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId" }
+            }
+        }
     }
 
     Context 'Help Documentation' {
 
         BeforeAll {
             $help = Get-Help Get-JIMActivityExecutionItem -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+}
+
+Describe 'Get-JIMCausalCohortMember' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMCausalCohortMember
+        }
+
+        It 'Takes the execution item and cohort key from the pipeline by property name' {
+            $command.Parameters['ExecutionItemId'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } |
+                Should -Not -BeNullOrEmpty
+            $command.Parameters['CohortKey'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } |
+                Should -Not -BeNullOrEmpty
+        }
+
+        It 'Has PageSize limited to 1-100' {
+            $validateRange = $command.Parameters['PageSize'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $validateRange.MinRange | Should -Be 1
+            $validateRange.MaxRange | Should -Be 100
+        }
+    }
+
+    Context 'Request' {
+
+        It 'Requests one page of the cohort''s members, with the search text' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @([PSCustomObject]@{ displayName = 'Project Pulse' }); totalCount = 1; hasNextPage = $false } }
+
+                $members = @(Get-JIMCausalCohortMember -ExecutionItemId $itemId -CohortKey 'abc_-1' -Page 2 -PageSize 10 -Search 'project pulse')
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/activities/items/$itemId/consequences/cohorts/abc_-1/members?page=2&pageSize=10&search=project%20pulse"
+                }
+                $members[0].displayName | Should -Be 'Project Pulse'
+            }
+        }
+
+        It 'Fetches every page with -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @([PSCustomObject]@{ displayName = 'Project Pulse' }); totalCount = 1; totalPages = 1; hasNextPage = $false } }
+
+                $members = @(Get-JIMCausalCohortMember -ExecutionItemId $itemId -CohortKey 'abc' -All)
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/activities/items/$itemId/consequences/cohorts/abc/members?page=1&pageSize=100"
+                }
+                $members.Count | Should -Be 1
+            }
+        }
+
+        It 'Pages the cohort of a consequence row piped in from Get-JIMActivityExecutionItem -Consequences' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0; hasNextPage = $false } }
+                $row = [PSCustomObject]@{ ExecutionItemId = $itemId; Level = 1; CohortKey = 'key-1'; Count = 4218 }
+
+                $row | Get-JIMCausalCohortMember | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like "/api/v1/activities/items/$itemId/consequences/cohorts/key-1/members?page=1&pageSize=*"
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Get-JIMCausalCohortMember -Full
         }
 
         It 'Should have a synopsis' {

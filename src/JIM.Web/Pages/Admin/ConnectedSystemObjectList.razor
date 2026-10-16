@@ -19,7 +19,7 @@
 
 <PageTitle>Connector Space: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
-    <PageInfo Title="Connector Space" Term="Term.ConnectorSpace">
+    <PageInfo Title="Connector Space" DocsPage="configuration/connector-space.md" Term="Term.ConnectorSpace">
         The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
     </PageInfo>
 </MudText>
@@ -85,6 +85,23 @@
             </MudChipSet>
         </div>
 
+        @* Unresolved references (#959): the objects holding a reference value that could not be linked. Amber, as the
+           Connected System page's signpost that links here is. *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by References:</MudText>
+            <MudChipSet T="string"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedReferenceFilters"
+                        SelectedValuesChanged="OnReferenceFilterChanged">
+                <MudChip Value="@UnresolvedReferenceDisplay.UnresolvedReferencesFilterValue"
+                         Color="@(FilteredToUnresolvedReferences ? Color.Default : Color.Warning)"
+                         Variant="@(FilteredToUnresolvedReferences ? Variant.Filled : Variant.Outlined)"
+                         SelectedColor="Color.Warning">
+                    Unresolved
+                </MudChip>
+            </MudChipSet>
+        </div>
+
         <MudSpacer />
 
         <MudButton Variant="Variant.Outlined"
@@ -96,6 +113,12 @@
             Delete All Objects
         </MudButton>
     </MudStack>
+
+    @* While filtered to unresolved references, what they have in common: the changes that would resolve them. *@
+    @if (FilteredToUnresolvedReferences)
+    {
+        <UnresolvedReferencesWhereTheyPoint ConnectedSystemId="@Id" ConnectedSystemName="@_connectedSystemHeader.Name" Class="mb-2" />
+    }
 
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density, the
        search box) lives in the shared grid; this page supplies the columns, the window loader, the chip filters
@@ -116,7 +139,7 @@
         <ToolBarExtras>
             @* The menu's own button, not an ActivatorContent one: MudMenu wraps a custom activator in a focusable
                role="button" div, which would give keyboard users two tab stops for one control. *@
-            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Outlined" Color="Color.Primary"
+            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Outlined"
                      Size="Size.Small" DropShadow="false" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                 <ChildContent>
                     <div class="jim-column-menu">
@@ -230,6 +253,17 @@
                     <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
+            @* Shown only while filtered to unresolved references, where it is what the list is about; Hidden rather than
+               wrapped in an @if, so the column keeps its place when the filter is turned on (see "Virtualised lists" in
+               JIM.Web/CLAUDE.md). Not sortable: the count is read per window. *@
+            <TemplateColumn Sortable="false" Hidden="@(!FilteredToUnresolvedReferences)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.subtitle2">Unresolved</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">@context.Item.UnresolvedReferenceCount.ToString("N0")</MudChip>
+                </CellTemplate>
+            </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Created" Name="created" />
@@ -300,6 +334,12 @@
                                  SecondaryText="Try a different search term, or clear the search."
                                  ActionText="Clear Search"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else if (FilteredToUnresolvedReferences && _selectedStatuses.Count == 0 && _selectedObjectTypeIds.Count == 0 && _selectedJoinTypes.Count == 0)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.Link"
+                                 PrimaryText="Every reference has resolved"
+                                 SecondaryText="@($"No Connected System Object in {_connectedSystemHeader.Name} holds a reference value that could not be linked.")" />
             }
             else if (HasActiveChipFilters)
             {
@@ -387,6 +427,13 @@ else
     [SupplyParameterFromQuery(Name = "status")]
     public string? DeepLinkStatus { get; set; }
 
+    /// <summary>
+    /// Deep link (#959): "unresolved" opens the list filtered to the objects holding unresolved references, as the
+    /// Connected System page's Unresolved References button and an Activity's View Affected Objects do.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "references")]
+    public string? DeepLinkReferences { get; set; }
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -429,11 +476,14 @@ else
     private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>();
     private IReadOnlyCollection<int> _selectedObjectTypeIds = new List<int>();
     private IReadOnlyCollection<ConnectedSystemObjectJoinType> _selectedJoinTypes = new List<ConnectedSystemObjectJoinType>();
+    private IReadOnlyCollection<string> _selectedReferenceFilters = new List<string>();
     private List<ConnectedSystemObjectType> _objectTypes = new();
 
     // True when any status, object type or join type chip narrows the list; the empty state uses this to tell
     // "the filters matched nothing" apart from "no import has populated the Connector Space yet".
-    private bool HasActiveChipFilters => _selectedStatuses.Count > 0 || _selectedObjectTypeIds.Count > 0 || _selectedJoinTypes.Count > 0;
+    private bool HasActiveChipFilters => _selectedStatuses.Count > 0 || _selectedObjectTypeIds.Count > 0 || _selectedJoinTypes.Count > 0 || FilteredToUnresolvedReferences;
+
+    private bool FilteredToUnresolvedReferences => _selectedReferenceFilters.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -467,6 +517,9 @@ else
         {
             _selectedStatuses = new List<ConnectedSystemObjectStatus> { deepLinkStatus };
         }
+
+        if (UnresolvedReferenceDisplay.IsUnresolvedReferencesFilter(DeepLinkReferences))
+            _selectedReferenceFilters = new List<string> { UnresolvedReferenceDisplay.UnresolvedReferencesFilterValue };
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -512,7 +565,8 @@ else
             statusFilter,
             objectTypeFilter,
             joinTypeFilter,
-            includeTotalCount: request.IncludeTotalCount);
+            includeTotalCount: request.IncludeTotalCount,
+            hasUnresolvedReferences: FilteredToUnresolvedReferences ? true : null);
 
         // Update column headers based on the window in hand; the grid re-renders its header templates when the
         // window arrives, so the new values paint without an explicit StateHasChanged.
@@ -630,6 +684,12 @@ else
     private async Task OnJoinTypeFilterChanged(IReadOnlyCollection<ConnectedSystemObjectJoinType> selected)
     {
         _selectedJoinTypes = selected;
+        await RefreshGridForFilterChangeAsync();
+    }
+
+    private async Task OnReferenceFilterChanged(IReadOnlyCollection<string> selected)
+    {
+        _selectedReferenceFilters = selected;
         await RefreshGridForFilterChangeAsync();
     }
 

@@ -22,6 +22,15 @@ public class ExportExecutionItemErrorTypeTests
             Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse));
     }
 
+    [Test]
+    public void ToExecutionItemErrorType_PasswordRequiredToEnableAccount_IsRecordedAsPasswordRequiredToEnableAccount()
+    {
+        // Active Directory refusing to enable an account with no password (#2039) is configuration to act on, not a
+        // JIM defect, so it must not fall into the Unhandled Error bucket that fails the Activity.
+        Assert.That(SyncExportTaskProcessor.ToExecutionItemErrorType(ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount),
+            Is.EqualTo(ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount));
+    }
+
     [TestCase(ConnectedSystemExportErrorType.InvalidGeneratedExternalId, ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId)]
     [TestCase(ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet, ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet)]
     [TestCase(ConnectedSystemExportErrorType.General, ActivityRunProfileExecutionItemErrorType.UnhandledError)]

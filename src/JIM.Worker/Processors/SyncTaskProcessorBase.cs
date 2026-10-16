@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
@@ -497,12 +498,12 @@ public abstract class SyncTaskProcessorBase
     /// exists, and for requests with nothing to probe. Creating the session opens nothing: it connects to each target
     /// system only when it first has a candidate to search for.
     /// </summary>
-    private void EnsureUniquenessProbeSession(IReadOnlyList<GenerationRequest> requests)
+    private void EnsureUniquenessProbeSession(IReadOnlyList<GenerationRequest> requests, bool formsProbe = false)
     {
         if (_uniquenessProbeSessionHost == null || _uniquenessProbeSession != null || _uniqueValueResolveOptions == null)
             return;
 
-        if (!requests.Any(r => r.ProbeTargets.Count > 0))
+        if (!formsProbe && !requests.Any(r => r.ProbeTargets.Count > 0))
             return;
 
         _uniquenessProbeSession = new UniquenessProbeSession(_uniquenessProbeSessionHost, _cancellationTokenSource.Token);
@@ -523,6 +524,42 @@ public abstract class SyncTaskProcessorBase
         var returned = await _uniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync(_uniqueValueResolveOptions);
         if (returned > 0)
             Log.Information("ReturnUnusedSequenceNumbersAsync: Handed {Count} unused sequence numbers back to their counters for Activity {ActivityId}", returned, _activity.Id);
+    }
+
+    /// <summary>
+    /// Generated values the run held back because values built from them could not be worked out yet (Generated Value
+    /// Forms, #2023), by generated attribute, with each distinct reason, for the run's warning.
+    /// </summary>
+    private readonly Dictionary<string, (int Count, HashSet<string> Reasons)> _generatedValuesWaiting = new(StringComparer.Ordinal);
+
+    private void RecordGeneratedValueWaiting(string attributeName, string waitingFor)
+    {
+        if (!_generatedValuesWaiting.TryGetValue(attributeName, out var waiting))
+            waiting = (0, new HashSet<string>(StringComparer.Ordinal));
+
+        waiting.Reasons.Add(waitingFor);
+        _generatedValuesWaiting[attributeName] = (waiting.Count + 1, waiting.Reasons);
+    }
+
+    /// <summary>
+    /// Appends one Activity warning per generated attribute the run held back because values built from it could not be
+    /// worked out yet (Generated Value Forms, #2023), naming what they wait for, and logs the same. Call from the
+    /// <c>finally</c> of <c>PerformFullSyncAsync</c> and <c>PerformDeltaSyncAsync</c>: an object that waits may have no
+    /// other change, and so no item of its own, to say it on.
+    /// </summary>
+    protected void ReportGeneratedValuesWaiting()
+    {
+        foreach (var (attributeName, (count, reasons)) in _generatedValuesWaiting)
+        {
+            var warning = string.Create(CultureInfo.InvariantCulture,
+                $"JIM held back {count} {attributeName} {(count == 1 ? "value" : "values")} until the values built from {(count == 1 ? "it" : "them")} can be worked out. " +
+                $"{(count == 1 ? "It waits" : "They wait")} for {string.Join("; ", reasons.Take(5))}{(reasons.Count > 5 ? "; and more" : string.Empty)}.");
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            Log.Information("ReportGeneratedValuesWaiting: {Count} {Attribute} value(s) held back for Activity {ActivityId} until values built from them can be worked out.",
+                count, LogSanitiser.Sanitise(attributeName), _activity.Id);
+        }
+
+        _generatedValuesWaiting.Clear();
     }
 
     /// <summary>
@@ -704,6 +741,108 @@ public abstract class SyncTaskProcessorBase
     /// run, on first need, from the same export rules as <see cref="GetOrComputeGenerationParticipatingTargets"/>.
     /// </summary>
     private Dictionary<int, List<UniquenessProbeTarget>>? _generationProbeTargets;
+
+    /// <summary>
+    /// The values built from each generated value (Generated Value Forms, #2023), over every rule the run knows; null
+    /// until <see cref="BuildDriftDetectionCache"/> builds it.
+    /// </summary>
+    private GeneratedValueBuiltValues? _generatedValueBuiltValues;
+
+    /// <summary>
+    /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), the values built from it that are checked
+    /// before it is issued, and where (<see cref="GeneratedValueParticipation.DescribeForms"/>). Computed once per run,
+    /// on first need.
+    /// </summary>
+    private Dictionary<int, List<GeneratedValueForm>>? _generationForms;
+
+    /// <summary>
+    /// Every enabled import Synchronisation Rule the run knows, for working out the forms of a generated value re-elected
+    /// from another system's rule.
+    /// </summary>
+    private List<SyncRule> _allImportRules = [];
+
+    /// <summary>
+    /// For each Metaverse attribute an export expression built from a generated value reads, the systems whose generated
+    /// values it is built from (<see cref="GeneratedValueParticipation.DescribeExportFormInputReaders"/>): marked, as a
+    /// derived flow's host is, when another system changes it, so a generated value waiting on it is retried.
+    /// </summary>
+    private Dictionary<(int MetaverseObjectTypeId, int MetaverseAttributeId), List<int>> _exportFormInputReaders = [];
+
+    private List<GeneratedValueForm> GetOrComputeGenerationForms(SyncRuleMapping mapping)
+    {
+        var generation = mapping.Generation!;
+        _generationForms ??= new Dictionary<int, List<GeneratedValueForm>>();
+
+        if (_generationForms.TryGetValue(generation.Id, out var cached))
+            return cached;
+
+        var exportRules = _exportEvaluationCache != null
+            ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)
+            : Enumerable.Empty<SyncRule>();
+
+        var forms = _generatedValueBuiltValues == null ? [] : GeneratedValueParticipation.DescribeForms(mapping, _generatedValueBuiltValues, exportRules);
+        _generationForms[generation.Id] = forms;
+        return forms;
+    }
+
+    /// <summary>
+    /// The form source for a generated value the object being synchronised is about to generate (Generated Value Forms,
+    /// #2023): the values built from it on its own Synchronisation Rule, worked out for each candidate by replaying the
+    /// derived pass over <paramref name="inScopeRules"/>, and checked where each is written. Null when there are none to
+    /// check, when the request came from another object's rule, or when the run already knows the object's value is
+    /// sticky, so no candidate will be drawn. A form's probe targets are kept only when the run probes, with the values
+    /// the object's own accounts hold exempted, exactly as for the generated value.
+    /// </summary>
+    /// <param name="cso">The object being synchronised: the generated value's own account on the main path, the account
+    /// leaving the object on the re-election paths.</param>
+    /// <param name="inScopeRules">The rules whose derived flows run for the generated value's own account; null on the
+    /// re-election paths, where they are the enabled import rules of that account's own system.</param>
+    private async Task<IGeneratedValueFormSource?> BuildGeneratedValueFormSourceAsync(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        PendingGeneratedValue pending,
+        IReadOnlyList<SyncRule>? inScopeRules,
+        bool probing,
+        bool csoIsJoinedToObject)
+    {
+        if (_attributePriorityContext == null || _objectTypes == null || pending.BaseUnavailable)
+            return null;
+
+        // The account the values built from the generated value read: the one being synchronised on the main path; on a
+        // re-election path, the surviving contributor's own account, as it recorded the request.
+        var source = inScopeRules != null ? cso : pending.SourceConnectedSystemObject;
+        if (source == null || pending.SourceConnectedSystemObjectId != source.Id || !ReferenceEquals(source.MetaverseObject, mvo))
+            return null;
+
+        inScopeRules ??= _allImportRules
+            .Where(rule => rule.ConnectedSystemId == source.ConnectedSystemId && rule.MetaverseObjectTypeId == mvo.Type?.Id)
+            .ToList();
+
+        if (mvo.Id != Guid.Empty && _uniqueValueResolveOptions!.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
+            return null;
+
+        var forms = GetOrComputeGenerationForms(pending.Mapping);
+        if (forms.Count == 0)
+            return null;
+
+        var prepared = new List<GeneratedValueForm>(forms.Count);
+        foreach (var form in forms)
+        {
+            if (!probing)
+                prepared.Add(form with { ProbeTargets = [] });
+            else if (form.ProbeTargets.Count == 0)
+                prepared.Add(form);
+            else
+                prepared.Add(form with { ProbeExemptValues = await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, form.ProbeTargets) });
+        }
+
+        // Another system's account is of a type this run does not otherwise load; it carries its own.
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes = source.Type != null && _objectTypes.All(t => t.Id != source.TypeId)
+            ? [.. _objectTypes, source.Type]
+            : _objectTypes;
+
+        return GeneratedValueFormSource.Create(_syncEngine, source, pending, prepared, inScopeRules, objectTypes, _expressionEvaluator, _attributePriorityContext);
+    }
 
     private List<UniquenessProbeTarget> GetOrComputeGenerationProbeTargets(SyncRuleMapping mapping)
     {
@@ -1020,6 +1159,10 @@ public abstract class SyncTaskProcessorBase
                         existingRpei.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
 
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1108,6 +1251,10 @@ public abstract class SyncTaskProcessorBase
                         runProfileExecutionItem.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
 
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1158,7 +1305,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityDescription: mvoDescription,
                             detailCount: rootDetailCount,
                             syncRuleId: changeResult.SyncRuleId,
-                            syncRuleName: changeResult.SyncRuleName);
+                            syncRuleName: changeResult.SyncRuleName,
+                            joinMatch: changeResult.JoinMatch);
 
                         // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned
                         // child per resolved attribute from a re-elected survivor's own
@@ -1259,6 +1407,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = joinEx.ErrorType;
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
+            runProfileExecutionItem.MatchCandidates = [.. joinEx.MatchCandidates];
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {CsoId}: {Message}",
@@ -1309,6 +1458,24 @@ public abstract class SyncTaskProcessorBase
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Expression not evaluated for {CsoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
                 LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+        }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // A scoping criterion could not be evaluated for this object (#2053): whether it is in scope is unknown,
+            // so it is neither brought into scope nor taken out, and keeps any join it has. Configuration for the
+            // administrator to correct, named in the message; every other object in the run carries on.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            runProfileExecutionItem.ErrorMessage = scopingEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // As for the expression errors above: anything staged on a shared Metaverse Object is never applied.
+            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Scope of {CsoId} could not be decided: {Message}",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(scopingEx.Message));
         }
         catch (Exception e)
         {
@@ -1409,6 +1576,21 @@ public abstract class SyncTaskProcessorBase
     /// (CWE-117) because it is administrator-authored but still untrusted; the inner exception message
     /// (from the expression evaluator) describes the concrete failure.
     /// </summary>
+    /// <summary>
+    /// Records an export rule's scoping criterion that could not be evaluated for a Metaverse Object as that object's
+    /// error, naming the object, so the administrator can find it and the criterion.
+    /// </summary>
+    private void RecordExportScopingFailure(MetaverseObject mvo, ScopingCriterionFailedException scopingEx)
+    {
+        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+        runProfileExecutionItem.ErrorMessage = $"{scopingEx.Message} Nothing was exported for Metaverse Object {mvo.Id}.";
+        _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+        Log.Warning("EvaluateOutboundExportsAsync: Export scope of MVO {MvoId} could not be decided: {Message}",
+            mvo.Id, LogSanitiser.Sanitise(scopingEx.Message));
+    }
+
     private static string BuildExpressionEvaluationErrorMessage(SyncExpressionEvaluationException expressionEx, Guid? metaverseObjectId = null)
     {
         var attribute = expressionEx.TargetAttributeName ?? "(unknown)";
@@ -1743,8 +1925,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Clears every deletion marker from an MVO whose scheduled or queued deletion has been cancelled by a
     /// rejoin (#119): the disconnection date, the deletion initiator audit fields, the triggering system
-    /// fields and the decision-time policy snapshot. The markers travel together; clearing a subset would
-    /// leave a cancelled deletion half-described.
+    /// fields, the decision-time policy snapshot and the scheduling item (#1811). The markers travel together;
+    /// clearing a subset would leave a cancelled deletion half-described.
     /// </summary>
     private static void ClearMvoDeletionMarkers(MetaverseObject mvo)
     {
@@ -1755,6 +1937,7 @@ public abstract class SyncTaskProcessorBase
         mvo.DeletionTriggeredBySystemId = null;
         mvo.DeletionTriggeredBySystemName = null;
         mvo.DeletionPolicySnapshotJson = null;
+        mvo.DeletionScheduledByRunProfileExecutionItemId = null;
     }
 
     /// <summary>
@@ -1842,6 +2025,7 @@ public abstract class SyncTaskProcessorBase
         to.DeletionTriggeredBySystemId = from.DeletionTriggeredBySystemId;
         to.DeletionTriggeredBySystemName = from.DeletionTriggeredBySystemName;
         to.DeletionPolicySnapshotJson = from.DeletionPolicySnapshotJson;
+        to.DeletionScheduledByRunProfileExecutionItemId = from.DeletionScheduledByRunProfileExecutionItemId;
     }
 
     /// <summary>
@@ -1886,6 +2070,10 @@ public abstract class SyncTaskProcessorBase
         string? cancelledMvoDeletionDetailMessage = null;
         string? cancelledMvoDeletionPolicySnapshotJson = null;
 
+        // The match a join was made on (#2052), threaded the same way so the Joined root outcome records which Object
+        // Matching Rule found the Metaverse Object and on what value.
+        ImportMatch? joinMatch = null;
+
         // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
@@ -1923,7 +2111,7 @@ public abstract class SyncTaskProcessorBase
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
             {
-                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson) =
+                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch) =
                     await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
             }
 
@@ -2096,7 +2284,8 @@ public abstract class SyncTaskProcessorBase
                         targetEntityId: mvoId,
                         targetEntityDescription: mvoDescription,
                         syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
-                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null);
+                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
+                        joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
 
                     // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
                     // child per resolved attribute. Not gated to Detailed mode: a
@@ -2212,7 +2401,7 @@ public abstract class SyncTaskProcessorBase
             if (wasJoined)
             {
                 return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved,
-                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch);
             }
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
@@ -2241,7 +2430,7 @@ public abstract class SyncTaskProcessorBase
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
     {
         var mvo = cso.MetaverseObject!;
-        var outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomesSoFar);
+        var outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, inScopeRules, outcomesSoFar);
 
         var graph = _attributePriorityContext?.DerivedFlowGraph;
         if (graph == null || inScopeRules.Count == 0)
@@ -2268,7 +2457,7 @@ public abstract class SyncTaskProcessorBase
             if (levelErrors.Count > 0)
                 _derivedFlowErroredCsoIds.Add(cso.Id);
 
-            outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomes);
+            outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, inScopeRules, outcomes);
         }
 
         return outcomes;
@@ -2281,12 +2470,13 @@ public abstract class SyncTaskProcessorBase
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>?> ResolveAndMergePendingGenerationsAsync(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
+        IReadOnlyList<SyncRule> inScopeRules,
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
     {
         if (mvo.PendingGeneratedValues.Count == 0)
             return outcomesSoFar;
 
-        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo, csoIsJoinedToObject: true);
+        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo, csoIsJoinedToObject: true, inScopeRules: inScopeRules);
         return outcomesSoFar == null ? resolvedHere : [.. outcomesSoFar, .. resolvedHere];
     }
 
@@ -2319,7 +2509,7 @@ public abstract class SyncTaskProcessorBase
     private void CollectDerivedInputMarks(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> changedValues)
     {
         var graph = _attributePriorityContext?.DerivedFlowGraph;
-        if (graph == null)
+        if (graph == null && _exportFormInputReaders.Count == 0)
             return;
 
         if (mvo.Type == null)
@@ -2331,7 +2521,19 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changedValues, _connectedSystem.Id))
+        var changed = changedValues.ToList();
+        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changed, _connectedSystem.Id))
+            _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
+
+        // Generated Value Forms (#2023): an export expression built from a generated value is not a derived flow, so the
+        // graph does not know its inputs; the generated value's own system is marked for them here.
+        var exportFormReaders = changed
+            .Select(value => value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0)
+            .Distinct()
+            .SelectMany(attributeId => _exportFormInputReaders.GetValueOrDefault((mvo.Type.Id, attributeId)) ?? [])
+            .Where(connectedSystemId => connectedSystemId != _connectedSystem.Id)
+            .Distinct();
+        foreach (var connectedSystemId in exportFormReaders)
             _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
     }
 
@@ -2448,8 +2650,12 @@ public abstract class SyncTaskProcessorBase
     /// as a <c>GeneratedValueAssigned</c> child outcome once it has built the object's root sync outcome (which
     /// happens later in the calling method); empty when nothing was generated this pass.
     /// </returns>
+    /// <param name="inScopeRules">The Synchronisation Rules in scope for <paramref name="cso"/>, whose derived flows the
+    /// synchronisation runs, for checking each request's forms with it (Generated Value Forms, #2023). Null on the
+    /// re-election paths, where the generated value comes from another system's rule and its forms are worked out from
+    /// that system's own account.</param>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesAsync(
-        ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false)
+        ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false, IReadOnlyList<SyncRule>? inScopeRules = null)
     {
         var forRpei = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
 
@@ -2461,6 +2667,7 @@ public abstract class SyncTaskProcessorBase
         try
         {
             var requests = new List<GenerationRequest>(pendingValues.Count);
+            var formsProbe = false;
             foreach (var pending in pendingValues)
             {
                 var generation = pending.Mapping.Generation!;
@@ -2482,6 +2689,9 @@ public abstract class SyncTaskProcessorBase
                     ? await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, probeTargets)
                     : [];
 
+                var formSource = await BuildGeneratedValueFormSourceAsync(cso, mvo, pending, inScopeRules, probing: _uniquenessProbeSessionHost != null, csoIsJoinedToObject);
+                formsProbe |= formSource != null && GetOrComputeGenerationForms(pending.Mapping).Any(f => f.ProbeTargets.Count > 0);
+
                 requests.Add(new GenerationRequest
                 {
                     Mode = GeneratedValueMode.Import,
@@ -2500,17 +2710,30 @@ public abstract class SyncTaskProcessorBase
                     StickyOnly = pending.BaseUnavailable,
                     ProbeTargets = probeTargets,
                     ProbeExemptValues = probeExemptValues,
+                    FormSource = formSource,
                     CallerState = mvo
                 });
             }
 
-            EnsureUniquenessProbeSession(requests);
-            var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+            EnsureUniquenessProbeSession(requests, formsProbe);
+            IReadOnlyList<GenerationOutcome> outcomes;
+            // Generation time, including the values built from each candidate (Generated Value Forms, #2023): the PRD
+            // asks for it in the run's performance diagnostics.
+            using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues")
+                       .SetTag("requests", requests.Count)
+                       .SetTag("withForms", requests.Count(r => r.FormSource != null)))
+                outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
             for (var i = 0; i < outcomes.Count; i++)
             {
                 var outcome = outcomes[i];
                 var pending = pendingValues[i];
+                var attributeName = pending.Mapping.TargetMetaverseAttribute!.Name;
+
+                // Generated Value Forms (#2023): candidates passed over because a value built from them was already
+                // held, whatever came of the request, a bounded number of them per object.
+                forRpei.AddRange(GeneratedValueFormReporting.DescribeSkippedCandidates(outcome.SkippedCandidates)
+                    .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
                 {
@@ -2529,7 +2752,15 @@ public abstract class SyncTaskProcessorBase
                         break;
 
                     case GenerationOutcomeKind.Waiting:
-                        // Nothing to do: any existing value stays, and there is nothing new to apply.
+                        // Nothing to apply: any existing value stays. A value held back because a value built from it
+                        // cannot be worked out yet is reported, on the object's item and on the run, since the object
+                        // may have nothing else to record (Generated Value Forms, #2023).
+                        if (outcome.FormWaits.Count > 0)
+                        {
+                            var waitingFor = GeneratedValueFormReporting.DescribeWaits(outcome.FormWaits);
+                            forRpei.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
+                            RecordGeneratedValueWaiting(attributeName, waitingFor);
+                        }
                         break;
 
                     case GenerationOutcomeKind.Exhausted:
@@ -2839,7 +3070,9 @@ public abstract class SyncTaskProcessorBase
         }
 
         EnsureUniquenessProbeSession(requests);
-        var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+        IReadOnlyList<GenerationOutcome> outcomes;
+        using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues").SetTag("requests", requests.Count))
+            outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
         for (var i = 0; i < outcomes.Count; i++)
         {
@@ -3061,6 +3294,15 @@ public abstract class SyncTaskProcessorBase
                     mvo.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
                 return;
             }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                // An export rule's scoping criterion could not be evaluated for this object (a pattern ran past its
+                // time limit), so whether it is in scope is unknown: nothing is provisioned, updated or deprovisioned
+                // for it, and its accounts stay as they are. Before this catch the exception escaped the page's export
+                // evaluation and failed the whole Activity; now it is one object's error and every other object exports.
+                RecordExportScopingFailure(mvo, scopingEx);
+                return;
+            }
             catch (SyncExpressionMissingInputException missingInputEx)
             {
                 // An export Expression read an attribute this Metaverse Object has no value for, and the mapping's
@@ -3110,6 +3352,13 @@ public abstract class SyncTaskProcessorBase
             // rest of the run still carries useful work.
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
+
+            // Create error RPEIs where export matching could not settle on an existing Connected System Object before
+            // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
+            // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
+            // the object's other export Rules are unaffected.
+            foreach (var matchError in result.ProvisioningMatchErrors)
+                _activity.RunProfileExecutionItems.Add(BuildProvisioningMatchErrorRpei(mvo, matchError));
 
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
@@ -3163,19 +3412,14 @@ public abstract class SyncTaskProcessorBase
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
                     ?? new Dictionary<int, string>();
 
-                // Build CSO type name lookup from export rules (the provisioning CSO doesn't have the Type nav property loaded)
-                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-                    ?? new Dictionary<int, string>();
+                // Type names from the export rules (the provisioning CSO doesn't have the Type nav property loaded)
+                var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
                     // Store CS integer ID and CSO type name in DetailMessage for hyperlinking in the UI
                     // Format: "csId|csoTypeName" (e.g. "4|person")
-                    csoTypeNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csoTypeName);
+                    var csoTypeName = typeNames.ForObjectType(provisioningCso.TypeId);
                     var detailMessage = provisioningCso.ConnectedSystemId > 0
                         ? SyncOutcomeBuilder.FormatCsoLinkDetailMessage(provisioningCso.ConnectedSystemId, csoTypeName)
                         : null;
@@ -3217,8 +3461,7 @@ public abstract class SyncTaskProcessorBase
                     var peCsId = pendingExport.ConnectedSystemId;
                     // The target CSO's own type, where known, so the causality panel can name it "type: name"
                     // exactly as a Provisioned outcome's target already does.
-                    var peCsoTypeName = pendingExport.ConnectedSystemObject?.Type?.Name
-                        ?? (csoTypeNameLookup.TryGetValue(peCsId, out var lookedUpCsoTypeName) ? lookedUpCsoTypeName : null);
+                    var peCsoTypeName = typeNames.ForPendingExport(pendingExport, metaverseObjectTypeId: mvo.Type?.Id);
                     var peDetailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(peCsId, peCsoTypeName);
 
                     ActivityRunProfileExecutionItemSyncOutcome peOutcome;
@@ -3279,18 +3522,13 @@ public abstract class SyncTaskProcessorBase
                         syncRuleName: provisioningSyncRule?.Name);
                 }
 
-                // Standard mode builds no shared csoTypeNameLookup of its own (the Detailed-mode one above is
-                // scoped to that branch), so it is rebuilt here from the same export evaluation cache.
-                var standardCsoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+                // The Detailed-mode type names above are scoped to that branch, so Standard mode builds its own
+                // from the same export evaluation cache.
+                var standardTypeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var pe in result.PendingExports)
                 {
-                    var peCsoTypeName = pe.ConnectedSystemObject?.Type?.Name
-                        ?? standardCsoTypeNameLookup.GetValueOrDefault(pe.ConnectedSystemId);
+                    var peCsoTypeName = standardTypeNames.ForPendingExport(pe, metaverseObjectTypeId: mvo.Type?.Id);
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
@@ -3320,10 +3558,21 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
             var outOfScopeWorkingSet = new ExportEvaluationWorkingSet();
-            var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
-                mvo,
-                _exportEvaluationCache!,
-                outOfScopeWorkingSet);
+            List<PendingExport> deprovisionPendingExports;
+            try
+            {
+                deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
+                    mvo,
+                    _exportEvaluationCache!,
+                    outOfScopeWorkingSet);
+            }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                // As above: a scope that cannot be decided never deprovisions. The in-scope evaluation reads the same
+                // criteria and normally fails first, so this guards a rule only the out-of-scope pass evaluates.
+                RecordExportScopingFailure(mvo, scopingEx);
+                return;
+            }
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
@@ -3355,16 +3604,13 @@ public abstract class SyncTaskProcessorBase
                     .Where(sr => sr.ConnectedSystem != null)
                     .GroupBy(sr => sr.ConnectedSystemId)
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name);
-                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+                var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var cancellation in outOfScopeWorkingSet.CancelledProvisionings)
                 {
                     csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
-                    csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+                    var cancelledCsoTypeName = typeNames.Resolve(cancellation.ConnectedSystemId,
+                        objectTypeId: cancellation.ConnectedSystemObjectTypeId, metaverseObjectTypeId: mvo.Type?.Id);
                     SyncOutcomeBuilder.AddRootOutcome(scopeOutRpei,
                         ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                         targetEntityDescription: targetSystemName,
@@ -3417,26 +3663,29 @@ public abstract class SyncTaskProcessorBase
             item.Id = Guid.NewGuid();
         foreach (var delete in deletes)
         {
-            delete.QueuedByRunProfileExecutionItemId = item.Id;
+            delete.RecordStager(item.Id);
             _scopeExitQueueingStamps.Add((delete.Id, item.Id));
         }
 
         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             return;
 
-        // The first export rule per target system names it and its object type, as the provisioning outcomes do.
+        // The first export rule per target system names the system, as the provisioning outcomes do. The object's type
+        // is named by the rule that acted on it: a system can export more than one type.
         var exportRuleBySystem = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
             .SelectMany(rules => rules)
             .GroupBy(rule => rule.ConnectedSystemId)
             .ToDictionary(group => group.Key, group => group.First());
+        var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
         foreach (var delete in deletes)
         {
             exportRuleBySystem.TryGetValue(delete.ConnectedSystemId, out var exportRule);
             var targetSystemName = exportRule?.ConnectedSystem?.Name;
-            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
             // The rule whose Deprovisioning Action queued the Delete, which the system-naming rule above need not be.
             workingSet.TryGetDeprovisioningRule(delete.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId,
+                typeNames.ForPendingExport(delete, syncRuleId: deprovisioningRule?.Id));
 
             var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
                 ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, SyncOutcomeTypes.ForPendingExport(delete),
@@ -3463,7 +3712,8 @@ public abstract class SyncTaskProcessorBase
         {
             exportRuleBySystem.TryGetValue(disconnection.ConnectedSystemId, out var exportRule);
             var targetSystemName = exportRule?.ConnectedSystem?.Name;
-            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId,
+                typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId));
 
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null)
             {
@@ -3582,6 +3832,23 @@ public abstract class SyncTaskProcessorBase
             "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
             "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
             "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
+    /// <summary>
+    /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
+    /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
+    /// ambiguous match found.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildProvisioningMatchErrorRpei(MetaverseObject mvo, ProvisioningMatchError error)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = error.ErrorType;
+        rpei.ErrorMessage = error.Message;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.MatchCandidates = [.. error.Candidates];
         return rpei;
     }
 
@@ -4473,7 +4740,7 @@ public abstract class SyncTaskProcessorBase
         var skippedCount = skippedEvaluations.Count;
 
         // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
-        // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
+        // cross-page reference pass, drift, deprovisioning, preview all look their candidates up themselves), so the
         // cache is cleared however the loop below ends, including on an unhandled exception.
         try
         {
@@ -4534,7 +4801,7 @@ public abstract class SyncTaskProcessorBase
             queueingItem.Id = Guid.NewGuid();
 
         foreach (var pendingExport in pendingExports)
-            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
+            pendingExport.RecordStager(queueingItem.Id);
     }
 
     /// <summary>
@@ -5035,10 +5302,11 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task FlushObsoleteCsoOperationsAsync()
     {
-        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion)
+        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion): no execution item, but a
+        // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncRepo.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
+            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -5251,6 +5519,19 @@ public abstract class SyncTaskProcessorBase
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
                     recallResult.SkippedDueToExistingDeletePendingExport);
 
+                // A referencing object whose export scope could not be decided received no recall: its error, never
+                // a silent skip.
+                foreach (var failure in recallResult.ScopingFailures)
+                {
+                    var failureItem = _activity.PrepareRunProfileExecutionItem();
+                    failureItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+                    failureItem.ErrorMessage = failure.DescribeForAdministrator();
+                    failureItem.DisplayNameSnapshot = recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId);
+                    _activity.RunProfileExecutionItems.Add(failureItem);
+                    Log.Warning("FlushPendingMvoDeletionsAsync: Reference recall skipped MVO {MvoId}; its export scope could not be decided: {Message}",
+                        failure.MetaverseObjectId, LogSanitiser.Sanitise(failure.Message));
+                }
+
                 // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
                 // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target
                 // CSO and deferred to end of run (FlushDeferredRecallRpeisAsync): a group whose deleted
@@ -5361,15 +5642,9 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
 
-        // Connected System id to CSO type name, the approximate ("first exporting rule's type per system")
-        // fallback used everywhere else in this file; the standalone branch below prefers the exact type off
-        // the CSO's own display snapshot where it has already paid for one.
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        // The target object's type, named by the rule whose Deprovisioning Action queued the Delete; the standalone
+        // branch below prefers the type off the CSO's own display snapshot where it has already paid for one.
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         // Only needed for the standalone fallback items, which must stay self-describing once the target
         // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
@@ -5396,8 +5671,9 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
-            csoTypeNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var cascadeCsoTypeName);
             workingSet.TryGetDeprovisioningRule(csoId, out var deprovisioningRule);
+            var cascadeCsoTypeName = typeNames.ForPendingExport(pendingExport,
+                syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: deletedMvo?.Type?.Id);
 
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
@@ -5415,7 +5691,7 @@ public abstract class SyncTaskProcessorBase
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
                     mvoDeletedNode.Rpei.Id = Guid.NewGuid();
-                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
@@ -5465,7 +5741,7 @@ public abstract class SyncTaskProcessorBase
                         .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
-            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            pendingExport.RecordStager(cascadeRpei.Id);
             queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
@@ -5508,12 +5784,7 @@ public abstract class SyncTaskProcessorBase
             .GroupBy(sr => sr.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         var reportedCount = 0;
         foreach (var cancellation in workingSet.CancelledProvisionings)
@@ -5532,7 +5803,8 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
-            csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+            var cancelledCsoTypeName = typeNames.Resolve(cancellation.ConnectedSystemId,
+                objectTypeId: cancellation.ConnectedSystemObjectTypeId);
             SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                 targetEntityDescription: targetSystemName,
@@ -5570,12 +5842,7 @@ public abstract class SyncTaskProcessorBase
             .GroupBy(sr => sr.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         var reportedCount = 0;
         foreach (var disconnection in workingSet.Disconnections)
@@ -5593,7 +5860,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var targetSystemName);
-            csoTypeNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var disconnectedCsoTypeName);
+            var disconnectedCsoTypeName = typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId);
             SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                 targetEntityId: disconnection.ConnectedSystemObjectId,
@@ -5824,7 +6091,7 @@ public abstract class SyncTaskProcessorBase
             // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
             // fix-up below rather than a pre-persist stamp.
             recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
-            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
+            stagedPendingExport.RecordStager(recallRpei.Id);
 
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
@@ -6017,11 +6284,12 @@ public abstract class SyncTaskProcessorBase
     /// <returns>
     /// Whether a join was established, plus (#1620) the MvoDeletionCancelled facts from
     /// <see cref="EstablishJoinAsync"/> when the join cancelled a previously scheduled deletion; both null
-    /// when no join was found or no deletion was cancelled.
+    /// when no join was found or no deletion was cancelled. Also the match the join was made on (#2052), so the
+    /// Joined outcome can record the rule and value; null when no join was found.
     /// </returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
     /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
-    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
@@ -6046,11 +6314,11 @@ public abstract class SyncTaskProcessorBase
                     rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
             }
 
-            var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-            if (mvo == null)
+            var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+            if (match == null)
                 continue;
 
-            return await EstablishJoinAsync(connectedSystemObject, mvo, importSyncRule);
+            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule, match);
         }
 
         // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
@@ -6060,15 +6328,15 @@ public abstract class SyncTaskProcessorBase
             var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
             if (matchingRules.Count > 0)
             {
-                var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+                var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
                 // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
-                if (mvo != null)
-                    return await EstablishJoinAsync(connectedSystemObject, mvo, joiningSyncRule: null);
+                if (match != null)
+                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null, match);
             }
         }
 
         // No join could be established.
-        return (false, null, null);
+        return (false, null, null, null);
     }
 
     /// <summary>
@@ -6091,25 +6359,32 @@ public abstract class SyncTaskProcessorBase
     /// distinct CLR instance of the same row. On real PostgreSQL, JIM's single tracking DbContext already
     /// resolves both loads to one instance via EF's own identity map, so this is hardening against a future
     /// change to how Metaverse Objects are loaded, not a fix for an observed production defect (see
-    /// <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening). Resolving here means every downstream use of the returned Metaverse Object (join
     /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
     /// tracking state on, regardless of how it was loaded.
     /// </summary>
-    private async Task<MetaverseObject?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
+    private async Task<ImportMatch?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
     {
         try
         {
             var match = await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
-            return match == null ? null : _mvoIdentityMap.Resolve(match);
+            return match == null ? null : match with { MetaverseObject = _mvoIdentityMap.Resolve(match.MetaverseObject) };
+        }
+        catch (JIM.Models.Exceptions.ObjectMatchingRuleFailedException ex)
+        {
+            // A rule that cannot be worked out stops the object (#2052). The SyncJoinException leaves
+            // ProcessMetaverseObjectChangesAsync before projection is considered, so a broken rule cannot project a
+            // duplicate identity; the object is retried on the next synchronisation.
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed, ex.Message);
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
-            throw new SyncJoinException(
-                ActivityRunProfileExecutionItemErrorType.AmbiguousMatch,
-                $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
-                $"An MVO can only be joined to a single CSO per Connected System. " +
-                $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}");
+            // The candidates are recorded with the item, so the message describes the collision rather than listing ids.
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguity(ex))
+            {
+                MatchCandidates = ex.Candidates
+            };
         }
     }
 
@@ -6125,8 +6400,8 @@ public abstract class SyncTaskProcessorBase
     /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
     /// to whichever site builds the root.
     /// </returns>
-    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
-        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule)
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> EstablishJoinAsync(
+        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
@@ -6174,7 +6449,9 @@ public abstract class SyncTaskProcessorBase
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
-        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow);
+        // Which Object Matching Rule found the match, and on what value (#2052), so the join can be explained.
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow,
+            match.Rule, match.MatchedValue);
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
@@ -6212,7 +6489,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, match);
     }
 
     /// <summary>
@@ -6495,6 +6772,25 @@ public abstract class SyncTaskProcessorBase
                     $"The base Expression for the generated value targeting {target} returned more than one value, so {outcome}; " +
                     "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
                     $"text value, not an array: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
+                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
+                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued when error.SourceAttributeName != null:
+                // The Expression handed on every value of one attribute (#2053): name it, and how to choose one.
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"'{error.SourceAttributeName}' has {error.ValueCount} values but target attribute {target} is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Use Where, " +
+                    $"Join, Count, Min or Max in the Expression to say which value it should have, or map it to a multi-valued attribute: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued:
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
+                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
 
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
@@ -6795,10 +7091,11 @@ public abstract class SyncTaskProcessorBase
                         // Queue for export evaluation so target systems receive Pending Exports for the recalled
                         // (and any re-elected) attribute values; without this, downstream Connected Systems keep
                         // the departed source's stale values forever. Same construction as the obsoletion path
-                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
-                        // its first matching changed value, so the re-elected survivor's value must precede the
-                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
-                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        // and the normal Attribute Flow path: additions FIRST, with every removal in
+                        // removedAttributes. Where the source or target is single-valued, export evaluation exports
+                        // the first changed value that was not removed (#2182), so the re-elected survivor's value
+                        // is exported rather than the leaver's, and a genuine clear, with no such value,
+                        // null-clears the target.
                         var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
                         var removedAttributes = recalledAttributeValues.ToHashSet();
                         MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);
@@ -6851,6 +7148,7 @@ public abstract class SyncTaskProcessorBase
                     // The MVO has been marked by this point, so its computed due date is the
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
+                    mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }
@@ -6883,6 +7181,13 @@ public abstract class SyncTaskProcessorBase
         // are honoured now the NullValue read-query filter is in place (markers are excluded from export/drift/scoping
         // value sourcing, so an asserted null clears downstream targets and cannot resurrect a lower-priority value).
         _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
+
+        // The values built from each generated value (Generated Value Forms, #2023), from the same rules and graph, so
+        // a generated value's forms are checked with it before it is issued.
+        _generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
+        _generationForms = null;
+        _allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
+        _exportFormInputReaders = GeneratedValueParticipation.DescribeExportFormInputReaders(_generatedValueBuiltValues, allSyncRules);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftGeneratedObjectTypes = null; // recomputed from the rules below on first need
@@ -6950,12 +7255,43 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
+            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
                 EvaluateDriftAndEnforceState(cso, mvo);
+
+            if (heldConnectedSystemObjectIds.Count > 0)
+            {
+                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
+                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
+            }
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
+    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
+    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
+    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
+    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
+    /// partial index on the flag, and none at all when this run detects no drift.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+            return new HashSet<Guid>();
+
+        var connectedSystemObjectIds = _pendingDriftEvaluations
+            .Select(pending => pending.Cso.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (connectedSystemObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
     }
 
     /// <summary>
@@ -6998,6 +7334,12 @@ public abstract class SyncTaskProcessorBase
         await _uniqueValueGenerationServer!.PrefetchAssignmentsAsync([], connectedSystemObjectIds, _uniqueValueResolveOptions!);
     }
 
+    /// <summary>
+    /// Opens the message of an error that stopped Drift Detection checking an object (#2180), so it reads as the reason
+    /// no correction was staged rather than as an export that failed.
+    /// </summary>
+    private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
+
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
     {
         // Skip if no drift detection export rules exist
@@ -7018,15 +7360,69 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoId", cso.Id);
         span.SetTag("mvoId", targetMvo.Id);
 
-        var result = _syncServer.EvaluateDrift(
-            cso,
-            targetMvo,
-            _driftDetectionExportRules,
-            _importMappingCache,
-            _attributePriorityContext,
-            _uniqueValueResolveOptions);
+        DriftDetectionResult result;
+        try
+        {
+            result = _syncServer.EvaluateDrift(
+                cso,
+                targetMvo,
+                _driftDetectionExportRules,
+                _importMappingCache,
+                _attributePriorityContext,
+                _uniqueValueResolveOptions);
+        }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // An enforced export expression failed while working out what this object should hold (#2180). Reported
+            // against the object exactly as export staging reports the same failure, never only logged, and nothing is
+            // staged for it, so the Connected System keeps its values. One object's failure never fails the page.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + BuildExpressionEvaluationErrorMessage(expressionEx, targetMvo.Id);
+            runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-        if (result.HasDrift)
+            Log.Error(expressionEx, "EvaluateDriftAndEnforceState: Expression evaluation error checking CSO {CsoId} for drift. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            // Missing Input Behaviour is Fail the object: as export staging does, nothing is staged for the object and
+            // the fault is reported against it (#2180).
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + missingInputEx.DescribeForAdministrator();
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("EvaluateDriftAndEnforceState: Expression not evaluated checking CSO {CsoId} for drift; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                cso.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+            span.SetSuccess();
+            return;
+        }
+
+        // Mapping-level errors (#2180): the attribute is left as it is and the error is recorded against the object, in
+        // the words export staging uses for the same fault; the object's other attributes are still corrected.
+        foreach (var attributeFlowError in result.AttributeFlowErrors)
+        {
+            var errorRpei = _activity.PrepareRunProfileExecutionItem();
+            errorRpei.ConnectedSystemObject = cso;
+            errorRpei.ConnectedSystemObjectId = cso.Id;
+            var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
+            errorRpei.ErrorType = errorType;
+            errorRpei.ErrorMessage = errorMessage;
+            _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that
+        // changes nothing.
+        if (result.HasDrift && result.CorrectiveExports.Count > 0)
         {
             Log.Information("EvaluateDriftAndEnforceState: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
                 "staged {ExportCount} corrective Pending Exports for batch save",
@@ -7053,7 +7449,7 @@ public abstract class SyncTaskProcessorBase
             if (runProfileExecutionItem.Id == Guid.Empty)
                 runProfileExecutionItem.Id = Guid.NewGuid();
             foreach (var correctiveExport in result.CorrectiveExports)
-                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
+                correctiveExport.RecordStager(runProfileExecutionItem.Id);
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

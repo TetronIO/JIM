@@ -363,6 +363,24 @@ public class MetaverseControllerSetPasswordTests
         }
     }
 
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162).
+    /// </summary>
+    [Test]
+    public async Task SetPassword_AccountsNamed_WithEnableAccountFalse_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+
+        var result = await SetPasswordAsync(connectedSystemObjectIds: accounts, enableAccount: false, wait: 0);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("enableAccount"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------
     // Named accounts
     // ---------------------------------------------------------------------------------------------------------
@@ -475,6 +493,31 @@ public class MetaverseControllerSetPasswordTests
             var target = BodyOf(result).Targets[0];
             Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Parked));
             Assert.That(target.Message, Does.Contain("requirements of the domain"));
+        }
+    }
+
+    /// <summary>
+    /// A system that set the password but could not apply the requested expiry (#2159) reads Set and carries the
+    /// warning flag, so a caller is not left to infer from Set that a change will be demanded at the next sign-in.
+    /// </summary>
+    [Test]
+    public async Task SetPassword_AccountsNamed_ExpiryCouldNotBeApplied_ReportsSetWithTheWarningAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+        var waiter = new RecordingWaiter(() =>
+        {
+            var outcomes = OutcomesWhereEveryTargetIs(PasswordChangeTargetState.Set, (CorporateAdId, "Corporate AD"));
+            outcomes.Targets[0].CompletedWithWarning = true;
+            return outcomes;
+        });
+
+        var result = await SetPasswordAsync(connectedSystemObjectIds: accounts, waiter: waiter);
+
+        var target = BodyOf(result).Targets[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Set));
+            Assert.That(target.CompletedWithWarning, Is.True);
         }
     }
 
@@ -664,15 +707,47 @@ public class MetaverseControllerSetPasswordTests
         }
     }
 
-    [Test]
-    public async Task SetPassword_HonoursARequestedExpiryBehaviourInEitherModeAsync()
+    [TestCase(PasswordExpiryBehaviour.RequireChangeAtNextSignIn)]
+    [TestCase(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy)]
+    public async Task SetPassword_NoAccountsNamed_HonoursARequestedExpiryBehaviourAsync(PasswordExpiryBehaviour expiryBehaviour)
     {
         ArrangeConfiguredSystems((CorporateAdId, "Corporate AD"));
 
-        await SetPasswordAsync(expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+        await SetPasswordAsync(expiryBehaviour: expiryBehaviour);
+
+        var queued = _syncRepo.PendingPasswordChanges.Values.Single();
+        Assert.That(queued.ExpiryBehaviour, Is.EqualTo(expiryBehaviour));
+    }
+
+    [Test]
+    public async Task SetPassword_AccountsNamed_HonoursNeverExpiresAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+
+        await SetPasswordAsync(connectedSystemObjectIds: accounts, expiryBehaviour: PasswordExpiryBehaviour.NeverExpires, wait: 0);
 
         var queued = _syncRepo.PendingPasswordChanges.Values.Single();
         Assert.That(queued.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+    }
+
+    /// <summary>
+    /// A password set on every Connected System leaves "Password never expires" as each account has it (#2159), so Never
+    /// expires there would do nothing. The core refuses it, and the API answers 400 with nothing queued.
+    /// </summary>
+    [Test]
+    public async Task SetPassword_NoAccountsNamed_WithNeverExpires_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        ArrangeConfiguredSystems((CorporateAdId, "Corporate AD"));
+
+        var result = await SetPasswordAsync(expiryBehaviour: PasswordExpiryBehaviour.NeverExpires);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("Password never expires"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
     }
 
     [Test]

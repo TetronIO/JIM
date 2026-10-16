@@ -12,13 +12,13 @@ function Get-JIMFileSystemItem {
         Only paths within the configured allowed roots are accessible.
 
     .PARAMETER Path
-        The directory path to list. Omit to list the allowed root directories.
+        The directory to list. Omit it to list the allowed root directories.
 
     .PARAMETER Roots
-        If specified, returns the allowed root directory paths instead of listing a directory.
+        Returns the allowed root directory paths instead of listing a directory.
 
     .OUTPUTS
-        PSCustomObject representing a directory listing, or a list of allowed root paths.
+        Listing returns the directory's contents; -Roots returns each allowed root directory's path.
 
     .EXAMPLE
         Get-JIMFileSystemItem
@@ -39,7 +39,8 @@ function Get-JIMFileSystemItem {
         Test-JIMFileSystemPath
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.FileSystemListResult', ParameterSetName = 'List')]
+    [OutputType([string], ParameterSetName = 'Roots')]
     param(
         [Parameter(ParameterSetName = 'List')]
         [string]$Path,

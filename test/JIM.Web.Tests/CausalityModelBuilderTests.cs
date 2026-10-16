@@ -148,7 +148,12 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = CausalityLane.Downstream
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = CausalityLane.Downstream,
+
+            // Generated Value Forms (#2023): a value held back and a candidate passed over are about the Metaverse
+            // Object's generated attribute, so they share the Identity lane with Assigned.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
@@ -1327,4 +1332,17 @@ public class CausalityModelBuilderTests
     }
 
     #endregion
+
+    [Test]
+    public void Build_JoinedByMatching_CarriesTheRuleAndValueItMatchedOn()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.JoinedByMatchingItem(), CausalityTestData.NewJoinerContext());
+
+        var joined = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joined.ObjectMatchingRuleDescription, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(joined.MatchedValue, Is.EqualTo("48213"));
+        }
+    }
 }

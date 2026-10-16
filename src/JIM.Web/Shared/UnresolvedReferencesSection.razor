@@ -1,0 +1,341 @@
+@using JIM.Application.Services
+@using JIM.Models.Activities
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Connected System Object's unresolved references (#959): which values could not be linked, the likely cause of
+   each, and where to fix it. One component for the Run Profile Execution Item page and the Connected System Object
+   page, so an administrator who follows the link from one to the other reads the same thing. The causes are judged
+   against the Connected System's current Container Scope, so the section always describes the object as it stands
+   now; on an item page it says how that compares with what the run left. *@
+
+@if (_loaded && (IsRunContext || _summary is { TotalCount: > 0 }))
+{
+    <MudPaper Outlined="true" Class="@PaperClass" data-testid="jim-unresolved-references">
+        <div class="jim-unresolved-references-head">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="@ToneColour" />
+                <MudText Typo="Typo.h6">Unresolved References</MudText>
+                <MudChip T="string" Variant="Variant.Text" Color="@ToneColour" Class="ma-0">@HeaderCount.ToString("N0")</MudChip>
+            </MudStack>
+            @if (_context != null)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Unresolved Reference Handling: <strong>@_context.UnresolvedReferenceHandling</strong>
+                    </MudText>
+                    <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">Change</MudLink>
+                </MudStack>
+            }
+        </div>
+
+        <div class="pa-4">
+            @foreach (var sentence in IntroSentences())
+            {
+                <MudText Typo="Typo.body1" Class="mb-2">@sentence</MudText>
+            }
+
+            @if (IsRunContext && RunCount == null && !string.IsNullOrEmpty(RecordedMessage))
+            {
+                @* An item recorded before the count existed: its own message is the only record of what the run said. *@
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Recorded by the run: @RecordedMessage</MudText>
+            }
+
+            @if (_summary is { TotalCount: > 0 } summary && _context != null)
+            {
+                @* Captured here: the table's cell templates are lambdas, which null-state does not flow into. *@
+                var objectTypeName = _context.ObjectTypeName;
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap mt-3">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Likely cause:</MudText>
+                    @foreach (var cause in summary.Causes)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.CauseColour(cause.FixLocation)" Class="ma-0">
+                            @UnresolvedReferenceDisplay.CauseLabel(cause.Cause)&nbsp;<strong>@cause.Count.ToString("N0")</strong>
+                        </MudChip>
+                    }
+                </MudStack>
+
+                @* Every distinct next step in full, so the table below can keep each row to one line. *@
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Next steps</MudText>
+                <UnresolvedReferenceNextSteps Fixes="@summary.Fixes"
+                                              ConnectedSystemId="@ConnectedSystemId"
+                                              ConnectedSystemName="@_context.ConnectedSystemName"
+                                              ObjectTypeName="@objectTypeName" />
+
+                <VirtualisedDataGrid T="ConnectedSystemObjectUnresolvedReference"
+                                     ContainerId="@ContainerId"
+                                     UrlParameterPrefix="@UrlParameterPrefix"
+                                     StateKey="@(ConnectedSystemObjectId?.ToString() ?? string.Empty)"
+                                     DefaultSortBy="attribute"
+                                     LoadWindow="LoadWindowAsync"
+                                     ExpectedItemCount="@summary.TotalCount"
+                                     MaxHeight="@GridMaxHeight"
+                                     GridClass="mt-4"
+                                     SingularName="Unresolved Reference"
+                                     PluralName="Unresolved References"
+                                     SearchPlaceholder="Search attribute or value">
+                    <Columns>
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Attribute</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @context.Item.AttributeName
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Value</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <span class="jim-one-line jim-text-code" title="@context.Item.Value">@context.Item.Value</span>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Likely Cause" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Likely Cause</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <UnresolvedReferenceCauseChip Diagnosis="@context.Item" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Where to Fix" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Where to Fix</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(context.Item.FixLocation)" Class="ma-0">
+                                    @UnresolvedReferenceDisplay.FixLocationLabel(context.Item.FixLocation)
+                                </MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Next Step" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Next Step</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{
+                                    var rowAction = UnresolvedReferenceDisplay.ActionFor(context.Item.Cause, ConnectedSystemId, objectTypeName);
+                                }
+                                <MudLink Href="@rowAction.Href" title="@($"{context.Item.Finding} {context.Item.Remedy}")">@rowAction.Text</MudLink>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <EmptyContent Context="grid">
+                        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                             PrimaryText="@($"No Unresolved References match \"{grid.SearchText}\"")"
+                                             SecondaryText="Try a different search term, or clear the search."
+                                             ActionText="Clear Search"
+                                             OnAction="@(() => grid.ClearSearchAsync())" />
+                        }
+                        else
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.Link"
+                                             PrimaryText="Every reference on this object has resolved"
+                                             SecondaryText="They resolved after this page was opened." />
+                        }
+                    </EmptyContent>
+                </VirtualisedDataGrid>
+            }
+
+            @if (IsRunContext && ConnectedSystemObjectId is { } objectId && _context != null)
+            {
+                <MudButton Variant="Variant.Text" Class="mt-3"
+                           Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{objectId}")">
+                    View the Connected System Object
+                </MudButton>
+            }
+        </div>
+    </MudPaper>
+}
+
+@code {
+    /// <summary>
+    /// The table's height ceiling. The section sits above other content on both pages, so a group with thousands of
+    /// unresolved members scrolls within the table rather than pushing the rest of the page out of reach.
+    /// </summary>
+    private const string GridMaxHeight = "480px";
+
+    /// <summary>The Connected System the object belongs to.</summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>The object whose references are shown; null where it has been deleted.</summary>
+    [Parameter]
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// True on a Run Profile Execution Item's page, where the section says what the run left unresolved and how that
+    /// compares with now, and shows even when none remain. False on the object's own page, where it shows only while
+    /// references are unresolved.
+    /// </summary>
+    [Parameter]
+    public bool IsRunContext { get; set; }
+
+    /// <summary>The section's accent on an item page; <see cref="UnresolvedReferenceTone.None"/> for a plain panel.</summary>
+    [Parameter]
+    public UnresolvedReferenceTone Tone { get; set; }
+
+    /// <summary>How many references the run left unresolved; null for an item recorded before the count existed.</summary>
+    [Parameter]
+    public int? RunCount { get; set; }
+
+    /// <summary>
+    /// The error the item records, if any. Where it is another error, the section says the references are not counted
+    /// as the item's error because that one is.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItemErrorType? ItemErrorType { get; set; }
+
+    /// <summary>The item's own error message, shown for an item recorded before the count existed.</summary>
+    [Parameter]
+    public string? RecordedMessage { get; set; }
+
+    /// <summary>The object's Object Type, as the page names it; used where the object has since been deleted.</summary>
+    [Parameter]
+    public string? ObjectTypeName { get; set; }
+
+    /// <summary>The table's element id; unique on its page.</summary>
+    [Parameter]
+    public string ContainerId { get; set; } = "unresolved-references";
+
+    /// <summary>The prefix for the table's URL parameters, so it cannot collide with another table on the page.</summary>
+    [Parameter]
+    public string UrlParameterPrefix { get; set; } = "ur-";
+
+    /// <summary>The call site's spacing classes.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// The object's diagnosis context, where the page has already built it for other reasons (the Connected System
+    /// Object page does, for its inline cause chips); the section builds its own otherwise. Building one reads the
+    /// Connected System's scope, so a page should not pay for it twice.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemObjectUnresolvedReferenceContext? Context { get; set; }
+
+    private ConnectedSystemObjectUnresolvedReferenceContext? _context;
+    private ConnectedSystemObjectUnresolvedReferenceSummary? _summary;
+    private bool _loaded;
+    private (int ConnectedSystemId, Guid? ObjectId, ConnectedSystemObjectUnresolvedReferenceContext? Context)? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The read is per object, not per render: guard on the parameters it depends on.
+        if (_loadedFor == (ConnectedSystemId, ConnectedSystemObjectId, Context))
+            return;
+
+        _loadedFor = (ConnectedSystemId, ConnectedSystemObjectId, Context);
+        _context = null;
+        _summary = null;
+
+        if (ConnectedSystemObjectId is { } objectId)
+        {
+            using var jim = JimFactory.Create();
+            _context = Context ?? await jim.ConnectedSystems.GetUnresolvedReferenceContextAsync(ConnectedSystemId, objectId);
+            if (_context != null)
+                _summary = await jim.ConnectedSystems.GetUnresolvedReferenceSummaryAsync(_context);
+        }
+
+        _loaded = true;
+    }
+
+    private async Task<VirtualisedWindow<ConnectedSystemObjectUnresolvedReference>> LoadWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        if (_context == null)
+            return new VirtualisedWindow<ConnectedSystemObjectUnresolvedReference>([], 0);
+
+        using var jim = JimFactory.Create();
+        var window = await jim.ConnectedSystems.GetUnresolvedReferencesRangeAsync(
+            _context, request.StartIndex, request.Count, request.SearchText, request.IncludeTotalCount);
+        return new VirtualisedWindow<ConnectedSystemObjectUnresolvedReference>(window.Results, window.TotalResults);
+    }
+
+    private int NowCount => _summary?.TotalCount ?? 0;
+
+    // An item page leads with what the run left, which is the thing being explained; the object page with what is
+    // unresolved now.
+    private int HeaderCount => IsRunContext ? RunCount ?? NowCount : NowCount;
+
+    private Color ToneColour => Tone switch
+    {
+        UnresolvedReferenceTone.Error => Color.Error,
+        UnresolvedReferenceTone.Warning => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string PaperClass => string.Join(' ', new[]
+    {
+        "jim-unresolved-references",
+        Tone switch
+        {
+            UnresolvedReferenceTone.Error => "jim-unresolved-references-error",
+            UnresolvedReferenceTone.Warning => "jim-unresolved-references-warning",
+            _ => null
+        },
+        Class
+    }.Where(c => !string.IsNullOrEmpty(c)));
+
+    private IEnumerable<string> IntroSentences()
+    {
+        if (!IsRunContext)
+        {
+            yield return $"These reference values could not be linked to Connected System Objects in {_context?.ConnectedSystemName ?? "this Connected System"}, " +
+                         "so they cannot flow to the Metaverse until they resolve. Each likely cause is judged against the current Container Scope.";
+            yield break;
+        }
+
+        yield return RunSentence();
+
+        if (_context == null)
+        {
+            yield return "The Connected System Object has since been deleted, so its references can no longer be shown, and none of them is still pending.";
+            yield break;
+        }
+
+        var now = NowCount;
+        yield return UnresolvedReferenceDisplay.SinceRun(RunCount, now) switch
+        {
+            UnresolvedReferenceSinceRun.NoneNow =>
+                "All of them have since resolved, or been removed from the source. Nothing about them is still pending.",
+            UnresolvedReferenceSinceRun.Fewer =>
+                $"{now:N0} {(now == 1 ? "is" : "are")} still unresolved; the others have since resolved, or been removed from the source. " +
+                "Those that remain are listed below with the likely cause of each, judged against the current Container Scope.",
+            UnresolvedReferenceSinceRun.More =>
+                $"Later imports have left more unresolved since: the Connected System Object holds {now:N0} now. All of them are listed below " +
+                "with the likely cause of each, judged against the current Container Scope.",
+            _ =>
+                "They are listed below as they stand now on the Connected System Object, with the likely cause of each, judged against the current Container Scope."
+        };
+    }
+
+    private string RunSentence()
+    {
+        var typeName = _context?.ObjectTypeName ?? ObjectTypeName ?? "object";
+        // "On this groupOfNames" rather than "the groupOfNames's": Object Type names are often a directory's class names,
+        // which take a possessive badly.
+        var references = RunCount is { } count
+            ? $"{count:N0} reference {(count == 1 ? "value" : "values")} on this {typeName}"
+            : $"some reference values on this {typeName}";
+
+        if (Tone == UnresolvedReferenceTone.Error)
+            return $"This run could not link {references} to Connected System Objects, so they cannot flow to the Metaverse until they resolve.";
+
+        var unresolved = RunCount is { } runCount
+            ? $"{runCount:N0} reference {(runCount == 1 ? "value" : "values")}"
+            : "reference values";
+
+        return ItemErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet
+            ? $"This run left {unresolved} unresolved. They were not counted as an error, because Unresolved Reference Handling was not set to Error at the time."
+            : $"This run also left {unresolved} unresolved. They are not counted as this item's error, because the error above already is.";
+    }
+}

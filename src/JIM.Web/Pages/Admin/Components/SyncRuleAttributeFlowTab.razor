@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using JIM.Models.Expressions
+@using JIM.Models.Interfaces
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
 @using JIM.Models.Staging
@@ -10,6 +11,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject IJimApplicationFactory JimFactory
+@inject IExpressionEvaluator ExpressionEvaluator
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -22,7 +24,7 @@
     </div>
     <div class="d-flex align-center justify-space-between mt-3">
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
-            OnClick="HandleOpenAddAttributeFlowRuleDialogAsync" Color="Color.Primary"
+            OnClick="HandleOpenAddAttributeFlowRuleDialogAsync"
             Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
@@ -43,7 +45,7 @@
         <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
             <div>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
-                <MudChipSet T="SyncRuleMappingSourcesType"
+                <MudChipSet T="AttributeFlowMappingType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedMappingTypes"
                             SelectedValuesChanged="OnMappingTypeFilterChangedAsync">
@@ -228,6 +230,17 @@
                                 {
                                     <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
+                                    </MudTooltip>
+                                }
+                                @* A row is one line in a virtualised grid, so the note is an icon here and a caption on the card. *@
+                                @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, context.Item, _passwordSynchronisationConfigured))
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent><TooltipText Text="@PasswordDeliveryNote" /></TooltipContent>
+                                        <ChildContent>
+                                            <MudIcon Icon="@Icons.Material.Outlined.Info" Color="Color.Info" Size="Size.Small" Class="ml-2"
+                                                     aria-label="@PasswordDeliveryNote" data-testid="jim-password-delivery-note" />
+                                        </ChildContent>
                                     </MudTooltip>
                                 }
                             }
@@ -483,6 +496,12 @@
                                 </MudTooltip>
                             }
                         </div>
+                        @if (AccountControlFlowNotes.ShowsPasswordDeliveryNote(SyncRule, attributeFlowRule, _passwordSynchronisationConfigured))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2" Style="max-width: 32rem;" data-testid="jim-password-delivery-note">
+                                @PasswordDeliveryNote
+                            </MudText>
+                        }
                     }
                 </MudPaper>
             }
@@ -562,14 +581,17 @@
                     }
                 case "Expression":
                     <ExpressionEditor @ref="_expressionEditor" @bind-Value="_attributeFlowMappingSource.Expression"
-                        @bind-Value:after="ScheduleDerivedFlowAnalysisAsync" Id="attribute-flow-expression"
+                        @bind-Value:after="ScheduleFlowAnalysisAsync" Id="attribute-flow-expression"
                         Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
                             ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
                             : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
-                        Required="true" Class="mt-5" />
+                        Required="true" SyntaxCheck="AttributeFlowExpressionCheck"
+                        MetaverseAttributeNames="SuggestedMetaverseAttributeNames" ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
+                        Class="mt-5" />
 
-                    @* ─── Insert attribute (#1750, mockup B): puts mv["..."] or cs["..."] at the caret ─── *@
+                    @* ─── Insert attribute (#1750, mockup B) and Insert function (#2053): put an accessor or a call at the caret ─── *@
                     <div class="mt-1">
+                        <InsertFunctionMenu OnInsert="InsertIntoExpressionAsync" />
                         <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                              ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                              ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -581,11 +603,16 @@
                     @* Expression tester (#1405): the Expression field is where an administrator finds out whether
                        their Expression does what they meant, and until now the answer only arrived from a
                        Synchronisation. ExpressionEditor raises every keystroke, which is what lets the tester follow
-                       the text as it is typed. *@
-                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" />
+                       the text as it is typed. Given the Attribute Flow, it runs the flow as a Synchronisation would
+                       (#2055): typed inputs, Missing Input Behaviour, value processing and conversion to the target. *@
+                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" SyncRule="SyncRule"
+                                      Mapping="_attributeFlowMapping" Source="_attributeFlowMappingSource" />
 
                     @* ─── Derived Attribute Flow (#1750, mockups B and C): the live analysis of this flow ─── *@
                     <DerivedFlowPanel Analysis="_derivedFlowAnalysis" ConnectedSystemName="@SyncRule.ConnectedSystem?.Name" />
+
+                    @* ─── Built from generated value (#2014, mock screen 1): which generated value, and the Keep unique switch ─── *@
+                    <BuiltFromGeneratedValueBlock Description="_builtFromGeneratedValue" Mapping="_attributeFlowMapping" />
 
                     @* Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it
                        produces a structurally broken value. Whether that matters is the administrator's call. *@
@@ -702,10 +729,14 @@
                             Direction="SyncRule.Direction" SyncRuleId="SyncRule.Id" ConnectedSystemId="SyncRule.ConnectedSystemId"
                             MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                             TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
-                            OnChanged="ScheduleDerivedFlowAnalysisAsync">
+                            StagedSyncRule="SyncRule" BaseExpressionCheck="AttributeFlowExpressionCheck"
+                            MetaverseAttributeNames="SuggestedMetaverseAttributeNames"
+                            ConnectedSystemAttributeNames="SuggestedConnectedSystemAttributeNames"
+                            OnChanged="ScheduleFlowAnalysisAsync">
                             <BaseExpressionTools Context="insertIntoBaseExpression">
                                 @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                                 <div class="mt-1">
+                                    <InsertFunctionMenu OnInsert="insertIntoBaseExpression" />
                                     <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
                                                          ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                                          ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
@@ -719,7 +750,7 @@
 
                         @* ─── Enabled (#1485): applies to a generated mapping the same as any other ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5" @bind-Value="_attributeFlowMapping.Enabled"
-                            @bind-Value:after="ScheduleDerivedFlowAnalysisAsync" Label="Enabled" />
+                            @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Enabled" />
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
                             A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
                         </MudText>
@@ -773,7 +804,7 @@
                 if (SyncRule.Direction == SyncRuleDirection.Import)
                 {
                     <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
-                        @bind-Value:after="ScheduleDerivedFlowAnalysisAsync"
+                        @bind-Value:after="ScheduleFlowAnalysisAsync"
                         Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
                         Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                         @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
@@ -877,7 +908,7 @@
                 else if (SyncRule.Direction == SyncRuleDirection.Export)
                 {
                     <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                        @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
+                        @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Connected System Attribute"
                         Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                         Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                         @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
@@ -910,7 +941,7 @@
                 @* ─── Enabled (#1485): applies to both directions, so it sits outside the import/export branches ─── *@
                 <MudCheckBox T="bool" Dense="true" Class="mt-5"
                     @bind-Value="_attributeFlowMapping.Enabled"
-                    @bind-Value:after="ScheduleDerivedFlowAnalysisAsync"
+                    @bind-Value:after="ScheduleFlowAnalysisAsync"
                     Label="Enabled" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
@@ -1032,7 +1063,7 @@
         return MappingAlreadyContributesToSelectedAttribute() ? contributors > 1 : contributors > 0;
     }
     private SyncRuleMapping? _attributeFlowMapping;
-    private IReadOnlyCollection<SyncRuleMappingSourcesType> _selectedMappingTypes = new List<SyncRuleMappingSourcesType>();
+    private IReadOnlyCollection<AttributeFlowMappingType> _selectedMappingTypes = new List<AttributeFlowMappingType>();
     private IReadOnlyCollection<AttributeDataType> _selectedDataTypes = new List<AttributeDataType>();
     private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
     private SyncRuleMappingSource? _attributeFlowMappingSource;
@@ -1082,12 +1113,48 @@
     private readonly LatestRequestGate _derivedFlowAnalysisGate = new(TimeSpan.FromMilliseconds(300));
 
     /// <summary>
+    /// What the flow open in the dialog is built from (Generated Value Forms, #2014); null for a flow built from no
+    /// generated value, and until the first answer.
+    /// </summary>
+    private GeneratedValueBuiltValueDescription? _builtFromGeneratedValue;
+
+    /// <summary>Debounces <see cref="ScheduleBuiltFromGeneratedValueAsync"/> as <see cref="_derivedFlowAnalysisGate"/> does the analysis.</summary>
+    private readonly LatestRequestGate _builtFromGeneratedValueGate = new(TimeSpan.FromMilliseconds(300));
+
+    /// <summary>
     /// The flow as the edit dialog opened it (the dialog edits in place), for the dependants check on Update. Null
     /// while adding a flow: adding only ever contributes.
     /// </summary>
     private AttributeFlowEditBaseline? _editBaseline;
 
     private ExpressionEditor? _expressionEditor;
+
+    // ─── Password delivery and userAccountControl (#2159) ───
+
+    /// <summary>
+    /// What the note on a userAccountControl Attribute Flow says, wherever passwords are delivered to this rule's
+    /// accounts (<see cref="AccountControlFlowNotes.ShowsPasswordDeliveryNote"/>).
+    /// </summary>
+    private const string PasswordDeliveryNote =
+        "Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.";
+
+    /// <summary>
+    /// Whether this rule's Connected System is configured for Password Synchronisation, so that passwords reach its
+    /// accounts other than as an Initial Password. Read once per Connected System, not per row.
+    /// </summary>
+    private bool _passwordSynchronisationConfigured;
+    private int? _passwordSynchronisationReadForConnectedSystemId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystemId <= 0 ||
+            _passwordSynchronisationReadForConnectedSystemId == SyncRule.ConnectedSystemId)
+            return;
+
+        _passwordSynchronisationReadForConnectedSystemId = SyncRule.ConnectedSystemId;
+        using var jim = JimFactory.Create();
+        _passwordSynchronisationConfigured = await jim.ConnectedSystems.GetPasswordSynchronisationAsync(SyncRule.ConnectedSystemId) != null;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -1215,6 +1282,20 @@
     private IEnumerable<ConnectedSystemObjectTypeAttribute>? InsertableConnectedSystemAttributes =>
         SyncRule.Direction == SyncRuleDirection.Import ? SyncRule.ConnectedSystemObjectType?.Attributes : null;
 
+    /// <summary>
+    /// The names the expression editors suggest inside <c>mv["</c> (#2053): the attributes Insert attribute offers.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedMetaverseAttributeNames =>
+        InsertableMetaverseAttributes?.Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+
+    /// <summary>
+    /// The names the expression editors suggest inside <c>cs["</c> (#2053): as Insert attribute, never a credential
+    /// attribute, since those travel through JIM's password channel rather than Attribute Flow.
+    /// </summary>
+    private IReadOnlyCollection<string> SuggestedConnectedSystemAttributeNames =>
+        InsertableConnectedSystemAttributes?.Where(candidate => !CredentialAttributes.IsCredentialAttribute(candidate.Name))
+            .Select(candidate => candidate.Name).Order(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
+
     private Task InsertIntoExpressionAsync(string accessor) =>
         _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;
 
@@ -1250,7 +1331,49 @@
         }, analysis => _derivedFlowAnalysis = analysis);
     }
 
-    public void Dispose() => _derivedFlowAnalysisGate.Dispose();
+    /// <summary>
+    /// Re-analyses the flow open in the dialog after anything it depends on changes: the derived flow analysis (#1750)
+    /// and what the flow is built from (Generated Value Forms, #2014).
+    /// </summary>
+    private Task ScheduleFlowAnalysisAsync() =>
+        Task.WhenAll(ScheduleDerivedFlowAnalysisAsync(), ScheduleBuiltFromGeneratedValueAsync());
+
+    /// <summary>
+    /// Whether the flow open in the dialog can be built from a generated value: an Expression flow, import or export,
+    /// with an expression and a target.
+    /// </summary>
+    private bool CanDescribeBuiltFromGeneratedValue() =>
+        _addAttributeFlowRuleDialogVisible &&
+        _attributeFlowMappingSourceType == "Expression" &&
+        !string.IsNullOrWhiteSpace(_attributeFlowMappingSource?.Expression) &&
+        (_attributeFlowMapping?.ResolveTargetMetaverseAttributeId() != null || _attributeFlowMapping?.ResolveTargetConnectedSystemAttributeId() != null);
+
+    /// <summary>
+    /// Works out which generated value, if any, the flow open in the dialog builds its value from (#2014), against the
+    /// Synchronisation Rule as it is being edited and every other rule as saved, for the "Built from generated value"
+    /// block. Debounced like the derived flow analysis, and sent a detached snapshot for the same reason.
+    /// </summary>
+    private async Task ScheduleBuiltFromGeneratedValueAsync()
+    {
+        if (!CanDescribeBuiltFromGeneratedValue())
+        {
+            _builtFromGeneratedValue = null;
+            return;
+        }
+
+        var proposal = AttributeFlowEditBaseline.Snapshot(_attributeFlowMapping!);
+        await _builtFromGeneratedValueGate.RunAsync(async _ =>
+        {
+            using var jim = JimFactory.Create();
+            return await jim.ConnectedSystems.DescribeBuiltFromGeneratedValueAsync(SyncRule, proposal);
+        }, described => _builtFromGeneratedValue = described);
+    }
+
+    public void Dispose()
+    {
+        _derivedFlowAnalysisGate.Dispose();
+        _builtFromGeneratedValueGate.Dispose();
+    }
 
     private async Task ToggleAttributeFlowViewAsync(bool tableView)
     {
@@ -1279,6 +1402,7 @@
         _originalTargetMetaverseAttributeId = null;
         _editBaseline = null;
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         await LoadStandardMappingHintsAsync();
         await LoadAttributeContributorCountsAsync();
         _addAttributeFlowRuleDialogVisible = true;
@@ -1290,8 +1414,9 @@
         await LoadAttributeContributorCountsAsync();
         _editBaseline = AttributeFlowEditBaseline.Capture(mapping);
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         HandleEditAttributeFlowRule(mapping);
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
@@ -1356,7 +1481,7 @@
             _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         }
 
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>
@@ -1372,7 +1497,7 @@
 
         _attributeFlowMapping.TargetMetaverseAttribute = target;
         CorrectTokenKindForTargetType(target?.Type);
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>The Connected System sibling of <see cref="OnGeneratedMetaverseTargetChanged"/> (export direction).</summary>
@@ -1626,7 +1751,7 @@
         else
             _attributeFlowMapping.TargetConnectedSystemAttribute = suggestion.ConnectedSystemAttribute;
 
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>
@@ -1759,6 +1884,14 @@
                mapping.TargetConnectedSystemAttribute is { AttributePlurality: AttributePlurality.SingleValued };
     }
 
+    /// <summary>
+    /// Why the expression as typed cannot be saved on this Attribute Flow, or null (#2055 Phase 3); the same check the
+    /// save runs for a new or changed mapping.
+    /// </summary>
+    private string? AttributeFlowExpressionCheck(string? expression) => _attributeFlowMapping == null
+        ? ExpressionSyntaxCheck.ErrorFor(ExpressionEvaluator, expression)
+        : ExpressionSyntaxCheck.ErrorForAttributeFlow(ExpressionEvaluator, expression, _attributeFlowMapping, SyncRule);
+
     private bool DisableAddAttributeFlowMappingButton()
     {
         if (_attributeFlowMapping == null || _attributeFlowMappingSource == null || _attributeFlowMappingSourceType == null)
@@ -1772,6 +1905,13 @@
 
         if (_attributeFlowMappingSourceType == "Expression" &&
             string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            return true;
+
+        // An expression the save would refuse (it does not parse, reads the wrong side or an attribute the type does not
+        // have, or returns a type the target can never hold) is refused here, as the save refuses it (#2053, #2055 Phase
+        // 3); the editor shows why beneath the field, from the same check. A Generated Value's base is held to the same.
+        if (_attributeFlowMappingSourceType is "Expression" or "Generated" &&
+            AttributeFlowExpressionCheck(_attributeFlowMappingSource.Expression) != null)
             return true;
 
         // Validate target is configured
@@ -1879,6 +2019,7 @@
         _isEditingAttributeFlow = false;
         _editBaseline = null;
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         await LoadDerivedFlowStepsAsync();
         await RefreshFlowGridAsync();
         await OnChanged.InvokeAsync();
@@ -2072,7 +2213,7 @@
 
     private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
     {
-        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(mapping.GetSourceType()))
+        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(AttributeFlowMappingTypes.Of(mapping, SyncRule.Direction)))
             return false;
 
         AttributeDataType? dataType = SyncRule.Direction == SyncRuleDirection.Import
@@ -2115,12 +2256,16 @@
         return mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
     }
 
-    private IEnumerable<KeyValuePair<SyncRuleMappingSourcesType, int>> GetAvailableMappingTypes()
+    /// <summary>
+    /// The Mapping Type filter's chips: each category the rule's flows fall into, with its count, Derived Attribute Flows
+    /// counted apart from ordinary Expressions (#2014), in <see cref="AttributeFlowMappingType"/>'s declared order.
+    /// </summary>
+    private IEnumerable<KeyValuePair<AttributeFlowMappingType, int>> GetAvailableMappingTypes()
     {
         return SyncRule.AttributeFlowRules
-            .GroupBy(m => m.GetSourceType())
-            .Select(g => new KeyValuePair<SyncRuleMappingSourcesType, int>(g.Key, g.Count()))
-            .OrderBy(x => x.Key.ToString());
+            .GroupBy(m => AttributeFlowMappingTypes.Of(m, SyncRule.Direction))
+            .Select(g => new KeyValuePair<AttributeFlowMappingType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
     }
 
     private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableFlowDataTypes()
@@ -2147,7 +2292,7 @@
             .OrderBy(x => x.Key);
     }
 
-    private async Task OnMappingTypeFilterChangedAsync(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
+    private async Task OnMappingTypeFilterChangedAsync(IReadOnlyCollection<AttributeFlowMappingType> selected)
     {
         _selectedMappingTypes = selected;
         await RefreshFlowGridAsync();

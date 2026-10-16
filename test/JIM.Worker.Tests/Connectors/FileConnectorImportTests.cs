@@ -211,7 +211,7 @@ public class FileConnectorImportTests
         // First object should have an error due to "thirty" not being a valid number
         var firstObject = result.ImportObjects[0];
         Assert.That(firstObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(firstObject.ErrorMessage, Does.Contain("Age"));
+        Assert.That(firstObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Age" }));
 
         // Second object should be valid
         var secondObject = result.ImportObjects[1];
@@ -266,6 +266,71 @@ public class FileConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_RowWithTwoUnreadableValues_ReportsEachWithItsValueAndReadsTheRestAsync()
+    {
+        // Before #2066 a row with two unreadable values reported only the second, and never the value itself.
+        var filePath = Path.Join(_testFilesPath, "unreadable_values.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+            Assert.That(first.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Age", "thirty"), ("StartDate", "not-a-date") }));
+            Assert.That(first.AttributeValueErrors?.Select(e => e.Reason), Has.All.Not.Empty);
+            Assert.That(first.Attributes.Select(a => a.Name), Is.EquivalentTo(new[] { "Id", "Name", "IsActive" }),
+                "Every value that could be read is still imported.");
+            Assert.That(result.ImportObjects[1].AttributeValueErrors, Is.Null);
+            Assert.That(first.SourceLocation, Is.EqualTo("unreadable_values.csv, row 2"),
+                "The row as a spreadsheet numbers it, header included, so the administrator can go straight to it.");
+            Assert.That(result.ImportObjects[1].SourceLocation, Is.Null, "A row that read cleanly needs no location.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_NumberOutsideTheRangeItsTypeHolds_ReportsItAsAWholeNumberJimCannotHoldAsync()
+    {
+        // A well-formed whole number too large for its attribute is not "not a whole number": the value is fine and
+        // the attribute's type is too small, which is what the administrator needs to be told (#2128).
+        var filePath = Path.Join(_testFilesPath, "out_of_range_numbers.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects[0].AttributeValueErrors?.Select(e => (e.Value, e.Reason)),
+                Is.EqualTo(new[] { ((string?)"2147483648", "Not a whole number JIM can hold.") }));
+            Assert.That(result.ImportObjects[1].AttributeValueErrors?.Select(e => (e.Value, e.Reason)),
+                Is.EqualTo(new[] { ((string?)"thirty", "Not a valid whole number.") }));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_MultiValuedAttributeWithTwoUnreadableValues_ReportsBothAndLeavesTheAttributeOutAsync()
+    {
+        var filePath = Path.Join(_testFilesPath, "multivalued_decimals_unreadable.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Rates", "lots"), ("Rates", "heaps") }));
+            Assert.That(first.Attributes.Select(a => a.Name), Does.Not.Contain("Rates"),
+                "Two of the four values is not the attribute; reading it as the whole set would remove the other two.");
+        }
+    }
+
+    [Test]
     public async Task ImportAsync_WithInvalidDecimal_RecordsErrorAsync()
     {
         // Arrange - first row's Salary is "lots", which is not a valid decimal
@@ -287,7 +352,7 @@ public class FileConnectorImportTests
         // First object should have an error due to "lots" not being a valid decimal
         var firstObject = result.ImportObjects[0];
         Assert.That(firstObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(firstObject.ErrorMessage, Does.Contain("Salary"));
+        Assert.That(firstObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Salary" }));
 
         // Third object should be valid
         var thirdObject = result.ImportObjects[2];
@@ -319,7 +384,7 @@ public class FileConnectorImportTests
 
         var secondObject = result.ImportObjects[1];
         Assert.That(secondObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(secondObject.ErrorMessage, Does.Contain("Salary"));
+        Assert.That(secondObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Salary" }));
         var salary = secondObject.Attributes.SingleOrDefault(a => a.Name == "Salary");
         Assert.That(salary, Is.Null, "The out-of-range Salary attribute should not be imported");
     }
@@ -358,6 +423,52 @@ public class FileConnectorImportTests
         var ratesAttr2 = secondObject.Attributes.Single(a => a.Name == "Rates");
         Assert.That(ratesAttr2.DecimalValues, Has.Count.EqualTo(1));
         Assert.That(ratesAttr2.DecimalValues[0], Is.EqualTo(9.99m));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithMultiValuedDateAttribute_ParsesEachDelimitedValueAsUtcUnderANonInvariantCultureAsync()
+    {
+        // #2153 S5: dates split on the multi-value delimiter like every other type; a zoneless value is UTC and an
+        // offset is honoured, whatever the configured culture.
+        var filePath = Path.Join(_testFilesPath, "multivalued_dates_booleans.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDatesAndBooleans(filePath, "User", culture: "de-DE");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.AttributeValueErrors, Is.Null);
+            Assert.That(first.Attributes.Single(a => a.Name == "Logins").DateTimeValues, Is.EqualTo(new[]
+            {
+                new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 9, 30, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 3, 8, 0, 0, DateTimeKind.Utc)
+            }));
+            Assert.That(first.Attributes.Single(a => a.Name == "Logins").DateTimeValues.All(d => d.Kind == DateTimeKind.Utc), Is.True);
+            Assert.That(first.Attributes.Single(a => a.Name == "Flags").BoolValues, Is.EqualTo(new[] { true, false }),
+                "Both are handed to JIM, which reports a true or false attribute holding both.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_WithMultiValuedDateAttributeHoldingUnreadableValues_ReportsEachAndLeavesTheAttributeOutAsync()
+    {
+        var filePath = Path.Join(_testFilesPath, "multivalued_dates_booleans.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDatesAndBooleans(filePath, "User", culture: null);
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var second = result.ImportObjects[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Logins", "not-a-date"), ("Logins", "31/02/2026") }));
+            Assert.That(second.Attributes.Select(a => a.Name), Does.Not.Contain("Logins"));
+            Assert.That(second.Attributes.Single(a => a.Name == "Flags").BoolValues, Is.EqualTo(new[] { true }));
+        }
     }
 
     [Test]
@@ -582,14 +693,14 @@ public class FileConnectorImportTests
         Assert.That(row2.ErrorType, Is.Null, "Row with empty DateTime should not cause error");
         var dateAttr2 = row2.Attributes.SingleOrDefault(a => a.Name == "StartDate");
         Assert.That(dateAttr2, Is.Not.Null);
-        Assert.That(dateAttr2!.DateTimeValue, Is.Null, "Empty DateTime should result in null DateTimeValue");
+        Assert.That(dateAttr2!.DateTimeValues, Is.Empty, "Empty DateTime should result in null DateTimeValue");
 
         // Row 3: Empty IsActive (Boolean) - should have no BoolValue
         var row3 = result.ImportObjects[2];
         Assert.That(row3.ErrorType, Is.Null, "Row with empty Boolean should not cause error");
         var boolAttr3 = row3.Attributes.SingleOrDefault(a => a.Name == "IsActive");
         Assert.That(boolAttr3, Is.Not.Null);
-        Assert.That(boolAttr3!.BoolValue, Is.Null, "Empty Boolean should result in null BoolValue");
+        Assert.That(boolAttr3!.BoolValues, Is.Empty, "Empty Boolean should result in null BoolValue");
 
         // Row 4: All empty (except Name) - should have no errors
         var row4 = result.ImportObjects[3];
@@ -1093,6 +1204,33 @@ public class FileConnectorImportTests
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
             SettingValues = CreateSettingValues(filePath, objectTypeName)
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithMultiValuedDatesAndBooleans(string filePath, string objectTypeName, string? culture)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "Logins", Type = AttributeDataType.DateTime, Selected = true, AttributePlurality = AttributePlurality.MultiValued },
+                new() { Id = 4, Name = "Flags", Type = AttributeDataType.Boolean, Selected = true, AttributePlurality = AttributePlurality.MultiValued }
+            }
+        };
+
+        var settingValues = CreateSettingValues(filePath, objectTypeName);
+        settingValues.Single(v => v.Setting.Name == "Culture").StringValue = culture;
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = settingValues
         };
     }
 

@@ -7,18 +7,28 @@ using JIM.Models.Logic;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of an attribute's priority list (#91): the ordered import contributions to a single
-/// Metaverse attribute for a single Metaverse Object Type. Contributors are returned highest priority first.
+/// A Metaverse Attribute's priority order on one Metaverse Object Type: the Attribute Flows that contribute its
+/// value, highest priority first.
 /// </summary>
 public class AttributePriorityOrderDto
 {
+    /// <summary>
+    /// The unique identifier of the Object Type the order applies to.
+    /// </summary>
     public int MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the attribute.
+    /// </summary>
     public int MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The attribute's name; null when nothing contributes to it.
+    /// </summary>
     public string? MetaverseAttributeName { get; set; }
 
     /// <summary>
-    /// The contributing import mappings, ordered by priority (highest first). May be empty when the attribute
-    /// has no import contributors.
+    /// The Attribute Flows that contribute a value to the attribute, highest priority first; empty when none does.
     /// </summary>
     public List<AttributePriorityContributorDto> Contributors { get; set; } = new();
 
@@ -36,14 +46,34 @@ public class AttributePriorityOrderDto
 }
 
 /// <summary>
-/// API representation of a single entry in an attribute's priority list (#91).
+/// One Attribute Flow in an attribute's priority order.
 /// </summary>
 public class AttributePriorityContributorDto
 {
+    /// <summary>
+    /// The unique identifier of the Attribute Flow mapping.
+    /// </summary>
     public int MappingId { get; set; }
+
+    /// <summary>
+    /// The Attribute Flow's position in the order, 1 being the highest priority.
+    /// </summary>
     public int Priority { get; set; }
+
+    /// <summary>
+    /// Whether a source with no value asserts that the attribute has none, rather than deferring to the next
+    /// source.
+    /// </summary>
     public bool NullIsValue { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the Synchronisation Rule the Attribute Flow belongs to.
+    /// </summary>
     public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule's name.
+    /// </summary>
     public string? SyncRuleName { get; set; }
 
     /// <summary>
@@ -52,7 +82,14 @@ public class AttributePriorityContributorDto
     /// </summary>
     public bool SyncRuleEnabled { get; set; }
 
+    /// <summary>
+    /// The unique identifier of the Synchronisation Rule's Connected System.
+    /// </summary>
     public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The Connected System's name.
+    /// </summary>
     public string? ConnectedSystemName { get; set; }
 
     public static AttributePriorityContributorDto FromEntity(SyncRuleMapping entity)

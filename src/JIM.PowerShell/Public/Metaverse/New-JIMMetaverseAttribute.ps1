@@ -11,27 +11,24 @@ function New-JIMMetaverseAttribute {
         Attributes define what data can be stored on Metaverse objects.
 
     .PARAMETER Name
-        The name of the new attribute. Must be unique.
+        The name of the new attribute. It must be unique, ignoring case.
 
     .PARAMETER Type
-        The data type of the attribute.
-        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
+        The kind of value the attribute holds. Integer is the type JIM names Number.
 
     .PARAMETER AttributePlurality
-        Whether the attribute is single-valued or multi-valued.
-        Valid values: SingleValued, MultiValued
-        Defaults to SingleValued.
+        Whether the attribute holds one value or many. A Boolean holds one value, so JIM refuses MultiValued for a
+        Boolean.
 
     .PARAMETER ObjectTypeIds
-        Optional array of Object Type IDs to associate this attribute with.
-        If not specified, the attribute can be associated with object types later.
+        The IDs of the Metaverse Object Types to bind the attribute to. It can also be bound later, with
+        Add-JIMMetaverseObjectTypeAttribute.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the object's
-        configuration change history.
+        An optional reason for the change, recorded in the attribute's Configuration Change History.
 
     .OUTPUTS
-        PSCustomObject representing the created Attribute.
+        The created attribute in full.
 
     .EXAMPLE
         New-JIMMetaverseAttribute -Name "EmployeeId" -Type Text
@@ -59,7 +56,7 @@ function New-JIMMetaverseAttribute {
         Remove-JIMMetaverseAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.MetaverseAttributeDetailDto')]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]

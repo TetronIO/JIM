@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 
 namespace JIM.Application.Servers.Scoping;
@@ -28,4 +29,26 @@ internal interface IScopingValueSource
 
     /// <summary>How many values the object holds for the attribute. Explanations only; synchronisation never asks.</summary>
     int CountValues(int attributeId);
+
+    /// <summary>
+    /// The context an expression criterion is evaluated in (#2054): the object's attributes as <c>cs["..."]</c> on an
+    /// import rule or <c>mv["..."]</c> on an export rule, read exactly as Attribute Flow reads them.
+    /// </summary>
+    ExpressionContext ExpressionContext(DateTime nowUtc);
+
+    /// <summary>The side an expression criterion reads on this object: <c>cs["..."]</c> or <c>mv["..."]</c>.</summary>
+    ExpressionInputSource ExpressionSide { get; }
+
+    /// <summary>
+    /// Whether the scoped object type has an attribute of this name (ignoring case, as expressions do); null when no
+    /// schema is available to say. An expression input naming no attribute must not read as "no value" (#2054): a
+    /// renamed or removed attribute would then decide scope on a name that no longer means anything.
+    /// </summary>
+    bool? IsInSchema(string attributeName);
+
+    /// <summary>
+    /// The type of the scoped object type's attribute of this name (ignoring case); null when it has none, or no schema
+    /// is available. Explanations use it to decide whether an expression input's values may be shown.
+    /// </summary>
+    AttributeDataType? SchemaType(string attributeName);
 }

@@ -86,22 +86,16 @@ public class ExampleDataTemplateObjectTypeRequest
 }
 
 /// <summary>
-/// How a Data Generation Template generates values for one attribute. Exactly one of
-/// <see cref="MetaverseAttributeId"/> or <see cref="ConnectedSystemObjectTypeAttributeId"/> identifies
-/// the attribute being generated; the remaining properties configure value generation and are validated
-/// against the attribute's data type.
+/// How a Data Generation Template generates values for one attribute. <see cref="MetaverseAttributeId"/>
+/// identifies the Metaverse Attribute being generated; the remaining properties configure value generation and
+/// are validated against the attribute's data type.
 /// </summary>
 public class ExampleDataTemplateAttributeRequest
 {
     /// <summary>
-    /// The id of the Metaverse Attribute to generate values for, when targeting the Metaverse.
+    /// The id of the Metaverse Attribute to generate values for. Required.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
-
-    /// <summary>
-    /// The id of the Connected System attribute to generate values for, when targeting a Connected System.
-    /// </summary>
-    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
 
     /// <summary>
     /// What percentage (1-100) of generated objects receive a value for this attribute.
@@ -248,15 +242,17 @@ public class ExampleDataTemplateAttributeDependencyRequest
     public int MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The comparison to apply to the depended-on attribute's value: one of Equals, NotEquals, LessThan,
-    /// GreaterThan, GreaterThanOrEqual, LessThanOrEqual or Like (case-insensitive).
+    /// The comparison to apply to the depended-on attribute's value, by its operator name (case-insensitive): the same
+    /// operators Synchronisation Rule scoping offers for that attribute's data type, such as Equals, NotEquals,
+    /// GreaterThanOrEquals, StartsWith, MatchesPattern, HasValue or HasNoValue.
     /// </summary>
     [Required]
     public string ComparisonType { get; set; } = null!;
 
     /// <summary>
-    /// The value the depended-on attribute's generated value is compared against.
+    /// The value the depended-on attribute's generated value is compared against, written as that attribute's data type
+    /// reads it: numbers with a full stop, dates in ISO 8601 (such as 2026-07-01), Booleans as true or false. Text is
+    /// compared case-sensitively. Omit it for HasValue and HasNoValue.
     /// </summary>
-    [Required]
-    public string StringValue { get; set; } = null!;
+    public string? StringValue { get; set; }
 }

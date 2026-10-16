@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Staging;
@@ -87,6 +88,24 @@ public class ExampleDataRepository : IExampleDataRepository
     #endregion
 
     #region ExampleDataTemplates
+    public async Task<List<AttributeReaderCandidate>> GetAttributeReaderCandidatesAsync()
+    {
+        return await Repository.Database.ExampleDataTemplates.AsNoTracking()
+            .SelectMany(t => t.ObjectTypes.SelectMany(ot => ot.TemplateAttributes
+                .Where(a => a.Expression != null)
+                .Select(a => new AttributeReaderCandidate
+                {
+                    Kind = AttributeReaderKind.ExampleDataTemplateExpression,
+                    ItemId = a.Id,
+                    ExampleDataTemplateId = t.Id,
+                    ExampleDataTemplateName = t.Name,
+                    MetaverseObjectTypeId = ot.MetaverseObjectType.Id,
+                    Expression = a.Expression,
+                    TargetName = a.MetaverseAttribute != null ? a.MetaverseAttribute.Name : null
+                })))
+            .ToListAsync();
+    }
+
     public async Task<List<ExampleDataTemplate>> GetTemplatesAsync()
     {
         var templates = await Repository.Database.ExampleDataTemplates.
@@ -96,9 +115,6 @@ public class ExampleDataRepository : IExampleDataRepository
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.MetaverseAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.ExampleDataSetInstances).
@@ -140,9 +156,6 @@ public class ExampleDataRepository : IExampleDataRepository
             ThenInclude(ta => ta.MetaverseAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.WeightedStringValues).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
@@ -170,9 +183,6 @@ public class ExampleDataRepository : IExampleDataRepository
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.MetaverseAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).
@@ -429,9 +439,6 @@ public class ExampleDataRepository : IExampleDataRepository
                 if (attribute.MetaverseAttribute != null)
                     attribute.MetaverseAttribute = await references.ResolveMetaverseAttributeAsync(attribute.MetaverseAttribute);
 
-                if (attribute.ConnectedSystemObjectTypeAttribute != null)
-                    attribute.ConnectedSystemObjectTypeAttribute = await references.ResolveConnectedSystemObjectTypeAttributeAsync(attribute.ConnectedSystemObjectTypeAttribute);
-
                 foreach (var instance in attribute.ExampleDataSetInstances)
                 {
                     instance.Id = 0;
@@ -469,7 +476,6 @@ public class ExampleDataRepository : IExampleDataRepository
         private readonly JimDbContext _database;
         private readonly Dictionary<int, MetaverseObjectType> _metaverseObjectTypes = new();
         private readonly Dictionary<int, MetaverseAttribute> _metaverseAttributes = new();
-        private readonly Dictionary<int, ConnectedSystemObjectTypeAttribute> _connectedSystemObjectTypeAttributes = new();
         private readonly Dictionary<int, ExampleDataSet> _exampleDataSets = new();
 
         internal PersistedTemplateReferences(JimDbContext database)
@@ -484,10 +490,6 @@ public class ExampleDataRepository : IExampleDataRepository
         internal async Task<MetaverseAttribute> ResolveMetaverseAttributeAsync(MetaverseAttribute incoming) =>
             await ResolveAsync(_metaverseAttributes, incoming.Id, "Metaverse Attribute",
                 id => _database.MetaverseAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
-
-        internal async Task<ConnectedSystemObjectTypeAttribute> ResolveConnectedSystemObjectTypeAttributeAsync(ConnectedSystemObjectTypeAttribute incoming) =>
-            await ResolveAsync(_connectedSystemObjectTypeAttributes, incoming.Id, "Connected System Object Type Attribute",
-                id => _database.ConnectedSystemAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
 
         internal async Task<ExampleDataSet> ResolveExampleDataSetAsync(ExampleDataSet incoming) =>
             await ResolveAsync(_exampleDataSets, incoming.Id, "Example Data Set",

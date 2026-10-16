@@ -1,4 +1,11 @@
-# Delta Import with a change-log table
+---
+title: "SQL Connector Delta Import: Change-Log Table"
+description: Set up a SQL Connector Delta Import that reads a change-log table, so JIM imports only what changed, deletions included.
+type: how-to
+audience: administrator
+---
+
+# SQL Connector Delta Import: Change-Log Table
 
 This guide sets up a Delta Import for the [JIM SQL Connector](jim-sql-connector.md) in **Change-Log Table** mode, from an empty database to a scheduled run. It is the recommended mode, and the only one that observes a deletion.
 
@@ -206,6 +213,12 @@ DELETE FROM HR.IDM_CHANGE_LOG WHERE CHANGED_AT < DATEADD(DAY, -30, SYSUTCDATETIM
 ```sql title="Oracle Database"
 DELETE FROM HR.IDM_CHANGE_LOG WHERE CHANGED_AT < SYSTIMESTAMP - INTERVAL '30' DAY;
 ```
+
+## Check it worked
+
+1. Change a row in one of the Object Type's tables, so your trigger or application writes a row to the change log.
+2. Run the Delta Import.
+3. Open its Activity. It counts the object you changed, and carries no warning that it ran as a Full Import.
 
 ## Troubleshooting
 

@@ -61,6 +61,33 @@ public class CausalityModelBuilderSpeculativeTests
     }
 
     [Test]
+    public void BuildSpeculative_JoinedNodeMadeByMatching_CarriesTheRuleAndValueItWouldMatchOn()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                    TargetEntityId = MvoId,
+                    ObjectMatchingRuleId = 3,
+                    ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals \"E\" + Trim(cs[\"employeeId\"])",
+                    MatchedValue = "E123"
+                }
+            ]
+        };
+
+        var joined = CausalityModelBuilder.BuildSpeculative(preview, Context()).Roots[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joined.ObjectMatchingRuleDescription, Is.EqualTo("Employee ID equals \"E\" + Trim(cs[\"employeeId\"])"));
+            Assert.That(joined.MatchedValue, Is.EqualTo("E123"));
+        }
+    }
+
+    [Test]
     public void BuildSpeculative_MvoDeletedNode_LinksTheLiveMetaverseObjectNotADeletionRecord()
     {
         // Unlike the recorded tree, nothing is actually deleted by a preview: the Metaverse Object mention

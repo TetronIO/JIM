@@ -829,6 +829,21 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void ColumnsCommandText_ReadsEachColumnsCaseExactnessFromItsCollation()
+    {
+        // #2051: Oracle compares binary unless a column's collation is case- or accent-insensitive.
+        var sql = _provider.ColumnsCommandText;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sql, Does.Contain("COLLATION LIKE '%\\_CI'"));
+            Assert.That(sql, Does.Contain("COLLATION LIKE '%\\_AI'"));
+            Assert.That(sql, Does.Contain("AS " + SqlCatalogueColumns.CaseExact));
+            Assert.That(_provider.TextComparesExactlyByDefault, Is.True, "Oracle Database compares text binary by default.");
+        }
+    }
+
+    [Test]
     public void ColumnsCommandText_FiltersBySchemaAndObjectNameAsParameters()
     {
         var sql = _provider.ColumnsCommandText;

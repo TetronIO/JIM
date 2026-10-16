@@ -8,15 +8,15 @@ using JIM.Models.Logic.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// The response to a Synchronisation Rule update: the rule's header, plus what the save raised that the caller should
-/// know about without being refused for it.
+/// A Synchronisation Rule as saved, with what the save raised that did not stop it.
 /// </summary>
 public class SyncRuleSaveResponse : SyncRuleHeader
 {
     /// <summary>
-    /// Non-blocking warnings the save raised about the rule's Attribute Flows, for example that an Attribute Flow
-    /// deriving a Metaverse attribute calls a function returning a different value each time it is evaluated. The
-    /// save went ahead regardless. Always present; empty when there are none.
+    /// Non-blocking warnings the save raised about the rule's Attribute Flows and Scoping Criteria, for example that an
+    /// Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is
+    /// evaluated, or that a Scoping Criterion the save left as it was is no longer valid. The save went ahead
+    /// regardless. Always present; empty when there are none.
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 
@@ -28,11 +28,10 @@ public class SyncRuleSaveResponse : SyncRuleHeader
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
-    /// Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
-    /// Disconnected, from a Connected System that is not one of the type's authoritative sources (#1256): objects it
-    /// projects that no selected source also holds will never be deleted, and those it shares with a selected source are
-    /// deleted when that source disconnects. The save went ahead regardless. Null when there is nothing to warn about,
-    /// including for a rule that already projected before the save.
+    /// Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative
+    /// Source Disconnected, from a Connected System that is not one of its authoritative sources: objects only this
+    /// system holds will never be deleted, and those it shares with an authoritative source are deleted when that
+    /// source disconnects. Null when there is nothing to warn about, including for a rule that already projected.
     /// </summary>
     public string? DeletionSourceWarning { get; set; }
 
@@ -52,7 +51,7 @@ public class SyncRuleSaveResponse : SyncRuleHeader
         var header = FromEntity(saved);
         var response = new SyncRuleSaveResponse
         {
-            Warnings = savedInstance.AttributeFlowRules.SelectMany(mapping => mapping.SaveWarnings).ToList(),
+            Warnings = savedInstance.SaveWarnings.ToList(),
             DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList(),
             DeletionSourceWarning = deletionSourceWarning?.Message
         };

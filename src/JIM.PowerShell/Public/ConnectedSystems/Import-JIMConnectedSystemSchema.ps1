@@ -7,55 +7,53 @@ function Import-JIMConnectedSystemSchema {
         Imports the schema from a Connected System.
 
     .DESCRIPTION
-        Connects to the external system and retrieves its schema (object types and attributes).
-        This is required before creating Synchronisation Rules, as Synchronisation Rules reference object type IDs.
+        Reads a Connected System's schema (its Object Types and their attributes) into JIM. A Connected System needs
+        its schema before Synchronisation Rules can be written for it.
 
-        A refresh never deletes: additions and attribute definition updates are applied, while object types and
-        attributes the Connected System no longer reports are retained in JIM and flagged. Use -Preview first to
-        see what a refresh would change without applying anything, then run again without -Preview to apply.
+        A refresh never deletes on its own: additions and changed attribute definitions are applied, while Object
+        Types and attributes the Connected System no longer reports are kept and flagged. Run it with -Preview first
+        to see what a refresh would change, then without -Preview to apply it.
 
     .PARAMETER Id
-        The unique identifier of the Connected System to import schema for.
+        The ID of the Connected System to import the schema of.
 
     .PARAMETER InputObject
-        Connected System object to import schema for (from pipeline).
+        A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
     .PARAMETER Preview
-        If specified, retrieves the schema and returns what a refresh would change without persisting anything.
-        The result's HasRemovalsOrDefinitionChanges property flags removals and attribute definition changes,
-        which are the changes that can affect existing configuration; additions alone cannot.
+        Reads the schema and returns what a refresh would change, without changing anything.
+        HasRemovalsOrDefinitionChanges flags the changes that can affect existing configuration: removals and
+        changed attribute definitions. HasObjectTypeClassificationChanges flags a change to how the Connected System
+        classifies a selected Object Type, each also written as a warning: applying one can move existing objects to
+        another Object Type, which the next import refuses as an Object Type Changed error unless a Full Import Run
+        Profile allows Object Type changes (Set-JIMRunProfile -AllowObjectTypeChanges).
 
     .PARAMETER DisableDependents
-        If specified, the refresh is applied with its dependents disabled: Synchronisation Rules bound to a
-        removed object type and attribute mappings reading a removed or redefined attribute (directly or as an
-        expression input) are disabled with a recorded reason, so nothing runs against entries the Connected
-        System no longer reports. Preview first with -Preview, whose result's Dependents property names what
-        this option would disable. Re-enabling is a manual choice per rule or mapping. Cannot be combined with
-        -RemoveDependents. When a disabled mapping was the last enabled contributor of a Metaverse attribute that an
-        Attribute Flow deriving another Metaverse attribute reads, the refresh still goes ahead and a warning names
-        each such flow.
+        Applies the refresh and disables what depends on what it removes or redefines: Synchronisation Rules bound
+        to a removed Object Type, and Attribute Flows reading a removed or redefined attribute, each with the reason
+        recorded. Each must be enabled again by hand. -Preview names them, in its Dependents property. Cannot be
+        used with -RemoveDependents.
 
     .PARAMETER RemoveDependents
-        If specified, the refresh is applied with its dependents removed. This deletes configuration and
-        identity data: the invalidated Synchronisation Rules and attribute mappings are deleted, and a
-        background worker task marks every Connected System Object of a removed object type Obsolete (they
-        deprovision through the standard pipeline, grace periods and Metaverse Deletion Rules included) and
-        deletes every stored value of a removed attribute. Always preview first with -Preview, whose result's
-        Dependents and RemovalImpact properties show exactly what this option would take. Follow the queued
-        removal with Get-JIMWorkerTask. Cannot be combined with -DisableDependents. Attribute Flows deriving
-        Metaverse attributes that the removal leaves with a missing input are named in a warning, as for
+        Applies the refresh and deletes what depends on what it removes: the Synchronisation Rules and Attribute
+        Flows are deleted, and a worker task obsoletes every Connected System Object of a removed Object Type, which
+        deprovisions them as any deletion would, and deletes every stored value of a removed attribute. -Preview
+        shows exactly what it would take, in its Dependents and RemovalImpact properties; follow the worker task
+        with Get-JIMWorkerTask. Refused, with nothing changed, while a Scoping Criterion or an Expression reads a
+        removed attribute; -Preview names each one in Dependents.RemovedAttributeReaders. Cannot be used with
         -DisableDependents.
 
     .PARAMETER PassThru
-        If specified, returns the updated Connected System object with imported schema. Not needed with -Preview,
-        which always returns the preview result.
+        Returns the Connected System with its refreshed schema. -Preview returns its result without it.
 
     .OUTPUTS
-        With -Preview, returns the schema refresh preview result; its Dependents.DependentDerivedFlows names the
-        Attribute Flows deriving Metaverse attributes that disabling or removing the dependents would leave with a
-        missing input, and each is also written with Write-Warning. Otherwise, if -PassThru is specified, returns
-        the updated Connected System object, whose DependentDerivedFlows names those the refresh left with a
-        missing input (empty unless -DisableDependents or -RemoveDependents was supplied).
+        With -Preview, what the refresh would change; with -PassThru, the Connected System with its refreshed
+        schema; otherwise nothing. Derived Attribute Flows that disabling or removing dependents leaves, or would
+        leave, with a missing input are written to the warning stream, as are changed Object Type classifications.
+
+        JIM.SchemaRefreshResultDto: With -Preview
+
+        JIM.ConnectedSystemDetailDto: With -PassThru
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1
@@ -101,7 +99,8 @@ function Import-JIMConnectedSystemSchema {
         Set-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.SchemaRefreshResultDto')]
+    [OutputType('JIM.ConnectedSystemDetailDto')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -142,6 +141,10 @@ function Import-JIMConnectedSystemSchema {
                 # Derived flows that disabling or removing the dependents would leave with a missing input
                 # (#1750, FR 3), worded as a prediction: the preview changes nothing.
                 Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $previewResult.Dependents.DependentDerivedFlows -Prospective
+
+                # Object Type classification changes (#2049): applying one can change which Object Type existing
+                # entries resolve to at the next import, so each is written as a warning a script cannot miss.
+                Write-JIMObjectTypeClassificationWarning -ChangedObjectTypeClassifications $previewResult.ChangedObjectTypeClassifications
 
                 $previewResult
             }

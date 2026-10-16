@@ -1,60 +1,71 @@
 ---
 title: Configuration
+description: The objects that configure JIM, from Connected Systems to Service Settings, each with its concepts, workflows and where to manage it.
+type: landing
+audience: administrator
 ---
 
 # Configuration
 
-JIM configuration is centred on a small set of first-class objects: Connected Systems, Run Profiles, Synchronisation Rules, the metaverse schema, schedules, and a handful of supporting objects (API keys, certificates, service settings, roles). Understanding what each object is, how it relates to the others, and how to manage it is the core of running JIM in production.
-
-The pages in this section explain each configuration object in plain terms, describe its key behaviours and the workflows it participates in, and point you at the three ways to manage it: the JIM portal, PowerShell, and the REST API.
+JIM is configured through a small set of objects: Connected Systems, Run Profiles, Synchronisation Rules, the Metaverse schema, Schedules, and the API Keys, Certificates, Service Settings and Roles that support them. Each page here explains one object: what it is, how it fits with the others, its common workflows, and where to manage it, in the portal, with PowerShell or through the REST API. In the portal, the info button beside a page's title links to the page here that covers it.
 
 ## Synchronisation
 
-The objects that drive identity flow between external systems and the metaverse.
+The objects that move identities between your systems and the Metaverse.
 
-- [Connected Systems](connected-systems.md) -- external directories, databases, SCIM 2.0 services, and files that JIM synchronises with
-- [Run Profiles](run-profiles.md) -- import, sync, and export operations executed against a Connected System
-- [Synchronisation Rules](synchronisation-rules.md) -- the relationship between a Connected System and the metaverse: scoping, joining, projection, and Attribute Flows
-- [Data Flow](data-flow.md) -- every attribute data flow configured across all Connected Systems, in both directions, in one list
+- [Connected Systems](connected-systems.md): the directories, databases, SCIM 2.0 services and files JIM synchronises with
+    - [Connector Space](connector-space.md): what JIM holds for each Connected System, and clearing it
+    - [Partitions and Containers](partitions-and-containers.md): which parts of a Connected System JIM manages
+    - [Connected System Schema](connected-system-schema.md): which Object Types and attributes JIM uses, and refreshing them
+    - [Connected System Attributes](connected-system-attributes.md): whether JIM can write each attribute, and its data type
+    - [Connected System Passwords](connected-system-passwords.md): password policy, setting a password, and Password Synchronisation
+    - [Unresolved References](unresolved-references.md): why a reference can stay unresolved, and finding what would resolve it
+    - [Removing a Connected System](removing-a-connected-system.md): what deleting one does, and previewing it first
+- [Run Profiles](run-profiles.md): the import, synchronisation and export operations run against a Connected System
+- [Synchronisation Rules](synchronisation-rules.md): how a Connected System and the Metaverse relate
+    - [Scoping Criteria](scoping-criteria.md): which objects a rule applies to
+    - [Object Matching Rules](object-matching-rules.md): how an object joins an existing Metaverse Object
+    - [Attribute Mappings](attribute-mappings.md): which values flow, and which import rule's value wins
+    - [Generated Values](generated-values.md): unique values JIM generates, such as account names
+    - [Generated Values in Target Systems](generated-values-in-target-systems.md): checking a target before choosing a value, and correcting one it refuses
+    - [Deriving Metaverse Attributes](derived-attributes.md): values derived from other Metaverse values
+    - [Deprovisioning](deprovisioning.md): what happens when an object leaves a rule's scope
+    - [Initial Password](initial-password.md): the first password JIM gives an object it provisions
+- [Data Flow](data-flow.md): every Attribute Flow across all Connected Systems, in both directions, in one list
 
 ## Changing configuration safely
 
 How JIM judges a save, and how to see what a change would do before you make it.
 
-- [Configuration Changes](configuration-changes.md) -- which edits JIM confirms, and the Configuration Change Preview that shows which objects a proposed edit would affect
-- [Sync Preview](sync-preview.md) -- what synchronising one object would do with the configuration already saved, changing nothing
+- [Configuration Changes](configuration-changes.md): which edits JIM confirms, and the preview of the objects an edit would affect
+- [Sync Preview](sync-preview.md): what synchronising one object would do with the configuration already saved, changing nothing
 
 ## Metaverse
 
-The central identity store and the searches that surface it.
+The central identity store and the searches over it.
 
-- [Metaverse](metaverse.md) -- object types, attributes, objects, and pending deletions
-- [Predefined Searches](predefined-searches.md) -- named, reusable searches over Metaverse Objects
+- [Metaverse](metaverse.md): Object Types, attributes, objects, and pending deletions
+    - [Metaverse Objects](metaverse-objects.md): where each value comes from, and why an object is connected, or not
+- [Predefined Searches](predefined-searches.md): named, reusable searches over Metaverse Objects
+- [Deleted Objects](deleted-objects.md): the record JIM keeps of each object it deletes
+- [Example Data](example-data.md): realistic users and groups generated for a demonstration or a proof of concept
 
 ## Automation and Operations
 
-Scheduled execution, the audit trail of what JIM did, and whether the services doing it are alive.
+Scheduled runs, the record of what JIM did, and whether the services doing it are alive.
 
-- [Operations](operations.md) -- the queue, history, Schedules and Passwords tabs in one place, with the Service Health of the Worker and Scheduler
-- [Schedules](schedules.md) -- automated, ordered sequences of operations
-- [Activities](activities.md) -- the audit trail of every operation, with status and execution detail
+- [Operations](operations.md): the queue, history, Schedules and Passwords tabs, with the Service Health of the Worker and Scheduler
+- [Schedules](schedules.md): automated, ordered sequences of operations
+- [Activities](activities.md): the record of every operation, with its status and outcome
+    - [Execution Items](activity-execution-items.md): what a run did to each object
+    - [Causality](causality.md): what caused a change, and what it went on to cause
+    - [Live Progress](activity-progress.md): following a running Run Profile step by step
 
 ## Security and Configuration
 
-Supporting objects that control access, trust, and runtime behaviour.
+The objects that control access, trust and how JIM runs.
 
-- [API Keys](api-keys.md) -- non-interactive credentials for scripts and automation
-- [Certificates](certificates.md) -- trusted CA certificates used by connectors
-- [Service Settings](service-settings.md) -- runtime configuration values
-- [Roles](roles.md) -- role definitions and role membership
-
-## How each page is structured
-
-Each configuration object page covers:
-
-- **What it is** and the key concepts you need to grasp before editing it
-- **How it fits in** to JIM's overall model
-- **Common workflows** at a concept level (the steps that matter, not click-by-click instructions)
-- **Where to do the work** in three forms: the JIM portal, PowerShell, and the REST API
-
-The portal is the right surface for most day-to-day administration. PowerShell is the right surface for repeatable automation, scripted onboarding, and integrations into existing operational tooling. The REST API is the right surface for purpose-built integrations and bespoke tooling.
+- [API Keys](api-keys.md): credentials for scripts and automation
+- [Certificates](certificates.md): the certificate authorities Connectors trust
+- [Service Settings](service-settings.md): settings that change how JIM runs
+- [Roles](roles.md): what each user can do, and who holds each role

@@ -6,17 +6,15 @@ using JIM.Models.Staging;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// A Connected System's Password Synchronisation configuration (#1119), as returned by the API.
-/// <para>
-/// A sub-resource of the Connected System rather than fields on <c>ConnectedSystemHeader</c>, for the same reason
-/// the initial-password configuration is a sub-resource of its rule: the header is a flat list projection whose
-/// query does not carry this navigation, so folding it in would report every system in a list as unconfigured.
-/// </para>
-/// <para>
-/// <b>Carries no password.</b> Nothing in this configuration holds one; queued passwords live in the Password
-/// Synchronisation queue, encrypted, and are never returned by any surface.
-/// </para>
+/// A Connected System's Password Synchronisation configuration. It carries no password: queued passwords are held
+/// encrypted in the Password Synchronisation queue, and nothing returns them.
 /// </summary>
+/// <remarks>
+/// #1119. A sub-resource of the Connected System rather than fields on <c>ConnectedSystemHeader</c>, for the same
+/// reason the initial-password configuration is a sub-resource of its rule: the header is a flat list projection
+/// whose query does not carry this navigation, so folding it in would report every system in a list as
+/// unconfigured.
+/// </remarks>
 public class ConnectedSystemPasswordSynchronisationResponse
 {
     /// <summary>

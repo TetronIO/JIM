@@ -1,0 +1,301 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Models.Utility
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One card in a Lineage object's After this run section (#1811). An outcome is the later run's recorded event, in the
+   shared event card a this-run card uses, with the run that recorded it and when above it the way this run's badge and
+   time sit above its own cards; a cohort's card pages its members on request, with a find box once there are more than
+   a handful. A confirmation folds to one line, since it changes nothing. A branch that stopped says where: waiting on
+   something that will happen by itself, needing someone to act, or settled. *@
+
+@switch (Consequence.Kind)
+{
+    case CausalityLineageConsequenceKind.Outcome:
+        @OutcomeCard(useTitle: true)
+        break;
+
+    case CausalityLineageConsequenceKind.Confirmation:
+        <div class="ln-fold">
+            <div class="ln-fold-head">
+                <button type="button" class="ln-fold-toggle" aria-expanded="@(_expanded ? "true" : "false")"
+                        @onclick="ToggleExpanded">@(_expanded ? "Hide" : "Show")</button>
+                <span class="ln-fold-text">@Consequence.DisplayTitle</span>
+            </div>
+            @if (_expanded)
+            {
+                @* The fold line already says it was confirmed; the card says what the import recorded. *@
+                @OutcomeCard(useTitle: false)
+            }
+        </div>
+        break;
+
+    case CausalityLineageConsequenceKind.Waiting:
+    case CausalityLineageConsequenceKind.NeedsAttention:
+    case CausalityLineageConsequenceKind.Settled:
+    case CausalityLineageConsequenceKind.FurtherThanShown:
+        <div class="@BranchEndClass">
+            <div class="ln-wait-title">
+                <MudIcon Icon="@BranchEndIcon" aria-hidden="true" />
+                <span>@Consequence.DisplayTitle</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Consequence.Text))
+            {
+                <div class="ln-wait-text">@Consequence.Text</div>
+            }
+            @if (Consequence.DueAt is { } dueAt)
+            {
+                var dueLocal = dueAt.ToLocalTime();
+                <div class="ln-wait-text">Due <span title="@dueLocal.ToFriendlyDate()">@dueLocal.ToRelativeTime()</span></div>
+            }
+            @if (Consequence.LinkHref != null)
+            {
+                <a class="ln-link" href="@Consequence.LinkHref">@Consequence.LinkText</a>
+            }
+        </div>
+        break;
+}
+
+@code {
+    /// <summary>
+    /// The prepared card.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityLineageConsequence Consequence { get; set; } = null!;
+
+    /// <summary>
+    /// The event whose attribute detail the panel's drawer shows, so an outcome card reads as selected while it does.
+    /// </summary>
+    [Parameter]
+    public CausalityEvent? SelectedEvent { get; set; }
+
+    /// <summary>
+    /// Raised when an outcome card with attribute detail is activated.
+    /// </summary>
+    [Parameter]
+    public EventCallback<CausalityEvent> OnSelect { get; set; }
+
+    /// <summary>
+    /// Pages a cohort's members by its key: page from 1, and the find box's text or null. Owned by the page, since the
+    /// panel has no data access of its own; without it a cohort shows the walk's first page only.
+    /// </summary>
+    [Parameter]
+    public Func<string, int, string?, Task<PagedResultSet<CausalConsequenceMember>?>>? LoadMembers { get; set; }
+
+    /// <summary>
+    /// The link policy the card's addresses were written with (#2100): a cohort's members, paged here on request, are
+    /// linked under the same policy, and every item link says what the policy says.
+    /// </summary>
+    [Parameter]
+    public ICausalityLinks Links { get; set; } = CausalityPageLinks.Instance;
+
+    /// <summary>
+    /// How many members a page holds: the walk's own first page is the first page here.
+    /// </summary>
+    private const int MemberPageSize = JIM.Application.Servers.ActivityServer.CausalConsequenceMemberPageSize;
+
+    /// <summary>
+    /// A cohort larger than this offers a find box when expanded.
+    /// </summary>
+    private const int FindBoxThreshold = 10;
+
+    private bool _expanded;
+    private bool _membersExpanded;
+    private bool _loadingMembers;
+    private List<CausalConsequenceMember>? _members;
+    private int _membersTotal;
+    private int _membersPage = 1;
+    private string? _search;
+
+    private RenderFragment OutcomeCard(bool useTitle) => __builder =>
+    {
+        <div class="ln-later">
+            @if (Consequence.RunLabel != null || Consequence.Occurred != null)
+            {
+                <div class="ln-when ln-later-when">
+                    @if (Consequence.RunLabel != null)
+                    {
+                        <span class="ln-runchip">@Consequence.RunLabel</span>
+                    }
+                    @if (Consequence.Occurred is { } occurred)
+                    {
+                        var occurredLocal = occurred.ToLocalTime();
+                        <span class="ln-time" title="@occurredLocal.ToFriendlyDate()">@occurredLocal.ToRelativeTime()</span>
+                    }
+                </div>
+            }
+            @if (Consequence.Event is { } consequenceEvent)
+            {
+                <CausalityEventCard Event="consequenceEvent"
+                                    Label="@(useTitle ? Consequence.Title : null)"
+                                    Note="@Consequence.Text"
+                                    HideSystemChip="true"
+                                    HideObjectGlyphs="true"
+                                    Operation="consequenceEvent.Operation"
+                                    Selected="ReferenceEquals(SelectedEvent, consequenceEvent)"
+                                    OnSelect="OnSelect">
+                    @if (Consequence.SettingLabel != null)
+                    {
+                        @* The setting an administrator would change to get a different result. *@
+                        <div class="ln-setting">
+                            <span class="ln-setting-label">@Consequence.SettingLabel</span>
+                            <span class="ln-setting-value">@Consequence.SettingValue</span>
+                            @if (Consequence.SettingText != null)
+                            {
+                                <div class="ln-setting-text">@Consequence.SettingText</div>
+                            }
+                        </div>
+                    }
+                </CausalityEventCard>
+            }
+            else
+            {
+                <div class="ln-card">
+                    <div class="ln-sentence">@Consequence.DisplayTitle</div>
+                    @if (!string.IsNullOrWhiteSpace(Consequence.Text))
+                    {
+                        <div class="ln-reason">@Consequence.Text</div>
+                    }
+                </div>
+            }
+            @if (Consequence.ActivityItemHref != null)
+            {
+                <div class="ln-actions">
+                    <a class="ln-link" href="@Consequence.ActivityItemHref">@Links.ItemLinkText</a>
+                </div>
+            }
+            @if (Consequence.Cohort is { } cohort)
+            {
+                @MembersContent(cohort)
+            }
+        </div>
+    };
+
+    private RenderFragment MembersContent(CausalConsequenceCohort cohort) => __builder =>
+    {
+        <button type="button" class="ln-members-toggle @(_membersExpanded ? "on" : null)"
+                aria-expanded="@(_membersExpanded ? "true" : "false")" @onclick="ToggleMembers">
+            @(_membersExpanded ? "Hide" : "Show") the @cohort.MemberCount.ToString("N0") @Consequence.MembersNoun
+        </button>
+        @if (_membersExpanded)
+        {
+            @if (cohort.MemberCount > FindBoxThreshold && LoadMembers != null)
+            {
+                <div class="ln-members-find">
+                    <SearchField Value="@_search" ValueChanged="SearchMembersAsync" DebounceInterval="500"
+                                 Placeholder="@($"Find {Consequence.MembersNoun}")" />
+                </div>
+            }
+            <ul class="ln-members">
+                @foreach (var member in _members ?? [])
+                {
+                    <li class="ln-member" @key="member">
+                        <span class="ln-member-name">@(string.IsNullOrWhiteSpace(member.DisplayName) ? "Unnamed object" : member.DisplayName)</span>
+                        @if (member.RunProfileExecutionItemId is { } itemId)
+                        {
+                            <a class="ln-link" href="@Links.ItemHref(itemId)">@Links.ItemLinkText</a>
+                        }
+                    </li>
+                }
+            </ul>
+            <div class="ln-members-foot">
+                <span class="ln-members-count">Showing @((_members?.Count ?? 0).ToString("N0")) of @_membersTotal.ToString("N0")</span>
+                @if (LoadMembers != null && (_members?.Count ?? 0) < _membersTotal)
+                {
+                    <button type="button" class="ln-members-more" disabled="@_loadingMembers" @onclick="LoadMoreMembersAsync">
+                        Show @Math.Min(MemberPageSize, _membersTotal - (_members?.Count ?? 0)).ToString("N0") more
+                    </button>
+                }
+            </div>
+        }
+    };
+
+    private string BranchEndClass => Consequence.Kind switch
+    {
+        CausalityLineageConsequenceKind.NeedsAttention => "ln-wait attention",
+        CausalityLineageConsequenceKind.Settled => "ln-settled",
+        CausalityLineageConsequenceKind.FurtherThanShown => "ln-further",
+        _ => "ln-wait"
+    };
+
+    private string BranchEndIcon => Consequence.Kind switch
+    {
+        CausalityLineageConsequenceKind.NeedsAttention => Icons.Material.Filled.ErrorOutline,
+        CausalityLineageConsequenceKind.Settled => Icons.Material.Filled.CheckCircleOutline,
+        CausalityLineageConsequenceKind.FurtherThanShown => Icons.Material.Filled.MoreHoriz,
+        _ => Icons.Material.Filled.HourglassTop
+    };
+
+    private void ToggleExpanded()
+    {
+        _expanded = !_expanded;
+    }
+
+    private void ToggleMembers()
+    {
+        _membersExpanded = !_membersExpanded;
+        if (_membersExpanded && _members == null && Consequence.Cohort is { } cohort)
+        {
+            // The walk's first page is already here, so opening the list costs no request.
+            _members = [.. cohort.Members];
+            _membersTotal = cohort.MemberCount;
+            _membersPage = 1;
+        }
+    }
+
+    private async Task LoadMoreMembersAsync()
+    {
+        if (LoadMembers == null || Consequence.Cohort is not { } cohort)
+            return;
+
+        _loadingMembers = true;
+        try
+        {
+            var page = await LoadMembers(cohort.CohortKey, _membersPage + 1, Normalise(_search));
+            if (page != null)
+            {
+                _members = [.. _members ?? [], .. page.Results];
+                _membersTotal = page.TotalResults;
+                _membersPage = page.CurrentPage;
+            }
+        }
+        finally
+        {
+            _loadingMembers = false;
+        }
+    }
+
+    private async Task SearchMembersAsync(string? search)
+    {
+        _search = search;
+        if (LoadMembers == null || Consequence.Cohort is not { } cohort)
+            return;
+
+        var normalised = Normalise(search);
+        if (normalised == null)
+        {
+            // Clearing the box goes back to the walk's own first page rather than asking again.
+            _members = [.. cohort.Members];
+            _membersTotal = cohort.MemberCount;
+            _membersPage = 1;
+            return;
+        }
+
+        _loadingMembers = true;
+        try
+        {
+            var page = await LoadMembers(cohort.CohortKey, 1, normalised);
+            _members = page != null ? [.. page.Results] : [];
+            _membersTotal = page?.TotalResults ?? 0;
+            _membersPage = 1;
+        }
+        finally
+        {
+            _loadingMembers = false;
+        }
+    }
+
+    private static string? Normalise(string? search) => string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+}

@@ -3,8 +3,10 @@
 
 using Bunit;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Preview;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -32,6 +34,11 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new UnusedJimApplicationFactory());
         Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
         Services.AddSingleton<IConfigurationChangePreviewStarter>(new UnusedPreviewStarter());
+        // The Add Matching Rule panel judges the rule being composed as the save would (#2052).
+        Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
+        // The test cases panel beneath the rules reads its cases when it renders (#2055 Phase 4); it is not the grid
+        // this fixture covers, and stubbing it keeps the guard below about the tab itself.
+        ComponentFactories.AddStub<JIM.Web.Pages.Admin.Components.ConfigurationTestCasesPanel>();
     }
 
     /// <summary>
@@ -78,6 +85,28 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
         var component = RenderMatchingTab(connectedSystem);
 
         Assert.That(component.FindComponents<VirtualisedSortHeader>(), Is.Empty);
+    }
+
+    [Test]
+    public void ObjectMatchingTab_ExpressionRule_ShowsItsExpressionAsTheMatchValue()
+    {
+        // #2052: an expression rule has no source attribute, and a Match Value column that showed only attributes
+        // would render it as an empty row.
+        var connectedSystem = ConnectedSystemWithMatchingRules();
+        var objectType = connectedSystem.ObjectTypes!.Single();
+        objectType.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            Id = 3,
+            Order = 2,
+            Sources = [new ObjectMatchingRuleSource { Order = 0, Expression = "\"E\" + Trim(cs[\"employeeId\"])" }],
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 3, Name = "Employee Number" }
+        });
+
+        var component = RenderMatchingTab(connectedSystem);
+
+        Assert.That(component.FindComponents<AttributeChip>().Select(c => c.Instance)
+                .Where(c => c.Kind == AttributeChipKind.Expression).Select(c => c.Expression),
+            Does.Contain("\"E\" + Trim(cs[\"employeeId\"])"));
     }
 
     private IRenderedComponent<ConnectedSystemObjectMatchingTab> RenderMatchingTab(ConnectedSystem connectedSystem)

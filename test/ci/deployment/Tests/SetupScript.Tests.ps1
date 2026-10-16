@@ -1448,6 +1448,99 @@ Describe 'setup.sh finish_upgrade' -Skip:$script:NoBash {
 
         Get-Content -Raw (Join-Path $dir '.env') | Should -Be 'new'
     }
+
+    It 'removes the files the upgrade added, and puts back those an earlier upgrade left (#2155)' {
+        $dir = New-SwappedInstallation
+        'new example' | Set-Content -NoNewline (Join-Path $dir '.env.example')
+        $aside = New-Item -ItemType Directory -Path (Join-Path $dir '.before-upgrade')
+        'earlier' | Set-Content -NoNewline (Join-Path $aside 'docker-compose.yml.previous')
+        'earlier example' | Set-Content -NoNewline (Join-Path $aside '.env.example')
+
+        $result = Invoke-SetupFunction 'finish_upgrade' "UPGRADE_INSTALL_DIR='$dir'`nUPGRADE_SWAPPED=true`nUPGRADE_ASIDE='$aside'"
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -Raw (Join-Path $dir 'docker-compose.yml.previous') | Should -Be 'earlier'
+        Get-Content -Raw (Join-Path $dir '.env.example') | Should -Be 'earlier example'
+        Join-Path $dir 'docker-compose.production.yml.previous' | Should -Not -Exist
+        Join-Path $dir '.env.previous' | Should -Not -Exist
+        $aside | Should -Not -Exist
+        Get-Content -Raw (Join-Path $dir '.env') | Should -Be 'previous'
+    }
+
+    It 'lets the earlier upgrade''s files go once JIM has been restarted on the new release' {
+        $dir = New-SwappedInstallation
+        $aside = New-Item -ItemType Directory -Path (Join-Path $dir '.before-upgrade')
+        'earlier' | Set-Content -NoNewline (Join-Path $aside '.env.previous')
+
+        Invoke-SetupFunction 'finish_upgrade' "UPGRADE_INSTALL_DIR='$dir'`nUPGRADE_SWAPPED=true`nUPGRADE_STARTED=true`nUPGRADE_ASIDE='$aside'" | Out-Null
+
+        Get-Content -Raw (Join-Path $dir '.env.previous') | Should -Be 'previous'
+        $aside | Should -Not -Exist
+    }
+}
+
+Describe 'setup.sh upgrade_installation, failing partway' -Skip:$script:NoBash {
+    BeforeAll {
+        # A Docker installation of 1.0.0 upgraded once before, so it has that upgrade's .previous files and template,
+        # and a 1.1.0 bundle whose images fail to load.
+        function New-FailingUpgradeArrangement {
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path (Join-Path $root 'jim'), (Join-Path $root 'bundle/compose') -Force | Out-Null
+            foreach ($name in 'docker-compose.yml', 'docker-compose.production.yml') {
+                'services: {} # 1.0.0' | Set-Content -NoNewline (Join-Path $root "jim/$name")
+                'services: {} # 0.9.0' | Set-Content -NoNewline (Join-Path $root "jim/$name.previous")
+                'services: {} # 1.1.0' | Set-Content -NoNewline (Join-Path $root "bundle/compose/$name")
+            }
+            "JIM_VERSION=1.0.0`nJIM_DB_HOSTNAME=db.example.test`n" | Set-Content -NoNewline (Join-Path $root 'jim/.env')
+            "JIM_VERSION=0.9.0`nJIM_DB_HOSTNAME=db.example.test`n" | Set-Content -NoNewline (Join-Path $root 'jim/.env.previous')
+            '# 1.0.0 template' | Set-Content -NoNewline (Join-Path $root 'jim/.env.example')
+            '# 1.1.0 template' | Set-Content -NoNewline (Join-Path $root 'bundle/compose/.env.example')
+            "1.1.0`n" | Set-Content -NoNewline (Join-Path $root 'bundle/VERSION')
+            [pscustomobject]@{
+                Installation = Join-Path $root 'jim'
+                Arrange = @"
+JIM_INSTALL_DIR='$root/jim'
+BUNDLE_DIR='$root/bundle'
+JIM_SETUP_BACKUP_CONFIRMED=true
+check_prerequisites() { :; }
+check_compose_edits() { :; }
+load_bundle_images() { fatal "Failed to load docker-images/jim-web.tar"; }
+docker() { return 0; }
+"@
+            }
+        }
+
+        function Get-InstallationContent {
+            param([string]$Path)
+            Get-ChildItem -LiteralPath $Path -Recurse -Force | Sort-Object FullName | ForEach-Object {
+                $name = [System.IO.Path]::GetRelativePath($Path, $_.FullName)
+                if ($_.PSIsContainer) { "$name/" } else { "$name $(Get-Content -Raw -LiteralPath $_.FullName)" }
+            }
+        }
+    }
+
+    It 'leaves the installation exactly as it was, an earlier upgrade''s .previous files included (#2155)' {
+        $arrangement = New-FailingUpgradeArrangement
+        $before = Get-InstallationContent $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM is as it was before the upgrade*'
+        Get-InstallationContent $arrangement.Installation | Should -Be $before
+    }
+
+    It 'refuses to start while files set aside by an earlier upgrade that stopped are still there' {
+        $arrangement = New-FailingUpgradeArrangement
+        New-Item -ItemType Directory -Path (Join-Path $arrangement.Installation '.before-upgrade') | Out-Null
+        $before = Get-InstallationContent $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*.before-upgrade holds*'
+        Get-InstallationContent $arrangement.Installation | Should -Be $before
+    }
 }
 
 Describe 'setup.sh main, stopping before it starts JIM' -Skip:$script:NoBash {

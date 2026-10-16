@@ -619,12 +619,14 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             Delimiter = delimiter,
             // Throw an exception when a row has fewer fields than the header row
-            MissingFieldFound = null
+            MissingFieldFound = null,
+            // A column header names its attribute ignoring case (#2051): "employeeid" is the column for EmployeeId.
+            PrepareHeaderForMatch = args => IdentifierKey.For(args.Header, caseExact: false)
         };
         logger.Debug($"GetCsvReader: Attempting to read '{filePath}'.");
         var reader = new StreamReader(filePath);
         var csv = new CsvReader(reader, config);
-        return new FileConnectorReader(reader, csv);
+        return new FileConnectorReader(reader, csv, Path.GetFileName(filePath));
     }
 
     /// <summary>

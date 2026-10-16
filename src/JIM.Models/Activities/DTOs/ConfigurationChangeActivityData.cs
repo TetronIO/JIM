@@ -25,6 +25,9 @@ public class ConfigurationChangeActivityData
 
     public string? Reason { get; set; }
 
+    /// <summary>What the save gate did with the change (#2055 Phase 4b), or null.</summary>
+    public string? ConfigurationTestGateNote { get; set; }
+
     /// <summary>The stored configuration snapshot document (jsonb), deserialised by the application layer.</summary>
     public string? SnapshotJson { get; set; }
 }

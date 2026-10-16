@@ -33,7 +33,8 @@ public class ObjectMatchingRuleSource
 
     /// <summary>
     /// If populated, denotes that an expression should be used to determine the match value.
-    /// Expressions use DynamicExpresso syntax and can reference mv["AttributeName"] and cs["AttributeName"].
+    /// Expressions use DynamicExpresso syntax and read the Connected System Object only, through cs["AttributeName"]:
+    /// the Metaverse Object is what the rule is looking for, so there is no mv["AttributeName"] to read.
     /// </summary>
     public string? Expression { get; set; }
 
@@ -43,7 +44,7 @@ public class ObjectMatchingRuleSource
     /// </summary>
     public bool IsValid()
     {
-        var hasAttribute = ConnectedSystemAttribute != null;
+        var hasAttribute = ConnectedSystemAttributeId.HasValue || ConnectedSystemAttribute != null;
         var hasExpression = !string.IsNullOrWhiteSpace(Expression);
 
         // Must have exactly one source type

@@ -22,7 +22,7 @@ internal static class PendingExportBulkColumns
         "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
         "LastErrorMessage", "LastErrorStackTrace", "SourceMetaverseObjectId",
         "HasUnresolvedReferences", "CreatedAt", "ProvisioningSyncRuleId",
-        "QueuedByRunProfileExecutionItemId"
+        "QueuedByRunProfileExecutionItemId", "StagedByRunProfileExecutionItemIds"
     ];
 
     /// <summary>
@@ -52,14 +52,15 @@ internal static class PendingExportBulkColumns
     /// Columns deliberately excluded from every Pending Export update list: the identity, source
     /// and creation timestamp are immutable once staged. ProvisioningSyncRuleId joins them because
     /// it records which rule's provisioning decision produced this export, which is a fact about
-    /// how it came to exist and cannot change afterwards, and QueuedByRunProfileExecutionItemId for
-    /// exactly the same reason: it names the synchronisation that staged the export, which no later
-    /// retry or reconciliation can change.
+    /// how it came to exist and cannot change afterwards, and QueuedByRunProfileExecutionItemId and
+    /// StagedByRunProfileExecutionItemIds for exactly the same reason: they name the synchronisations that
+    /// staged the export, which no retry or reconciliation can change. Only another staging run adds to
+    /// them, through SetPendingExportQueueingItemsAsync's own targeted statement.
     /// </summary>
     internal static readonly string[] PendingExportsUpdateExclusions =
     [
         "Id", "ConnectedSystemId", "SourceMetaverseObjectId", "CreatedAt", "ProvisioningSyncRuleId",
-        "QueuedByRunProfileExecutionItemId"
+        "QueuedByRunProfileExecutionItemId", "StagedByRunProfileExecutionItemIds"
     ];
 
     /// <summary>
@@ -70,28 +71,33 @@ internal static class PendingExportBulkColumns
         "Id", "PendingExportId", "AttributeId", "StringValue", "DateTimeValue",
         "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
         "UnresolvedReferenceValue", "ChangeType", "Status", "ExportAttemptCount",
-        "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId", "SyncRuleId", "SyncRuleName"
+        "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId", "SyncRuleId", "SyncRuleName",
+        "AwaitsInitialPassword"
     ];
 
     /// <summary>
     /// Update columns for the confirming-import bulk update (SyncRepository.CsOperations.cs):
-    /// the export confirmation tracking fields.
+    /// the export confirmation tracking fields. AwaitsInitialPassword is among them because the
+    /// confirming import clears it when it releases a change held until an Initial Password is
+    /// delivered (#2039).
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesConfirmationUpdate =
     [
-        "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt"
+        "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt", "AwaitsInitialPassword"
     ];
 
     /// <summary>
     /// Update columns for the export-result bulk update (ConnectedSystemRepository): confirmation
     /// tracking plus the reference-resolution rewrites (a resolved reference moves from
     /// UnresolvedReferenceValue into StringValue before export, and the resolved target CSO is
-    /// stamped onto ResolvedReferenceCsoId, #1079).
+    /// stamped onto ResolvedReferenceCsoId, #1079). AwaitsInitialPassword is set here when the
+    /// Connector reports it wrote the attribute with an interim value until an Initial Password is
+    /// delivered (#2039).
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesExportResultUpdate =
     [
         "Status", "ExportAttemptCount", "LastExportedAt", "StringValue",
-        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId"
+        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId", "AwaitsInitialPassword"
     ];
 
     /// <summary>

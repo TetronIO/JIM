@@ -158,6 +158,37 @@ Describe 'Set-JIMScopingCriterion -DecimalValue' {
     }
 }
 
+Describe 'Set-JIMScopingCriterion -CaseSensitive' {
+
+    # The update keeps a criterion's stored case sensitivity when the request leaves it out (#2051), so the cmdlet
+    # must only send it when -CaseSensitive is bound: an omitted parameter must not become an explicit value.
+    It 'Omits caseSensitive from the update body when -CaseSensitive is not bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'Sales' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and -not $Body.ContainsKey('caseSensitive')
+            }
+        }
+    }
+
+    It 'Sends caseSensitive in the update body when -CaseSensitive is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'Sales' -CaseSensitive $false -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.ContainsKey('caseSensitive') -and $Body.caseSensitive -eq $false
+            }
+        }
+    }
+}
+
 Describe 'Set-JIMScopingCriterion -ConnectedSystemAttributeName' {
 
     It 'Resolves the attribute name to its id via the object-types list endpoint and sends it in the update body' {
@@ -186,6 +217,188 @@ Describe 'Set-JIMScopingCriterion -ConnectedSystemAttributeName' {
                 $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/scoping-criteria/5/criteria/3' -and
                 $Body.connectedSystemAttributeId -eq 100
             }
+        }
+    }
+}
+
+Describe 'New-JIMScopingCriterion presence and pattern operators' {
+
+    It 'Sends HasNoValue with no value when no value parameter is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -MetaverseAttributeId 15 -ComparisonType HasNoValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.comparisonType -eq 'HasNoValue' -and
+                -not $Body.ContainsKey('stringValue') -and
+                -not $Body.ContainsKey('intValue')
+            }
+        }
+    }
+
+    It 'Sends the pattern as the string value for MatchesPattern' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedSystemAttributeId 40 -ComparisonType MatchesPattern -StringValue '^[a-z.]+@example\.org$' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.comparisonType -eq 'MatchesPattern' -and
+                $Body.stringValue -eq '^[a-z.]+@example\.org$'
+            }
+        }
+    }
+
+    It 'Sends HasValue on update' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType HasValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.comparisonType -eq 'HasValue'
+            }
+        }
+    }
+}
+
+
+Describe 'New-JIMScopingCriterion -Expression' {
+
+    It 'Sends the expression and its Compare As type, and no attribute, in the create body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -Expression 'Lower(Trim(cs["department"]))' -CompareAs Text -ComparisonType StartsWith -StringValue 'fin' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.expression -eq 'Lower(Trim(cs["department"]))' -and
+                $Body.compareAs -eq 'Text' -and
+                -not $Body.ContainsKey('metaverseAttributeId') -and
+                -not $Body.ContainsKey('connectedSystemAttributeId')
+            }
+        }
+    }
+
+    It 'Requires -CompareAs with -Expression' {
+        $command = Get-Command New-JIMScopingCriterion
+        $compareAs = $command.Parameters['CompareAs'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ByExpression' }
+
+        $compareAs.Mandatory | Should -BeTrue
+    }
+
+    It 'Warns with the notice the API returns' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999; notice = 'every reconciliation evaluates every object' } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -Expression 'ParseDate(cs["start"], "yyyy-MM-dd")' -CompareAs DateTime -ComparisonType GreaterThan -ValueMode Relative -RelativeCount 30 -RelativeUnit Days -RelativeDirection Ago -Confirm:$false -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+            $warnings | Should -HaveCount 1
+            "$($warnings[0])" | Should -BeLike '*every reconciliation evaluates every object*'
+        }
+    }
+}
+
+Describe 'Set-JIMScopingCriterion -Expression' {
+
+    It 'Sends the expression and its Compare As type in the update body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -Expression 'Upper(mv["Department"])' -CompareAs Text -ComparisonType Equals -StringValue 'FINANCE' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.expression -eq 'Upper(mv["Department"])' -and $Body.compareAs -eq 'Text'
+            }
+        }
+    }
+}
+
+Describe 'Test-JIMScope' {
+    It 'Posts the sample values and as-of time to the scoping criteria test endpoint' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'InScope' }
+            }
+
+            Test-JIMScope -SyncRuleId 12 -Attributes @{ department = 'Finance' } -AsOf '2027-01-31' | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/12/scoping-criteria/test'
+            $script:capturedBody.attributes.department | Should -Be 'Finance'
+            $script:capturedBody.asOf | Should -Be '2027-01-31T00:00:00'
+            $script:capturedBody.ContainsKey('connectedSystemObjectId') | Should -BeFalse
+        }
+    }
+
+    It 'Posts the object to load values from' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'OutOfScope' }
+            }
+
+            Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' | Out-Null
+
+            $script:capturedBody.connectedSystemObjectId | Should -Be ([guid]'0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01')
+            $script:capturedBody.ContainsKey('asOf') | Should -BeFalse
+        }
+    }
+
+    It 'Takes the Synchronisation Rule from the pipeline' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                [PSCustomObject]@{ isValid = $true; outcome = 'InScope' }
+            }
+
+            [PSCustomObject]@{ Id = 15; Name = 'Finance App Users' } | Test-JIMScope -MetaverseObjectId '6f9619ff-8b86-d011-b42d-00c04fc964ff' | Out-Null
+
+            $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/15/scoping-criteria/test'
+        }
+    }
+
+    It 'Refuses a Connected System Object and a Metaverse Object together' {
+        { Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId ([guid]::NewGuid()) -MetaverseObjectId ([guid]::NewGuid()) } |
+            Should -Throw -ErrorId 'AmbiguousParameterSet,Test-JIMScope'
+    }
+
+    It 'Returns the API object, so the explanation and next change reach the caller' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    IsValid     = $true
+                    Outcome     = 'InScope'
+                    Explanation = [PSCustomObject]@{ Criteria = @([PSCustomObject]@{ Met = $true }) }
+                    NextChange  = [PSCustomObject]@{ At = '2026-12-01T00:00:00Z'; Outcome = 'OutOfScope' }
+                }
+            }
+
+            $result = Test-JIMScope -SyncRuleId 12
+
+            $result.Outcome | Should -Be 'InScope'
+            $result.NextChange.Outcome | Should -Be 'OutOfScope'
+            $result.Explanation.Criteria[0].Met | Should -BeTrue
         }
     }
 }

@@ -17,6 +17,9 @@
 <MudText Typo="Typo.h3">
     <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />
     <span>Schedule Execution:</span> <span class="mud-primary-text">@(_detail?.Execution.ScheduleName ?? "Not Found")</span>
+    <PageInfo Title="Schedule Execution" DocsPage="configuration/schedules.md#the-schedule-execution-view">
+        One run of a Schedule: each of its steps, the Activity each step started, and how the run ended.
+    </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
@@ -105,27 +108,10 @@
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText><br />
-                <div class="d-flex align-center">
-                    @if (_detail.Execution.InitiatedByType == ActivityInitiatorType.System)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
-                        <span>@(_detail.Execution.InitiatedByName ?? "Scheduler")</span>
-                    }
-                    else
-                    {
-                        @if (_detail.Execution.InitiatedByType == ActivityInitiatorType.User)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
-                        }
-                        else if (_detail.Execution.InitiatedByType == ActivityInitiatorType.ApiKey)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
-                        }
-                        <AuditPrincipalLink PrincipalType="_detail.Execution.InitiatedByType"
-                                            PrincipalId="_detail.Execution.InitiatedById"
-                                            PrincipalName="@_detail.Execution.InitiatedByName" />
-                    }
-                </div>
+                @* The Schedule itself is this page's subject, so an execution its trigger started reads as System. *@
+                <AuditPrincipalLink PrincipalType="_detail.Execution.InitiatedByType"
+                                    PrincipalId="_detail.Execution.InitiatedById"
+                                    PrincipalName="@_detail.Execution.InitiatedByName" />
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -304,7 +290,7 @@
 else if (_notFound)
 {
     <MudAlert Severity="Severity.Warning" Class="mt-2">Schedule Execution not found.</MudAlert>
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack"
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="/admin/operations?t=schedules" Class="mt-4">
         Back to Operations
     </MudButton>

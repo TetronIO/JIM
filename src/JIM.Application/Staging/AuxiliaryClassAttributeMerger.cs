@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.Application.Staging;
@@ -141,13 +142,20 @@ internal static class AuxiliaryClassAttributeMerger
                 {
                     Name = attribute.Name,
                     Description = attribute.Description,
-                    AttributePlurality = attribute.AttributePlurality,
+                    // A Boolean holds one value wherever it is merged (#2153).
+                    AttributePlurality = AttributeDataTypeCapabilities.Constrain(attribute.Type, attribute.AttributePlurality),
                     Type = attribute.Type,
                     Writability = attribute.Writability,
 
                     // The auxiliary class's own requirement travels with the attribute: an entry that carries the
                     // class must satisfy its MUSTs, whichever structural class it is merged onto.
                     Required = attribute.Required,
+
+                    // So does its case-exact declaration: the values compare the same way on any class (#2051).
+                    CaseExact = attribute.CaseExact,
+
+                    // And whether the Connector reported it as operational.
+                    IsOperational = attribute.IsOperational,
 
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name

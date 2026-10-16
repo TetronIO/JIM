@@ -594,6 +594,27 @@ Describe 'Invoke-JIMExampleDataTemplate' {
                 }
             }
         }
+
+        It 'Reports the Activity''s final status with -PassThru once it has waited, not Queued' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{
+                            activityId = '11111111-1111-1111-1111-111111111111'
+                            taskId = '22222222-2222-2222-2222-222222222222'
+                            message = 'Queued'
+                        }
+                    }
+                    [PSCustomObject]@{ status = 'CompleteWithWarning'; objectsProcessed = 10; objectsToProcess = 10; message = '' }
+                }
+
+                $result = Invoke-JIMExampleDataTemplate -Id 1 -Wait -Timeout 30 -PassThru -Confirm:$false
+
+                $result.Status | Should -Be 'CompleteWithWarning'
+                $result.ActivityId | Should -Be '11111111-1111-1111-1111-111111111111'
+            }
+        }
     }
 
     Context 'Help Documentation' {
@@ -753,6 +774,17 @@ Describe 'New-JIMExampleDataTemplate' {
                 {
                     New-JIMExampleDataTemplate -Name 'Demo Users' -ObjectType @{ MetaverseObjectType = 1; ObjectsToCraete = 5 } -Confirm:$false -ErrorAction Stop
                 } | Should -Throw '*ObjectsToCraete*'
+            }
+        }
+
+        It 'Throws on a ConnectedSystemObjectTypeAttributeId key in an attribute hashtable, which would generate nothing' {
+            InModuleScope JIM {
+                {
+                    New-JIMExampleDataTemplate -Name 'Demo Users' -ObjectType @{
+                        MetaverseObjectType = 1
+                        Attributes          = @(@{ ConnectedSystemObjectTypeAttributeId = 55; Pattern = '{0}' })
+                    } -Confirm:$false -ErrorAction Stop
+                } | Should -Throw '*ConnectedSystemObjectTypeAttributeId*'
             }
         }
 
@@ -1213,8 +1245,6 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
                                     id                                   = 700
                                     metaverseAttributeId                 = 10
                                     metaverseAttributeName               = 'Firstname'
-                                    connectedSystemObjectTypeAttributeId = $null
-                                    connectedSystemObjectTypeAttributeName = $null
                                     populatedValuesPercentage            = 90
                                     boolTrueDistribution                 = $null
                                     boolShouldBeRandom                   = $null
@@ -1353,6 +1383,32 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
             }
         }
 
+        It 'Sends a catalogue operator name for the attribute dependency' {
+            InModuleScope JIM {
+                Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'GreaterThanOrEquals'; StringValue = '30' } -Confirm:$false
+
+                $script:capturedBody.objectTypes[0].attributes[1].attributeDependency.comparisonType | Should -BeExactly 'GreaterThanOrEquals'
+            }
+        }
+
+        It 'Sends HasNoValue with no string value' {
+            InModuleScope JIM {
+                Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'HasNoValue' } -Confirm:$false
+
+                $dependency = $script:capturedBody.objectTypes[0].attributes[1].attributeDependency
+                $dependency.comparisonType | Should -BeExactly 'HasNoValue'
+                $dependency.Contains('stringValue') | Should -BeFalse
+            }
+        }
+
+        It 'Throws on a retired operator name, naming the one that replaced it' {
+            InModuleScope JIM {
+                {
+                    Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -Pattern 'x' -AttributeDependency @{ MetaverseAttribute = 11; ComparisonType = 'GreaterThanOrEqual'; StringValue = '30' } -Confirm:$false -ErrorAction Stop
+                } | Should -Throw '*GreaterThanOrEquals*'
+            }
+        }
+
         It 'Throws on an invalid attribute dependency comparison type' {
             InModuleScope JIM {
                 {
@@ -1361,21 +1417,15 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
             }
         }
 
-        It 'Errors when both -MetaverseAttribute and -ConnectedSystemObjectTypeAttributeId are supplied' {
-            InModuleScope JIM {
-                {
-                    Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 12 -ConnectedSystemObjectTypeAttributeId 55 -Pattern 'x' -Confirm:$false -ErrorAction Stop
-                } | Should -Throw '*one of*'
-
-                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PUT' }
-            }
+        It 'Has no -ConnectedSystemObjectTypeAttributeId parameter, since generation produces Metaverse Attribute values only' {
+            (Get-Command Add-JIMExampleDataTemplateAttribute).Parameters.Keys | Should -Not -Contain 'ConnectedSystemObjectTypeAttributeId'
         }
 
-        It 'Errors when neither -MetaverseAttribute nor -ConnectedSystemObjectTypeAttributeId is supplied' {
+        It 'Errors when -MetaverseAttribute is not supplied' {
             InModuleScope JIM {
                 {
                     Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -Pattern 'x' -Confirm:$false -ErrorAction Stop
-                } | Should -Throw '*one of*'
+                } | Should -Throw '*-MetaverseAttribute*'
 
                 Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PUT' }
             }
@@ -1443,6 +1493,111 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
 
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Test-JIMExampleDataExpression' {
+    It 'Posts the template attribute and samples to the template''s test-expression endpoint' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedEndpoint = $null
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedEndpoint = $Endpoint
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Value'; value = 'ada.lovelace' }
+            }
+
+            $result = Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Attributes @{ 'First Name' = 'Ada'; 'Last Name' = 'Lovelace' }
+
+            $script:capturedEndpoint | Should -Be '/api/v1/example-data/templates/4/test-expression'
+            $script:capturedBody.templateAttributeId | Should -Be 13
+            $script:capturedBody.attributes.'First Name' | Should -Be 'Ada'
+            $script:capturedBody.ContainsKey('expression') | Should -BeFalse
+            $result.Value | Should -Be 'ada.lovelace'
+        }
+    }
+
+    It 'Posts an expression to test in place of the saved one' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ isValid = $true; outcome = 'Value'; value = 'ADA' }
+            }
+
+            Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Expression 'Upper(mv["First Name"])' -Attributes @{ 'First Name' = 'Ada' } | Out-Null
+
+            $script:capturedBody.expression | Should -Be 'Upper(mv["First Name"])'
+        }
+    }
+
+    It 'Requires the template and the template attribute' {
+        { Test-JIMExampleDataExpression -TemplateId 4 -ErrorAction Stop } | Should -Throw
+    }
+}
+
+Describe 'Data Generation Template save warnings (#2055 Phase 3)' {
+
+    BeforeEach {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:saveWarning = "The expression for 'Account Name' on 'User' reads mv[""Nickname""], which this template does not generate on 'User', so it never has a value."
+            $script:warnedTemplate = [PSCustomObject]@{
+                id          = 7
+                name        = 'Demo Users'
+                builtIn     = $false
+                objectTypes = @(
+                    [PSCustomObject]@{
+                        id = 70; metaverseObjectTypeId = 1; metaverseObjectTypeName = 'User'; objectsToCreate = 10
+                        templateAttributes = @()
+                    }
+                )
+                warnings    = @($script:saveWarning)
+            }
+
+            Mock Invoke-JIMApi {
+                if ($Method -in 'POST', 'PUT') { return $script:warnedTemplate }
+                switch -Wildcard ($Endpoint) {
+                    '/api/v1/example-data/templates/*' { return $script:warnedTemplate }
+                    '/api/v1/metaverse/attributes*' {
+                        return [PSCustomObject]@{ items = @([PSCustomObject]@{ id = 12; name = 'Account Name' }) }
+                    }
+                }
+                return $null
+            }
+        }
+    }
+
+    It 'New-JIMExampleDataTemplate writes each save warning' {
+        InModuleScope JIM {
+            New-JIMExampleDataTemplate -Name 'Demo Users' -ObjectType @{ MetaverseObjectType = 1 } -Confirm:$false `
+                -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
+        }
+    }
+
+    It 'Set-JIMExampleDataTemplate writes each save warning' {
+        InModuleScope JIM {
+            Set-JIMExampleDataTemplate -Id 7 -ObjectType @{ MetaverseObjectType = 1; ObjectsToCreate = 10 } -Confirm:$false `
+                -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
+        }
+    }
+
+    It 'Add-JIMExampleDataTemplateAttribute writes each save warning' {
+        InModuleScope JIM {
+            Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType 'User' -MetaverseAttribute 'Account Name' -Expression 'Lower(mv["Nickname"])' `
+                -Confirm:$false -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+            $saveWarnings | Should -HaveCount 1
+            $saveWarnings[0].Message | Should -Be $script:saveWarning
         }
     }
 }

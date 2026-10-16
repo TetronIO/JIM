@@ -152,6 +152,45 @@ public class ExportExecutionCausalEdgeTests
             Is.EqualTo(CausalEdgeType.PendingExportQueueingCausedExportExecution));
     }
 
+    /// <summary>
+    /// An export carrying changes from several synchronisations was caused by each of them (#2100). One edge per
+    /// run, so every one of them reaches this export walking down, and the export's own chain names them all.
+    /// </summary>
+    [Test]
+    public void RecordQueueingCause_ExportStagedBySeveralRuns_WritesAnEdgeNamingEachOfThem()
+    {
+        var earlierRunId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var executionItem = new ActivityRunProfileExecutionItem { ObjectChangeType = ObjectChangeType.Exported };
+        var exportItem = ExportItem();
+        exportItem.StagedByRunProfileExecutionItemIds = [earlierRunId, QueueingItemId];
+
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, effectOutcome: null, TargetSystem());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(executionItem.CausalEdges.Select(e => e.CauseRunProfileExecutionItemId),
+                Is.EqualTo(new Guid?[] { earlierRunId, QueueingItemId }));
+            Assert.That(executionItem.CausalEdges.Select(e => e.CausePendingExportId), Is.All.EqualTo(PendingExportId));
+            Assert.That(executionItem.CausalEdges.Select(e => e.EdgeType),
+                Is.All.EqualTo(CausalEdgeType.PendingExportQueueingCausedExportExecution));
+        }
+    }
+
+    /// <summary>
+    /// An export queued before the stagers were listed names only its latest. That one is still its cause.
+    /// </summary>
+    [Test]
+    public void RecordQueueingCause_ExportStagedBeforeTheListWasRecorded_NamesItsLatestStager()
+    {
+        var executionItem = new ActivityRunProfileExecutionItem { ObjectChangeType = ObjectChangeType.Exported };
+        var exportItem = ExportItem();
+        exportItem.StagedByRunProfileExecutionItemIds = [];
+
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, effectOutcome: null, TargetSystem());
+
+        Assert.That(executionItem.CausalEdges.Select(e => e.CauseRunProfileExecutionItemId), Is.EqualTo(new Guid?[] { QueueingItemId }));
+    }
+
     private static ProcessedExportItem ExportItem() => new()
     {
         ChangeType = PendingExportChangeType.Update,

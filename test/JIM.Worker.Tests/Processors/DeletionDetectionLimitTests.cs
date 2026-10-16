@@ -265,7 +265,7 @@ public class DeletionDetectionLimitTests
                 "resolve-then-apply behaviour here, because that behaviour is what these tests pin.");
 
         var toBeUpdated = new List<ConnectedSystemObject>();
-        var task = (Task)method.Invoke(processor, [new List<ExternalIdPair>(), toBeUpdated, null, existingCsoCount])!;
+        var task = (Task)method.Invoke(processor, [new List<ExternalIdPair>(), new List<ConnectedSystemObject>(), toBeUpdated, null, existingCsoCount])!;
         await task;
 
         const string fieldName = "_activityRunProfileExecutionItems";

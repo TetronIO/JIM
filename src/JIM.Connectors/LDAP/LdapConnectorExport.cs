@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -22,6 +23,11 @@ internal class LdapConnectorExport
     private readonly int _modifyBatchSize;
     private readonly LdapDirectoryType _directoryType;
     private readonly string _placeholderMemberDn;
+    private readonly bool _directoryAdvertisesPermissiveModify;
+
+    // Value changes found already in the state an export asked for, across this export run. Written from concurrent
+    // exports on the async path, so only through Interlocked.
+    private int _valuesAlreadyInDesiredState;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -81,6 +87,14 @@ internal class LdapConnectorExport
     /// </summary>
     internal IReadOnlyList<string> CreatedContainerExternalIds => _createdContainerExternalIds.AsReadOnly();
 
+    /// <summary>
+    /// How many value changes this export run found already in the state their export asked for (a value to add that
+    /// was already present, one to remove that was already absent), counted where the directory refused a modify for
+    /// that reason and the connector applied it in parts instead. A directory that honours Permissive Modify
+    /// accepts such changes without saying so, and they are not counted.
+    /// </summary>
+    internal int ValuesAlreadyInDesiredState => Volatile.Read(ref _valuesAlreadyInDesiredState);
+
     internal LdapConnectorExport(
         ILdapOperationExecutor executor,
         IList<ConnectedSystemSettingValue> settings,
@@ -88,7 +102,8 @@ internal class LdapConnectorExport
         int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE,
         LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory,
-        string? placeholderMemberDn = null)
+        string? placeholderMemberDn = null,
+        bool directoryAdvertisesPermissiveModify = false)
     {
         _executor = executor;
         _settings = settings;
@@ -97,6 +112,7 @@ internal class LdapConnectorExport
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
         _modifyBatchSize = Math.Clamp(modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
         _placeholderMemberDn = placeholderMemberDn ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
+        _directoryAdvertisesPermissiveModify = directoryAdvertisesPermissiveModify;
 
         if (exportConcurrency > LdapConnectorConstants.MAX_EXPORT_CONCURRENCY)
         {
@@ -113,6 +129,15 @@ internal class LdapConnectorExport
 
     #region Sequential execution (sync path)
 
+    /// <summary>
+    /// Executes Pending Exports one after another, returning a result for every one of them.
+    /// </summary>
+    /// <remarks>
+    /// A batch is never abandoned partway, cancelled or not. JIM records a batch's results only once the Connector
+    /// returns them, so a batch stopped after some of its exports had been written would lose those results: an object
+    /// created without its External ID being recorded, created again by the next run and refused as already existing.
+    /// JIM observes a cancelled run between batches instead.
+    /// </remarks>
     internal List<ConnectedSystemExportResult> Execute(IList<PendingExport> pendingExports)
     {
         _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} Pending Exports", pendingExports.Count);
@@ -139,11 +164,12 @@ internal class LdapConnectorExport
                 // Return failure result - ExportExecutionServer is responsible for updating
                 // ErrorCount, Status, and retry timing. The connector should
                 // only report success or failure via ConnectedSystemExportResult.
-                results.Add(FailureFor(ex));
+                results.Add(FailureFor(ex, pendingExport));
             }
         }
 
         _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} Pending Exports", pendingExports.Count);
+        LogValuesAlreadyInDesiredStateSummary("LdapConnectorExport.Execute");
         return results;
     }
 
@@ -289,7 +315,7 @@ internal class LdapConnectorExport
         // Track whether we injected a placeholder so we can provide a specific error if it's rejected
         var hasPlaceholder = RequiresPlaceholderMember(pendingExport);
 
-        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         try
         {
@@ -305,13 +331,9 @@ internal class LdapConnectorExport
         }
 
         // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         foreach (var modifyRequest in overflowModifyRequests)
-        {
-            var modifyResponse = (ModifyResponse)_executor.SendRequest(modifyRequest);
-            if (modifyResponse.ResultCode != ResultCode.Success)
-                throw new LdapException((int)modifyResponse.ResultCode,
-                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
-        }
+            SendModify(modifyRequest, dn, singleValuedAttributes);
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -321,11 +343,11 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn);
+            return CreateSucceeded(externalId, dn, attributesAwaitingInitialPassword, addRequest);
         }
 
         // External ID not available, return success without it
-        return ConnectedSystemExportResult.Succeeded(null, dn);
+        return CreateSucceeded(null, dn, attributesAwaitingInitialPassword, addRequest);
     }
 
     /// <summary>
@@ -380,6 +402,11 @@ internal class LdapConnectorExport
             workingDn = ProcessRename(currentDn, newDn);
             wasRenamed = true;
         }
+        else if (GetCaseOnlyRenameDn(pendingExport, currentDn, newDn) is { } caseOnlyRenameDn)
+        {
+            workingDn = ProcessRename(currentDn, caseOnlyRenameDn);
+            wasRenamed = true;
+        }
 
         // Track whether placeholder modifications were injected for error handling
         var hasPlaceholderModifications = RequiresPlaceholderMember(pendingExport);
@@ -393,7 +420,8 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
-        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
+        IReadOnlyList<string>? attributesAwaitingInitialPassword = null;
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -405,8 +433,14 @@ internal class LdapConnectorExport
 
             try
             {
-                var response = (ModifyResponse)_executor.SendRequest(request);
-                lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+                SendModify(request, workingDn, singleValuedAttributes);
+            }
+            catch (DirectoryOperationException ex) when (CanWithholdEnablementAfterRefusal(pendingExport, request, ex))
+            {
+                // A refusal of the resend propagates and fails the export exactly as this refusal would have.
+                var (withheld, attributeName) = WithEnablementWithheld(request, workingDn);
+                SendModify(withheld, workingDn, singleValuedAttributes);
+                attributesAwaitingInitialPassword = [attributeName];
             }
             catch (DirectoryOperationException ex) when (hasPlaceholderModifications && IsPlaceholderConstraintViolation(ex))
             {
@@ -414,7 +448,7 @@ internal class LdapConnectorExport
             }
         }
 
-        return lastResult;
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests, attributesAwaitingInitialPassword);
     }
 
     /// <summary>
@@ -453,16 +487,14 @@ internal class LdapConnectorExport
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
-        if (deleteBehaviour == LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            ProcessDisable(pendingExport, dn);
-        }
-        else
+        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
         {
             ProcessHardDelete(dn);
+            return ConnectedSystemExportResult.Succeeded();
         }
 
-        return ConnectedSystemExportResult.Succeeded();
+        var disabledThrough = ProcessDisable(pendingExport, dn);
+        return DisableSucceeded(disabledThrough);
     }
 
     private void ProcessHardDelete(string dn)
@@ -495,7 +527,10 @@ internal class LdapConnectorExport
         }
     }
 
-    private void ProcessDisable(PendingExport pendingExport, string dn)
+    /// <summary>
+    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// </summary>
+    private string ProcessDisable(PendingExport pendingExport, string dn)
     {
         _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -523,6 +558,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisable: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
+        return disableAttribute;
     }
 
     private void DisableUsingUserAccountControl(string dn)
@@ -635,11 +671,21 @@ internal class LdapConnectorExport
     #region Concurrent execution (async path)
 
     /// <summary>
-    /// Executes Pending Exports asynchronously with configurable concurrency.
+    /// Executes Pending Exports, returning a result for every one of them in the order they were given.
     /// When concurrency is 1, delegates to the sequential <see cref="Execute"/> method.
     /// When concurrency > 1, processes multiple exports concurrently using SemaphoreSlim
     /// while maintaining positional ordering of results.
     /// </summary>
+    /// <remarks>
+    /// As on the sequential path, a batch is never abandoned partway, cancelled or not: every export scheduled runs and
+    /// returns its result, those still waiting for a slot included. JIM records a batch's results only once the
+    /// Connector returns them, so abandoning the waiting exports would return no results at all, losing those of the
+    /// exports already written (a created object's External ID among them), and would leave the batch's Pending
+    /// Exports Executing until the Worker restarts. JIM observes a cancelled run between batches instead.
+    /// </remarks>
+    /// <param name="pendingExports">The batch of Pending Exports to execute.</param>
+    /// <param name="cancellationToken">The run's cancellation, deliberately not observed within the batch (see the
+    /// remarks); it only notes in the log that the batch was finished after the run was cancelled.</param>
     internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync(
         IList<PendingExport> pendingExports,
         CancellationToken cancellationToken)
@@ -655,24 +701,38 @@ internal class LdapConnectorExport
 
         // If concurrency is 1, fall back to synchronous sequential processing
         // for maximum compatibility and simplicity
-        if (_exportConcurrency <= 1)
-            return Execute(pendingExports);
+        var results = _exportConcurrency <= 1
+            ? Execute(pendingExports)
+            : await ExecuteConcurrentlyAsync(pendingExports);
 
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _logger.Information("LdapConnectorExport.ExecuteAsync: The export run was cancelled while this batch of {Count} Pending Exports " +
+                "was under way; the batch was finished so that every result reaches JIM, which stops before the next batch",
+                pendingExports.Count);
+        }
+
+        return results;
+    }
+
+    private async Task<List<ConnectedSystemExportResult>> ExecuteConcurrentlyAsync(IList<PendingExport> pendingExports)
+    {
         // Pre-allocate results array to maintain positional ordering.
         // Each task writes to its own unique index - no shared mutable state between tasks.
         var results = new ConnectedSystemExportResult[pendingExports.Count];
         using var semaphore = new SemaphoreSlim(_exportConcurrency);
 
+        // No cancellation token on the wait or the task: an export waiting for a slot when the run is cancelled still
+        // runs, so the batch returns every result (see the remarks on ExecuteAsync).
         var tasks = new Task[pendingExports.Count];
         for (var i = 0; i < pendingExports.Count; i++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             var index = i; // Capture for closure
             var pendingExport = pendingExports[i];
 
             tasks[i] = Task.Run(async () =>
             {
-                await semaphore.WaitAsync(cancellationToken);
+                await semaphore.WaitAsync();
                 try
                 {
                     results[index] = await ProcessPendingExportAsync(pendingExport);
@@ -680,19 +740,20 @@ internal class LdapConnectorExport
                 catch (Exception ex)
                 {
                     LogExportFailure(ex, "LdapConnectorExport.ExecuteAsync", pendingExport);
-                    results[index] = FailureFor(ex);
+                    results[index] = FailureFor(ex, pendingExport);
                 }
                 finally
                 {
                     semaphore.Release();
                 }
-            }, cancellationToken);
+            });
         }
 
         await Task.WhenAll(tasks);
 
         _logger.Information("LdapConnectorExport.ExecuteAsync: Completed export processing of {Count} Pending Exports",
             pendingExports.Count);
+        LogValuesAlreadyInDesiredStateSummary("LdapConnectorExport.ExecuteAsync");
         return results.ToList();
     }
 
@@ -751,7 +812,7 @@ internal class LdapConnectorExport
             await EnsureParentContainersExistAsync(dn);
         }
 
-        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         // Sequential within this export: create must succeed before GUID fetch
         var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
@@ -761,13 +822,9 @@ internal class LdapConnectorExport
         }
 
         // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         foreach (var modifyRequest in overflowModifyRequests)
-        {
-            var modifyResponse = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
-            if (modifyResponse.ResultCode != ResultCode.Success)
-                throw new LdapException((int)modifyResponse.ResultCode,
-                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
-        }
+            await SendModifyAsync(modifyRequest, dn, singleValuedAttributes);
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -776,10 +833,10 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn);
+            return CreateSucceeded(externalId, dn, attributesAwaitingInitialPassword, addRequest);
         }
 
-        return ConnectedSystemExportResult.Succeeded(null, dn);
+        return CreateSucceeded(null, dn, attributesAwaitingInitialPassword, addRequest);
     }
 
     private async Task<string?> FetchExternalIdAsync(string dn, LdapConnectorRootDse rootDse)
@@ -829,6 +886,11 @@ internal class LdapConnectorExport
             workingDn = await ProcessRenameAsync(currentDn, newDn);
             wasRenamed = true;
         }
+        else if (GetCaseOnlyRenameDn(pendingExport, currentDn, newDn) is { } caseOnlyRenameDn)
+        {
+            workingDn = await ProcessRenameAsync(currentDn, caseOnlyRenameDn);
+            wasRenamed = true;
+        }
 
         var modifyRequests = BuildModifyRequests(pendingExport, workingDn);
 
@@ -839,7 +901,8 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
-        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
+        IReadOnlyList<string>? attributesAwaitingInitialPassword = null;
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -849,11 +912,20 @@ internal class LdapConnectorExport
                     i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
-            var response = (ModifyResponse)await _executor.SendRequestAsync(request);
-            lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+            try
+            {
+                await SendModifyAsync(request, workingDn, singleValuedAttributes);
+            }
+            catch (DirectoryOperationException ex) when (CanWithholdEnablementAfterRefusal(pendingExport, request, ex))
+            {
+                // A refusal of the resend propagates and fails the export exactly as this refusal would have.
+                var (withheld, attributeName) = WithEnablementWithheld(request, workingDn);
+                await SendModifyAsync(withheld, workingDn, singleValuedAttributes);
+                attributesAwaitingInitialPassword = [attributeName];
+            }
         }
 
-        return lastResult;
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests, attributesAwaitingInitialPassword);
     }
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
@@ -888,16 +960,14 @@ internal class LdapConnectorExport
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
-        if (deleteBehaviour == LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            await ProcessDisableAsync(pendingExport, dn);
-        }
-        else
+        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
         {
             await ProcessHardDeleteAsync(dn);
+            return ConnectedSystemExportResult.Succeeded();
         }
 
-        return ConnectedSystemExportResult.Succeeded();
+        var disabledThrough = await ProcessDisableAsync(pendingExport, dn);
+        return DisableSucceeded(disabledThrough);
     }
 
     private async Task ProcessHardDeleteAsync(string dn)
@@ -928,7 +998,10 @@ internal class LdapConnectorExport
         }
     }
 
-    private async Task ProcessDisableAsync(PendingExport pendingExport, string dn)
+    /// <summary>
+    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// </summary>
+    private async Task<string> ProcessDisableAsync(PendingExport pendingExport, string dn)
     {
         _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -953,6 +1026,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
+        return disableAttribute;
     }
 
     private async Task DisableUsingUserAccountControlAsync(string dn)
@@ -1072,8 +1146,10 @@ internal class LdapConnectorExport
     /// needed when a multi-valued attribute (e.g. member) exceeds the batch size limit.
     /// The AddRequest carries the first batch of values; each overflow ModifyRequest carries
     /// the next batch as an Add operation against the already-created object.
+    /// Also returns the attributes the add carries with an interim value because an Initial Password will follow
+    /// (see <see cref="WithholdEnablementUntilInitialPassword"/>), or null when nothing was rewritten.
     /// </summary>
-    internal (AddRequest AddRequest, List<ModifyRequest> OverflowModifyRequests) BuildAddRequestWithOverflow(PendingExport pendingExport, string dn)
+    internal (AddRequest AddRequest, List<ModifyRequest> OverflowModifyRequests, IReadOnlyList<string>? AttributesAwaitingInitialPassword) BuildAddRequestWithOverflow(PendingExport pendingExport, string dn)
     {
         var addRequest = new AddRequest(dn);
 
@@ -1116,6 +1192,10 @@ internal class LdapConnectorExport
                 values.Add(value);
             }
         }
+
+        // Active Directory refuses an enabled account with no password, so one an Initial Password will follow is
+        // created disabled (#2039). Rewrites this request's copy of the value only, never the Pending Export.
+        var attributesAwaitingInitialPassword = WithholdEnablementUntilInitialPassword(pendingExport, attributeGroups, dn);
 
         // Placeholder member injection for groupOfNames/groupOfUniqueNames on non-AD directories.
         // If this is a MUST-member object class and no member values are present, inject the placeholder.
@@ -1190,7 +1270,154 @@ internal class LdapConnectorExport
             }
         }
 
-        return (addRequest, overflowModifyRequests);
+        return (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword);
+    }
+
+    /// <summary>
+    /// Creates an Active Directory account disabled when an Initial Password will follow it (#2039), by adding
+    /// ACCOUNTDISABLE (0x2) to the <c>userAccountControl</c> value the add carries, and returns the attribute so the
+    /// result can say so. Returns null, leaving the add exactly as the Attribute Flows built it, unless every one of
+    /// these holds:
+    /// <list type="bullet">
+    /// <item>The directory is real Active Directory. Not the Active Directory family: Samba AD accepts an enabled
+    /// account with no password, so it keeps the value it was given.</item>
+    /// <item>The change is a Create, and JIM said an Initial Password follows it
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>).</item>
+    /// <item><c>userAccountControl</c> is present as a single integer value without ACCOUNTDISABLE
+    /// (<see cref="TryWithholdEnablement"/>). An account the Attribute Flow already creates disabled needs nothing, and
+    /// JIM never invents a value it was not given: absent, Active Directory creates the account disabled on its own.</item>
+    /// </list>
+    /// <para>
+    /// This rewrite is proactive, and for a Create only, because an account being created never has a password yet. An
+    /// Update writes to an account that may well have one, so it is sent as the Attribute Flow asks, and withheld only
+    /// once Active Directory has refused it for want of a password (<see cref="CanWithholdEnablementAfterRefusal"/>, #2158).
+    /// </para>
+    /// <para>
+    /// Only <paramref name="attributeGroups"/>, the values built for this request, is changed. The Pending Export and its
+    /// changes keep the Synchronisation Rule's value, which is what the confirming import is judged against, and
+    /// Connectors never mutate an export.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string>? WithholdEnablementUntilInitialPassword(PendingExport pendingExport, Dictionary<string, List<object>> attributeGroups, string dn)
+    {
+        if (_directoryType != LdapDirectoryType.ActiveDirectory
+            || pendingExport.ChangeType != PendingExportChangeType.Create
+            || !pendingExport.InitialPasswordFollows)
+            return null;
+
+        if (!attributeGroups.TryGetValue(LdapConnectorConstants.UserAccountControlAttributeName, out var values) || values.Count != 1)
+            return null;
+
+        if (!TryWithholdEnablement(values[0], out var flowValue, out var interimValue))
+            return null;
+
+        values[0] = interimValue.ToString(CultureInfo.InvariantCulture);
+
+        // Named as the Pending Export spells it; the dictionary matches the name whatever its case.
+        var attributeName = attributeGroups.Keys.First(key =>
+            key.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase));
+
+        _logger.Debug("LdapConnectorExport.BuildAddRequestWithOverflow: Creating '{Dn}' disabled ({Attribute} {FlowValue} sent as {InterimValue}) " +
+            "because an Initial Password follows; the account is enabled once the password is set",
+            LogSanitiser.Sanitise(dn), LogSanitiser.Sanitise(attributeName), flowValue, interimValue);
+
+        return [attributeName];
+    }
+
+    /// <summary>
+    /// Whether an Update the directory refused can be sent again with its enable withheld until a password is delivered
+    /// (#2158). Active Directory will not enable an account that has no password, so an Attribute Flow enabling one whose
+    /// password is still queued (a pre-hire whose start date arrives before the Initial Password is delivered, say) is
+    /// refused. Where JIM said a password follows the Update, the account is held disabled instead, exactly as a Create
+    /// is (#2039), and the delivery enables it once the password is set. Every one of these must hold:
+    /// <list type="bullet">
+    /// <item>The change is an Update, and JIM said a password follows it (<see cref="PendingExport.InitialPasswordFollows"/>):
+    /// one is still owed to the account's person on this Connected System.</item>
+    /// <item>The directory refused it as one that will not enable an account with no password
+    /// (<see cref="LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal"/>, confined to the Active Directory family).
+    /// Reactive rather than proactive, so an account that already has a password is enabled at once, and a directory
+    /// that never refuses (Samba AD, today) is never held.</item>
+    /// <item>The refused request carries exactly one <c>userAccountControl</c> modification, a Replace of one integer
+    /// value without ACCOUNTDISABLE (<see cref="TryWithholdEnablement"/>). Anything else is not an enable JIM can hold,
+    /// and is reported as the refusal it was.</item>
+    /// </list>
+    /// <para>
+    /// The refused modify applied nothing (an LDAP modify is atomic), so every change it carried is sent again with it.
+    /// Should the refusal have come from one step of the fallback in parts (<see cref="SendModify"/>), sending the whole
+    /// request again replays the steps that were applied; that is safe, because every step is a Replace, or a value
+    /// change the directory accepts as already in place under Permissive Modify or answers with the same fallback.
+    /// </para>
+    /// </summary>
+    private bool CanWithholdEnablementAfterRefusal(PendingExport pendingExport, ModifyRequest request, DirectoryOperationException refusal) =>
+        pendingExport.ChangeType == PendingExportChangeType.Update
+        && pendingExport.InitialPasswordFollows
+        && FindEnablingUserAccountControl(request) != null
+        && LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(refusal, pendingExport, _directoryType);
+
+    /// <summary>
+    /// The same modifications for the same entry, with ACCOUNTDISABLE added to the enabling <c>userAccountControl</c>
+    /// value, and the attribute named as the request spells it. Only the modifications are copied: the request is sent
+    /// as any other, so Permissive Modify and the fallback in parts apply to it as they did to the one refused.
+    /// </summary>
+    private (ModifyRequest Request, string AttributeName) WithEnablementWithheld(ModifyRequest refused, string dn)
+    {
+        var (enabling, flowValue, interimValue) = FindEnablingUserAccountControl(refused)
+            ?? throw new InvalidOperationException("The refused modify carries no enabling userAccountControl to withhold.");
+
+        var withheld = new DirectoryAttributeModification { Name = enabling.Name, Operation = DirectoryAttributeOperation.Replace };
+        withheld.Add(interimValue.ToString(CultureInfo.InvariantCulture));
+
+        var request = new ModifyRequest(refused.DistinguishedName);
+        request.Modifications.AddRange(refused.Modifications.Cast<DirectoryAttributeModification>()
+            .Select(modification => ReferenceEquals(modification, enabling) ? withheld : modification)
+            .ToArray());
+
+        _logger.Information("LdapConnectorExport: Active Directory will not enable '{Dn}' until it has a password, and one is owed to it, " +
+            "so {Attribute} {FlowValue} is sent as {InterimValue}; the account is enabled once the password is set",
+            LogSanitiser.Sanitise(dn), LogSanitiser.Sanitise(enabling.Name), flowValue, interimValue);
+
+        return (request, enabling.Name);
+    }
+
+    /// <summary>
+    /// The request's one <c>userAccountControl</c> modification, when it is a Replace of a single value that enables
+    /// the account, with that value and the value disabling it; null otherwise, including when the attribute is modified
+    /// more than once.
+    /// </summary>
+    private static (DirectoryAttributeModification Modification, int FlowValue, int InterimValue)? FindEnablingUserAccountControl(ModifyRequest request)
+    {
+        var userAccountControl = request.Modifications.Cast<DirectoryAttributeModification>()
+            .Where(modification => modification.Name.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (userAccountControl is not [{ Operation: DirectoryAttributeOperation.Replace, Count: 1 } modification])
+            return null;
+
+        return TryWithholdEnablement(modification[0], out var flowValue, out var interimValue)
+            ? (modification, flowValue, interimValue)
+            : null;
+    }
+
+    /// <summary>
+    /// Reads a <c>userAccountControl</c> value an Attribute Flow sent as one that enables the account: an integer
+    /// without ACCOUNTDISABLE (0x2), with the same value disabling it, which is what Active Directory holds until the
+    /// account has a password. False for anything else: a value that already disables the account needs nothing, and
+    /// one that is not an integer is never guessed at. Shared by the Create rewrite (#2039) and the Update resend (#2158).
+    /// </summary>
+    private static bool TryWithholdEnablement(object? value, out int flowValue, out int interimValue)
+    {
+        interimValue = 0;
+        if (value is not string text || !int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out flowValue))
+        {
+            flowValue = 0;
+            return false;
+        }
+
+        if ((flowValue & LdapConnectorConstants.UAC_ACCOUNTDISABLE) != 0)
+            return false;
+
+        interimValue = flowValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
+        return true;
     }
 
     /// <summary>
@@ -1332,55 +1559,66 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Splits consolidated modifications into one or more ModifyRequests, chunking any
-    /// multi-valued modifications that exceed the configured batch size.
+    /// The attributes this export changes that the Connected System's schema says hold one value at most, compared
+    /// without regard to case. An attribute counts only when every change to it says so, and objectClass, which is
+    /// multi-valued in every directory, never does.
     /// </summary>
+    internal static HashSet<string> GetSingleValuedAttributeNames(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute != null)
+            .GroupBy(change => change.Attribute!.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(changes => !changes.Key.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase) &&
+                              changes.All(change => change.Attribute!.AttributePlurality == AttributePlurality.SingleValued))
+            .Select(changes => changes.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Splits consolidated modifications into one or more ModifyRequests, chunking any multi-valued modification that
+    /// exceeds the configured batch size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every attribute's first chunk goes into one base request, so small changes to several attributes still land
+    /// together; each later chunk of an attribute is a request of its own, carrying that attribute's next batch of
+    /// deletes and next batch of adds.
+    /// </para>
+    /// <para>
+    /// Within any request, an attribute's delete comes before its add. RFC 4511 applies a modify's changes in order and
+    /// checks the schema once, at the end, so this is always safe within one request, and it is what keeps a value the
+    /// export removes under one case and adds under another (proxyAddresses compares without regard to case): added
+    /// first, the add is refused or, under Permissive Modify, skipped as already present, and the delete then takes the
+    /// value away while the export reports success. The same order lets a single-valued attribute change from its old
+    /// value to its new one in one request.
+    /// </para>
+    /// <para>
+    /// Batching must not separate such a pair either, or the delete could land in a later request than the add. So each
+    /// value deleted and added again under a spelling that compares equal travels with its counterpart: the pairs fill
+    /// the first requests, a pair is never split, and the attribute's other deletes and adds fill the room left, from the
+    /// base request on. A later request therefore only ever deletes values no earlier request added, and the base request
+    /// carries adds whenever the export has any, so an attribute an entry must hold (groupOfNames' member) is never left
+    /// empty between requests. Every modification still respects the batch size, unless one value is deleted or added
+    /// more often under different spellings than the batch size allows, which no directory holds.
+    /// </para>
+    /// </remarks>
     private List<ModifyRequest> ChunkModifyRequests(string workingDn, List<ConsolidatedModification> consolidatedModifications)
     {
-        // Separate modifications into those that fit in a single request and those that need chunking
-        var singleRequestMods = new List<DirectoryAttributeModification>();
-        var chunkedMods = new List<List<DirectoryAttributeModification>>();
+        var baseModifications = new List<DirectoryAttributeModification>();
+        var overflowModifications = new List<List<DirectoryAttributeModification>>();
 
-        foreach (var consolidated in consolidatedModifications)
+        foreach (var chunks in consolidatedModifications
+                     .GroupBy(consolidated => consolidated.AttributeName, StringComparer.OrdinalIgnoreCase)
+                     .Select(attributeChanges => ChunkAttribute([.. attributeChanges]))
+                     .Where(chunks => chunks.Count > 0))
         {
-            var modifications = BuildConsolidatedModification(consolidated);
-
-            if (modifications.Count <= 1)
-            {
-                // Single modification or empty - goes into the base request
-                singleRequestMods.AddRange(modifications);
-            }
-            else
-            {
-                // Multiple chunks from a large multi-valued attribute
-                // First chunk goes into the base request, rest get their own requests
-                singleRequestMods.Add(modifications[0]);
-                for (var i = 1; i < modifications.Count; i++)
-                {
-                    chunkedMods.Add([modifications[i]]);
-                }
-            }
+            baseModifications.AddRange(chunks[0]);
+            overflowModifications.AddRange(chunks.Skip(1));
         }
 
         var requests = new List<ModifyRequest>();
+        if (baseModifications.Count > 0)
+            requests.Add(NewModifyRequest(workingDn, baseModifications));
 
-        // Base request with single-request mods and first chunks
-        if (singleRequestMods.Count > 0)
-        {
-            var baseRequest = new ModifyRequest(workingDn);
-            foreach (var mod in singleRequestMods)
-                baseRequest.Modifications.Add(mod);
-            requests.Add(baseRequest);
-        }
-
-        // Additional requests for overflow chunks
-        foreach (var chunk in chunkedMods)
-        {
-            var request = new ModifyRequest(workingDn);
-            foreach (var mod in chunk)
-                request.Modifications.Add(mod);
-            requests.Add(request);
-        }
+        requests.AddRange(overflowModifications.Select(modifications => NewModifyRequest(workingDn, modifications)));
 
         if (requests.Count > 1)
         {
@@ -1391,8 +1629,174 @@ internal class LdapConnectorExport
         return requests;
     }
 
+    private static ModifyRequest NewModifyRequest(string dn, List<DirectoryAttributeModification> modifications)
+    {
+        var request = new ModifyRequest(dn);
+        request.Modifications.AddRange(modifications.ToArray());
+        return request;
+    }
+
     /// <summary>
-    /// Builds one or more DirectoryAttributeModification objects from a consolidated modification.
+    /// One attribute's modifications, by request: the first list joins the base request, and each later one is a
+    /// request of its own. A replacement keeps its place among the attribute's changes; the deletes and adds are placed
+    /// together, deletes first, where the first of them stood.
+    /// </summary>
+    private List<List<DirectoryAttributeModification>> ChunkAttribute(List<ConsolidatedModification> attributeChanges)
+    {
+        var chunks = new List<List<DirectoryAttributeModification>>();
+        var valueChangesPlaced = false;
+
+        foreach (var consolidated in attributeChanges)
+        {
+            if (consolidated.Operation == DirectoryAttributeOperation.Replace)
+            {
+                PlaceInChunks(chunks, BuildConsolidatedModification(consolidated).Select(modification => new List<DirectoryAttributeModification> { modification }));
+            }
+            else if (!valueChangesPlaced)
+            {
+                valueChangesPlaced = true;
+                PlaceInChunks(chunks, ChunkDeletesAndAdds(
+                    consolidated.AttributeName,
+                    CollectValues(attributeChanges.Where(change => change.Operation == DirectoryAttributeOperation.Delete), consolidated.AttributeName),
+                    CollectValues(attributeChanges.Where(change => change.Operation == DirectoryAttributeOperation.Add), consolidated.AttributeName)));
+            }
+        }
+
+        return chunks;
+    }
+
+    private static void PlaceInChunks(List<List<DirectoryAttributeModification>> chunks, IEnumerable<List<DirectoryAttributeModification>> placed)
+    {
+        var index = 0;
+        foreach (var modifications in placed)
+        {
+            if (index == chunks.Count)
+                chunks.Add([]);
+            chunks[index++].AddRange(modifications);
+        }
+    }
+
+    /// <summary>
+    /// The values one attribute's deletes or adds carry, in order. A remove with no value is skipped, as it always has
+    /// been; an add with none keeps its place in the batch and contributes no value.
+    /// </summary>
+    private List<object?> CollectValues(IEnumerable<ConsolidatedModification> consolidated, string attributeName)
+    {
+        var values = new List<object?>();
+        foreach (var attrChange in consolidated.SelectMany(modification => modification.AttributeChanges))
+        {
+            var value = GetAttributeValue(attrChange);
+            if (value == null && attrChange.ChangeType == PendingExportAttributeChangeType.Remove)
+            {
+                _logger.Warning("LdapConnectorExport.CollectValues: Cannot remove value for '{AttrName}' - no value specified", attributeName);
+                continue;
+            }
+
+            values.Add(value);
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// One attribute's deletes and adds in batches, each batch a delete (if any) followed by an add (if any); see the
+    /// remarks on <see cref="ChunkModifyRequests"/> for why pairs travel together.
+    /// </summary>
+    private List<List<DirectoryAttributeModification>> ChunkDeletesAndAdds(string attributeName, List<object?> deletes, List<object?> adds)
+    {
+        var batches = new List<(List<object?> Deletes, List<object?> Adds)>();
+        var pairedKeys = new HashSet<string>(LdapValueCollisionKey.Comparer);
+
+        // Only an attribute with both deletes and adds can have pairs; a large group gaining or losing members has one.
+        if (deletes.Count > 0 && adds.Count > 0)
+        {
+            var deletesByKey = LdapValueCollisionKey.Group(deletes);
+            var addsByKey = LdapValueCollisionKey.Group(adds);
+            pairedKeys.UnionWith(deletesByKey.Keys.Where(addsByKey.ContainsKey));
+
+            foreach (var key in deletesByKey.Keys.Where(pairedKeys.Contains))
+            {
+                var pairDeletes = deletesByKey[key];
+                var pairAdds = addsByKey[key];
+                if (batches.Count == 0 ||
+                    batches[^1].Deletes.Count + pairDeletes.Count > _modifyBatchSize ||
+                    batches[^1].Adds.Count + pairAdds.Count > _modifyBatchSize)
+                {
+                    batches.Add(([], []));
+                }
+
+                batches[^1].Deletes.AddRange(pairDeletes);
+                batches[^1].Adds.AddRange(pairAdds);
+            }
+        }
+
+        FillBatches(batches, pairedKeys.Count == 0 ? deletes : deletes.Where(value => !IsPaired(value, pairedKeys)), batch => batch.Deletes);
+        FillBatches(batches, pairedKeys.Count == 0 ? adds : adds.Where(value => !IsPaired(value, pairedKeys)), batch => batch.Adds);
+
+        if (batches.Count > 1)
+        {
+            _logger.Information("LdapConnectorExport.ChunkDeletesAndAdds: Chunking {DeleteCount} deletes and {AddCount} adds for attribute " +
+                "'{AttrName}' into {BatchCount} batches of up to {BatchSize}",
+                deletes.Count, adds.Count, attributeName, batches.Count, _modifyBatchSize);
+        }
+
+        if (pairedKeys.Count > 0)
+        {
+            _logger.Debug("LdapConnectorExport.ChunkDeletesAndAdds: {PairCount} value(s) of '{AttrName}' are deleted and added again under a " +
+                "spelling the directory may treat as the same; each is deleted before it is added, in the same request",
+                pairedKeys.Count, attributeName);
+        }
+
+        return [.. batches.Select(batch => ToModifications(attributeName, batch.Deletes, batch.Adds))];
+    }
+
+    private void FillBatches(
+        List<(List<object?> Deletes, List<object?> Adds)> batches,
+        IEnumerable<object?> values,
+        Func<(List<object?> Deletes, List<object?> Adds), List<object?>> side)
+    {
+        var index = 0;
+        foreach (var value in values)
+        {
+            while (index < batches.Count && side(batches[index]).Count >= _modifyBatchSize)
+                index++;
+
+            if (index == batches.Count)
+                batches.Add(([], []));
+
+            side(batches[index]).Add(value);
+        }
+    }
+
+    private static List<DirectoryAttributeModification> ToModifications(string attributeName, List<object?> deletes, List<object?> adds)
+    {
+        var modifications = new List<DirectoryAttributeModification>();
+        if (deletes.Count > 0)
+            modifications.Add(NewModification(attributeName, DirectoryAttributeOperation.Delete, deletes));
+        if (adds.Count > 0)
+            modifications.Add(NewModification(attributeName, DirectoryAttributeOperation.Add, adds));
+        return modifications;
+    }
+
+    private static DirectoryAttributeModification NewModification(string attributeName, DirectoryAttributeOperation operation, IEnumerable<object?> values)
+    {
+        var modification = new DirectoryAttributeModification { Name = attributeName, Operation = operation };
+        foreach (var value in values)
+        {
+            if (value is byte[] bytes)
+                modification.Add(bytes);
+            else if (value != null)
+                modification.Add(value.ToString());
+        }
+
+        return modification;
+    }
+
+    private static bool IsPaired(object? value, HashSet<string> pairedKeys) =>
+        LdapValueCollisionKey.Of(value) is { } key && pairedKeys.Contains(key);
+
+    /// <summary>
+    /// Builds one or more DirectoryAttributeModification objects from a consolidated replacement.
     /// If the number of values exceeds the batch size, returns multiple modifications (one per chunk).
     /// </summary>
     private List<DirectoryAttributeModification> BuildConsolidatedModification(ConsolidatedModification consolidated)
@@ -1400,7 +1804,7 @@ internal class LdapConnectorExport
         var results = new List<DirectoryAttributeModification>();
 
         // Collect all values from the attribute changes
-        var values = new List<(object? Value, PendingExportAttributeValueChange Change)>();
+        var values = new List<object?>();
 
         foreach (var attrChange in consolidated.AttributeChanges)
         {
@@ -1415,27 +1819,16 @@ internal class LdapConnectorExport
 
             var value = GetAttributeValue(attrChange);
 
-            // Handle null values for specific change types
-            if (value == null)
+            // Update with no value = clear attribute - handle as standalone
+            if (value == null && attrChange.ChangeType == PendingExportAttributeChangeType.Update)
             {
-                if (attrChange.ChangeType == PendingExportAttributeChangeType.Remove)
-                {
-                    _logger.Warning("LdapConnectorExport.BuildConsolidatedModification: Cannot remove value for '{AttrName}' - no value specified",
-                        consolidated.AttributeName);
-                    continue;
-                }
-
-                if (attrChange.ChangeType == PendingExportAttributeChangeType.Update)
-                {
-                    // Update with no value = clear attribute - handle as standalone
-                    var mod = CreateModification(attrChange);
-                    if (mod != null)
-                        results.Add(mod);
-                    return results;
-                }
+                var mod = CreateModification(attrChange);
+                if (mod != null)
+                    results.Add(mod);
+                return results;
             }
 
-            values.Add((value, attrChange));
+            values.Add(value);
         }
 
         if (values.Count == 0)
@@ -1444,19 +1837,7 @@ internal class LdapConnectorExport
         // If within batch size, create a single modification with all values
         if (values.Count <= _modifyBatchSize)
         {
-            var mod = new DirectoryAttributeModification
-            {
-                Name = consolidated.AttributeName,
-                Operation = consolidated.Operation
-            };
-            foreach (var (value, _) in values)
-            {
-                if (value is byte[] bytes)
-                    mod.Add(bytes);
-                else if (value != null)
-                    mod.Add(value.ToString());
-            }
-            results.Add(mod);
+            results.Add(NewModification(consolidated.AttributeName, consolidated.Operation, values));
             return results;
         }
 
@@ -1466,24 +1847,44 @@ internal class LdapConnectorExport
             values.Count, consolidated.AttributeName, consolidated.Operation, _modifyBatchSize);
 
         for (var i = 0; i < values.Count; i += _modifyBatchSize)
-        {
-            var chunk = values.Skip(i).Take(_modifyBatchSize).ToList();
-            var mod = new DirectoryAttributeModification
-            {
-                Name = consolidated.AttributeName,
-                Operation = consolidated.Operation
-            };
-            foreach (var (value, _) in chunk)
-            {
-                if (value is byte[] bytes)
-                    mod.Add(bytes);
-                else if (value != null)
-                    mod.Add(value.ToString());
-            }
-            results.Add(mod);
-        }
+            results.Add(NewModification(consolidated.AttributeName, consolidated.Operation, values.Skip(i).Take(_modifyBatchSize)));
 
         return results;
+    }
+
+    /// <summary>
+    /// The distinguished name a change of case to the object's own name gives it (#2051), or null when the export makes
+    /// no such change. A distinguished name is compared ignoring case, because the directory owns the case of its parent
+    /// components, so a case-only change is read from the object's relative name: the RDN attribute's new value
+    /// (<c>cn</c>, which compares exactly), else the leaf of a staged distinguished name. The parent is kept as the
+    /// directory holds it. Only a single-valued RDN whose value differs from the current one in case alone qualifies; any
+    /// other change of name comes with a staged distinguished name, and is a rename of its own.
+    /// </summary>
+    internal static string? GetCaseOnlyRenameDn(PendingExport pendingExport, string currentDn, string? newDn)
+    {
+        if (!LdapDistinguishedName.TryParse(currentDn, out var current) || current.LeafRdn.Components.Count != 1)
+            return null;
+
+        var leaf = current.LeafRdn.Components[0];
+        var newValue = pendingExport.AttributeValueChanges
+            .LastOrDefault(change => change.ChangeType == PendingExportAttributeChangeType.Update &&
+                                     change.StringValue != null &&
+                                     change.Attribute?.Name.Equals(leaf.Type, StringComparison.OrdinalIgnoreCase) == true)?
+            .StringValue;
+
+        if (newValue == null &&
+            LdapDistinguishedName.TryParse(newDn, out var staged) &&
+            staged.LeafRdn.Components.Count == 1 &&
+            staged.LeafRdn.Components[0].Type.Equals(leaf.Type, StringComparison.OrdinalIgnoreCase))
+            newValue = staged.LeafRdn.Components[0].Value;
+
+        if (newValue == null ||
+            string.Equals(newValue, leaf.Value, StringComparison.Ordinal) ||
+            !string.Equals(newValue, leaf.Value, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var newRdn = $"{leaf.Type}={LdapConnectorUtilities.EscapeRdnValue(newValue)}";
+        return current.Parent == null ? newRdn : $"{newRdn},{current.Parent}";
     }
 
     /// <summary>
@@ -1547,40 +1948,289 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Handles the response from a ModifyRequest, including the special case for AttributeOrValueExists.
+    /// The result of an update whose modify requests have all reached the state they asked for. A renamed object
+    /// reports its new Distinguished Name, so JIM records where the object now lives; an enable withheld until a password
+    /// is delivered (#2158) is reported as awaiting it. Whether the update wrote the enabled state is judged from the
+    /// requests as built, so an attribute reported awaiting a password is always one that wrote it.
     /// </summary>
-    private ConnectedSystemExportResult HandleModifyResponse(ModifyResponse response, ModifyRequest modifyRequest, string workingDn, bool wasRenamed)
+    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, List<ModifyRequest> modifyRequests,
+        IReadOnlyList<string>? attributesAwaitingInitialPassword)
     {
-        if (response.ResultCode != ResultCode.Success)
+        _logger.Debug("LdapConnectorExport: Successfully updated object at '{Dn}' with {Count} modify requests",
+            LogSanitiser.Sanitise(workingDn), modifyRequests.Count);
+
+        var result = ConnectedSystemExportResult.Succeeded(null, wasRenamed ? workingDn : null, attributesAwaitingInitialPassword);
+        result.SetsAccountEnabledState = WritesAccountEnabledState(modifyRequests
+            .SelectMany(request => request.Modifications.Cast<DirectoryAttributeModification>())
+            .Select(modification => modification.Name));
+        return result;
+    }
+
+    /// <summary>
+    /// The result of a create the directory accepted, saying which attributes carry an interim value until an Initial
+    /// Password is delivered (#2039) and whether the add wrote the account's enabled state (#2064).
+    /// </summary>
+    private ConnectedSystemExportResult CreateSucceeded(string? externalId, string dn, IReadOnlyList<string>? attributesAwaitingInitialPassword, AddRequest addRequest)
+    {
+        var result = ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
+        result.SetsAccountEnabledState = WritesAccountEnabledState(addRequest.Attributes.Cast<DirectoryAttribute>().Select(attribute => attribute.Name));
+        return result;
+    }
+
+    /// <summary>
+    /// The result of a delete performed as a disable, saying whether the disable wrote the account's enabled state
+    /// (#2064), so an Initial Password still owed to the account never re-enables it.
+    /// </summary>
+    private ConnectedSystemExportResult DisableSucceeded(string disabledThrough)
+    {
+        var result = ConnectedSystemExportResult.Succeeded();
+        result.SetsAccountEnabledState = WritesAccountEnabledState([disabledThrough]);
+        return result;
+    }
+
+    /// <summary>
+    /// Whether a request writing these attributes writes the account's enabled state (#2064): <c>userAccountControl</c>,
+    /// on the Active Directory family only. Elsewhere a password delivery's Enable Account means nothing, so there is no
+    /// enabled state for an Attribute Flow to take over from it.
+    /// </summary>
+    private bool WritesAccountEnabledState(IEnumerable<string> attributeNames) =>
+        _directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
+        && attributeNames.Any(name => name.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase));
+
+    #region Modify requests: Permissive Modify and the fallback in parts
+
+    // Active Directory's ERROR_MEMBER_NOT_IN_GROUP (0x561), which it reports with unwillingToPerform (53) when asked
+    // to remove a member a group does not hold.
+    private const string ActiveDirectoryMemberNotInGroupCode = "00000561";
+
+    // Samba AD's words for the same refusal, also under unwillingToPerform (53): "Attribute member doesn't exist for
+    // target GUID <guid>". Samba sends it even when the modify carries Permissive Modify, and likewise answers
+    // entryAlreadyExists for the add of a member the group already holds.
+    private const string SambaMemberNotPresentWording = "doesn't exist for target GUID";
+
+    // Samba AD's words when the group held the member once and has since lost it, under the same code: it keeps the
+    // removed link and answers "Attribute member already deleted for target GUID <guid>" from it.
+    private const string SambaMemberAlreadyRemovedWording = "already deleted for target GUID";
+
+    // The attribute Active Directory and Samba AD hold group membership in, and the only one whose entryAlreadyExists
+    // and unwillingToPerform answers are read as "already there" or "already gone": entryAlreadyExists is also how
+    // they report an account name in use, which is a genuine failure.
+    private const string ActiveDirectoryMemberAttributeName = "member";
+
+    /// <summary>
+    /// Sends one ModifyRequest of an export and sees it through to the state it asks for, or fails.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An LDAP modify is atomic: a directory that finds one value to add already present, or one value to remove
+    /// already absent, refuses the whole request and applies none of the others. An export asks for a state, and that
+    /// state holds for such a value, so the refusal must not fail the export; but nor may the request be treated as a
+    /// success, because every other change it carried was dropped with it.
+    /// </para>
+    /// <para>
+    /// Where the directory advertises Permissive Modify the request carries it, and the directory itself accepts such
+    /// values. Where it does not, or where a directory refuses regardless (Samba AD still refuses the removal of an
+    /// absent member, and OpenLDAP the delete of any absent value), the request is applied again in parts, halving any
+    /// part the directory refuses again; see <see cref="LdapModifyBisection"/>. Any other refusal propagates and fails
+    /// the export, as it always has.
+    /// </para>
+    /// </remarks>
+    /// <param name="request">The request to send.</param>
+    /// <param name="dn">The entry it modifies, for the log.</param>
+    /// <param name="singleValuedAttributes">The attributes the Connected System's schema says are single-valued.</param>
+    private void SendModify(ModifyRequest request, string dn, IReadOnlySet<string> singleValuedAttributes)
+    {
+        AttachPermissiveModifyIfOffered(request);
+        DirectoryOperationException? refusedForAValueInPlace = null;
+        try
         {
-            // Handle "attribute or value exists" error gracefully for Add operations.
-            // This can happen when trying to add a member that already exists in a group.
-            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
-            // Since the desired state (member is in group) is already achieved, treat as success.
-            if (response.ResultCode == ResultCode.AttributeOrValueExists)
-            {
-                _logger.Warning("LdapConnectorExport.HandleModifyResponse: Some attribute values already exist at '{Dn}'. " +
-                    "This typically means a group member was already present. Treating as success. Error: {Error}",
-                    LogSanitiser.Sanitise(workingDn), LogSanitiser.Sanitise(response.ErrorMessage));
-                return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
-            }
-
-            // Build a more descriptive error message that includes the attributes being modified
-            var modifiedAttrs = string.Join(", ", modifyRequest.Modifications
-                .Cast<DirectoryAttributeModification>()
-                .Select(m => $"'{m.Name}' ({m.Operation})"));
-            var errorDetail = $"LDAP modify failed for DN '{workingDn}'. " +
-                $"Modified attributes: {modifiedAttrs}. " +
-                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
-
-            throw new LdapException((int)response.ResultCode, errorDetail);
+            SendModifyOrThrow(request);
+        }
+        catch (DirectoryOperationException rejection) when (IsRefusedForAValueAlreadyInDesiredState(rejection, request))
+        {
+            refusedForAValueInPlace = rejection;
         }
 
-        _logger.Debug("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
-            LogSanitiser.Sanitise(workingDn), modifyRequest.Modifications.Count);
+        if (refusedForAValueInPlace == null)
+            return;
 
-        return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
+        var bisection = BeginBisection(request, dn, singleValuedAttributes, refusedForAValueInPlace);
+        while (bisection.TryTakeNext(out var step))
+        {
+            AttachPermissiveModifyIfOffered(step);
+            try
+            {
+                SendModifyOrThrow(step);
+                bisection.Applied();
+            }
+            catch (DirectoryOperationException stepRejection) when (bisection.IsAlreadyInDesiredState(stepRejection))
+            {
+                bisection.RefusedAsAlreadyInDesiredState();
+            }
+        }
+
+        CompleteBisection(dn, bisection);
     }
+
+    /// <summary>
+    /// The async form of <see cref="SendModify"/>, for the concurrent export path.
+    /// </summary>
+    private async Task SendModifyAsync(ModifyRequest request, string dn, IReadOnlySet<string> singleValuedAttributes)
+    {
+        AttachPermissiveModifyIfOffered(request);
+        DirectoryOperationException? refusedForAValueInPlace = null;
+        try
+        {
+            await SendModifyOrThrowAsync(request);
+        }
+        catch (DirectoryOperationException rejection) when (IsRefusedForAValueAlreadyInDesiredState(rejection, request))
+        {
+            refusedForAValueInPlace = rejection;
+        }
+
+        if (refusedForAValueInPlace == null)
+            return;
+
+        var bisection = BeginBisection(request, dn, singleValuedAttributes, refusedForAValueInPlace);
+        while (bisection.TryTakeNext(out var step))
+        {
+            AttachPermissiveModifyIfOffered(step);
+            try
+            {
+                await SendModifyOrThrowAsync(step);
+                bisection.Applied();
+            }
+            catch (DirectoryOperationException stepRejection) when (bisection.IsAlreadyInDesiredState(stepRejection))
+            {
+                bisection.RefusedAsAlreadyInDesiredState();
+            }
+        }
+
+        CompleteBisection(dn, bisection);
+    }
+
+    private void SendModifyOrThrow(ModifyRequest request) =>
+        ThrowUnlessSuccessful((ModifyResponse)_executor.SendRequest(request));
+
+    private async Task SendModifyOrThrowAsync(ModifyRequest request) =>
+        ThrowUnlessSuccessful((ModifyResponse)await _executor.SendRequestAsync(request));
+
+    /// <summary>
+    /// Raises a returned failure the way the platform raises one. LdapConnection throws DirectoryOperationException,
+    /// carrying the response, for every result other than success, so a failure is only ever returned by an executor
+    /// that does not; raising it identically means one path decides what every refusal means.
+    /// </summary>
+    private static void ThrowUnlessSuccessful(ModifyResponse response)
+    {
+        if (response.ResultCode != ResultCode.Success)
+            throw new DirectoryOperationException(response, response.ErrorMessage);
+    }
+
+    /// <summary>
+    /// Attaches the Permissive Modify control to a request that adds or deletes values, where the directory advertised
+    /// it on this connection. A request that only replaces cannot meet a value already present or already absent, and
+    /// is left as it is.
+    /// </summary>
+    private void AttachPermissiveModifyIfOffered(ModifyRequest request)
+    {
+        if (!_directoryAdvertisesPermissiveModify || !CarriesValueChanges(request))
+            return;
+
+        var alreadyAttached = request.Controls.Cast<DirectoryControl>()
+            .Any(control => control.Type == LdapConnectorConstants.LDAP_SERVER_PERMISSIVE_MODIFY_OID);
+        if (!alreadyAttached)
+            request.Controls.Add(new PermissiveModifyControl());
+    }
+
+    private static bool CarriesValueChanges(ModifyRequest request) =>
+        request.Modifications.Cast<DirectoryAttributeModification>()
+            .Any(modification => modification.Operation is DirectoryAttributeOperation.Add or DirectoryAttributeOperation.Delete);
+
+    /// <summary>
+    /// Whether the directory refused this request because a value it adds is already present, or a value it deletes is
+    /// already absent: the only refusal that applying the request in parts can resolve.
+    /// </summary>
+    private bool IsRefusedForAValueAlreadyInDesiredState(DirectoryOperationException rejection, ModifyRequest request) =>
+        request.Modifications.Cast<DirectoryAttributeModification>()
+            .Any(modification => MeansAlreadyInDesiredState(rejection, modification));
+
+    /// <summary>
+    /// Whether a refusal says this modification's value is already where the export wants it.
+    /// </summary>
+    /// <remarks>
+    /// RFC directories (OpenLDAP, 389 Directory Server) answer attributeOrValueExists (20) for a value already present
+    /// and noSuchAttribute (16) for a value already absent, on any attribute, and Active Directory does the same for
+    /// most attributes. For group membership, Active Directory and Samba AD answer entryAlreadyExists (68) for a member
+    /// already present, and unwillingToPerform (53) for one already absent, naming the reason (Active Directory's
+    /// ERROR_MEMBER_NOT_IN_GROUP code, Samba AD's "doesn't exist for target GUID", or "already deleted for target GUID"
+    /// for a member the group held once). Both codes mean something else
+    /// elsewhere (entryAlreadyExists is also an account name in use; unwillingToPerform also refuses to take a member
+    /// out of its primary group), so they are read this way only for the AD family's member attribute, and
+    /// unwillingToPerform only when the directory gave that reason.
+    /// </remarks>
+    private bool MeansAlreadyInDesiredState(DirectoryOperationException rejection, DirectoryAttributeModification modification)
+    {
+        if (rejection.Response is not { } response)
+            return false;
+
+        var isActiveDirectoryMembership = (_directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD) &&
+                                          modification.Name.Equals(ActiveDirectoryMemberAttributeName, StringComparison.OrdinalIgnoreCase);
+
+        return modification.Operation switch
+        {
+            DirectoryAttributeOperation.Add =>
+                response.ResultCode == ResultCode.AttributeOrValueExists ||
+                (isActiveDirectoryMembership && response.ResultCode == ResultCode.EntryAlreadyExists),
+            DirectoryAttributeOperation.Delete =>
+                response.ResultCode == ResultCode.NoSuchAttribute ||
+                (isActiveDirectoryMembership && response.ResultCode == ResultCode.UnwillingToPerform &&
+                 SaysMemberNotInGroup(rejection, response)),
+            _ => false
+        };
+    }
+
+    private static bool SaysMemberNotInGroup(DirectoryOperationException rejection, DirectoryResponse response)
+    {
+        var message = $"{response.ErrorMessage} {rejection.Message}";
+        return message.Contains(ActiveDirectoryMemberNotInGroupCode, StringComparison.OrdinalIgnoreCase) ||
+               message.Contains(SambaMemberNotPresentWording, StringComparison.OrdinalIgnoreCase) ||
+               message.Contains(SambaMemberAlreadyRemovedWording, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private LdapModifyBisection BeginBisection(ModifyRequest rejected, string dn, IReadOnlySet<string> singleValuedAttributes, DirectoryOperationException rejection)
+    {
+        var bisection = new LdapModifyBisection(rejected, singleValuedAttributes, _directoryType, MeansAlreadyInDesiredState);
+
+        _logger.Information("LdapConnectorExport: The directory refused the whole modify of '{Dn}' ({ResultCode}: {Message}) because a value " +
+            "it carries is already in the state the export asks for, so none of its changes were applied. Applying its {ValueChanges} value changes " +
+            "in parts, halving any part the directory refuses again.",
+            LogSanitiser.Sanitise(dn), rejection.Response?.ResultCode,
+            LogSanitiser.Sanitise(string.IsNullOrEmpty(rejection.Response?.ErrorMessage) ? rejection.Message : rejection.Response.ErrorMessage),
+            bisection.ValueChanges);
+
+        return bisection;
+    }
+
+    private void CompleteBisection(string dn, LdapModifyBisection bisection)
+    {
+        Interlocked.Add(ref _valuesAlreadyInDesiredState, bisection.ValuesAlreadyInDesiredState);
+
+        _logger.Information("LdapConnectorExport: Applied the modify of '{Dn}' in parts ({RequestCount} requests). {AlreadyInDesiredState} of " +
+            "{ValueChanges} value changes were already in the desired state; the rest were applied.",
+            LogSanitiser.Sanitise(dn), bisection.RequestsSent, bisection.ValuesAlreadyInDesiredState, bisection.ValueChanges);
+    }
+
+    private void LogValuesAlreadyInDesiredStateSummary(string caller)
+    {
+        var total = ValuesAlreadyInDesiredState;
+        if (total == 0)
+            return;
+
+        _logger.Information("{Caller}: {Count} value changes were already in the desired state (a value to add already present, or one to " +
+            "remove already absent) and were treated as achieved", caller, total);
+    }
+
+    #endregion
 
     /// <summary>
     /// Builds a ModifyDNRequest for renaming/moving an LDAP object.
@@ -1962,13 +2612,17 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Logs an export the directory refused. A value already in use is a per-object data conflict the export run reports
-    /// on the object (and may correct, Unique Value Generation's Collision Remediation), so it is logged at Warning; every
-    /// other failure stays an Error, as it always was.
+    /// on the object (and may correct, Unique Value Generation's Collision Remediation), and an account Active Directory
+    /// will not enable without a password (#2039) is configuration the export run reports on the object with its
+    /// remedies, so both are logged at Warning; every other failure stays an Error, as it always was.
     /// </summary>
     private void LogExportFailure(Exception ex, string caller, PendingExport pendingExport)
     {
         if (LdapUniquenessRejectionClassifier.TryClassify(ex, out _))
             _logger.Warning(ex, "{Caller}: Pending Export {Id} ({ChangeType}) was rejected because a value it carries is already in use",
+                caller, pendingExport.Id, pendingExport.ChangeType);
+        else if (LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(ex, pendingExport, _directoryType))
+            _logger.Warning(ex, "{Caller}: Pending Export {Id} ({ChangeType}) was refused because Active Directory will not enable an account that has no password",
                 caller, pendingExport.Id, pendingExport.ChangeType);
         else
             _logger.Error(ex, "{Caller}: Failed to process Pending Export {Id} ({ChangeType})", caller, pendingExport.Id, pendingExport.ChangeType);
@@ -1976,13 +2630,20 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// The result for an export the directory refused. A rejection because a value is already in use is classified
-    /// as such, naming the attribute where the directory named it (Unique Value Generation, decision 9); every other
-    /// failure is reported as it always was. The directory's own message is kept whole either way.
+    /// as such, naming the attribute where the directory named it (Unique Value Generation, decision 9), and Active
+    /// Directory refusing to enable an account that has no password is classified with the remedies named (#2039);
+    /// every other failure is reported as it always was. The directory's own message is kept whole either way.
     /// </summary>
-    private static ConnectedSystemExportResult FailureFor(Exception ex) =>
-        LdapUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName)
-            ? ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName)
-            : ConnectedSystemExportResult.Failed(ex.Message);
+    private ConnectedSystemExportResult FailureFor(Exception ex, PendingExport pendingExport)
+    {
+        if (LdapUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName))
+            return ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName);
+
+        if (LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(ex, pendingExport, _directoryType))
+            return LdapAccountEnableRefusalClassifier.FailureFor(ex);
+
+        return ConnectedSystemExportResult.Failed(ex.Message);
+    }
 
     /// <summary>
     /// Returns a structured export error when the placeholder member DN is rejected by the directory.

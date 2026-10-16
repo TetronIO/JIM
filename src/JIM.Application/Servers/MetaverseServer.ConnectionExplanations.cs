@@ -50,6 +50,8 @@ public partial class MetaverseServer
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        await AttachScopedSchemasAsync(rules, header.TypeId);
+
         var joinedSystemIds = joinedObjects.Select(cso => cso.ConnectedSystemId).ToHashSet();
         var rulesOnJoinedSystems = rules.Where(r => joinedSystemIds.Contains(r.ConnectedSystemId)).ToList();
         var notConnectedRules = includeNotConnected
@@ -69,10 +71,19 @@ public partial class MetaverseServer
             .Where(r => r.Direction == SyncRuleDirection.Import && r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
             .ToList());
 
+        // The criteria's attributes are enough for attribute criteria; an expression criterion (#2054) reads its inputs by
+        // name from the whole object, so where one is in play the whole object is read instead.
         var metaverseObject = new MetaverseObject { Id = metaverseObjectId };
-        var metaverseAttributeIds = CriteriaAttributeIds(exportRulesToEvaluate, criterion => criterion.MetaverseAttribute?.Id);
-        if (metaverseAttributeIds.Count > 0)
-            metaverseObject.AttributeValues = await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds);
+        if (exportRulesToEvaluate.Any(ScopingEvaluationServer.HasExpressionCriteria))
+        {
+            metaverseObject = await Application.Repository.Metaverse.GetMetaverseObjectAsync(metaverseObjectId) ?? metaverseObject;
+        }
+        else
+        {
+            var metaverseAttributeIds = CriteriaAttributeIds(exportRulesToEvaluate, criterion => criterion.MetaverseAttribute?.Id);
+            if (metaverseAttributeIds.Count > 0)
+                metaverseObject.AttributeValues = await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds);
+        }
 
         var objectValues = await LoadConnectedSystemObjectScopingValuesAsync(importRulesByConnection);
 
@@ -88,6 +99,13 @@ public partial class MetaverseServer
         var joinHistory = joinedObjects.Count > 0
             ? await Application.Repository.ConnectedSystems.GetJoinHistoryAsync(joinedObjects.Select(cso => cso.Id).ToList(), pendingProvisioningQueuedBy)
             : [];
+
+        // The Object Matching Rules that made the matching joins (#2052), so each join can say what it compared.
+        var joiningRuleIds = joinedObjects.Where(cso => cso.JoinObjectMatchingRuleId.HasValue)
+            .Select(cso => cso.JoinObjectMatchingRuleId!.Value).Distinct().ToList();
+        var joiningRules = joiningRuleIds.Count > 0
+            ? (await Application.Repository.ConnectedSystems.GetObjectMatchingRulesAsync(joiningRuleIds)).ToDictionary(r => r.Id)
+            : new Dictionary<int, ObjectMatchingRule>();
 
         var scoping = Application.ScopingEvaluation;
         var exportExplanations = exportRulesToEvaluate
@@ -113,13 +131,15 @@ public partial class MetaverseServer
             PopulateConnectionRow(row, cso, isSource: importRules.Count > 0,
                 isTarget: exportRules.Any(r => r.ConnectedSystemObjectTypeId == cso.TypeId), pendingExport);
 
-            row.Join = BuildJoinRecord(cso, pendingExport, joinHistory, rules);
+            row.Join = BuildJoinRecord(cso, pendingExport, joinHistory, rules, joiningRules);
 
-            var objectForScoping = new ConnectedSystemObject
-            {
-                Id = cso.Id,
-                AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? values : []
-            };
+            var objectForScoping = importRules.Any(ScopingEvaluationServer.HasExpressionCriteria)
+                ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(cso.ConnectedSystemId, cso.Id) ?? cso
+                : new ConnectedSystemObject
+                {
+                    Id = cso.Id,
+                    AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? values : []
+                };
             row.Scoping = importRules.Select(r => scoping.ExplainCsoForImportRule(objectForScoping, r, evaluatedAt))
                 .Concat(exportRules.Where(r => r.ConnectedSystemObjectTypeId == cso.TypeId).Select(r => exportExplanations[r.Id]))
                 .OrderBy(e => e.SyncRuleName, StringComparer.OrdinalIgnoreCase)
@@ -157,6 +177,32 @@ public partial class MetaverseServer
             conflict.ExistingObjectTypeName, connectedSystemName),
         Scoping = scoping
     };
+
+    /// <summary>
+    /// Gives each rule with an expression criterion its scoped object type with that type's attributes (#2054). The rules
+    /// are loaded as a lean projection, and an expression's inputs are checked against the scoped type's attributes:
+    /// without them every expression criterion would read as one that cannot be evaluated.
+    /// </summary>
+    private async Task AttachScopedSchemasAsync(List<SyncRule> rules, int metaverseObjectTypeId)
+    {
+        var expressionRules = rules.Where(ScopingEvaluationServer.HasExpressionCriteria).ToList();
+        if (expressionRules.Count == 0)
+            return;
+
+        if (expressionRules.Any(r => r.Direction == SyncRuleDirection.Export))
+        {
+            var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, includeChildObjects: true);
+            foreach (var rule in expressionRules.Where(r => r.Direction == SyncRuleDirection.Export))
+                rule.MetaverseObjectType = metaverseObjectType ?? rule.MetaverseObjectType;
+        }
+
+        foreach (var typeRules in expressionRules.Where(r => r.Direction == SyncRuleDirection.Import).GroupBy(r => r.ConnectedSystemObjectTypeId))
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(typeRules.Key);
+            foreach (var rule in typeRules)
+                rule.ConnectedSystemObjectType = objectType ?? rule.ConnectedSystemObjectType;
+        }
+    }
 
     /// <summary>
     /// Loads every joined object's values for the attributes its import rules' criteria compare, in one read.
@@ -198,7 +244,7 @@ public partial class MetaverseServer
     /// Activity link comes from history either way.
     /// </summary>
     private static JoinRecord BuildJoinRecord(ConnectedSystemObject cso, PendingExport? pendingExport, List<JoinHistoryEntry> joinHistory,
-        List<SyncRule> rules)
+        List<SyncRule> rules, Dictionary<int, ObjectMatchingRule> joiningRules)
     {
         var evidence = FindJoinEvidence(cso, joinHistory);
         var record = new JoinRecord
@@ -238,6 +284,17 @@ public partial class MetaverseServer
             record.SyncRuleId = evidence?.SyncRuleId;
             record.SyncRuleName = evidence?.SyncRuleName;
             record.Source = record.SyncRuleName != null ? JoinRecordSource.Derived : JoinRecordSource.NotRecorded;
+        }
+
+        // What a matching join matched on (#2052). The value is kept on the object; what the rule compares is read from
+        // the rule while it exists.
+        record.ObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+        record.MatchValue = cso.JoinMatchValue;
+        if (cso.JoinObjectMatchingRuleId is { } matchingRuleId && joiningRules.TryGetValue(matchingRuleId, out var matchingRule))
+        {
+            var source = matchingRule.Sources.Count == 1 ? matchingRule.Sources[0] : null;
+            record.MatchedAttributeName = matchingRule.TargetMetaverseAttribute?.Name;
+            record.MatchSource = string.IsNullOrWhiteSpace(source?.Expression) ? source?.ConnectedSystemAttribute?.Name : source.Expression;
         }
 
         record.Description = ScopingExplanationSummariser.DescribeJoin(record);

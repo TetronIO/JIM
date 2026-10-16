@@ -48,6 +48,20 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public string? ReferencesObjectTypeName { get; set; }
 
+    /// <summary>
+    /// Whether the Connected System's schema states this attribute's values are case-exact (an LDAP
+    /// <c>caseExactMatch</c> equality rule, an Active Directory case-sensitive string syntax, SCIM
+    /// <c>caseExact: true</c>, a case-sensitive SQL column collation). False when the schema says values ignore
+    /// case, or says nothing.
+    /// </summary>
+    public bool CaseExact { get; set; }
+
+    /// <summary>
+    /// Whether this is an operational attribute: one the Connected System maintains for its own operation. See
+    /// <see cref="ConnectedSystemObjectTypeAttribute.IsOperational"/>.
+    /// </summary>
+    public bool IsOperational { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

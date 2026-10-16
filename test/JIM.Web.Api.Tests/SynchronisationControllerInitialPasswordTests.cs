@@ -17,6 +17,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -66,6 +67,9 @@ public class SynchronisationControllerInitialPasswordTests
             .ReturnsAsync([]);
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);

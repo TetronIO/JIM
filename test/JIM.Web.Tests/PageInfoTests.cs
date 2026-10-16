@@ -71,6 +71,42 @@ public class PageInfoTests : JimComponentTestContext
     }
 
     [Test]
+    public async Task PageInfo_WithADocsPage_LinksToThatPageOnTheDocsSite()
+    {
+        var cut = Render(WithPopoverProvider("Synchronisation Rules", "What the page is for.", null, "configuration/synchronisation-rules.md"));
+
+        await cut.Find("button[aria-label]").ClickAsync(new MouseEventArgs());
+
+        cut.WaitForAssertion(() =>
+        {
+            var links = cut.FindAll(".jim-info-popover a");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(links.Select(l => l.GetAttribute("href")),
+                    Is.EqualTo(new[] { "https://docs.junctional.io/configuration/synchronisation-rules/" }));
+                Assert.That(links[0].GetAttribute("target"), Is.EqualTo("_blank"));
+            }
+        });
+    }
+
+    [Test]
+    public async Task PageInfo_WithADocsPageAndATerm_LinksToTheDocsPageBeforeTheGlossaryEntry()
+    {
+        // The docs page is about the page; the glossary entry is about one term on it. The page comes first.
+        var cut = Render(WithPopoverProvider("Connector Space", "What the page is for.", Term.ConnectorSpace,
+            "configuration/connected-systems.md#the-connector-space"));
+
+        await cut.Find("button[aria-label]").ClickAsync(new MouseEventArgs());
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.FindAll(".jim-info-popover a").Select(l => l.GetAttribute("href")), Is.EqualTo(new[]
+            {
+                "https://docs.junctional.io/configuration/connected-systems/#the-connector-space",
+                "https://docs.junctional.io/reference/glossary/#connector-space",
+            })));
+    }
+
+    [Test]
     public async Task TermHint_Clicked_UsesTheSamePaddedPopoverBody()
     {
         // One popover body for both affordances, so the padding and measure are fixed in one place.
@@ -88,7 +124,7 @@ public class PageInfoTests : JimComponentTestContext
         cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-info-popover"), Has.Count.EqualTo(1)));
     }
 
-    private static RenderFragment WithPopoverProvider(string title, string description, Term? term)
+    private static RenderFragment WithPopoverProvider(string title, string description, Term? term, string? docsPage = null)
     {
         return builder =>
         {
@@ -98,6 +134,7 @@ public class PageInfoTests : JimComponentTestContext
             builder.AddComponentParameter(2, nameof(PageInfo.Title), title);
             builder.AddComponentParameter(3, nameof(PageInfo.Term), term);
             builder.AddComponentParameter(4, nameof(PageInfo.ChildContent), (RenderFragment)(b => b.AddContent(0, description)));
+            builder.AddComponentParameter(5, nameof(PageInfo.DocsPage), docsPage);
             builder.CloseComponent();
         };
     }

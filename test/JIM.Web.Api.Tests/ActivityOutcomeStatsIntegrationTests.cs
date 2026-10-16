@@ -569,6 +569,37 @@ public class ActivityOutcomeStatsIntegrationTests
     }
 
     [Test]
+    public async Task GetStats_GeneratedValueWaitingOutcomes_CountsValuesHeldBackAsync()
+    {
+        // Arrange: Generated Value Forms (#2023). Two objects projected without their Account Name because the Email
+        // built from it needs a Region they have not got, recorded as GeneratedValueWaiting beneath the projection;
+        // a third was generated after a candidate was passed over, which is not a wait.
+        var activity = await CreateActivityAsync();
+
+        var waiting1 = await CreateRpeiAsync(activity, ObjectChangeType.Projected);
+        var projected1 = await CreateOutcomeAsync(waiting1, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        await CreateOutcomeAsync(waiting1, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, parent: projected1, ordinal: 0);
+        var waiting2 = await CreateRpeiAsync(activity, ObjectChangeType.Projected);
+        var projected2 = await CreateOutcomeAsync(waiting2, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        await CreateOutcomeAsync(waiting2, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, parent: projected2, ordinal: 0);
+        var generated = await CreateRpeiAsync(activity, ObjectChangeType.Projected);
+        var projected3 = await CreateOutcomeAsync(generated, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        await CreateOutcomeAsync(generated, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, parent: projected3, ordinal: 0);
+        await CreateOutcomeAsync(generated, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, parent: projected3, ordinal: 1);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalGeneratedValuesWaiting, Is.EqualTo(2));
+            Assert.That(stats.TotalGeneratedValues, Is.EqualTo(1), "a passed-over candidate is not a value generated");
+            Assert.That(stats.TotalGeneratedValueFailures, Is.Zero, "waiting is not a failure");
+        }
+    }
+
+    [Test]
     public async Task GetStats_LegacyFallback_GeneratedValueStatsAreZeroAsync()
     {
         // Arrange: no outcomes; the legacy RPEI-based fallback has no ObjectChangeType equivalent for

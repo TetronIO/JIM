@@ -30,6 +30,10 @@
 .PARAMETER Tab
     The tab's title, such as Docker. Leave it out for a command outside every tab.
 
+.PARAMETER Block
+    Which of the matching blocks to return, counting from 1, for a step that gives one command per case in turn (the
+    connected one, then the air-gapped one). Default 1.
+
 .EXAMPLE
     ./test/ci/deployment/Get-DocumentedCommand.ps1 -Path ./docs/administration/backup-recovery.md -Heading 'Restoring' -Tab Docker
 
@@ -49,7 +53,10 @@ param(
 
     [string]$Step,
 
-    [string]$Tab
+    [string]$Tab,
+
+    [ValidateRange(1, 100)]
+    [int]$Block = 1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,6 +84,7 @@ $inStep = -not $Step
 # so a line that is not ends it, and what follows is outside every tab.
 $tabTitle = $null
 $tabIndent = -1
+$found = 0
 for ($i = $start + 1; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
     if ($line -match '^(#{1,6})\s' -and $Matches[1].Length -le $level) {
@@ -97,14 +105,23 @@ for ($i = $start + 1; $i -lt $lines.Count; $i++) {
     }
     $wanted = $inStep -and $(if ($Tab) { $tabTitle -eq $Tab } else { $tabIndent -lt 0 })
     if ($wanted -and $line -match '^(\s*)```') {
+        $found++
+        if ($found -lt $Block) {
+            # Not this one: step over it, so that its contents are not read as the page's own lines.
+            for ($i++; $i -lt $lines.Count -and $lines[$i] -notmatch '^\s*```\s*$'; $i++) { }
+            continue
+        }
         $indent = $Matches[1]
-        $block = for ($j = $i + 1; $j -lt $lines.Count -and $lines[$j] -notmatch '^\s*```\s*$'; $j++) {
+        $blockLines = for ($j = $i + 1; $j -lt $lines.Count -and $lines[$j] -notmatch '^\s*```\s*$'; $j++) {
             if ($lines[$j].StartsWith($indent)) { $lines[$j].Substring($indent.Length) } else { $lines[$j].TrimStart() }
         }
-        return (@($block) -join "`n")
+        return (@($blockLines) -join "`n")
     }
 }
 $where = if ($Tab) { "under a `"$Tab`" tab" } else { 'outside a tab' }
+if ($Block -gt 1) {
+    $where += " (block $Block; it has $found)"
+}
 if ($Step) {
     throw "The section '$Heading' of $Path has no step '$Step' with a command $where"
 }

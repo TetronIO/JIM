@@ -16,13 +16,13 @@ function Get-JIMRole {
         without parameters, all roles are returned.
 
     .PARAMETER Id
-        The unique identifier (integer) of the role to retrieve.
+        Returns the Role with this ID.
 
     .PARAMETER Name
-        Filter roles by name. Supports wildcards (e.g., "Admin*").
+        Only Roles with this name.
 
     .OUTPUTS
-        PSCustomObject representing role(s).
+        One object per Role.
 
     .EXAMPLE
         Get-JIMRole
@@ -55,7 +55,8 @@ function Get-JIMRole {
         New-JIMApiKey
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RoleHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.RoleDto', ParameterSetName = 'ById')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

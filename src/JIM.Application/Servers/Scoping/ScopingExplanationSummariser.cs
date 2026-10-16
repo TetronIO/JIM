@@ -57,25 +57,30 @@ internal static class ScopingExplanationSummariser
         if (criterion.Outcome == ScopingCriterionOutcome.AttributeMissing)
             return "references no attribute";
         if (criterion.Outcome == ScopingCriterionOutcome.Invalid)
-            return "cannot be evaluated";
+            return criterion.FailureReason == null ? "cannot be evaluated" : $"cannot be evaluated. {criterion.FailureReason}";
+
+        // An expression criterion's value is the one it computed (#2054), and saying "is" would read as an attribute's.
+        var computed = criterion.Expression != null;
         if (criterion.Masked)
-            return "is hidden";
+            return computed ? "computed a hidden value" : "is hidden";
         if (criterion.ValueCount == 0)
-            return "has no value";
+            return computed ? "computed no value" : "has no value";
         if (criterion.ValueCount == 1)
-            return $"is {criterion.ActualDisplay}";
+            return $"{(computed ? "computed" : "is")} {criterion.ActualDisplay}";
 
         // Several values (#1923): name the one that decided it, or say that none matched.
         var count = criterion.ValueCount.ToString(CultureInfo.InvariantCulture);
         if (criterion.ActualDisplay != null)
-            return $"includes {criterion.ActualDisplay} (one of {count} values)";
+            return computed
+                ? $"computed {criterion.ActualDisplay} (one of {count} values)"
+                : $"includes {criterion.ActualDisplay} (one of {count} values)";
 
         var expected = criterion.ExpectedDisplay ?? criterion.RelativeDisplay;
         if (expected == null)
-            return $"has {count} values";
+            return $"{(computed ? "computed" : "has")} {count} values";
 
         var (condition, _) = Wording(PositiveForm(criterion.ComparisonType), criterion.AttributeType);
-        return $"none of {count} values {condition} {expected}";
+        return $"none of {count} {(computed ? "computed " : "")}values {condition} {expected}";
     }
 
     /// <summary>A group as one line of the tree, for example "All of these must be met (not met)".</summary>
@@ -151,9 +156,9 @@ internal static class ScopingExplanationSummariser
         {
             (ConnectedSystemObjectJoinMethod.Projection, not null) => $"Projected by {rule}",
             (ConnectedSystemObjectJoinMethod.Provisioning, not null) => $"Provisioned by {rule}",
-            (ConnectedSystemObjectJoinMethod.InboundMatching, not null) => $"Joined by matching, under {rule}",
+            (ConnectedSystemObjectJoinMethod.InboundMatching, not null) => $"Joined by matching, under {rule}{DescribeMatch(record)}",
             (ConnectedSystemObjectJoinMethod.InboundMatching, null) when record.Source == JoinRecordSource.Recorded =>
-                "Joined by matching on the Connected System's Object Matching Rules",
+                $"Joined by matching on the Connected System's Object Matching Rules{DescribeMatch(record)}",
             (ConnectedSystemObjectJoinMethod.ExportMatching, not null) =>
                 $"Joined by {rule}, which matched an existing object instead of provisioning a new one",
             _ => record.JoinType switch
@@ -163,6 +168,20 @@ internal static class ScopingExplanationSummariser
                 _ => "Joined; how was not recorded"
             }
         };
+    }
+
+    /// <summary>
+    /// The clause naming what a matching join matched on, or nothing when the join recorded no value (it predates
+    /// recording). A rule since deleted still has its value, and says so.
+    /// </summary>
+    private static string DescribeMatch(JoinRecord record)
+    {
+        if (record.MatchValue == null)
+            return string.Empty;
+
+        return record.MatchedAttributeName == null || record.MatchSource == null
+            ? $": matched \"{record.MatchValue}\" (the Object Matching Rule has since been deleted)"
+            : $": matched \"{record.MatchValue}\" on {record.MatchedAttributeName} (equals {record.MatchSource})";
     }
 
     #endregion
@@ -396,7 +415,6 @@ internal static class ScopingExplanationSummariser
         var (condition, requirement) = Wording(criterion.ComparisonType, criterion.AttributeType);
         var verb = form == Form.Requirement ? requirement : condition;
         var quote = criterion.AttributeType == AttributeDataType.Text;
-        var expectedEmpty = criterion.ExpectedDisplay == null;
         var noValue = criterion.Outcome == ScopingCriterionOutcome.NoValue;
 
         line.Attribute(criterion.AttributeName!);
@@ -414,15 +432,15 @@ internal static class ScopingExplanationSummariser
             return;
         }
 
-        // An empty expected value turns equality into presence: "has no value", "has a value".
-        if (expectedEmpty && criterion.ComparisonType == SearchComparisonType.Equals)
+        // The presence operators compare against nothing, so there is no expected value to show.
+        if (criterion.ComparisonType == SearchComparisonType.HasNoValue)
         {
             line.Text(form == Form.Requirement ? " must have no value" : " has no value");
             if (includeCurrent && !noValue)
                 AppendCurrent(line, criterion, quote, caseIsTheReason: false);
             return;
         }
-        if (expectedEmpty && criterion.ComparisonType == SearchComparisonType.NotEquals)
+        if (criterion.ComparisonType == SearchComparisonType.HasValue)
         {
             line.Text(form == Form.Requirement ? " needs a value" : " has a value");
             return;
@@ -517,6 +535,8 @@ internal static class ScopingExplanationSummariser
             "does not end with" => ("does not end with", "must not end with"),
             "contains" => ("contains", "must contain"),
             "does not contain" => ("does not contain", "must not contain"),
+            "matches pattern" => ("matches pattern", "must match pattern"),
+            "does not match pattern" => ("does not match pattern", "must not match pattern"),
             // The ordered comparisons' labels are not verbs ("before", "greater than").
             _ => ($"is {label}", $"must be {label}")
         };
@@ -529,14 +549,8 @@ internal static class ScopingExplanationSummariser
             : comparison.ToString().SplitOnCapitalLetters()).ToLowerInvariant();
 
     /// <summary>The operator a negated one negates ("does not equal" to "equals"); any other operator unchanged.</summary>
-    private static SearchComparisonType PositiveForm(SearchComparisonType comparison) => comparison switch
-    {
-        SearchComparisonType.NotEquals => SearchComparisonType.Equals,
-        SearchComparisonType.NotStartsWith => SearchComparisonType.StartsWith,
-        SearchComparisonType.NotEndsWith => SearchComparisonType.EndsWith,
-        SearchComparisonType.NotContains => SearchComparisonType.Contains,
-        _ => comparison
-    };
+    private static SearchComparisonType PositiveForm(SearchComparisonType comparison) =>
+        SearchComparisonOperators.Negates(comparison) ?? comparison;
 
     /// <summary>
     /// Whether a case-sensitive text criterion failed only on case, so the words can say that is why: without it,
@@ -662,6 +676,12 @@ internal static class ScopingExplanationSummariser
             var line = new LineBuilder();
             line.Text($"Criterion {criterion.Path} compares ");
             line.Attribute(criterion.AttributeName ?? "an attribute");
+            if (SearchComparisonOperators.IsPattern(criterion.ComparisonType) && criterion.AttributeType == AttributeDataType.Text)
+            {
+                // The operator suits the type, so it is the pattern itself: invalid, or too slow on this object's value.
+                line.Text(" with a pattern that cannot be evaluated; correct or remove it in the Synchronisation Rule.");
+                return line.ToBullet();
+            }
             var typeName = TypeName(criterion.AttributeType);
             line.Text($" with \"{Label(criterion.ComparisonType, criterion.AttributeType)}\", which {Article(typeName)} {typeName} attribute cannot use; " +
                       "correct or remove it in the Synchronisation Rule.");

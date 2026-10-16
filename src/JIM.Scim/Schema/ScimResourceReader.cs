@@ -45,25 +45,26 @@ public static class ScimResourceReader
         var read = new List<ConnectedSystemImportObjectAttribute>();
         var warnings = new List<string>();
 
+        var unreadable = new List<ConnectedSystemImportObjectAttributeValueError>();
+
         foreach (var attribute in attributes)
         {
             var values = ReadValues(resource, attribute, warnings);
             if (values.Count == 0)
                 continue;
 
-            var converted = Convert(attribute, values, out var error);
-            if (error != null)
-            {
-                // Any value JIM cannot hold faithfully fails the whole object. Importing the rest would
-                // present a partial object as a complete one, which synchronisation would then act on.
-                return new ScimResourceReadResult { Error = error };
-            }
+            var unreadableBefore = unreadable.Count;
+            var converted = Convert(attribute, values, unreadable);
 
-            if (converted != null)
+            // An attribute with a value JIM cannot hold faithfully is left out whole, and each such value reported
+            // (#2066). JIM then leaves the attribute as it already held it: what did convert is only part of what
+            // the provider holds, and importing it would present a partial attribute as a complete one. The rest of
+            // the object, its id included, is still read, so it can be matched rather than found missing.
+            if (converted != null && unreadable.Count == unreadableBefore)
                 read.Add(converted);
         }
 
-        return new ScimResourceReadResult { Attributes = read, Warnings = warnings };
+        return new ScimResourceReadResult { Attributes = read, Warnings = warnings, UnreadableValues = unreadable };
     }
 
     /// <summary>
@@ -197,36 +198,43 @@ public static class ScimResourceReader
 
     /// <summary>
     /// Converts located JSON values into the typed list the import object expects, returning null when
-    /// nothing usable survived.
+    /// nothing usable survived. A value that cannot be converted is added to <paramref name="unreadable"/>
+    /// rather than dropped: dropped, it left the attribute missing, which JIM read as "no value" (#2066).
+    /// An empty string is no value at all, as a JSON null is, and is passed over.
     /// </summary>
-    private static ConnectedSystemImportObjectAttribute? Convert(ScimFlattenedAttribute attribute, List<JsonElement> values, out string? error)
+    private static ConnectedSystemImportObjectAttribute? Convert(ScimFlattenedAttribute attribute, List<JsonElement> values, List<ConnectedSystemImportObjectAttributeValueError> unreadable)
     {
-        error = null;
         var converted = new ConnectedSystemImportObjectAttribute { Name = attribute.Name, Type = attribute.Type };
 
-        foreach (var value in values)
+        foreach (var value in values.Where(v => v.ValueKind != JsonValueKind.String || !string.IsNullOrWhiteSpace(v.GetString())))
         {
             switch (attribute.Type)
             {
                 case AttributeDataType.Boolean:
-                    // Booleans are single-valued by nature: several values cannot be told apart.
-                    converted.BoolValue = value.ValueKind switch
-                    {
-                        JsonValueKind.True => true,
-                        JsonValueKind.False => false,
-                        JsonValueKind.String => bool.TryParse(value.GetString(), out var parsed) ? parsed : converted.BoolValue,
-                        _ => converted.BoolValue
-                    };
+                    // Every value is staged (#2153): a true or false attribute holds one, and JIM itself reports an
+                    // attribute arriving with both, the same way for every Connector, rather than the last one winning.
+                    if (value.ValueKind == JsonValueKind.True)
+                        converted.BoolValues.Add(true);
+                    else if (value.ValueKind == JsonValueKind.False)
+                        converted.BoolValues.Add(false);
+                    else if (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed))
+                        converted.BoolValues.Add(parsed);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not true or false."));
                     break;
 
                 case AttributeDataType.LongNumber:
                     if (TryGetInt64(value, out var longValue))
                         converted.LongValues.Add(longValue);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not a whole number JIM can hold."));
                     break;
 
                 case AttributeDataType.Number:
                     if (TryGetInt64(value, out var intCandidate) && intCandidate is >= int.MinValue and <= int.MaxValue)
                         converted.IntValues.Add((int)intCandidate);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not a whole number JIM can hold."));
                     break;
 
                 case AttributeDataType.Decimal:
@@ -239,24 +247,29 @@ public static class ScimResourceReader
                         break;
                     }
 
-                    // Out of range or unparseable: rounding it would corrupt the value silently, and
-                    // synchronisation integrity outranks importing the object at all.
-                    error = $"The service provider returned a value for '{attribute.Name}' that is not a decimal JIM can hold: '{LogSanitiser.Sanitise(raw)}'.";
-                    return null;
+                    // Out of range or unparseable: rounding it would corrupt the value silently.
+                    unreadable.Add(Unreadable(attribute, value, "Not a decimal number JIM can hold."));
+                    break;
 
                 case AttributeDataType.DateTime:
                     if (TryGetDateTime(value, out var dateTimeValue))
-                        converted.DateTimeValue = dateTimeValue;
+                        converted.DateTimeValues.Add(dateTimeValue);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not a valid date and time."));
                     break;
 
                 case AttributeDataType.Binary:
                     if (TryGetBinary(value, out var bytes))
                         converted.ByteValues.Add(bytes);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not valid base64-encoded binary."));
                     break;
 
                 case AttributeDataType.Guid:
                     if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var guidValue))
                         converted.GuidValues.Add(guidValue);
+                    else
+                        unreadable.Add(Unreadable(attribute, value, "Not a valid GUID."));
                     break;
 
                 case AttributeDataType.Reference:
@@ -276,6 +289,13 @@ public static class ScimResourceReader
         return HasValue(converted) ? converted : null;
     }
 
+    private static ConnectedSystemImportObjectAttributeValueError Unreadable(ScimFlattenedAttribute attribute, JsonElement value, string reason) => new()
+    {
+        AttributeName = attribute.Name,
+        Value = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText(),
+        Reason = reason
+    };
+
     private static bool HasValue(ConnectedSystemImportObjectAttribute attribute)
     {
         return attribute.StringValues.Count > 0
@@ -285,8 +305,8 @@ public static class ScimResourceReader
                || attribute.DecimalValues.Count > 0
                || attribute.GuidValues.Count > 0
                || attribute.ByteValues.Count > 0
-               || attribute.DateTimeValue.HasValue
-               || attribute.BoolValue.HasValue;
+               || attribute.HasDateTimeValues
+               || attribute.HasBoolValues;
     }
 
     /// <summary>

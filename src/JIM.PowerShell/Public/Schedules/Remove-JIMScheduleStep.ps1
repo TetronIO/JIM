@@ -14,19 +14,20 @@ function Remove-JIMScheduleStep {
         The unique identifier (GUID) of the Schedule to remove the step from.
 
     .PARAMETER StepIndex
-        The index of the step to remove (0-based).
+        The position of the step to remove, counting from 0.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
 
     .PARAMETER Force
-        Bypasses confirmation prompts.
+        Suppresses the confirmation prompt.
 
     .PARAMETER PassThru
-        If specified, returns the updated Schedule object.
+        Returns the updated Schedule.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Schedule object.
+        With -PassThru, the updated Schedule in full; otherwise nothing. The remaining steps are renumbered, and
+        each keeps its Id and its failure setting.
 
     .EXAMPLE
         Remove-JIMScheduleStep -ScheduleId "12345678-..." -StepIndex 0
@@ -43,7 +44,7 @@ function Remove-JIMScheduleStep {
         Add-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ScheduleDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
@@ -69,7 +70,7 @@ function Remove-JIMScheduleStep {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess("Step $StepIndex from Schedule $ScheduleId", "Remove Schedule Step")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target "Step $StepIndex from Schedule $ScheduleId" -Action "Remove Schedule Step" -Force:$Force) {
             Write-Verbose "Removing step $StepIndex from Schedule: $ScheduleId"
 
             try {

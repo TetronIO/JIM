@@ -1,5 +1,9 @@
 ---
 title: Backup & Disaster Recovery
+description: Back up JIM's database and encryption keys as a matched pair, and restore them so every stored secret still decrypts.
+type: how-to
+audience: operator
+validated: v0.16.0
 ---
 
 # Backup & Disaster Recovery
@@ -7,7 +11,7 @@ title: Backup & Disaster Recovery
 JIM stores two pieces of state that must be backed up **together as a matched pair**: the PostgreSQL database and the encryption key set. Backing up one without the other leaves you unable to recover.
 
 !!! danger "The database alone is not a recoverable backup"
-    Sensitive values in the database (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) are encrypted at rest. They can only be decrypted with the encryption keys that were in use when they were written. Restore a database backup onto a host that does not have the matching keys and **every stored secret becomes permanently undecryptable**. The rest of the data restores fine, but JIM cannot connect to any Connected System until an administrator re-enters every affected secret by hand.
+    Sensitive values in the database are encrypted at rest: each Connected System's credentials and other secret settings, initial passwords waiting to be delivered, and queued Password Synchronisation changes. They can only be decrypted with the encryption keys that were in use when they were written. Restore a database backup onto a host that does not have the matching keys and **every stored secret becomes permanently undecryptable**. The rest of the data restores fine, but JIM cannot connect to any Connected System until an administrator re-enters every affected secret by hand.
 
 ## 🔐 What to back up
 
@@ -80,7 +84,7 @@ Then check the archive holds the keys. It lists one `key-` file per key; if it l
 tar tzf jim-keys-2026-07-09.tar.gz | grep key-
 ```
 
-If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of using the managed volume, simply back up that directory.
+If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of using the managed volume, back up that directory instead.
 
 ### 3. Store both artefacts together
 
@@ -156,7 +160,9 @@ Restore both artefacts from the **same backup set**, then start the services.
         sudo systemctl start jim.service
         ```
 
-4. **Confirm secrets decrypt.** Open a Connected System that uses a password (for example an LDAP Connector) and run an import, or trigger a synchronisation run. Successful connection confirms the keys and database match. A decryption error in the logs ("Failed to decrypt credential") means the key set does not match the database; restore the correct keys before proceeding.
+## Check it worked
+
+Confirm the secrets decrypt: run an import from a Connected System that signs in with a password, such as one using the LDAP Connector. A successful connection confirms the keys and the database match. A decryption error in the logs ("Failed to decrypt credential") means the key set does not match the database; stop JIM and restore the keys from the same backup set before going further.
 
 !!! tip "Test your restore"
     A backup you have never restored is a hypothesis, not a backup. Periodically rehearse a full restore (database plus keys) into a scratch environment and confirm a Connected System still connects.
@@ -174,11 +180,10 @@ Because the keys are unencrypted, anyone with both the database backup and the k
 If you have a valid database backup but no matching keys, the non-secret data is fully recoverable but the encrypted values are not. Recovery means:
 
 1. Restore the database as normal.
-2. Re-enter every Connected System secret (service-account passwords, and any other encrypted setting) via the administration UI.
-3. Re-set the SSO secret and any other encrypted [Service Settings](../configuration/service-settings.md).
-4. Re-enter any Schedule SQL-step connection strings.
+2. Re-enter every Connected System secret (service-account passwords, and any other encrypted setting) in the portal.
+3. Set again any password that was waiting to be delivered: initial passwords and queued Password Synchronisation changes cannot be read without the keys that encrypted them.
 
-There is no way to recover the original secret values without the keys; this is by design.
+The SSO secret needs nothing: JIM reads it from `JIM_SSO_SECRET` each time it starts, and encrypts it with the keys it has. There is no way to recover the original secret values without the keys; this is by design.
 
 ## ✅ Checklist
 
@@ -190,6 +195,6 @@ There is no way to recover the original secret values without the keys; this is 
 
 ## Related
 
-- [Deployment Guide](deployment.md) -- volumes, production readiness checklist, air-gapped checklist.
-- [Configuration Reference](configuration.md) -- the `JIM_ENCRYPTION_KEY_PATH` variable.
-- [Service Settings](../configuration/service-settings.md) -- encrypted settings and how secret changes are recorded.
+- [Deployment Guide](deployment.md): volumes, production readiness checklist, air-gapped checklist.
+- [Configuration Reference](configuration.md): the `JIM_ENCRYPTION_KEY_PATH` variable.
+- [Service Settings](../configuration/service-settings.md): how secret changes are recorded.

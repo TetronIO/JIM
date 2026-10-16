@@ -38,7 +38,9 @@
 # them. The last step resumes them, and a watchdog on the host resumes them anyway if this job is cancelled or dies
 # before it gets there.
 #
-# Configuration: none. The suite needs no secrets (its test credentials are throwaway and built in).
+# Configuration: the suite needs none (its test credentials are throwaway and built in). The jim-screenshots job, which
+# follows a passing suite with the release's screenshots (see that job), uses the jim-automation app's JIM_AUTOMATION_*
+# secrets to open its pull requests on junctional.io and tetron.io.
 #
 # The release gate: release.yml's jim-pre-release-gate job and the /release skill require a `success` status from this
 # workflow on the SHA being tagged (scripts/Test-PreReleaseGate.ps1), with no override, once the repository variable
@@ -211,6 +213,192 @@ jobs:
 
       # Last, and always, so the host's other runners come back however this job ended. The host's watchdog
       # resumes them too if the job dies before this step.
+      - name: Resume this host's other runners
+        if: ${{ always() }}
+        run: |
+          sudo -n /usr/local/sbin/ci-runner-pause resume
+          exit $LASTEXITCODE
+
+  # The release's screenshots (#582): once the suite has passed on the commit the release will tag, the same runner
+  # loads integration Scenario 8 at Scale100k50Groups, captures every image in scripts/screenshots/manifest.json with
+  # the portal in Production mode, keeps the whole library as an artefact, and opens a pull request on junctional.io
+  # with the images its product tour shows (scripts/screenshots/Publish-TourScreenshots.ps1), and one on tetron.io
+  # replacing the JIM screenshot in its homepage hero (scripts/screenshots/Publish-TetronScreenshots.ps1). No one
+  # reviews them: the capture refuses blank images and dark and light pairs in the same theme, junctional.io is built
+  # with the new images before anything is committed, and each pull request merges once its checks pass and the
+  # release is published (release.yml's publish-screenshots job, or this job if the release came out first).
+  #
+  # A job here rather than a workflow of its own, because the jim-prerelease runner group admits exactly this file. It
+  # cannot hold up a release: the gate reads the jim-pre-release commit status, which the job above has already posted.
+  #
+  # The host, once (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries, from
+  # scripts/toolchain/install-playwright-for-runner.sh (re-run it with the new pin when PLAYWRIGHT_MCP_VERSION in
+  # .devcontainer/setup.sh moves); the 20+ GB the Scale100k50Groups template needs; the Scale100k50Groups OpenLDAP
+  # snapshot, which the first run builds and keeps. The jim-automation app needs Contents and Pull requests write on
+  # junctional.io and tetron.io.
+  jim-screenshots:
+    name: jim-screenshots
+    needs: jim-pre-release
+    runs-on: [self-hosted, jim-prerelease]
+    # Reads the repository; junctional.io is reached with the jim-automation app's own token, minted below.
+    permissions:
+      contents: read
+    # Scenario 8 at Scale100k50Groups, the rebuild at the release version, and about four minutes of capture.
+    timeout-minutes: 300
+    # The host's Docker is this job's alone, as for the suite: a new pre-release run waits for it.
+    concurrency:
+      group: jim-pre-release
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Hand back files a previous run's containers wrote
+        shell: bash
+        run: |
+          if [ -d "$GITHUB_WORKSPACE/test/integration/results" ]; then
+            docker run --rm -v "$GITHUB_WORKSPACE/test/integration/results:/results" busybox:1.37.0 \
+              chown -R "$(id -u):$(id -g)" /results
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Pause this host's other runners
+        run: |
+          sudo -n /usr/local/sbin/ci-runner-pause pause "$env:RUNNER_NAME"
+          exit $LASTEXITCODE
+
+      - name: Create the stack's .env
+        run: |
+          $bytes = New-Object byte[] 24
+          [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+          $password = [Convert]::ToBase64String($bytes).Replace('+', 'A').Replace('/', 'B').Replace('=', '')
+          $text = (Get-Content -LiteralPath .env.example -Raw) -replace '(?m)^JIM_DB_PASSWORD=.*$', "JIM_DB_PASSWORD=$password"
+          Set-Content -LiteralPath .env -Value $text -NoNewline
+
+      # The browser the capture drives: the @playwright/mcp version .devcontainer/setup.sh pins (and tooling-pin-check
+      # watches), so CI captures with the same Playwright and Chromium a developer does. Install scripts are not run;
+      # Chromium comes from Playwright's own installer, kept in the runner's tool cache between runs.
+      - name: Install the capture's browser
+        run: |
+          $pin = (Select-String -LiteralPath .devcontainer/setup.sh -Pattern '^PLAYWRIGHT_MCP_VERSION="([^"]+)"').Matches[0].Groups[1].Value
+          $prefix = Join-Path $env:RUNNER_TEMP 'playwright'
+          npm install --prefix $prefix --ignore-scripts --no-audit --no-fund "@playwright/mcp@$pin"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $core = @(
+            (Join-Path $prefix 'node_modules' '@playwright' 'mcp' 'node_modules' 'playwright-core'),
+            (Join-Path $prefix 'node_modules' 'playwright-core')
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $core) { throw "No playwright-core under $prefix after installing @playwright/mcp@$pin." }
+          $browsers = Join-Path $env:RUNNER_TOOL_CACHE 'ms-playwright'
+          $env:PLAYWRIGHT_BROWSERS_PATH = $browsers
+          node (Join-Path $core 'cli.js') install chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "JIM_PLAYWRIGHT_MODULE=$core" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PLAYWRIGHT_BROWSERS_PATH=$browsers" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Capture the screenshots
+        id: capture
+        run: |
+          $version = 'v' + (Get-Content -LiteralPath VERSION -Raw).Trim()
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          pwsh -File ./scripts/Capture-Screenshots.ps1 -Version $version -PrepareData -OutputPath artifacts/screenshots
+          exit $LASTEXITCODE
+
+      # The whole library, including the images not on the sites; both sites' pull requests link to it.
+      - name: Upload the screenshots
+        if: ${{ always() && steps.capture.outputs.version != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: jim-screenshots-${{ steps.capture.outputs.version }}-${{ github.run_attempt }}
+          path: artifacts/screenshots/
+          if-no-files-found: warn
+          retention-days: 90
+
+      # A prerelease's screenshots stay in the artefact; the site shows releases only, as notify-site in release.yml.
+      - name: Mint a junctional.io token
+        id: site-token
+        if: ${{ success() && !contains(steps.capture.outputs.version, '-') }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: junctional.io
+
+      - name: Check out junctional.io
+        if: ${{ steps.site-token.outcome == 'success' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ github.repository_owner }}/junctional.io
+          token: ${{ steps.site-token.outputs.token }}
+          path: junctional.io
+          persist-credentials: false
+
+      # No one reviews the pull request: the capture refused blank images and pairs in the wrong theme, -Build refuses
+      # images the site will not build with, and release.yml's publish-screenshots job merges it once the release is
+      # published. If the release came out while this job was capturing, -MergeWhenReleased merges it here instead.
+      - name: Open the junctional.io pull request
+        if: ${{ steps.site-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.site-token.outputs.token }}
+          JIM_RELEASE_TOKEN: ${{ github.token }}
+          VERSION_FOLDER: ${{ steps.capture.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pwsh -File ./scripts/screenshots/Publish-TourScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
+            -Version $env:VERSION_FOLDER -SitePath junctional.io -Repository "$env:GITHUB_REPOSITORY_OWNER/junctional.io" -RunUrl $env:RUN_URL `
+            -Build -MergeWhenReleased
+          exit $LASTEXITCODE
+
+      # tetron.io's homepage hero shows JIM's home page. Its own token and steps, run whether or not junctional.io's
+      # succeeded, so one site's failure does not keep the other's screenshots back (the job still fails).
+      - name: Mint a tetron.io token
+        id: tetron-token
+        if: ${{ !cancelled() && steps.capture.outcome == 'success' && !contains(steps.capture.outputs.version, '-') }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: tetron.io
+
+      - name: Check out tetron.io
+        if: ${{ !cancelled() && steps.tetron-token.outcome == 'success' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ github.repository_owner }}/tetron.io
+          token: ${{ steps.tetron-token.outputs.token }}
+          path: tetron.io
+          persist-credentials: false
+
+      # Merged the same way; its own check (the Azure Static Web Apps preview) builds the site with the new image.
+      - name: Open the tetron.io pull request
+        if: ${{ !cancelled() && steps.tetron-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.tetron-token.outputs.token }}
+          JIM_RELEASE_TOKEN: ${{ github.token }}
+          VERSION_FOLDER: ${{ steps.capture.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pwsh -File ./scripts/screenshots/Publish-TetronScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
+            -Version $env:VERSION_FOLDER -SitePath tetron.io -Repository "$env:GITHUB_REPOSITORY_OWNER/tetron.io" -RunUrl $env:RUN_URL `
+            -MergeWhenReleased
+          exit $LASTEXITCODE
+
+      # A serial run's stack carries the SambaAD lane's names (the serial defaults), whatever directory it used.
+      - name: Tear down the stack
+        if: ${{ always() }}
+        run: |
+          . ./test/integration/utils/Invoke-IntegrationLanes.ps1
+          try { Remove-IntegrationLaneStack -Name 'SambaAD' -RepoRoot (Get-Location) }
+          catch { Write-Host "::warning::Removing the stack failed: $_" }
+          if (Test-Path -LiteralPath 'test/integration/results') {
+            docker run --rm -v "$(Resolve-Path 'test/integration/results'):/results" busybox:1.37.0 chown -R "$(id -u):$(id -g)" /results
+          }
+          exit 0
+
       - name: Resume this host's other runners
         if: ${{ always() }}
         run: |

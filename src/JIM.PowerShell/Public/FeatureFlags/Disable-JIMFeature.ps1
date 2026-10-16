@@ -13,13 +13,14 @@ function Disable-JIMFeature {
         Supports ShouldProcess; use -WhatIf or -Confirm to preview or confirm the operation.
 
     .PARAMETER Name
-        The flag's key, e.g. "Features.SomeInDevelopmentFeature".
+        The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from
+        Get-JIMFeature binds by its Key.
 
     .PARAMETER PassThru
-        If specified, returns the updated feature flag object.
+        Returns the feature flag as updated.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated feature flag object.
+        With -PassThru, the feature flag as updated; otherwise nothing.
 
     .EXAMPLE
         Disable-JIMFeature -Name "Features.SomeInDevelopmentFeature"
@@ -36,7 +37,7 @@ function Disable-JIMFeature {
         Enable-JIMFeature
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.FeatureFlagDto')]
     param(
         [Parameter(Mandatory, Position = 0, ValueFromPipelineByPropertyName)]
         [Alias('Key')]

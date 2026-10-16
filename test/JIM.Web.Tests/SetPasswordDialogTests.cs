@@ -127,7 +127,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
         IReadOnlyList<MetaverseObjectAccount>? accounts = null,
         PasswordPolicyReconciliation? reconciliation = null,
         TimeSpan? deliveryWait = null,
-        Func<PasswordSetSubmission, Task<PasswordQueueResult>>? setPassword = null)
+        Func<PasswordSetSubmission, Task<PasswordQueueResult>>? setPassword = null,
+        Func<int, Task<bool>>? confirmStopTrying = null)
     {
         accounts ??= allowSelection ? _accounts : [_accounts[0]];
 
@@ -141,7 +142,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
             { x => x.Reconcile, (IReadOnlyList<MetaverseObjectAccount> _) => reconciliation ?? Reconciliation() },
             { x => x.GeneratePassword, (PasswordGenerationPolicy _) => { _generateCalls++; return $"{GeneratedPassword}-{_generateCalls}"; } },
             { x => x.SetPassword, setPassword ?? Queue },
-            { x => x.StopTrying, (int connectedSystemId) => { _stopped.Add(connectedSystemId); return Task.CompletedTask; } }
+            { x => x.StopTrying, (int connectedSystemId) => { _stopped.Add(connectedSystemId); return Task.CompletedTask; } },
+            { x => x.ConfirmStopTrying, confirmStopTrying ?? (_ => Task.FromResult(true)) }
         };
 
         var provider = Render<MudDialogProvider>();
@@ -879,6 +881,38 @@ public class SetPasswordDialogTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// Regression for #2159. A system that set the password but could not apply what was asked of it (OpenLDAP and
+    /// 389 Directory Server have no "change at next sign-in") must not be described from the request: the row
+    /// carries what the delivery's Activity says was applied, and the summary is a warning rather than a success,
+    /// because "must be changed at next sign-in" is what the helpdesk passes on to the person.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemCouldNotApplyTheExpiry_ShowsWhatWasAppliedAndWarns()
+    {
+        const string applied = "Password set on Fabrikam HR. Not everything asked for could be applied: the password ages according to Fabrikam HR's own policy.";
+        var warned = Target("Fabrikam HR", PasswordChangeTargetState.Set, applied);
+        warned.CompletedWithWarning = true;
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."), warned);
+        var provider = ShowDialog(allowSelection: true);
+        Click(provider, SelectAllMarker);
+        Generate(provider);
+
+        SubmitAndSettle(provider);
+
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Fabrikam HR"),
+                "the summary names the system that did not apply everything asked");
+            Assert.That(rows.Select(r => r.GetAttribute("data-state")), Is.All.EqualTo("Set"), "the password is set on both");
+            Assert.That(rows[0].TextContent, Does.Contain("must be changed at next sign-in"), "the system that applied it says so");
+            Assert.That(rows[1].TextContent, Does.Contain(applied));
+            Assert.That(rows[1].TextContent, Does.Not.Contain("must be changed at next sign-in"));
+        }
+    }
+
+    /// <summary>
     /// The rows appear from what was queued, so the stage is never empty while the first wait is in flight, and
     /// each one moves as its system answers.
     /// </summary>
@@ -949,6 +983,40 @@ public class SetPasswordDialogTests : JimComponentTestContext
             {
                 Assert.That(_stopped, Is.EqualTo(new[] { _accounts[1].ConnectedSystemId }), "stop trying is for that Connected System alone");
                 Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[1].GetAttribute("data-state"), Is.EqualTo("Cancelled"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Stop trying is asked about first where the host says so (#2160: the change is a Connected System Object's first
+    /// password, and cancelling it leaves that object without one). Declined, nothing is stopped and the row still
+    /// reads as being retried.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_StopTryingDeclined_StopsNothing()
+    {
+        var asked = new List<int>();
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Retrying, "Connection refused", PasswordSetFailureReason.Transient, DateTime.UtcNow.AddMinutes(5)));
+        var provider = ShowDialog(allowSelection: true, confirmStopTrying: connectedSystemId =>
+        {
+            asked.Add(connectedSystemId);
+            return Task.FromResult(false);
+        });
+        Click(provider, SelectAllMarker);
+        Generate(provider);
+        SubmitAndSettle(provider);
+
+        Click(provider, StopTryingMarker);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(asked, Is.EqualTo(new[] { _accounts[1].ConnectedSystemId }));
+                Assert.That(_stopped, Is.Empty);
+                Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[1].GetAttribute("data-state"), Is.EqualTo("Retrying"));
             }
         });
     }

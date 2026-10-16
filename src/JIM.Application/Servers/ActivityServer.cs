@@ -12,7 +12,7 @@ using JIM.Models.Utility;
 using Serilog;
 namespace JIM.Application.Servers;
 
-public class ActivityServer
+public partial class ActivityServer
 {
     private JimApplication Application { get; }
 
@@ -597,6 +597,15 @@ public class ActivityServer
         return await Application.Repository.Activity.HasAnyRunProfileExecutionAsync();
     }
 
+    /// <summary>
+    /// Whether any of the Activity's items left reference values unresolved (#959), under any Unresolved Reference
+    /// Handling: what decides whether the Activity's page offers View Affected Objects.
+    /// </summary>
+    public async Task<bool> HasUnresolvedReferencesAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.HasUnresolvedReferencesAsync(activityId);
+    }
+
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.
@@ -682,7 +691,7 @@ public class ActivityServer
     /// RPEIs with errors, the total number of RPEIs, and the number of UnhandledError RPEIs,
     /// enabling precise activity completion status determination without loading RPEIs into memory.
     /// </summary>
-    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }
@@ -701,6 +710,66 @@ public class ActivityServer
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemCoreAsync(id);
     }
+
+    /// <summary>
+    /// A Run Profile Execution Item's Joined outcome, which says which Object Matching Rule made the join and on what
+    /// value (#2052); null when the item recorded no Joined outcome.
+    /// </summary>
+    public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
+    {
+        return await Application.Repository.Activity.GetJoinedOutcomeAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded,
+    /// each with whether it still exists and, for a Metaverse Object, what is joined to it now. Three reads at most,
+    /// whatever the number of candidates.
+    /// </summary>
+    public async Task<IReadOnlyList<MatchCandidateDetail>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId)
+    {
+        var candidates = await Application.Repository.Activity.GetMatchCandidatesAsync(runProfileExecutionItemId);
+        if (candidates.Count == 0)
+            return [];
+
+        var metaverseObjectIds = CandidateIds(candidates, MatchCandidateKind.MetaverseObject);
+        var connectedSystemObjectIds = CandidateIds(candidates, MatchCandidateKind.ConnectedSystemObject);
+        var existingMetaverseObjects = await Application.Repository.Metaverse.GetExistingMetaverseObjectTypePluralNamesAsync(metaverseObjectIds);
+        var existingConnectedSystemObjectIds = await Application.Repository.ConnectedSystems.GetExistingConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        var joinedByMetaverseObjectId = (await Application.Repository.ConnectedSystems
+                .GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync([.. existingMetaverseObjects.Keys]))
+            .GroupBy(cso => cso.MetaverseObjectId!.Value)
+            .ToDictionary(g => g.Key, g => g
+                .OrderBy(cso => cso.ConnectedSystem?.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cso => cso.NameOrId, StringComparer.OrdinalIgnoreCase)
+                .Select(cso => new MatchCandidateJoinedObject
+                {
+                    ConnectedSystemObjectId = cso.Id,
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemName = cso.ConnectedSystem?.Name,
+                    TypeName = cso.Type?.Name,
+                    DisplayName = cso.Name,
+                    ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName()
+                })
+                .ToList());
+
+        return candidates.Select(candidate => candidate.CandidateKind == MatchCandidateKind.MetaverseObject
+                ? new MatchCandidateDetail
+                {
+                    Candidate = candidate,
+                    Exists = existingMetaverseObjects.ContainsKey(candidate.CandidateId),
+                    MetaverseObjectTypePluralName = existingMetaverseObjects.GetValueOrDefault(candidate.CandidateId),
+                    JoinedObjects = joinedByMetaverseObjectId.TryGetValue(candidate.CandidateId, out var joined) ? joined : []
+                }
+                : new MatchCandidateDetail
+                {
+                    Candidate = candidate,
+                    Exists = existingConnectedSystemObjectIds.Contains(candidate.CandidateId)
+                })
+            .ToList();
+    }
+
+    private static List<Guid> CandidateIds(IEnumerable<ActivityRunProfileExecutionItemMatchCandidate> candidates, MatchCandidateKind kind) =>
+        candidates.Where(c => c.CandidateKind == kind).Select(c => c.CandidateId).Distinct().ToList();
 
     /// <summary>
     /// Walks upward from a Run Profile Execution Item through the causal edges recorded against it, returning
@@ -913,9 +982,15 @@ public class ActivityServer
             return null;
 
         var importEvent = await FindSourceImportEventAsync(summary);
-        if (importEvent == null)
-            return null;
+        return importEvent == null ? null : BuildSourceImportCohort(importEvent, summary.ConnectedSystemObjectId);
+    }
 
+    /// <summary>
+    /// The source-import hop for an import event already found: shared by the walk, which finds the event one item at
+    /// a time, and the Causality Explorer, which finds a page of them at once, so the two can never word it differently.
+    /// </summary>
+    private static CausalChainCohort BuildSourceImportCohort(CausalSourceImportEvent importEvent, Guid? connectedSystemObjectId)
+    {
         return new CausalChainCohort
         {
             SourceImportChangeType = importEvent.ChangeType,
@@ -926,7 +1001,7 @@ public class ActivityServer
                 new CausalChainMember
                 {
                     RunProfileExecutionItemId = importEvent.RunProfileExecutionItemId,
-                    ConnectedSystemObjectId = summary.ConnectedSystemObjectId,
+                    ConnectedSystemObjectId = connectedSystemObjectId,
                     DisplayName = importEvent.DisplayName,
                     // Every other member takes its time from the stored edge; this one is built by hand, so
                     // omitting it left the hop with default(DateTime), which the Lineage reads as "no time

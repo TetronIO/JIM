@@ -166,6 +166,17 @@ public class SyncRuleMapping : IAuditable
     public string? DisabledReason { get; set; }
 
     /// <summary>
+    /// Whether the value this mapping builds is kept unique with the generated value it is built from (Generated Value
+    /// Forms, #2023; the "Keep unique with Account Name" switch). It applies only to an expression mapping whose value is
+    /// built from exactly one generated value: a Metaverse-Derived Attribute Flow (an Email built from a generated Account
+    /// Name) or an export expression reading one. On, a target's refusal of the value is corrected with the generated
+    /// value it is built from; off, the refusal is an ordinary Value Already in Use export error and the value never holds
+    /// the generated value back. The switch is per value: a value built through a switched-off value is still governed by
+    /// its own switch. Defaults to true, so a mapping saved before the switch existed keeps today's behaviour.
+    /// </summary>
+    public bool KeepUnique { get; set; } = true;
+
+    /// <summary>
     /// Non-blocking warnings the save that returned this instance raised about it, such as a Metaverse-Derived
     /// Attribute Flow calling a function that returns a different value on every evaluation (#1750). Transient:
     /// never persisted, and empty on every ordinary read. The server that performed the save fills it on the same

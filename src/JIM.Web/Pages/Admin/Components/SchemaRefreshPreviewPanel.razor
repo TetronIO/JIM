@@ -56,8 +56,22 @@
 
         @if (HasAdditions)
         {
-            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">Additions: safe to apply</MudText>
+            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">@(HasRenames ? "Additions and renames: safe to apply" : "Additions: safe to apply")</MudText>
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Additions" />
+        }
+
+        @if (Result.HasObjectTypeClassificationChanges)
+        {
+            @* Neither safe nor destructive (#2049): applying can move entries between selected Object Types at the next
+               import, while cancelling keeps the classification matching reads, so it needs a warning but not the
+               three-way decision. *@
+            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Warning">Object Type classification: review before applying</MudText>
+            <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Reclassified" />
+
+            <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-schema-refresh-reclassified-warning">
+                Applying this refresh can change <strong>which Object Type existing entries resolve to</strong>. By default, each object that would change Object Type is refused at the next import and reported as an <strong>Object Type Changed</strong> error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with <strong>Allow Object Type Changes</strong> enabled to carry it out. Cancelling keeps the current classification.
+                <MudLink Href="https://docs.junctional.io/configuration/connected-system-schema/#when-an-object-changes-object-type" Target="_blank">Learn more</MudLink>
+            </MudAlert>
         }
 
         @if (Result.HasRemovalsOrDefinitionChanges)
@@ -87,7 +101,27 @@
                     {
                         <li>Object Matching Rule on @matchingRule.Context: @matchingRule.Reason</li>
                     }
+                    @foreach (var reader in Dependents.RemovedAttributeReaders)
+                    {
+                        <li>
+                            @reader.Description reads an attribute the Connected System no longer reports.
+                            @if (Helpers.AttributeReaderHref(reader) is { } readerHref)
+                            {
+                                <MudLink Href="@readerHref" Target="_blank" Class="ml-1">Open</MudLink>
+                            }
+                        </li>
+                    }
                 </ul>
+            }
+
+            @if (Dependents is { RemovalRefused: true })
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-3" data-testid="jim-schema-refresh-removal-refused">
+                    <strong>Apply &amp; Remove is unavailable.</strong> It would delete attributes that
+                    @Dependents.RemovedAttributeReaders.Count configuration item(s) above still read, and JIM does not
+                    remove those for you: a Scoping Criterion left reading nothing takes objects out of scope. Change
+                    them first, or use Apply &amp; Disable Dependents, which keeps the attributes.
+                </MudAlert>
             }
 
             <MudAlert Severity="Severity.Warning" Class="mt-3">
@@ -129,7 +163,7 @@
                            Variant="Variant.Outlined"
                            Color="Color.Error"
                            DropShadow="false"
-                           Disabled="@Busy"
+                           Disabled="@(Busy || Dependents is { RemovalRefused: true })"
                            OnClick="@(() => _removePlanDialogVisible = true)">Apply &amp; Remove…</MudButton>
             }
             else
@@ -334,12 +368,21 @@
     [Parameter]
     public bool Busy { get; set; }
 
-    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges ? Severity.Warning : Severity.Info;
+    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges || Result.HasObjectTypeClassificationChanges
+        ? Severity.Warning
+        : Severity.Info;
 
     private bool HasAdditions =>
         Result.AddedObjectTypes.Count > 0 ||
         Result.UpdatedObjectTypes.Count > 0 ||
+        Result.RenamedObjectTypes.Count > 0 ||
+        Result.RenamedAttributes.Values.Sum(v => v.Count) > 0 ||
+        Result.ObjectTypesWithClassificationUpdates.Count > 0 ||
         Result.AddedAttributes.Values.Sum(v => v.Count) > 0;
+
+    private bool HasRenames =>
+        Result.RenamedObjectTypes.Count > 0 ||
+        Result.RenamedAttributes.Values.Sum(v => v.Count) > 0;
 
     private static string SyncRuleUrl(int syncRuleId) => $"/admin/sync-rules/{syncRuleId}";
 
@@ -356,9 +399,10 @@
     }
 
     /// <summary>
-    /// Additions discard for free (the next refresh finds them again). Removals and definition changes do not:
-    /// cancelling does not preserve the status quo, so the administrator confirms with the concrete
-    /// consequences in front of them.
+    /// Additions discard for free (the next refresh finds them again), and so do Object Type classification changes
+    /// (matching reads the classification JIM has stored, so cancelling keeps things as they are). Removals and
+    /// definition changes do not: cancelling does not preserve the status quo, so the administrator confirms with
+    /// the concrete consequences in front of them.
     /// </summary>
     private async Task HandleDiscardAsync()
     {

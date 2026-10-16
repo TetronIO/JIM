@@ -65,6 +65,26 @@
             }
         </div>
     }
+    @* What followed the run (#1811), outlined so it never reads as part of what the run itself did. Choosing a pill
+       opens the Lineage, the one view that shows consequences. *@
+    @if (AfterThisRunPills is { Count: > 0 } afterThisRunPills)
+    {
+        <div class="outcome-strip after-strip">
+            <span class="after-strip-label">After this run</span>
+            @foreach (var pill in afterThisRunPills)
+            {
+                @if (OnAfterThisRunSelected.HasDelegate)
+                {
+                    <MudChip T="string" Variant="Variant.Outlined" Color="@CausalityToneCss.MudColor(pill.Tone)"
+                             OnClick="SelectAfterThisRunAsync">@pill.Label</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Outlined" Color="@CausalityToneCss.MudColor(pill.Tone)">@pill.Label</MudChip>
+                }
+            }
+        </div>
+    }
 </div>
 
 @code {
@@ -106,6 +126,24 @@
     /// </summary>
     [Parameter]
     public bool IsSpeculative { get; set; }
+
+    /// <summary>
+    /// What the item went on to cause (#1811), as the After this run strip; null or empty for none, or not read yet.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<CausalityPill>? AfterThisRunPills { get; set; }
+
+    /// <summary>
+    /// Raised when an After this run pill is chosen. Unset where the Lineage is already showing, so the pills do not
+    /// pretend to go anywhere.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnAfterThisRunSelected { get; set; }
+
+    private Task SelectAfterThisRunAsync()
+    {
+        return OnAfterThisRunSelected.InvokeAsync();
+    }
 
     private string? GetRunChipLabel()
     {

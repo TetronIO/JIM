@@ -18,7 +18,10 @@ function Stop-JIMConfigurationChangePreview {
         succeeding: there was nothing to stop, and the results are still there to read.
 
     .PARAMETER ActivityId
-        The preview's Activity id.
+        The preview to stop, by its Activity id.
+
+    .OUTPUTS
+        None.
 
     .EXAMPLE
         Stop-JIMConfigurationChangePreview -ActivityId 019fc824-f8c6-7588-8d9a-24a295e7621d
@@ -30,6 +33,7 @@ function Stop-JIMConfigurationChangePreview {
         Get-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low')]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$ActivityId
