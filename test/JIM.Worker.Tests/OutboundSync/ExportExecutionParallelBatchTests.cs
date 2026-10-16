@@ -1147,6 +1147,59 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #2197: a Connector that returns fewer results than it was handed changes has not said what became of the rest, and
+    /// a change JIM cannot account for is never read as a success: that would confirm a write nobody made. Each missing
+    /// result is a failed attempt, with an execution item.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReturnsTooFewResults_CountsEachMissingOneAsAFailedAttemptAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var connector = CreateScriptedConnector((_, _) => [ConnectedSystemExportResult.Succeeded()]);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1), Has.All.Matches<PendingExport>(pe =>
+                pe.Status == PendingExportStatus.Pending && pe.ErrorCount == 1 && pe.LastErrorMessage!.Contains("no result")));
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+        }
+    }
+
+    /// <summary>
+    /// #2197: when the run has been cancelled, a change the Connector returned no result for is taken to be one it never
+    /// started: it goes back as it was, uncounted, as a change the Connector reports not attempted does (#2083).
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ConnectorReturnsTooFewResultsOnCancellation_PutsTheMissingOnesBackAsItWas()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 3);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        using var cts = new CancellationTokenSource();
+        var connector = CreateScriptedConnector((_, _) =>
+        {
+            cts.Cancel();
+            return [ConnectedSystemExportResult.Succeeded()];
+        });
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 100 }, cts.Token));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports[0].Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exports.Skip(1).Select(PendingExportRetryState.Of), Is.EqualTo(exports.Skip(1).Select(pe => before[pe.Id])));
+        }
+    }
+
+    /// <summary>
     /// #2083: a parallel batch whose Connector fails, and then fails again as its connection is closed, is one failed
     /// batch: its failure is recorded once, and the close failure is reported beside it rather than as the batch failing
     /// a second time with execution items naming no object.

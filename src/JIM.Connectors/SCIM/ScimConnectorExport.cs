@@ -191,6 +191,17 @@ internal sealed class ScimConnectorExport
 
             return ScimExportErrorClassifier.Failure(ex.Message, (int?)ex.StatusCode, ex.Error);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Anything else (the transport, or an authentication refresh, failing in a way the provider did not answer)
+            // fails this change alone (#2197). Escaping the batch would lose the result of every request already made, so a
+            // resource already created would be posted again. Cancellation still propagates, to be handled as the run's.
+            _logger.Error(ex, "SCIM export: a {Method} of {Path} failed before the service provider answered it.",
+                operation.Method.Method, LogSanitiser.Sanitise(operation.Path));
+
+            return ConnectedSystemExportResult.Failed(
+                $"The request for this change failed before the service provider answered it: {ex.Message} Whether the service provider applied it is not known; the next import will show what it holds.");
+        }
     }
 
     private async Task<ConnectedSystemExportResult> CreateAsync(ScimExportOperation operation, CancellationToken cancellationToken)

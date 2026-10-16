@@ -3172,18 +3172,20 @@ public class SyncRepository : ISyncRepository
                         && pe.Status == PendingExportStatus.Exported));
     }
 
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
     {
+        var now = DateTime.UtcNow;
+        now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
         foreach (var pe in pendingExports)
         {
             pe.Status = PendingExportStatus.Executing;
-            pe.LastAttemptedAt = DateTime.UtcNow;
+            pe.LastAttemptedAt = now;
             _pendingExports[pe.Id] = pe;
         }
-        return Task.CompletedTask;
+        return Task.FromResult(now);
     }
 
-    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
     {
         // Only rows still Executing are written, as the database's guarded UPDATE does. This store shares instances with
         // the caller, so a result the caller set in memory and has not persisted reads here as already recorded; the
@@ -3191,7 +3193,7 @@ public class SyncRepository : ISyncRepository
         var released = new HashSet<Guid>();
         foreach (var state in states)
         {
-            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing)
+            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing || pe.LastAttemptedAt != markedAt)
                 continue;
 
             state.ApplyTo(pe);

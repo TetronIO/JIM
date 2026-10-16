@@ -5167,12 +5167,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
     }
 
-    public async Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    public async Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
     {
-        if (pendingExports.Count == 0)
-            return;
-
+        // To the microsecond, as the column holds it, so the mark compares equal to what was written (#2197).
         var now = DateTime.UtcNow;
+        now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
+        if (pendingExports.Count == 0)
+            return now;
 
         var ids = pendingExports.Select(pe => pe.Id).ToArray();
         var statusValue = (int)PendingExportStatus.Executing;
@@ -5187,15 +5188,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             export.Status = PendingExportStatus.Executing;
             export.LastAttemptedAt = now;
         }
+
+        return now;
     }
 
     /// <summary>
-    /// Writes each retry state onto its Pending Export while that row is still Executing (see interface doc for the full
-    /// rationale), in one statement over the unnested states. The Status guard is what keeps a result already recorded
-    /// from being overwritten: a batch that failed after part of it was persisted has those rows out of Executing.
+    /// Writes each retry state onto its Pending Export while that row is still Executing under this batch's mark (see
+    /// interface doc for the full rationale), in one statement over the unnested states. The Status guard is what keeps a
+    /// result already recorded from being overwritten: a batch that failed after part of it was persisted has those rows
+    /// out of Executing. The mark guard keeps a later run's mark from being overwritten (#2197).
     /// Tracked copies of the rows written are detached, so no later save on a long-lived context writes Executing back.
     /// </summary>
-    public async Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    public async Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt)
     {
         if (states.Count == 0)
             return new HashSet<Guid>();
@@ -5212,6 +5216,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 AS v("Id", "Status", "ErrorCount", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace")
             WHERE t."Id" = v."Id"
               AND t."Status" = @executing
+              AND t."LastAttemptedAt" = @markedAt
             RETURNING t."Id"
             """;
 
@@ -5235,6 +5240,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         command.Parameters.Add(new NpgsqlParameter("lastErrorStackTraces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
             { Value = states.Select(s => s.LastErrorStackTrace).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("executing", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Executing });
+        command.Parameters.Add(new NpgsqlParameter("markedAt", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = markedAt });
 
         var released = new HashSet<Guid>();
         await using (var reader = await command.ExecuteReaderAsync())

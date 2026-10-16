@@ -767,11 +767,11 @@ public class ExportExecutionServer
                         });
 
                         // Mark batch as executing
-                        IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting;
+                        ExecutingBatchMark executingMark;
                         using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
                             .SetTag("batchSize", immediateExports.Count))
                         {
-                            statesBeforeExecuting = await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
+                            executingMark = await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
                         }
 
                         try
@@ -799,13 +799,13 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, statesBeforeExecuting, cancellationToken, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, executingMark, cancellationToken, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
                             }
                         }
                         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                         {
                             // The run was cancelled while the Connector held the batch, and it gave no results (#2083).
-                            await ReleaseBatchAfterCancellationAsync(immediateExports, statesBeforeExecuting, SyncRepo, connectedSystem.Name);
+                            await ReleaseBatchAfterCancellationAsync(immediateExports, executingMark, SyncRepo, connectedSystem.Name);
                             throw;
                         }
                         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -816,7 +816,7 @@ public class ExportExecutionServer
 
                             // Create ProcessedExportItems so the RPEI pipeline can record the failures.
                             // Without this, the activity would silently report Status: Complete.
-                            await RecordBatchFailureAsync(immediateExports, statesBeforeExecuting, ex, result, SyncRepo, connectedSystem.Name);
+                            await RecordBatchFailureAsync(immediateExports, executingMark, ex, result, SyncRepo, connectedSystem.Name);
 
                             // Stop processing further batches — the connector is likely broken
                             break;
@@ -1382,11 +1382,11 @@ public class ExportExecutionServer
                 Message = "Exporting deferred"
             });
 
-            IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting;
+            ExecutingBatchMark executingMark;
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
                 .SetTag("batchSize", batch.Count))
             {
-                statesBeforeExecuting = await MarkBatchAsExecutingAsync(batch, SyncRepo);
+                executingMark = await MarkBatchAsExecutingAsync(batch, SyncRepo);
             }
 
             try
@@ -1407,13 +1407,13 @@ public class ExportExecutionServer
                 using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                     .SetTag("batchSize", batch.Count))
                 {
-                    await ProcessBatchSuccessAsync(batch, exportResults, statesBeforeExecuting, cancellationToken, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // As on the first pass (#2083): the batch goes back as it was, and the run stops.
-                await ReleaseBatchAfterCancellationAsync(batch, statesBeforeExecuting, SyncRepo, connectedSystem.Name);
+                await ReleaseBatchAfterCancellationAsync(batch, executingMark, SyncRepo, connectedSystem.Name);
                 throw;
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -1421,7 +1421,7 @@ public class ExportExecutionServer
                 // As on the first pass (#2083): a failed attempt at the batch, and the rest of the pass waits for the next run,
                 // its batches never marked.
                 Log.Error(ex, "ProcessDeferredBatchesSequentiallyAsync: Deferred batch failed for {SystemName}", connectedSystem.Name);
-                await RecordBatchFailureAsync(batch, statesBeforeExecuting, ex, result, SyncRepo, connectedSystem.Name);
+                await RecordBatchFailureAsync(batch, executingMark, ex, result, SyncRepo, connectedSystem.Name);
                 break;
             }
 
@@ -1537,7 +1537,7 @@ public class ExportExecutionServer
                 // Declared outside the try so the catches below, which record an interrupted batch through this batch's own
                 // repository while its scope is still alive, know what the batch was before it was sent (#2083). Null until
                 // the batch is marked: one whose Connector could not be opened was never touched.
-                IReadOnlyDictionary<Guid, PendingExportRetryState>? statesBeforeExecuting = null;
+                ExecutingBatchMark? executingMark = null;
                 var batchResult = new ExportExecutionResult();
                 var batchResultMerged = false;
 
@@ -1553,7 +1553,7 @@ public class ExportExecutionServer
                     }
 
                     // Mark batch as executing (raw SQL - context-independent)
-                    statesBeforeExecuting = await MarkBatchAsExecutingAsync(batch, batchRepo);
+                    executingMark = await MarkBatchAsExecutingAsync(batch, batchRepo);
 
                     // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
                     // set on the primary's copies would never reach this batch's connector (#2039, #2158).
@@ -1568,7 +1568,7 @@ public class ExportExecutionServer
                     // Process results using the batch's own repository
                     batchResult.ClassMembershipRefusedCount = batchClassRefused;
                     batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
-                    await ProcessBatchSuccessAsync(batch, exportResults, statesBeforeExecuting, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1627,8 +1627,8 @@ public class ExportExecutionServer
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
-                    if (statesBeforeExecuting != null)
-                        await ReleaseBatchAfterCancellationAsync(batch, statesBeforeExecuting, batchRepo, connectedSystem.Name);
+                    if (executingMark != null)
+                        await ReleaseBatchAfterCancellationAsync(batch, executingMark, batchRepo, connectedSystem.Name);
                     throw;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -1638,7 +1638,7 @@ public class ExportExecutionServer
                     // their object. Results this batch already merged stand; the failure is reported on a result of its own.
                     Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
                     var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
-                    await RecordBatchFailureAsync(batch, statesBeforeExecuting, ex, failureResult, batchRepo, connectedSystem.Name);
+                    await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
 
                     lock (resultLock)
                     {
@@ -1788,13 +1788,13 @@ public class ExportExecutionServer
     /// </summary>
     /// <returns>
     /// Each export's retry state as it stood just before the mark (#2083): what an export the run never got to is put back
-    /// to, and what a failed attempt is counted from.
+    /// to, and what a failed attempt is counted from; and the time of the mark, which putting it back is guarded on (#2197).
     /// </returns>
-    private static async Task<IReadOnlyDictionary<Guid, PendingExportRetryState>> MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
+    private static async Task<ExecutingBatchMark> MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
         var before = batch.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
-        await repository.MarkPendingExportsAsExecutingAsync(batch);
-        return before;
+        var markedAt = await repository.MarkPendingExportsAsExecutingAsync(batch);
+        return new ExecutingBatchMark(before, markedAt);
     }
 
     /// <summary>
@@ -1808,13 +1808,14 @@ public class ExportExecutionServer
     /// </summary>
     private static async Task ReleaseBatchAfterCancellationAsync(
         List<PendingExport> batch,
-        IReadOnlyDictionary<Guid, PendingExportRetryState> before,
+        ExecutingBatchMark mark,
         ISyncRepository repository,
         string connectedSystemName)
     {
+        var before = mark.StatesBefore;
         try
         {
-            var released = await repository.ReleaseExecutingPendingExportsAsync(before.Values.ToList());
+            var released = await repository.ReleaseExecutingPendingExportsAsync(before.Values.ToList(), mark.MarkedAt);
             foreach (var export in batch.Where(pe => released.Contains(pe.Id)))
                 before[export.Id].ApplyTo(export);
 
@@ -1856,7 +1857,7 @@ public class ExportExecutionServer
     /// </summary>
     private static async Task RecordBatchFailureAsync(
         List<PendingExport> batch,
-        IReadOnlyDictionary<Guid, PendingExportRetryState>? before,
+        ExecutingBatchMark? mark,
         Exception exception,
         ExportExecutionResult result,
         ISyncRepository repository,
@@ -1865,14 +1866,15 @@ public class ExportExecutionServer
         var itemMessage = $"Batch export failed: {exception.Message}";
 
         IReadOnlySet<Guid>? failed = null;
-        if (before != null)
+        if (mark != null)
         {
+            var before = mark.StatesBefore;
             var failedAttempts = batch
                 .Where(pe => before.ContainsKey(pe.Id))
                 .ToDictionary(pe => pe.Id, pe => AfterFailedAttempt(before[pe.Id], pe.MaxRetries, exception.Message));
             try
             {
-                failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList());
+                failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList(), mark.MarkedAt);
                 foreach (var export in batch.Where(pe => failed.Contains(pe.Id)))
                 {
                     failedAttempts[export.Id].ApplyTo(export);
@@ -1989,7 +1991,7 @@ public class ExportExecutionServer
             ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
             : [];
 
-        return (InBatchOrder(batch.Count, refusals, sentResults), refusals.Count - contradictions, contradictions);
+        return (InBatchOrder(batch.Count, refusals, sentResults, cancellationToken), refusals.Count - contradictions, contradictions);
     }
 
     /// <summary>
@@ -2011,12 +2013,14 @@ public class ExportExecutionServer
 
     /// <summary>
     /// One result per export of a batch, in the batch's own order, from the refusals held back and the results of the
-    /// exports that were sent. The caller pairs results with exports by index.
+    /// exports that were sent. The caller pairs results with exports by index. An export the Connector returned no result
+    /// for is given one by <see cref="NoResultFromTheConnector"/>.
     /// </summary>
     private static List<ConnectedSystemExportResult> InBatchOrder(
         int batchCount,
         Dictionary<int, ConnectedSystemExportResult> refusals,
-        IList<ConnectedSystemExportResult> sentResults)
+        IList<ConnectedSystemExportResult> sentResults,
+        CancellationToken cancellationToken)
     {
         var results = new List<ConnectedSystemExportResult>(batchCount);
         var sentIndex = 0;
@@ -2025,11 +2029,21 @@ public class ExportExecutionServer
             if (refusals.TryGetValue(i, out var refusal))
                 results.Add(refusal);
             else
-                results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
+                results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : NoResultFromTheConnector(cancellationToken));
         }
 
         return results;
     }
+
+    /// <summary>
+    /// The result of an export the Connector returned no result for (#2197). The Connector has not said what became of it,
+    /// so it is never read as a success, which would confirm a write nobody made: once the run has been cancelled it is
+    /// taken to be a change the Connector never started, and put back as it was (#2083); otherwise it is a failed attempt.
+    /// </summary>
+    private static ConnectedSystemExportResult NoResultFromTheConnector(CancellationToken cancellationToken) =>
+        cancellationToken.IsCancellationRequested
+            ? ConnectedSystemExportResult.NotAttempted()
+            : ConnectedSystemExportResult.Failed("The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again.");
 
     /// <summary>
     /// Decides whether a Delete export that just succeeded is the terminal step for a Connected System
@@ -2135,7 +2149,7 @@ public class ExportExecutionServer
     private async Task ProcessBatchSuccessAsync(
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
-        IReadOnlyDictionary<Guid, PendingExportRetryState> statesBeforeExecuting,
+        ExecutingBatchMark executingMark,
         CancellationToken cancellationToken,
         ExportExecutionResult result,
         ISyncRepository repository,
@@ -2186,7 +2200,7 @@ public class ExportExecutionServer
         for (var i = 0; i < batch.Count; i++)
         {
             var export = batch[i];
-            var exportResult = i < exportResults.Count ? exportResults[i] : ConnectedSystemExportResult.Succeeded();
+            var exportResult = i < exportResults.Count ? exportResults[i] : NoResultFromTheConnector(cancellationToken);
 
             // What the connector was actually handed (see ForConnector), and what it was not: reference
             // changes still awaiting resolution stay behind on a partial write (issue #1398).
@@ -2368,8 +2382,8 @@ public class ExportExecutionServer
         // attempt against them (#2083).
         if (notAttempted.Count > 0)
         {
-            var notAttemptedStates = notAttempted.ToDictionary(pe => pe.Id, pe => statesBeforeExecuting[pe.Id]);
-            var released = await repository.ReleaseExecutingPendingExportsAsync(notAttemptedStates.Values.ToList());
+            var notAttemptedStates = notAttempted.ToDictionary(pe => pe.Id, pe => executingMark.StatesBefore[pe.Id]);
+            var released = await repository.ReleaseExecutingPendingExportsAsync(notAttemptedStates.Values.ToList(), executingMark.MarkedAt);
             foreach (var export in notAttempted.Where(pe => released.Contains(pe.Id)))
                 notAttemptedStates[export.Id].ApplyTo(export);
             Log.Information("ProcessBatchSuccessAsync: {Count} change(s) to {ConnectedSystemName} were not attempted because the run was cancelled; " +
@@ -3577,7 +3591,8 @@ public class ExportExecutionServer
                 var sentResults = sendable.Count > 0
                     ? await connector.ExportAsync(connectedSystem.SettingValues, sendable, cancellationToken, connectorProgress)
                     : [];
-                exportResults = InBatchOrder(pendingExports.Count, refusals, sentResults);
+                // This path has no change put back as not attempted, so a missing result is always a failed attempt.
+                exportResults = InBatchOrder(pendingExports.Count, refusals, sentResults, CancellationToken.None);
             }
 
             // Check if the connector supports auto-confirm and the setting is enabled
@@ -3599,7 +3614,7 @@ public class ExportExecutionServer
             for (var i = 0; i < pendingExports.Count; i++)
             {
                 var export = pendingExports[i];
-                var exportResult = i < exportResults.Count ? exportResults[i] : ConnectedSystemExportResult.Succeeded();
+                var exportResult = i < exportResults.Count ? exportResults[i] : NoResultFromTheConnector(CancellationToken.None);
 
                 if (!exportResult.Success)
                 {
