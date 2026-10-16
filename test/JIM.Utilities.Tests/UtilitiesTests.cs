@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Utilities;
 
 namespace JIM.Utilities.Tests;
@@ -347,6 +348,70 @@ public class UtilitiesTests
 
         // Assert
         Assert.That(result, Is.False);
+    }
+
+    #endregion
+
+    #region Pending Deletions Link Tests
+
+    [Test]
+    public void GetPendingDeletionsHref_WithObjectType_FiltersByLowercasePluralName()
+    {
+        // Act
+        var result = Utilities.GetPendingDeletionsHref("Users");
+
+        // Assert
+        Assert.That(result, Is.EqualTo("/admin/pending-deletions?type=users"));
+    }
+
+    [Test]
+    public void GetPendingDeletionsHref_WithPluralNameContainingSpaces_EscapesIt()
+    {
+        // Act
+        var result = Utilities.GetPendingDeletionsHref("Service Accounts");
+
+        // Assert
+        Assert.That(result, Is.EqualTo("/admin/pending-deletions?type=service%20accounts"));
+    }
+
+    [Test]
+    public void FindMetaverseObjectTypeForPendingDeletions_WithMatchingName_ReturnsTypeIgnoringCase()
+    {
+        // Arrange
+        var users = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" };
+        var groups = new MetaverseObjectType { Id = 2, Name = "Group", PluralName = "Groups" };
+
+        // Act
+        var result = Utilities.FindMetaverseObjectTypeForPendingDeletions(new[] { users, groups }, "groups");
+
+        // Assert
+        Assert.That(result, Is.SameAs(groups));
+    }
+
+    [Test]
+    public void FindMetaverseObjectTypeForPendingDeletions_WithUnknownName_ReturnsNull()
+    {
+        // Arrange
+        var users = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" };
+
+        // Act
+        var result = Utilities.FindMetaverseObjectTypeForPendingDeletions(new[] { users }, "devices");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void FindMetaverseObjectTypeForPendingDeletions_WithNoName_ReturnsNull()
+    {
+        // Arrange
+        var users = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" };
+
+        // Act
+        var result = Utilities.FindMetaverseObjectTypeForPendingDeletions(new[] { users }, null);
+
+        // Assert
+        Assert.That(result, Is.Null);
     }
 
     #endregion

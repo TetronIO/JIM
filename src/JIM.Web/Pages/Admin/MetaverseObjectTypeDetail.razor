@@ -75,8 +75,17 @@
             </MudPaper>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
-                <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
-                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
+                @* The link sits in the header, apart from Save, Preview and Reset below: it navigates rather than edits. *@
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Wrap="Wrap.Wrap" Spacing="2">
+                    <div>
+                        <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AutoDelete"
+                               Href="@Utilities.GetPendingDeletionsHref(_metaverseObjectType.PluralName)">
+                        View Pending Deletions
+                    </MudButton>
+                </MudStack>
                 <MudGrid>
                     <MudItem xs="12" sm="6" md="4">
                         <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
