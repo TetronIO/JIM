@@ -113,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ `Add-JIMExampleDataTemplateAttribute -ConnectedSystemObjectTypeAttributeId`, and the `ConnectedSystemObjectTypeAttributeId` key in `New-JIMExampleDataTemplate` and `Set-JIMExampleDataTemplate` attribute hashtables, are removed: templates generate Metaverse Attribute values only, so they produced nothing.
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
