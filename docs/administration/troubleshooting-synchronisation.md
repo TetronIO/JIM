@@ -70,7 +70,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** The Connected System returned two or more objects with the same External ID, so JIM imported none of them: it cannot tell which is the real one.
 
-**How to fix.** Make the External ID unique in the source, or choose an attribute that is unique as the External ID on the Connected System's schema. A variant of the message, `found across import pages`, means a Full Import was given the same object on two pages of results; check the directory's paging. A Delta Import does not report this: it reads changes in order, so a later page's copy of an object, such as a row deleted and then added back, is a later change and replaces the earlier one.
+**How to fix.** Make the External ID unique in the source, or choose an attribute that is unique as the External ID on the Connected System's schema. A variant of the message, `found across import pages`, means a Full Import was given the same object on two pages of results; check the directory's paging. A Delta Import does not report the `found across import pages` variant: it reads changes in order, so a later page's copy of an object, such as a row deleted and then added back, is a later change and replaces the earlier one. An object repeated within a single page is still rejected as a duplicate.
 
 **Check.** The next import brings the object in, with no Duplicate Object execution items.
 
