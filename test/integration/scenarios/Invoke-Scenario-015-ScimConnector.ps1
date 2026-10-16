@@ -155,7 +155,7 @@ function Add-StepResult {
 $badgeHolderUserName = "badgeholder1"
 
 # Rewrites the HR CSV. HR data drives every transition this scenario tests: the update (a suffix on
-# every Display Name), the joiner (an extra row in the department the export rule is scoped to), the
+# every Display Name, carried on the surname, since Display Name is built from first and last names), the joiner (an extra row in the department the export rule is scoped to), the
 # leaver (the joiner's department changing out of scope), and the badge holder's badges (pipe-separated,
 # split into a multi-valued Metaverse attribute by the HR import rule).
 function Write-HrCsv {
@@ -165,7 +165,7 @@ function Write-HrCsv {
     $csvLines.Add("accountName,firstName,lastName,displayName,email,department,badges")
     for ($i = 1; $i -le $ExpectedUserCount; $i++) {
         $suffix = if ($VerifiedSuffix) { " (Verified)" } else { "" }
-        $csvLines.Add("user$i,User,Number$i,User Number$i$suffix,user$i@example.com,Engineering,")
+        $csvLines.Add("user$i,User,Number$i$suffix,User Number$i$suffix,user$i@example.com,Engineering,")
     }
     if ($JoinerDepartment) {
         $csvLines.Add("joiner1,Joiner,One,Joiner One,joiner1@example.com,$JoinerDepartment,")
