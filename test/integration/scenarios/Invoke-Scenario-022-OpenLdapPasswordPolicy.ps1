@@ -590,11 +590,11 @@ try {
             $query = @"
 SELECT av."Id", to_char(av."DateTimeValue" AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS.US') || 'Z'
 FROM "ConnectedSystemObjectAttributeValues" av
-JOIN "ConnectedSystemObjectTypeAttributes" a ON a."Id" = av."AttributeId"
+JOIN "ConnectedSystemAttributes" a ON a."Id" = av."AttributeId"
 WHERE a."Name" = 'pwdFailureTime' AND av."DateTimeValue" IS NOT NULL
   AND av."ConnectedSystemObjectId" IN (
     SELECT dn."ConnectedSystemObjectId" FROM "ConnectedSystemObjectAttributeValues" dn
-    JOIN "ConnectedSystemObjectTypeAttributes" dna ON dna."Id" = dn."AttributeId"
+    JOIN "ConnectedSystemAttributes" dna ON dna."Id" = dn."AttributeId"
     WHERE dna."Name" = 'distinguishedName' AND lower(dn."StringValue") = lower('$escapedDn'));
 "@
             $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -F '|' -U jim -d jim -c $query 2>&1
