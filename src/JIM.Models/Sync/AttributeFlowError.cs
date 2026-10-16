@@ -45,7 +45,16 @@ public enum AttributeFlowErrorKind
     /// will not pick one, so nothing flows and the target keeps its value. Recorded as
     /// <c>MultiValuedToSingleValued</c>, the type of the same fault from an attribute source.
     /// </summary>
-    ExpressionResultMultiValued
+    ExpressionResultMultiValued,
+
+    /// <summary>
+    /// Two or more of the dates an export sends to a multi-valued attribute are the same date at the step of time the
+    /// Connected System holds the attribute to (#2153, decision D2): two times in one second, for a directory that holds
+    /// whole seconds. The Connected System can hold them only as one, so it is sent them as one, and this reports that.
+    /// Unlike every other kind, the attribute still exports; only the merging is reported. Recorded as
+    /// <c>DatesCollapseAtTargetResolution</c>.
+    /// </summary>
+    DatesCollapseAtTargetResolution
 }
 
 /// <summary>
@@ -115,4 +124,16 @@ public class AttributeFlowError
     /// so the error names the rule an administrator has to open. Null for an ordinary mapping.
     /// </summary>
     public string? SyncRuleName { get; set; }
+
+    /// <summary>
+    /// The step of time the target attribute holds dates to. Only populated for
+    /// <see cref="AttributeFlowErrorKind.DatesCollapseAtTargetResolution"/>.
+    /// </summary>
+    public JIM.Models.Staging.DateTimeResolution? TargetDateTimeResolution { get; set; }
+
+    /// <summary>
+    /// How many dates the target attribute holds once its values are taken to its resolution: fewer than
+    /// <see cref="ValueCount"/>. Only populated for <see cref="AttributeFlowErrorKind.DatesCollapseAtTargetResolution"/>.
+    /// </summary>
+    public int TargetValueCount { get; set; }
 }
