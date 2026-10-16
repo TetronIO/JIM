@@ -120,4 +120,30 @@ public class DateTimeAttributeValueTests
             Assert.That(DateTimeAttributeValue.AreEqual(null, March15), Is.False);
         }
     }
+
+    [Test]
+    public void ToDisplayString_WholeSecond_ShowsNoFraction()
+    {
+        Assert.That(DateTimeAttributeValue.ToDisplayString(March15), Is.EqualTo("15 Mar 2026 10:30:00"));
+    }
+
+    [Test]
+    public void ToDisplayString_FractionalSecond_ShowsTheMicrosecondsWithTrailingZerosTrimmed()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DateTimeAttributeValue.ToDisplayString(March15.AddTicks(1_234_567)), Is.EqualTo("15 Mar 2026 10:30:00.123456"),
+                "Floored to the microsecond JIM holds.");
+            Assert.That(DateTimeAttributeValue.ToDisplayString(March15.AddMilliseconds(500)), Is.EqualTo("15 Mar 2026 10:30:00.5"));
+        }
+    }
+
+    [Test]
+    public void ToDisplayString_LocalValue_IsShownInTheTimeZoneItIsIn()
+    {
+        // Each surface keeps its own time zone policy: the formatter never converts.
+        var local = new DateTime(2026, 3, 15, 10, 30, 0, DateTimeKind.Local);
+
+        Assert.That(DateTimeAttributeValue.ToDisplayString(local), Is.EqualTo("15 Mar 2026 10:30:00"));
+    }
 }

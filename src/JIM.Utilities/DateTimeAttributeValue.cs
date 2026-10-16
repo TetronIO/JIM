@@ -56,4 +56,12 @@ public static class DateTimeAttributeValue
     /// </summary>
     public static string ToRoundTripString(DateTime value) =>
         ToCanonical(value).ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFF'Z'", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The value as the portal and other display text show an attribute's date (#2153): <c>dd MMM yyyy HH:mm:ss</c>,
+    /// then a fraction of up to six digits with trailing zeros trimmed, only when the value has one, so two dates a
+    /// fraction of a second apart never look the same. Culture-invariant. Never converts the time zone: each surface
+    /// keeps its own policy, converting before it calls this where it shows local time.
+    /// </summary>
+    public static string ToDisplayString(DateTime value) => JIM.Models.Utility.AttributeDateDisplay.Format(value);
 }

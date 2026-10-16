@@ -2250,7 +2250,7 @@ public class MetaverseRepository : IMetaverseRepository
             return decimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (dateTimeValue.HasValue)
-            return dateTimeValue.Value.ToString("u", System.Globalization.CultureInfo.InvariantCulture);
+            return DateTimeAttributeValue.ToDisplayString(dateTimeValue.Value);
 
         if (guidValue.HasValue)
             return guidValue.Value.ToString();

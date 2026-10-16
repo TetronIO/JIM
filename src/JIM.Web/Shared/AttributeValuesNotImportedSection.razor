@@ -20,8 +20,9 @@
 
     <div class="pa-4">
         <MudText Typo="Typo.body1" Class="mb-2">
-            The Connector could not read @(Errors.Total == 1 ? "this value" : "these values"), so JIM left
+            JIM could not import @(Errors.Total == 1 ? "this value" : "these values"), so it left
             @(AttributeCount == 1 ? "the attribute" : "each attribute") as it already held it and imported the rest of the object.
+            The Found By column says whether the Connector could not read a value, or JIM could not hold it as read.
         </MudText>
 
         <VirtualisedDataGrid T="ImportedAttributeValueError"
@@ -74,9 +75,17 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="ImportedAttributeValueError" Title="Why It Could Not Be Read" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <TemplateColumn T="ImportedAttributeValueError" Title="Found By" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Why It Could Not Be Read</MudText>
+                        <MudText Typo="Typo.button">Found By</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @AttributeValueErrorDisplay.FoundBy(context.Item.Source)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ImportedAttributeValueError" Title="Why It Could Not Be Imported" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Why It Could Not Be Imported</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         <OneLineText Text="@context.Item.Reason" />
@@ -123,7 +132,7 @@
 </MudPaper>
 
 @code {
-    /// <summary>What the item recorded of the values the Connector could not read.</summary>
+    /// <summary>What the item recorded of the values the import could not import.</summary>
     [Parameter, EditorRequired]
     public ImportedAttributeValueErrors Errors { get; set; } = null!;
 
