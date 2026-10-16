@@ -89,6 +89,18 @@ These pages take JIM into production and keep it there: installing it on Docker 
 
     What to back up (database plus encryption keys, as a matched pair), how to take and restore a backup, securing key backups, and recovery expectations if keys are lost.
 
+-   **[Factory Reset](factory-reset.md)**
+
+    ---
+
+    Wiping JIM back to a fresh installation: what goes, what survives, and how to keep administrative access.
+
+-   **[Logs](logs.md)**
+
+    ---
+
+    Reading and searching the logs of JIM's services from the portal, and how long each service keeps them.
+
 -   **[Troubleshooting](troubleshooting.md)**
 
     ---

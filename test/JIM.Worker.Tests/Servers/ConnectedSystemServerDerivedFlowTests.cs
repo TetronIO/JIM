@@ -55,6 +55,8 @@ public class ConnectedSystemServerDerivedFlowTests
         _mvRepo = new Mock<IMetaverseRepository>();
         _activityRepo = new Mock<IActivityRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        _repo.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _repo.Setup(r => r.Metaverse).Returns(_mvRepo.Object);
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
 

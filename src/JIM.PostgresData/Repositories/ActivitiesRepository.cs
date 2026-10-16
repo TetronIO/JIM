@@ -1011,6 +1011,7 @@ public partial class ActivityRepository : IActivityRepository
         InitiatedByName = a.InitiatedByName,
         When = a.Created,
         Reason = a.ChangeReason,
+        ConfigurationTestGateNote = a.ConfigurationTestGateNote,
         SnapshotJson = a.ConfigurationChangeSnapshot
     };
 

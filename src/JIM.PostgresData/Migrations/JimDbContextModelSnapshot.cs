@@ -97,6 +97,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConfigurationChangeVersion")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ConfigurationTestGateNote")
+                        .HasColumnType("text");
+
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 

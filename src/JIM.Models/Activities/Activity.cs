@@ -594,6 +594,13 @@ public class Activity
     public string? ChangeReason { get; set; }
 
     /// <summary>
+    /// What the save gate (#2055 Phase 4b) did with a configuration change that stopped configuration test cases
+    /// passing: the cases saved past, and those whose new result was accepted as expected, by name and status, never
+    /// their values. Null when the change stopped no case passing.
+    /// </summary>
+    public string? ConfigurationTestGateNote { get; set; }
+
+    /// <summary>
     /// The per-object configuration-change version number (v1, v2, ...). Assigned as (max existing version for the
     /// object) + 1 at capture time, so it does not renumber when older entries are removed by retention.
     /// Null for non-configuration activities.

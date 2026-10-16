@@ -27,6 +27,8 @@ Where a change is sync-affecting or destructive, JIM shows a confirmation before
 
 Cancelling the confirmation abandons the save. Nothing is written.
 
+A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is not saved until you choose: keep editing (nothing is saved), accept the new result, or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
+
 !!! note "Saving is not applying"
 
     A saved configuration change does not reach existing objects until synchronisation runs again, so the confirmation ends by recommending a Full Synchronisation. The Connected System pages show a [changed-since indicator](connected-systems.md#configuration-changes-pending-a-full-synchronisation) so you can see at a glance which systems have configuration waiting for one.
@@ -72,9 +74,10 @@ A pattern only appears where **every** object in the row makes the same kind of 
 
 In the drill-down, each object's name is a link to the object the change would act on, with a **CS** or **MV** marker saying which side of the Metaverse it leads to: the Connected System Object where the row has one (the object an export would remove, or the joined object an import would disconnect), otherwise the Metaverse Object.
 
-Three things are worth knowing before you act on a preview:
+Four things are worth knowing before you act on a preview:
 
 - **A preview that failed shows nothing.** A part-way evaluation has seen an arbitrary subset of the objects, so its counts are real numbers about the wrong population. JIM withholds them rather than presenting them with a caveat beside them.
+- **An object whose scope cannot be decided is counted as one the run would fail.** When a [Scoping Criterion](scoping-criteria.md) cannot be evaluated for an object (an Expression whose value cannot be compared as its Compare As type, say), a synchronisation stops that object with an error and changes nothing about it. Every preview says the same, as **Fails with an error** with the reason, and previews every other object; it never guesses the object's scope.
 - **Object detail may be a sample.** Each summary row keeps a capped number of detail rows by default; the row's own count is always exact. Where the cap applied, the drill-down is labelled as a sample, and you can ask for the full set when you start the preview.
 - **A preview describes the data as it stood.** An import that runs afterwards can move the answer. The panel says when the preview was evaluated so you can judge whether that matters.
 

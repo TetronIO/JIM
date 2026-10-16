@@ -168,7 +168,8 @@ public class MetaverseAttributeCustomDatabaseTests
             buildingCodeId = buildingCode.Id;
 
             // A Synchronisation Rule with an import mapping targeting costCentre (to be cascade-removed) and one
-            // targeting buildingCode (a control that must survive), plus a scoping criterion on costCentre.
+            // targeting buildingCode (a control that must survive). A Scoping Criterion on costCentre would refuse the
+            // delete instead (#2265; MetaverseAttributeReaderRefusalDatabaseTests).
             var rule = new SyncRule
             {
                 Name = "Person Import",
@@ -180,10 +181,6 @@ public class MetaverseAttributeCustomDatabaseTests
             };
             rule.AttributeFlowRules.Add(new SyncRuleMapping { TargetMetaverseAttribute = costCentre });
             rule.AttributeFlowRules.Add(new SyncRuleMapping { TargetMetaverseAttribute = buildingCode });
-            rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
-            {
-                Criteria = [new SyncRuleScopingCriteria { MetaverseAttribute = costCentre, StringValue = "100" }]
-            });
             seed.SyncRules.Add(rule);
             await seed.SaveChangesAsync();
         }
@@ -200,7 +197,6 @@ public class MetaverseAttributeCustomDatabaseTests
         // costCentre and all its references are gone; buildingCode and its mapping and the rule survive.
         Assert.That(await verify.MetaverseAttributes.AnyAsync(a => a.Id == costCentreId), Is.False, "the attribute was removed");
         Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.TargetMetaverseAttributeId == costCentreId), Is.False, "the import mapping was cascade-removed");
-        Assert.That(await verify.SyncRuleScopingCriteria.AnyAsync(c => c.MetaverseAttributeId == costCentreId), Is.False, "the scoping criterion was cascade-removed");
         Assert.That(await verify.MetaverseAttributes.AnyAsync(a => a.Id == buildingCodeId), Is.True, "the control attribute survives");
         Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.TargetMetaverseAttributeId == buildingCodeId), Is.True, "the control mapping survives");
         Assert.That(await verify.SyncRules.CountAsync(), Is.EqualTo(1), "the Synchronisation Rule itself survives");

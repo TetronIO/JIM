@@ -64,6 +64,8 @@ public class SyncRuleMappingGenerationExclusionsApiTests
         var apiKeyRepo = new Mock<IApiKeyRepository>();
         var syncRepository = _syncRepository = new InMemorySyncRepository();
         repository.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
+        repository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         // The stored generation settings a save compares against to release a Needs Decision (#242, release 4): none.
         _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
             .ReturnsAsync(() => new Dictionary<int, SyncRuleMappingGeneration>());

@@ -7,6 +7,7 @@ using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
+using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Servers.Scoping;
 using JIM.Application.Interfaces;
@@ -2620,9 +2621,13 @@ public class SynchronisationController(
     /// missing input.</response>
     /// <response code="400">Schema import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected System not found.</response>
+    /// <response code="409">With <c>removeDependents</c>, refused before anything changed because a Scoping Criterion
+    /// or an Expression reads an attribute the Connected System no longer reports; the message names each one.
+    /// Change them first, or apply with <c>disableDependents</c>, which keeps the attributes.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-schema", Name = "ImportConnectedSystemSchema")]
     [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -2696,6 +2701,11 @@ public class SynchronisationController(
             var dto = ConnectedSystemDetailDto.FromEntity(updated!);
             dto.DependentDerivedFlows = dependents?.DependentDerivedFlows ?? [];
             return Ok(dto);
+        }
+        catch (AttributeReadByConfigurationException ex)
+        {
+            // Apply and Remove refused before anything persisted (#2265): configuration reads a removed attribute.
+            return Conflict(ApiErrorResponse.Conflict(ex.Message));
         }
         catch (Exception ex)
         {
@@ -3746,11 +3756,13 @@ public class SynchronisationController(
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPut("sync-rules/{id:int}", Name = "UpdateSyncRule")]
     [ProducesResponseType(typeof(SyncRuleSaveResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateSyncRuleAsync(int id, [FromBody] UpdateSyncRuleRequest request)
     {
         _logger.LogInformation("Updating Synchronisation Rule: {Id}", id);
@@ -3803,8 +3815,12 @@ public class SynchronisationController(
         try
         {
             success = apiKey != null
-                ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId)
-                : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
+                ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId, configurationTestGate: request.ToConfigurationTestGateOptions())
+                : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId, configurationTestGate: request.ToConfigurationTestGateOptions());
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -4967,11 +4983,13 @@ public class SynchronisationController(
     /// or excluded a Connected System the generated value is not exported to unchanged (the message names it).</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPatch("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "UpdateSyncRuleMapping")]
     [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateSyncRuleMappingAsync(int syncRuleId, int mappingId, [FromBody] UpdateSyncRuleMappingRequest request)
     {
         _logger.LogInformation("Updating mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
@@ -5006,8 +5024,8 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             var updated = apiKey != null
-                ? await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), apiKey)
-                : await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), initiatedBy);
+                ? await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), apiKey, request.ToConfigurationTestGateOptions())
+                : await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), initiatedBy, request.ToConfigurationTestGateOptions());
 
             if (updated == null)
                 return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
@@ -5019,6 +5037,10 @@ public class SynchronisationController(
             if (DerivedFlowGraph.ReadsMetaverse(updated))
                 AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
             return Ok(dto);
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5289,11 +5311,13 @@ public class SynchronisationController(
     /// <response code="201">Group created successfully.</response>
     /// <response code="400">Invalid request.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateScopingCriteriaGroupAsync(int syncRuleId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
         _logger.LogInformation("Creating scoping criteria group for Synchronisation Rule: {SyncRuleId}", syncRuleId);
@@ -5321,11 +5345,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Created scoping criteria group {GroupId} for Synchronisation Rule {SyncRuleId}", group.Id, syncRuleId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = group.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(group));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5341,11 +5369,13 @@ public class SynchronisationController(
     /// <param name="parentGroupId">The unique identifier of the parent criteria group.</param>
     /// <param name="request">The criteria group creation request.</param>
     /// <returns>The created Scoping Criteria group.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/{parentGroupId:int}/child-groups", Name = "CreateChildScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateChildScopingCriteriaGroupAsync(int syncRuleId, int parentGroupId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
         _logger.LogInformation("Creating child scoping criteria group under {ParentId} for Synchronisation Rule: {SyncRuleId}", parentGroupId, syncRuleId);
@@ -5378,11 +5408,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Created child scoping criteria group {GroupId} under {ParentId}", childGroup.Id, parentGroupId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = childGroup.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(childGroup));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5398,11 +5432,13 @@ public class SynchronisationController(
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Scoping Criteria group.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPut("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "UpdateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateScopingCriteriaGroupAsync(int syncRuleId, int groupId, [FromBody] UpdateScopingCriteriaGroupRequest request)
     {
         _logger.LogInformation("Updating scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
@@ -5433,11 +5469,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Updated scoping criteria group {GroupId}", groupId);
             return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5451,12 +5491,16 @@ public class SynchronisationController(
     /// </summary>
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group to delete.</param>
+    /// <param name="saveAnyway">Save even though configuration test cases stop passing; Configuration History records which.</param>
+    /// <param name="acceptNewResults">Take what the Scope now gives as what each case that stopped passing expects, and save.</param>
     /// <returns>No content on success.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "DeleteScopingCriteriaGroup")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteScopingCriteriaGroupAsync(int syncRuleId, int groupId)
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteScopingCriteriaGroupAsync(int syncRuleId, int groupId, [FromQuery] bool saveAnyway = false, [FromQuery] bool acceptNewResults = false)
     {
         _logger.LogInformation("Deleting scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
@@ -5482,11 +5526,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: new ConfigurationTestGateOptions(saveAnyway, acceptNewResults));
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: new ConfigurationTestGateOptions(saveAnyway, acceptNewResults));
             _logger.LogInformation("Deleted scoping criteria group {GroupId}", groupId);
             return NoContent();
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5505,11 +5553,13 @@ public class SynchronisationController(
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The criterion creation request.</param>
     /// <returns>The created criterion.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria", Name = "CreateScopingCriterion")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateScopingCriterionAsync(int syncRuleId, int groupId, [FromBody] CreateScopingCriterionRequest request)
     {
         _logger.LogInformation("Creating criterion in group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
@@ -5537,11 +5587,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Created criterion {CriterionId} in group {GroupId}", criterion.Id, groupId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId }, SyncRuleScopingCriteriaDto.FromEntity(criterion));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5562,11 +5616,13 @@ public class SynchronisationController(
     /// <param name="criterionId">The unique identifier of the criterion to update.</param>
     /// <param name="request">The new criterion values.</param>
     /// <returns>The updated criterion.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPut("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria/{criterionId:int}", Name = "UpdateScopingCriterion")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateScopingCriterionAsync(int syncRuleId, int groupId, int criterionId, [FromBody] CreateScopingCriterionRequest request)
     {
         _logger.LogInformation("Updating criterion {CriterionId} in group {GroupId} for Synchronisation Rule: {SyncRuleId}", criterionId, groupId, syncRuleId);
@@ -5595,11 +5651,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Updated criterion {CriterionId} in group {GroupId}", criterionId, groupId);
             return Ok(SyncRuleScopingCriteriaDto.FromEntity(criterion));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -5730,12 +5790,16 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="criterionId">The unique identifier of the criterion to delete.</param>
+    /// <param name="saveAnyway">Save even though configuration test cases stop passing; Configuration History records which.</param>
+    /// <param name="acceptNewResults">Take what the Scope now gives as what each case that stopped passing expects, and save.</param>
     /// <returns>No content on success.</returns>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria/{criterionId:int}", Name = "DeleteScopingCriterion")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteScopingCriterionAsync(int syncRuleId, int groupId, int criterionId)
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteScopingCriterionAsync(int syncRuleId, int groupId, int criterionId, [FromQuery] bool saveAnyway = false, [FromQuery] bool acceptNewResults = false)
     {
         _logger.LogInformation("Deleting criterion {CriterionId} from group {GroupId}", criterionId, groupId);
 
@@ -5761,11 +5825,15 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, configurationTestGate: new ConfigurationTestGateOptions(saveAnyway, acceptNewResults));
             else
-                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: new ConfigurationTestGateOptions(saveAnyway, acceptNewResults));
             _logger.LogInformation("Deleted criterion {CriterionId} from group {GroupId}", criterionId, groupId);
             return NoContent();
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -6040,11 +6108,13 @@ public class SynchronisationController(
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Connected System or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "UpdateObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateObjectMatchingRuleAsync(int connectedSystemId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
     {
         _logger.LogInformation("Updating Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
@@ -6115,13 +6185,17 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey);
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey, request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy, request.ToConfigurationTestGateOptions());
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
             return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -6381,11 +6455,13 @@ public class SynchronisationController(
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="409">The change stops one or more configuration test cases passing, so nothing was saved; the body names each case and what it now gives. Send the change again with <c>acceptNewResults</c> or <c>saveAnyway</c> to go ahead.</response>
     [HttpPut("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "UpdateSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ConfigurationTestGateResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
     {
         _logger.LogInformation("Updating Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
@@ -6444,13 +6520,17 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey);
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey, request.ToConfigurationTestGateOptions());
             else
-                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy, request.ToConfigurationTestGateOptions());
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
             return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ConfigurationTestsRegressedException ex)
+        {
+            return ConfigurationTestsRegressed(ex);
         }
         catch (ArgumentException ex)
         {
@@ -7164,4 +7244,14 @@ public class SynchronisationController(
     }
 
     #endregion
+
+    /// <summary>
+    /// The 409 Conflict a save the save gate refused gets (#2055 Phase 4b): nothing was saved, and the body names each
+    /// configuration test case the change stops passing.
+    /// </summary>
+    private ConflictObjectResult ConfigurationTestsRegressed(ConfigurationTestsRegressedException exception)
+    {
+        _logger.LogInformation("Refused a change that stops {Count} configuration test case(s) passing", exception.Regressions.Count);
+        return Conflict(ConfigurationTestGateResponse.FromException(exception));
+    }
 }

@@ -235,8 +235,19 @@ public class SyncRuleScopingCriteriaGroupDto
 /// <summary>
 /// Request DTO for creating a new scoping criteria group.
 /// </summary>
-public class CreateScopingCriteriaGroupRequest
+public class CreateScopingCriteriaGroupRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The logical operator for this group: "All" (AND) or "Any" (OR).
     /// </summary>
@@ -252,8 +263,19 @@ public class CreateScopingCriteriaGroupRequest
 /// <summary>
 /// Request DTO for updating a scoping criteria group.
 /// </summary>
-public class UpdateScopingCriteriaGroupRequest
+public class UpdateScopingCriteriaGroupRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// The logical operator for this group: "All" (AND) or "Any" (OR).
     /// </summary>
@@ -271,8 +293,19 @@ public class UpdateScopingCriteriaGroupRequest
 /// For import Synchronisation Rules, provide ConnectedSystemAttributeId.
 /// To compare a computed value instead, provide Expression and CompareAs and no attribute.
 /// </summary>
-public class CreateScopingCriterionRequest
+public class CreateScopingCriterionRequest : IConfigurationTestGateRequest
 {
+    /// <summary>
+    /// Save even though configuration test cases stop passing; Configuration History records which, by name.
+    /// </summary>
+    public bool? SaveAnyway { get; set; }
+
+    /// <summary>
+    /// Take what the configuration now gives as what each configuration test case that stopped passing expects, and
+    /// save. A case whose new result cannot be expected still refuses the save unless <c>saveAnyway</c> is set too.
+    /// </summary>
+    public bool? AcceptNewResults { get; set; }
+
     /// <summary>
     /// An expression whose computed value the criterion compares, in place of an attribute: cs["..."] reads the
     /// Connected System Object on an import Synchronisation Rule, mv["..."] the Metaverse Object on an export one.

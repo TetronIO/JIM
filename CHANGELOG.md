@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Test an Example Data Template attribute's expression with sample values before generating anything, over REST or with `Test-JIMExampleDataExpression`. (#2055)
 - ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
 - ✨ Save configuration test cases: inputs, and what an Attribute Flow, Generated Value, Scope or Object Matching Rule should give, run from a Synchronisation Rule's new **Tests** tab to catch a breaking change. Also via REST and `Invoke-JIMConfigurationTest`. (#2055)
+- ✨ Saving a change that stops a configuration test case passing now asks first: keep editing, accept the new result, or save anyway, which Configuration History records. Also via REST and `-SaveAnyway` or `-AcceptNewResult`. (#2055)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
@@ -75,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
 - 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
 - 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
 - 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
@@ -117,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
+- 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Synchronisation Rule's Scoping Criteria still compared, leaving the rule's scope reading nothing and deprovisioning its objects. It is now refused, before anything changes, while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
 - 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values now succeeds as no change, instead of being refused, and records nothing in its change history. (#2153)
 - 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
 - 🐛 File Connector imports match headers ignoring case, and fail naming a column the file lacks instead of clearing that attribute on every object. On upgrade, a file lacking a selected attribute's column fails to import until you add the column or deselect the attribute. (#2051)
@@ -167,6 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An LDAP Boolean or DateTime attribute holding more than one value no longer clears the value JIM held: JIM holds one value for these types, so it lists each under **Attribute Values Not Imported** and leaves the attribute as it was. (#2153)
 - 🐛 A date with finer than microsecond precision, such as a SQL `datetime2(7)` value, no longer reads as changed on every Full Import, and no longer raises a false Verification Mode disagreement. JIM holds every date in UTC, to the microsecond. (#2153)
 - 🐛 A date exported by JIM now confirms on the next import and is no longer reported as drift, however the server's time zone is set. (#2153)
+- 🐛 Import Attribute Flows compare every type's values as a set: a multi-valued date or Boolean flows every value instead of the first, a Metaverse Object holding two dates no longer fails synchronisation, a reordered set changes nothing, and an object holding no value of the attribute's type follows "Null is a value" and priority instead of clearing it. (#2153)
 - 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 **Deleted By** on the Deleted Objects page linked the person who deleted an object to a page that does not exist; it now opens their Metaverse Object. (#2066)

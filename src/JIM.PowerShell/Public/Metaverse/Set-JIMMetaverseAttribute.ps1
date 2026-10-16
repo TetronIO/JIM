@@ -19,6 +19,11 @@ function Set-JIMMetaverseAttribute {
           cleared. Giving the type and plurality the attribute already has is no change: it always
           succeeds, and nothing is recorded in the attribute's change history.
 
+        A rename is refused while an Expression reads the attribute by its current name (a Scoping
+        Criterion, Attribute Flow, Object Matching Rule or Example Data Template Expression); the
+        error names each one. Change them first. A rename that only changes the case of the name is
+        allowed, because Expressions read attribute names ignoring case.
+
         Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
         Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
 
