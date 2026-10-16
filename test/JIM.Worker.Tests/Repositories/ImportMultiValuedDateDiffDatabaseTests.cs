@@ -85,6 +85,23 @@ public class ImportMultiValuedDateDiffDatabaseTests
     }
 
     [Test]
+    public async Task UpdateFromImport_SingleSeventhDigitDateReimported_StagesNothingAsync()
+    {
+        // The single-valued fast path, against a value PostgreSQL has floored to the microsecond and hands back in
+        // another Kind.
+        var (systemId, csoId) = await SeedObjectHoldingDatesAsync([Dates[0]]);
+
+        var (cso, objectType) = await HydrateAsync(systemId, csoId);
+        Diff(ImportOf(objectType, [Dates[0]]), cso, objectType);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.PendingAttributeValueAdditions, Is.Empty);
+            Assert.That(cso.PendingAttributeValueRemovals, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task UpdateFromImport_OneDateReplaced_RemovesAndAddsOnlyThatDateAsync()
     {
         var (systemId, csoId) = await SeedObjectHoldingDatesAsync(Dates);
