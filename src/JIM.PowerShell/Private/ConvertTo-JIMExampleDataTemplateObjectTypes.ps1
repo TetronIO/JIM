@@ -91,7 +91,7 @@ function ConvertTo-JIMExampleDataTemplateAttributeRequest {
     )
 
     $allowedKeys = @(
-        'MetaverseAttribute', 'MetaverseAttributeId', 'ConnectedSystemObjectTypeAttributeId',
+        'MetaverseAttribute', 'MetaverseAttributeId',
         'PopulatedValuesPercentage', 'BoolTrueDistribution', 'BoolShouldBeRandom',
         'MinDate', 'MaxDate', 'MinNumber', 'MaxNumber', 'SequentialNumbers', 'RandomNumbers',
         'Pattern', 'Expression', 'ExampleDataSets', 'WeightedStringValues',
@@ -118,9 +118,6 @@ function ConvertTo-JIMExampleDataTemplateAttributeRequest {
     }
     if ($Attribute.ContainsKey('MetaverseAttributeId')) {
         $converted.metaverseAttributeId = [int]$Attribute['MetaverseAttributeId']
-    }
-    if ($Attribute.ContainsKey('ConnectedSystemObjectTypeAttributeId')) {
-        $converted.connectedSystemObjectTypeAttributeId = [int]$Attribute['ConnectedSystemObjectTypeAttributeId']
     }
 
     # Scalar generation settings pass through under their request field names.

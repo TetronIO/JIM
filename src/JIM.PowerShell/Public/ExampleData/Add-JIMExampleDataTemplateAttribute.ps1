@@ -10,8 +10,7 @@ function Add-JIMExampleDataTemplateAttribute {
         Adds one attribute's generation configuration to an Object Type within an existing Data
         Generation Template, without restating the rest of the template: the cmdlet reads the template,
         appends the new attribute to the named Object Type, and writes the whole configuration back.
-        Supply exactly one of -MetaverseAttribute or -ConnectedSystemObjectTypeAttributeId to say which
-        attribute values are generated for. Executing a template generates Metaverse Attribute values only.
+        -MetaverseAttribute names the attribute values are generated for.
 
     .PARAMETER TemplateId
         The unique identifier of the Data Generation Template to add the attribute to.
@@ -24,11 +23,7 @@ function Add-JIMExampleDataTemplateAttribute {
         receives the attribute.
 
     .PARAMETER MetaverseAttribute
-        The Metaverse Attribute (name or id) values are generated for, when targeting the Metaverse.
-
-    .PARAMETER ConnectedSystemObjectTypeAttributeId
-        The id of a Connected System attribute to generate values for. The attribute is saved on the template,
-        but executing a template generates Metaverse Attribute values only, so it produces no values.
+        The Metaverse Attribute (name or id) values are generated for. Always needed: the cmdlet stops with an error if it is omitted.
 
     .PARAMETER Pattern
         A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com".
@@ -139,9 +134,6 @@ function Add-JIMExampleDataTemplateAttribute {
         [object]$MetaverseAttribute,
 
         [Parameter()]
-        [int]$ConnectedSystemObjectTypeAttributeId,
-
-        [Parameter()]
         [string]$Pattern,
 
         [Parameter()]
@@ -211,11 +203,10 @@ function Add-JIMExampleDataTemplateAttribute {
             return
         }
 
-        # Exactly one target attribute must be named.
-        $hasMetaverseAttribute = $PSBoundParameters.ContainsKey('MetaverseAttribute')
-        $hasConnectedSystemAttribute = $PSBoundParameters.ContainsKey('ConnectedSystemObjectTypeAttributeId')
-        if ($hasMetaverseAttribute -eq $hasConnectedSystemAttribute) {
-            Write-Error "Specify exactly one of -MetaverseAttribute or -ConnectedSystemObjectTypeAttributeId to say which attribute values are generated for."
+        # The target attribute must be named. -MetaverseAttribute is not declared Mandatory so that this check,
+        # rather than an interactive prompt, answers a call that leaves it out.
+        if (-not $PSBoundParameters.ContainsKey('MetaverseAttribute')) {
+            Write-Error "Specify -MetaverseAttribute to say which attribute values are generated for."
             return
         }
 
@@ -272,9 +263,7 @@ function Add-JIMExampleDataTemplateAttribute {
 
                 # Assemble the new attribute from the flat parameters and reuse the shared converter,
                 # so names resolve to ids identically to New/Set-JIMExampleDataTemplate's hashtable path.
-                $attributeSpec = @{}
-                if ($hasMetaverseAttribute) { $attributeSpec.MetaverseAttribute = $MetaverseAttribute }
-                if ($hasConnectedSystemAttribute) { $attributeSpec.ConnectedSystemObjectTypeAttributeId = $ConnectedSystemObjectTypeAttributeId }
+                $attributeSpec = @{ MetaverseAttribute = $MetaverseAttribute }
 
                 foreach ($scalarParameter in 'Pattern', 'Expression', 'PopulatedValuesPercentage', 'BoolTrueDistribution', 'BoolShouldBeRandom',
                     'MinDate', 'MaxDate', 'MinNumber', 'MaxNumber', 'SequentialNumbers', 'RandomNumbers',

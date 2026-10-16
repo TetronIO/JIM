@@ -259,7 +259,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable                    | Description                                                                                                                                                                                      | Default  |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| `JIM_INFRASTRUCTURE_API_KEY` | Creates an API key on startup for automated configuration (CI/CD). The key must start with `jim_ak_` and be at least 32 characters. Has Administrator role, expires after 24 hours, and should be deleted after initial setup. | *(none)* |
+| `JIM_INFRASTRUCTURE_API_KEY` | Creates an API key on startup for automated configuration (CI/CD). The key must start with `jim_ak_` and be at least 32 characters. Has the Administrator role and works for 24 hours; when it has expired, restarting JIM renews it for another 24 hours. A disabled key stays disabled. Remove the variable once setup is done, and delete the key: while the variable is set, every restart creates the key again if it is missing. | *(none)* |
 
 Generate a key with:
 
