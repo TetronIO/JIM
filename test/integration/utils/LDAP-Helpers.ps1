@@ -222,6 +222,164 @@ function Invoke-LdapTool {
     return $output
 }
 
+function Get-LdapToolboxCommandInvocation {
+    <#
+    .SYNOPSIS
+        Build the docker argument list that runs a command other than an LDAP client tool in the toolbox.
+
+    .DESCRIPTION
+        Get-LdapToolInvocation's counterpart for the toolbox's other tools (kpasswd, and sh to write its
+        configuration), which run only against a real Active Directory and so only in jim-ldap-toolbox.
+        Environment variables go to docker exec as -e NAME=value, before the container name. Pure, so it
+        is testable with no Docker present.
+
+    .PARAMETER Arguments
+        The command and its arguments, one element each.
+
+    .PARAMETER WithInput
+        Add -i so the command can read standard input.
+
+    .PARAMETER Environment
+        Environment variables for the command.
+
+    .OUTPUTS
+        string[]: the arguments to pass to docker.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$WithInput,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$Environment = @{}
+    )
+
+    $argv = [System.Collections.Generic.List[string]]::new()
+    $argv.Add('exec')
+    if ($WithInput) { $argv.Add('-i') }
+    foreach ($name in @($Environment.Keys | Sort-Object)) {
+        $argv.Add('-e')
+        $argv.Add("$name=$($Environment[$name])")
+    }
+    $argv.Add('jim-ldap-toolbox')
+    foreach ($argument in $Arguments) { $argv.Add($argument) }
+    return $argv.ToArray()
+}
+
+function Invoke-LdapToolboxCommand {
+    <#
+    .SYNOPSIS
+        Run a command in the toolbox and return @{ ExitCode; Output }, standard error merged in.
+
+    .PARAMETER Arguments
+        The command and its arguments, one element each.
+
+    .PARAMETER InputObject
+        Text written to the command's standard input. Adds -i.
+
+    .PARAMETER Environment
+        Environment variables for the command.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory=$false)]
+        [string]$InputObject,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$Environment = @{}
+    )
+
+    $hasInput = $PSBoundParameters.ContainsKey('InputObject')
+    $argv = Get-LdapToolboxCommandInvocation -Arguments $Arguments -WithInput:$hasInput -Environment $Environment
+
+    if ($hasInput) {
+        $output = $InputObject | & docker @argv 2>&1
+    }
+    else {
+        $output = & docker @argv 2>&1
+    }
+    return @{ ExitCode = $LASTEXITCODE; Output = (($output | Out-String).Trim()) }
+}
+
+function Get-Krb5ConfigText {
+    <#
+    .SYNOPSIS
+        A krb5.conf for one lab forest: its realm, with its domain controller as the KDC and the
+        password change server.
+
+    .DESCRIPTION
+        The lab has no DNS the toolbox can see (the domain controllers' names are compose extra_hosts),
+        so nothing is looked up: the realm and its servers are named outright. TCP is preferred
+        (udp_preference_limit = 1), because an Active Directory ticket carries a PAC that can be too
+        large for one UDP datagram.
+
+    .PARAMETER Realm
+        The Kerberos realm, the forest's DNS name in capitals (PANOPLY.LOCAL).
+
+    .PARAMETER Kdc
+        The domain controller's host name.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Realm,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Kdc
+    )
+
+    return @(
+        '[libdefaults]'
+        "    default_realm = $Realm"
+        '    dns_lookup_kdc = false'
+        '    dns_lookup_realm = false'
+        '    rdns = false'
+        '    udp_preference_limit = 1'
+        ''
+        '[realms]'
+        "    $Realm = {"
+        "        kdc = $Kdc"
+        "        kpasswd_server = $Kdc"
+        "        admin_server = $Kdc"
+        '    }'
+        ''
+    ) -join "`n"
+}
+
+function Get-KerberosPasswordChangeOutcome {
+    <#
+    .SYNOPSIS
+        Classify a kpasswd run in the outcome vocabulary Get-LDAPPasswordModifyOutcome uses.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ExitCode,
+
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$Output
+    )
+
+    if ($ExitCode -eq 0) { return 'Success' }
+    # The domain refused the new password under its policy (complexity, length, history): kpasswd's
+    # soft error, "Password change rejected".
+    if ($Output -match 'Password change rejected') { return 'ConstraintViolation' }
+    # The current password was wrong, so no ticket for the password change service was issued.
+    if ($Output -match 'Password incorrect|Preauthentication failed|integrity check failed') { return 'InvalidCredentials' }
+    return 'Failed'
+}
+
 function ConvertTo-UnicodePwdValue {
     <#
     .SYNOPSIS
@@ -528,9 +686,11 @@ function Invoke-LDAPSearch {
 
     try {
         # Build ldapsearch arguments array — pass args directly to docker exec
-        # to avoid shell glob expansion issues with '*'
+        # to avoid shell glob expansion issues with '*'. Paged, as Find-DirectoryEntry's searches are: Active
+        # Directory refuses an unpaged search matching more than 1,000 entries (exit 4, sizeLimitExceeded), and
+        # no server need build one unbounded response.
         $ldapArgs = @(
-            "-x", "-LLL",
+            "-x", "-LLL", "-E", "pr=1000/noprompt",
             "-H", $ldapUri,
             "-D", $BindDN,
             "-w", $BindPassword,
@@ -1190,10 +1350,10 @@ function Set-LDAPUserPasswordAsAccountHolder {
         such as JIM's own bypasses.
 
         On a real Active Directory config (DirectoryType ActiveDirectory, no container) the same
-        change is made the way Windows makes it: the account binds as itself over LDAPS and, in one
-        modify, deletes unicodePwd carrying the old password and adds unicodePwd carrying the new one.
-        smbpasswd does not exist there. The account's DN is found with an administrator search when
-        -AccountDN is not given.
+        change is made the way Windows makes it at a first sign-in: Kerberos password change (kpasswd,
+        RFC 3244), run in jim-ldap-toolbox with a krb5.conf for the forest. An LDAP bind cannot do it,
+        because Active Directory refuses a bind from an account that must change its password
+        (data 773), which is exactly the state an Initial Password leaves it in (#2286).
 
     .PARAMETER AccountName
         The account's sAMAccountName.
@@ -1207,12 +1367,9 @@ function Set-LDAPUserPasswordAsAccountHolder {
     .PARAMETER DirectoryConfig
         Directory configuration hashtable from Get-DirectoryConfig.
 
-    .PARAMETER AccountDN
-        The account's Distinguished Name. Only used on Active Directory, where the change is an LDAP
-        modify of that entry; looked up by sAMAccountName as the administrator when omitted.
-
     .OUTPUTS
-        A hashtable with Success, ExitCode, Output and Outcome (see Get-LDAPPasswordModifyOutcome).
+        A hashtable with Success, ExitCode, Output and Outcome (see Get-LDAPPasswordModifyOutcome and
+        Get-KerberosPasswordChangeOutcome).
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -1225,31 +1382,31 @@ function Set-LDAPUserPasswordAsAccountHolder {
         [string]$NewPassword,
 
         [Parameter(Mandatory=$true)]
-        [hashtable]$DirectoryConfig,
-
-        [Parameter(Mandatory=$false)]
-        [string]$AccountDN
+        [hashtable]$DirectoryConfig
     )
 
     if (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig) {
-        if (-not $AccountDN) {
-            $user = Get-LDAPUser -UserIdentifier $AccountName -DirectoryConfig $DirectoryConfig
-            if ($null -eq $user -or -not $user.ContainsKey('dn')) {
-                throw "Set-LDAPUserPasswordAsAccountHolder: could not find the account '$AccountName' to change its password."
-            }
-            $AccountDN = [string]$user['dn']
+        $realm = ([string]$DirectoryConfig.Domain).ToUpperInvariant()
+        $configPath = "/tmp/krb5-$($realm.ToLowerInvariant()).conf"
+
+        # The toolbox serves all three forests, so the configuration is written for this one on each call. The path
+        # is the last argument, given to sh as $1, so nothing is interpolated into the script.
+        $written = Invoke-LdapToolboxCommand -Arguments @('sh', '-c', 'cat > "$1"', 'sh', $configPath) `
+            -InputObject (Get-Krb5ConfigText -Realm $realm -Kdc ([string]$DirectoryConfig.Host))
+        if ($written.ExitCode -ne 0) {
+            throw "Set-LDAPUserPasswordAsAccountHolder: could not write the Kerberos configuration $configPath in jim-ldap-toolbox: $($written.Output)"
         }
 
-        # A simple bind accepts the NetBIOS domain\account form, so the account holder needs no DN to bind.
-        $result = Invoke-LdapUnicodePwdModify -DirectoryConfig $DirectoryConfig `
-            -BindDN "$($DirectoryConfig.ShortDomain)\$AccountName" -BindPassword $CurrentPassword `
-            -TargetDN $AccountDN -NewPassword $NewPassword -OldPassword $CurrentPassword
+        # kpasswd reads the current password, then the new one twice, from standard input, so neither is ever
+        # an argument (a process list shows arguments).
+        $result = Invoke-LdapToolboxCommand -Arguments @('kpasswd', "$AccountName@$realm") `
+            -InputObject "$CurrentPassword`n$NewPassword`n$NewPassword`n" -Environment @{ KRB5_CONFIG = $configPath }
 
         return @{
             Success  = ($result.ExitCode -eq 0)
             ExitCode = $result.ExitCode
             Output   = $result.Output
-            Outcome  = $result.Outcome
+            Outcome  = Get-KerberosPasswordChangeOutcome -ExitCode $result.ExitCode -Output $result.Output
         }
     }
 

@@ -368,6 +368,10 @@ function New-OutOfBandLdapAccount {
         $ldif = ($lines -join "`n") + "`n"
 
         if (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig) {
+            # Active Directory only: the account carries Scenario 017's lab password. Once JIM joins it, its export
+            # asks for the account enabled, and Active Directory will not enable an account with no password
+            # (0000052D); the Initial Password reaches only accounts JIM provisions, not ones it joins.
+            $ldif += "unicodePwd:: $(ConvertTo-UnicodePwdValue -Password 'Chalkstream-7-Vault!')`n"
             $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
             if ($result.Outcome -eq 'Failed') {
                 throw "Failed to create out-of-band Active Directory account '$AccountName': $($result.Output)"

@@ -689,7 +689,6 @@ try {
                 @{ LdapAttr = "uid";                MvAttr = "Account Name" }
                 @{ LdapAttr = "givenName";          MvAttr = "First Name" }
                 @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
-                @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
                 @{ LdapAttr = "mail";               MvAttr = "Email" }
                 @{ LdapAttr = "employeeNumber";     MvAttr = "Employee ID" }
             )
@@ -698,7 +697,6 @@ try {
                 @{ LdapAttr = "sAMAccountName";     MvAttr = "Account Name" }
                 @{ LdapAttr = "givenName";          MvAttr = "First Name" }
                 @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
-                @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
                 @{ LdapAttr = "mail";               MvAttr = "Email" }
                 @{ LdapAttr = "title";              MvAttr = "Job Title" }
                 @{ LdapAttr = "department";         MvAttr = "Department" }
@@ -799,6 +797,11 @@ try {
             }
         }
         Write-Host "  ✓ Source import mappings configured ($importMappingsCreated new)" -ForegroundColor Green
+
+        # Display Name is derived from the given name and surname rather than taken from displayName.
+        $displayNameMvAttrId = ($mvAttributes | Where-Object { $_.name -eq 'Display Name' }).id
+        Add-DisplayNameExpressionMapping -SyncRuleId $sourceImportRule.id -DisplayNameAttributeId $displayNameMvAttrId `
+            -FirstNameAttribute 'givenName' -LastNameAttribute 'sn'
 
         # Add constant expression mapping for Type = PersonEntity on source import rule
         $typeAttr = $mvAttributes | Where-Object { $_.name -eq "Type" }
@@ -907,6 +910,8 @@ try {
                 }
             }
             Write-Host "  ✓ Target import mappings configured ($reverseImportMappingsCreated new)" -ForegroundColor Green
+            Add-DisplayNameExpressionMapping -SyncRuleId $targetImportRule.id -DisplayNameAttributeId $displayNameMvAttrId `
+                -FirstNameAttribute 'givenName' -LastNameAttribute 'sn'
         }
 
         # Source Export mappings (for reverse sync)

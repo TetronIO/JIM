@@ -1402,3 +1402,122 @@ echo "$stamp [12:00:31 ERR] Unhandled exception in the export run"
         }
     }
 }
+
+Describe 'ConvertTo-ScheduleStepTime' {
+    # The schedule execution API's step times reach the harness as DateTime values, because PowerShell's JSON
+    # reader converts ISO 8601 strings; Scenario 006 then parsed them again. On a runner outside the US that
+    # threw "String '10/16/2026 16:57:20' was not recognized as a valid DateTime" (the Active Directory lab, 2026-10-16).
+    BeforeEach {
+        $script:originalCulture = [System.Globalization.CultureInfo]::CurrentCulture
+        [System.Globalization.CultureInfo]::CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('en-GB')
+    }
+    AfterEach {
+        [System.Globalization.CultureInfo]::CurrentCulture = $script:originalCulture
+    }
+
+    It 'returns a DateTime it is given unchanged, whatever the current culture' {
+        $value = [datetime]::new(2026, 10, 16, 16, 57, 20, [System.DateTimeKind]::Utc)
+
+        ConvertTo-ScheduleStepTime -Value $value | Should -Be $value
+    }
+
+    It 'reads an ISO 8601 string as UTC, whatever the current culture' {
+        $result = ConvertTo-ScheduleStepTime -Value '2026-10-16T16:57:20.123Z'
+
+        $result | Should -Be ([datetime]::new(2026, 10, 16, 16, 57, 20, 123, [System.DateTimeKind]::Utc))
+        $result.Kind | Should -Be ([System.DateTimeKind]::Utc)
+    }
+}
+
+Describe 'Limit-ActiveDirectorySamAccountName' {
+    # New-TestUser's names are first.last plus the index; 18 of Scenario 008's first 1,000 run past Active
+    # Directory's 20 characters, which it refuses (00000523, 2026-10-16).
+    It 'leaves a name of 20 characters or fewer alone' {
+        Limit-ActiveDirectorySamAccountName -SamAccountName 'hannah.jenkins109' -Index 109 | Should -Be 'hannah.jenkins109'
+    }
+
+    It 'shortens a longer name to 20 characters and keeps the index that makes it unique' {
+        $result = Limit-ActiveDirectorySamAccountName -SamAccountName 'penelope.fitzgerald137' -Index 137
+
+        $result | Should -Be 'penelope.fitzgera137'
+        $result.Length | Should -Be 20
+    }
+}
+
+Describe 'Display Name from first and last names' {
+    BeforeAll {
+        # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing it.
+        # Their parameters exist only for the mocks' parameter filters to bind to.
+        if (-not (Get-Command Get-JIMSyncRuleMapping -ErrorAction SilentlyContinue)) {
+            function script:Get-JIMSyncRuleMapping {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
+                param($SyncRuleId)
+            }
+        }
+        if (-not (Get-Command New-JIMSyncRuleMapping -ErrorAction SilentlyContinue)) {
+            function script:New-JIMSyncRuleMapping {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
+                param($SyncRuleId, $TargetMetaverseAttributeId, $Expression, $MissingInputBehaviour)
+            }
+        }
+    }
+
+    Context 'Get-DisplayNameExpression' {
+        It 'joins the two Connected System attributes with a space' {
+            Get-DisplayNameExpression -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName' |
+                Should -Be 'cs["firstName"] + " " + cs["lastName"]'
+        }
+    }
+
+    Context 'Add-DisplayNameExpressionMapping' {
+        It 'creates the expression mapping, failing the mapping when a name is missing' {
+            Mock Get-JIMSyncRuleMapping { @() }
+            Mock New-JIMSyncRuleMapping { @{ id = 9 } }
+
+            Add-DisplayNameExpressionMapping -SyncRuleId 3 -DisplayNameAttributeId 7 -FirstNameAttribute 'givenName' -LastNameAttribute 'sn'
+
+            Should -Invoke New-JIMSyncRuleMapping -Times 1 -Exactly -ParameterFilter {
+                $SyncRuleId -eq 3 -and $TargetMetaverseAttributeId -eq 7 -and
+                $Expression -eq 'cs["givenName"] + " " + cs["sn"]' -and $MissingInputBehaviour -eq 'FailMapping'
+            }
+        }
+
+        It 'leaves a rule that already flows into Display Name alone' {
+            Mock Get-JIMSyncRuleMapping { @(@{ id = 4; targetMetaverseAttributeId = 7 }) }
+            Mock New-JIMSyncRuleMapping { }
+
+            Add-DisplayNameExpressionMapping -SyncRuleId 3 -DisplayNameAttributeId 7 -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName'
+
+            Should -Invoke New-JIMSyncRuleMapping -Times 0
+        }
+    }
+
+    Context 'Split-TestDisplayName' {
+        It 'puts everything before the last space in the first name, so the two rejoin to the display name' -ForEach @(
+            @{ DisplayName = 'Test WLCD Recall'; First = 'Test WLCD'; Last = 'Recall' }
+            @{ DisplayName = 'Test Projection'; First = 'Test'; Last = 'Projection' }
+        ) {
+            $parts = Split-TestDisplayName -DisplayName $DisplayName
+
+            $parts.FirstName | Should -Be $First
+            $parts.LastName | Should -Be $Last
+            "$($parts.FirstName) $($parts.LastName)" | Should -Be $DisplayName
+        }
+
+        It 'refuses a display name with no space, which no first and last name can produce' {
+            { Split-TestDisplayName -DisplayName 'Mononym' } | Should -Throw
+        }
+    }
+
+    Context 'Set-TestUserDisplayName' {
+        It 'gives a New-TestUser user the display name and the first and last names that rebuild it' {
+            $user = New-TestUser -Index 3
+
+            Set-TestUserDisplayName -User $user -DisplayName 'Test Join Conflict One'
+
+            $user.DisplayName | Should -Be 'Test Join Conflict One'
+            $user.FirstName | Should -Be 'Test Join Conflict'
+            $user.LastName | Should -Be 'One'
+        }
+    }
+}

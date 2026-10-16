@@ -343,7 +343,6 @@ $importMappings = @(
     @{ CSAttr = "employeeId"; MVAttr = "Employee ID" },
     @{ CSAttr = "firstName"; MVAttr = "First Name" },
     @{ CSAttr = "lastName"; MVAttr = "Last Name" },
-    @{ CSAttr = "displayName"; MVAttr = "Display Name" },
     @{ CSAttr = "email"; MVAttr = "Email" },
     @{ CSAttr = "department"; MVAttr = "Department" },
     @{ CSAttr = "title"; MVAttr = "Job Title" },
@@ -364,6 +363,11 @@ foreach ($mapping in $importMappings) {
     }
 }
 Write-Host "  OK Created $importMappingsCreated import attribute flow mappings" -ForegroundColor Green
+
+# Display Name is derived from the HR names rather than taken from the CSV's displayName column.
+Add-DisplayNameExpressionMapping -SyncRuleId $importRule.id `
+    -DisplayNameAttributeId ($mvAttributes | Where-Object { $_.name -eq 'Display Name' }).id `
+    -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName'
 
 # Step 12: Add scoping criteria to import rule - department Equals 'Finance' (case-insensitive)
 Write-TestStep "Step 12" "Adding scoping criteria to import rule"

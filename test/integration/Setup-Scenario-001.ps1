@@ -949,7 +949,6 @@ try {
             @{ CsAttr = "employeeId";        MvAttr = "Employee ID" }
             @{ CsAttr = "firstName";         MvAttr = "First Name" }
             @{ CsAttr = "lastName";          MvAttr = "Last Name" }
-            @{ CsAttr = "displayName";       MvAttr = "Display Name" }
             @{ CsAttr = "email";             MvAttr = "Email" }
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
@@ -1089,6 +1088,11 @@ try {
             }
         }
         Write-Host "  ✓ Import attribute mappings configured ($importMappingsCreated new)" -ForegroundColor Green
+
+        # Display Name is derived from the HR names rather than taken from the CSV's displayName column.
+        Add-DisplayNameExpressionMapping -SyncRuleId $importRule.id `
+            -DisplayNameAttributeId ($mvAttributes | Where-Object { $_.name -eq 'Display Name' }).id `
+            -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName'
 
         # Unique Value Generation (#242): replace samAccountName -> Account Name with a generated
         # mapping, and derive Email from the names when the CSV carries no "email" column.
