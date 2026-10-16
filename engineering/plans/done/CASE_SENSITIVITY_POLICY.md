@@ -2,7 +2,7 @@
 
 - **Status:** Done
 - **Issue:** [#2051](https://github.com/TetronIO/JIM/issues/2051)
-- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
+- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/done/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
 - **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
 
 ## Overview

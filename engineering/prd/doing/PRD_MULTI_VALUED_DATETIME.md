@@ -92,7 +92,7 @@ A multi-valued Boolean can only hold {TRUE}, {FALSE} or {TRUE, FALSE}. The first
 
 - **Multi-valued Boolean.** Deliberately unsupported, by [the Boolean rule](#the-boolean-rule).
 - **100ns fidelity.** JIM holds microseconds (D1). Sources that carry finer precision are floored, and collisions are reported.
-- **Defining how expressions read multi-valued inputs.** That model is already decided in #2053 (Decision 8 of [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md)). This PRD covers only the result handling and the date forms that multi-valued dates need (D5).
+- **Defining how expressions read multi-valued inputs.** That model is already decided in #2053 (Decision 8 of [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../done/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md)). This PRD covers only the result handling and the date forms that multi-valued dates need (D5).
 - **A File Connector multi-valued overhaul** (plurality override, repeated-header reads, whole-set export). Its gaps affect every type, not only dates (D6).
 - **Retiring Npgsql's legacy timestamp switch or pinning the session time zone.** Separate concerns; this delivery makes attribute values correct regardless.
 - **Out of scope, filed separately** (each affects every type): the REST list DTO is single-valued, last value wins (`MetaverseObjectHeaderDto.cs:75-78`); the capped multi-valued value search is string-only (`MetaverseRepository.cs:4287-4294`, `ConnectedSystemRepository.cs:2263-2267`); the date-only criterion editor (`CriterionValueEditor.razor:36`); Example Data generating one value per attribute.

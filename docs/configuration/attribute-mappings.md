@@ -35,6 +35,8 @@ An expression mapping applies a transformation using the JIM [expression languag
 
 On an export rule that provisions to Active Directory, an enabled value such as `512` needs an [Initial Password](initial-password.md) on the same rule: Active Directory refuses to create an enabled account that has no password, and with an Initial Password JIM creates the account disabled and enables it once the password is set. The accounts this expression creates disabled (`514`) stay disabled when their password is delivered: the expression decides the enabled state, not the Initial Password (see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector-passwords.md#accounts-your-attribute-flow-creates-disabled)).
 
+To keep a check that an Attribute Flow still gives the value you expect, and run it again after later changes, save a [configuration test case](configuration-tests.md) for it from the tester or the Synchronisation Rule's **Tests** tab. A later change that stops the case passing is not saved until you choose what to do about it.
+
 ### Missing Input Behaviour
 
 An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:

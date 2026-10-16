@@ -57,6 +57,8 @@ The test stops there. Which value is free is decided when a Synchronisation runs
 
 Over the REST API and PowerShell, test the Attribute Flow with [`Test-JIMExpression`](../powershell/expressions.md#test-jimexpression) `-SyncRuleId` and `-MappingId`: `GeneratedValue` is `$true`, and `BaseOutcome` and `BaseValue` say what generation would be given.
 
+A [configuration test case](configuration-tests.md) for a Generated Value keeps that check: it expects the base the expression gives, never a candidate, so it passes or fails the same way however many values are already taken.
+
 ## Checking and correcting values in target systems
 
 Before choosing a value, JIM can ask a target system whether the value is already in use there, and when a target still refuses a value as taken, JIM corrects it for you. See [Generated Values in Target Systems](generated-values-in-target-systems.md).
