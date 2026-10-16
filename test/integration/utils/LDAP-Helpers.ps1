@@ -20,10 +20,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# The shared container that runs LDAP client tools against a directory that has no container of its
-# own (a real Active Directory domain controller). See test/integration/docker/ldap-toolbox/.
-$script:LdapToolboxContainerName = 'jim-ldap-toolbox'
-
 function Test-LdapToolboxConfig {
     <#
     .SYNOPSIS
@@ -135,7 +131,11 @@ function Get-LdapToolInvocation {
     )
 
     $containerName = if (Test-LdapToolboxConfig -DirectoryConfig $DirectoryConfig) {
-        $script:LdapToolboxContainerName
+        # The shared container that runs LDAP client tools against a directory with no container of its own
+        # (a real Active Directory domain controller; see test/integration/docker/ldap-toolbox/). A literal, not
+        # a $script: variable: a child script (Setup-Scenario-002.ps1, run with &) calls this function with its
+        # own script scope, where such a variable was never set.
+        'jim-ldap-toolbox'
     }
     else {
         [string]$DirectoryConfig['ContainerName']

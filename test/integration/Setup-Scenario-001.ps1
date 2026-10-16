@@ -83,7 +83,10 @@
     the delivery leaves "Password never expires" (0x10000) to the flow, so the account holds exactly what the flow
     asserts (512, or 514 for an Archived joiner) whatever the expiry, the confirming import confirms it, and Tests
     2d and 2e still match 514 and 512 exactly. Run it with NeverExpires to prove that the delivery no longer
-    writes 66048 over the flow's 512. Without this switch nothing changes.
+    writes 66048 over the flow's 512. Without this switch nothing changes, except on real Active Directory
+    (DirectoryType ActiveDirectory), where the Initial Password is always given: every scenario that composes this
+    setup provisions enabled accounts, and none of them could create one there without it. A scenario that needs a
+    different Initial Password (017, 020, 022, 024) sets its own afterwards, which replaces this one.
 
 .PARAMETER InitialPasswordExpiry
     The Initial Password's expiry behaviour, used only with -InitialPassword. Defaults to
@@ -1624,7 +1627,7 @@ catch {
     Write-Host "    Leaver and Reconnection tests may fail without deletion rules configured" -ForegroundColor DarkYellow
 }
 
-# Step 6e: Give the provisioning Synchronisation Rule an Initial Password (-InitialPassword only, #2039)
+# Step 6e: Give the provisioning Synchronisation Rule an Initial Password (-InitialPassword, and always on real Active Directory; #2039)
 #
 # The userAccountControl Attribute Flow configured in Step 6c stays: on real Active Directory JIM creates the account
 # disabled because this Initial Password follows it, and the password's delivery enables it (EnableAccount). The
@@ -1634,7 +1637,9 @@ catch {
 # Directory complexity rule on its own merits, and shares no token with the account names the HR template
 # generates, which Active Directory would refuse. It is a throwaway credential for a throwaway lab directory.
 $initialPasswordExpiry = $InitialPasswordExpiry
-if ($InitialPassword) {
+# Always on real Active Directory, which refuses to create an enabled account with no password; see -InitialPassword.
+$useInitialPassword = $InitialPassword -or (([string]$DirectoryConfig['DirectoryType']) -eq 'ActiveDirectory')
+if ($useInitialPassword) {
     Write-TestStep "Step 6e" "Enabling the Initial Password on the Export Synchronisation Rule"
 
     try {
@@ -1931,7 +1936,7 @@ Write-Host "  Training CSV (Source): $($trainingSystem.id)" -ForegroundColor Gra
 Write-Host "  Samba AD (Target):     $($ldapSystem.id)" -ForegroundColor Gray
 Write-Host "  Cross-Domain (Target): $($crossDomainSystem.id)" -ForegroundColor Gray
 Write-Host ""
-if ($InitialPassword) {
+if ($useInitialPassword) {
     Write-Host "Initial Password:      Static, $initialPasswordExpiry, enables the account (Export Synchronisation Rule $($exportRule.id))" -ForegroundColor Cyan
     Write-Host ""
 }
