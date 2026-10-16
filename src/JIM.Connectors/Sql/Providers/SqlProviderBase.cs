@@ -455,8 +455,13 @@ internal abstract class SqlProviderBase : ISqlProvider
         if (command.KeyColumns.Count == 0)
             throw new ArgumentException("A delete must be keyed on at least one column, or it would empty the table.", nameof(command));
 
+        var rangePredicate = command.RangeColumn == null
+            ? string.Empty
+            : $" AND {QuoteIdentifier(command.RangeColumn.ColumnName)} >= {GetParameterPlaceholder(command.RangeColumn.LowerParameterName)}" +
+              $" AND {QuoteIdentifier(command.RangeColumn.ColumnName)} < {GetParameterPlaceholder(command.RangeColumn.UpperParameterName)}";
+
         return $"DELETE FROM {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
-               $"WHERE {BuildKeyPredicate(command.KeyColumns)}";
+               $"WHERE {BuildKeyPredicate(command.KeyColumns)}{rangePredicate}";
     }
 
     /// <summary>
