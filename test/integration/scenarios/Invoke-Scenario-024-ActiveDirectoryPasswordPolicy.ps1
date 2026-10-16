@@ -910,7 +910,7 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
             if (-not $existingFlow) {
                 New-JIMSyncRuleMapping -SyncRuleId $config.ExportSyncRuleId `
                     -TargetConnectedSystemAttributeId $userAccountControlAttribute.id `
-                    -Expression 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))' | Out-Null
+                    -Expression 'IIF(Eq(mv["Status"], "Archived"), DisableUser(512), EnableUser(512))' | Out-Null
                 Write-Host "  OK Added the userAccountControl Attribute Flow (Archived disables, anything else enables)" -ForegroundColor Green
             }
 

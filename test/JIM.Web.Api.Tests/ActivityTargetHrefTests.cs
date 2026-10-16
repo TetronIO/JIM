@@ -26,6 +26,15 @@ public class ActivityTargetHrefTests
     }
 
     [Test]
+    public void GetSyncRuleActivityHref_TestCaseActivity_DeepLinksToTestsTab()
+    {
+        var href = Helpers.GetSyncRuleActivityHref(4, $"{Activity.ConfigurationTestCaseTargetNamePrefix}'Surname flows'");
+
+        Assert.That(href, Is.EqualTo("/admin/sync-rules/4?t=tests"),
+            "a Synchronisation Rule's configuration test cases are managed on its Tests tab");
+    }
+
+    [Test]
     public void GetSyncRuleActivityHref_RuleActivity_LinksToRulePage()
     {
         var href = Helpers.GetSyncRuleActivityHref(4, "AD to HR Inbound");

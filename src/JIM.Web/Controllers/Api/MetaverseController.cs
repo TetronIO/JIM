@@ -762,15 +762,16 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// While any Metaverse Object holds a stored value for the attribute, the only change allowed is widening it from
     /// single-valued to multi-valued with its data type unchanged; every stored value is kept. Any other change (a data
     /// type change, or multi-valued to single-valued) is refused with a 409 carrying the blocking impact, and nothing is
-    /// changed. Built-in attributes cannot be changed. A Boolean attribute holds one value, so changing to a
+    /// changed. Requesting the attribute's current type and plurality is never refused: it returns 200 with the
+    /// attribute unchanged, and records no change. Built-in attributes cannot be changed. A Boolean attribute holds one value, so changing to a
     /// multi-valued Boolean is refused with a 400.
     /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
     /// <param name="request">The new type and plurality.</param>
-    /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
+    /// <response code="200">Schema changed, or already as requested; returns the attribute.</response>
     /// <response code="400">Invalid request: no Type, a multi-valued Boolean, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
-    /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values and the change is not a widening to multi-valued; returns the blocking impact. Nothing was changed. Requesting the current type and plurality never returns 409.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPatch("attributes/{id:int}/schema", Name = "ChangeAttributeSchema")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
@@ -805,8 +806,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
 
-        // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, and a
-        // refused change is never applied.
+        // Gate on what the server did, not on the stored-value count: a widening is applied while values exist, a
+        // request for the current schema is applied as a no-op, and a refused change is never applied.
         if (!impact.Applied)
             return Conflict(impact);
 

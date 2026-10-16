@@ -157,7 +157,20 @@ public static class ConfigurationChangeClassifier
         ["valueMode"] = B,
         ["relativeCount"] = B,
         ["relativeUnit"] = B,
-        ["relativeDirection"] = B
+        ["relativeDirection"] = B,
+
+        // Saved configuration test cases (#2055 Phase 4): a test case checks the configuration and changes nothing
+        // that synchronises, so every key is Class C. "name" and "description" reuse the keys above, at the same class.
+        ["testCases"] = C,
+        ["testCase"] = C,
+        ["testCaseKind"] = C,
+        ["testCaseAttributeFlowId"] = C,
+        ["testCaseObjectMatchingRuleId"] = C,
+        ["testCaseRunAsOf"] = C,
+        ["testCaseExpectation"] = C,
+        ["testCaseInOrder"] = C,
+        ["testCaseExpectedValues"] = C,
+        ["testCaseInputs"] = C
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemKeys = new(StringComparer.Ordinal)
@@ -271,7 +284,20 @@ public static class ConfigurationChangeClassifier
         // Carving a container out of a selection above it takes its objects out of scope, reaching the same place as
         // deselecting the container by a third route. Over-classified on clearing the exclusion for the same reason
         // scope is over-classified on widening, and distinguished the same way in the consequence text.
-        ["excluded"] = A
+        ["excluded"] = A,
+
+        // Saved configuration test cases of Simple mode Object Matching Rules (#2055 Phase 4), Class C as on a
+        // Synchronisation Rule. "name" and "description" reuse the keys above, at the same class.
+        ["testCases"] = C,
+        ["testCase"] = C,
+        ["testCaseKind"] = C,
+        ["testCaseAttributeFlowId"] = C,
+        ["testCaseObjectMatchingRuleId"] = C,
+        ["testCaseRunAsOf"] = C,
+        ["testCaseExpectation"] = C,
+        ["testCaseInOrder"] = C,
+        ["testCaseExpectedValues"] = C,
+        ["testCaseInputs"] = C
     };
 
     /// <summary>

@@ -90,6 +90,8 @@ account that may already exist. Correct that object's value, or the expression, 
     - **No match**;
     - **Ambiguous**, listing the Metaverse Objects the values identify.
 
+To keep a test of a saved rule and run it again after later changes, create a [configuration test case](configuration-tests.md) for it: on the Synchronisation Rule's **Tests** tab in Advanced mode, or below the rules on the Connected System's **Matching** tab in Simple mode.
+
 Automation gets the same test of a saved rule through [`Test-JIMMatchingRule`](../powershell/object-matching-rules.md#test-jimmatchingrule) and the REST API's `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-rules/{ruleId}/test` and `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{ruleId}/test` endpoints.
 
 ## Simple vs advanced matching mode

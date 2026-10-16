@@ -446,6 +446,13 @@ public class PasswordSynchronisationServer
     public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
 
     /// <summary>
+    /// How long an account's Initial Password waits for the account's own Create (#2270). That Create stays in flight only
+    /// until the password is queued and its results are written, a moment later, so the wait is short: the full
+    /// <see cref="ExportInFlightWait"/> would delay every new account's first password for nothing.
+    /// </summary>
+    public static readonly TimeSpan CreateInFlightWait = TimeSpan.FromSeconds(1);
+
+    /// <summary>
     /// How long an export may be Executing before a delivery stops waiting for it (#2173). A Worker that stops part-way
     /// through a batch leaves it Executing until the Worker starts again (a cancelled or failed batch no longer does,
     /// #2083), and a delivery waiting on that would wait until the change expired. An hour is far longer than an export
@@ -894,14 +901,16 @@ public class PasswordSynchronisationServer
         var (flags, facts) = await DecideAccountFlagsAsync(connectedSystem, change, account, firstPassword, change.ExpiryBehaviour, asOf);
         if (flags == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
-        if (facts.ExportInFlight && AccountFlagsPolicy.WaitsForAnExportInFlight(flags))
-            return PostponeForExportInFlight(connectedSystem, change, account, asOf);
-
         // The account is being created right now (#2160). Its entry can exist part-way through the Create's batch, and
         // the export stages the account's Initial Password only once the batch has come back: a change delivered and
         // removed in between would let that Initial Password be queued over the person's password. A change owing no
-        // first password waits, counting nothing; staging then makes it the account's first password.
-        if (facts.CreateInFlight && !change.OwesInitialPassword)
+        // first password waits, counting nothing; staging then makes it the account's first password. One that owes it
+        // was queued as the Create finished, and the Create is written a moment later with any enable it held back for
+        // this password (#2039, #2270), so it waits too, briefly.
+        if (facts.CreateInFlight)
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf,
+                change.OwesInitialPassword ? CreateInFlightWait : ExportInFlightWait);
+        if (facts.ExportInFlight && AccountFlagsPolicy.WaitsForAnExportInFlight(flags))
             return PostponeForExportInFlight(connectedSystem, change, account, asOf);
 
         // "Must change at next sign-in" belongs to the password being delivered; only where the decision writes
@@ -1084,6 +1093,9 @@ public class PasswordSynchronisationServer
             new InitialPasswordAccountFlags(initialPasswordConfiguration.EnableAccount, expiryBehaviour), expiryBehaviour, asOf);
         if (flags == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
+        // Queued as the account's Create finished, which is written a moment later (#2270): wait for it, briefly.
+        if (facts.CreateInFlight)
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf, CreateInFlightWait);
         if (facts.ExportInFlight && AccountFlagsPolicy.WaitsForAnExportInFlight(flags))
             return PostponeForExportInFlight(connectedSystem, change, account, asOf);
 
@@ -1164,9 +1176,10 @@ public class PasswordSynchronisationServer
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemObject account,
-        DateTime asOf)
+        DateTime asOf,
+        TimeSpan? wait = null)
     {
-        change.Postpone(asOf + ExportInFlightWait);
+        change.Postpone(asOf + (wait ?? ExportInFlightWait));
         Log.Debug("DeliverDuePasswordChangesAsync: An export to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} is in flight, " +
             "and may change what delivering password change {PendingPasswordChangeId} does to the account's flags; it waits until {NextRetryAt}",
             account.Id, connectedSystem.Id, change.Id, change.NextRetryAt);

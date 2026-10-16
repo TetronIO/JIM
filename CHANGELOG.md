@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Testing a Generated Value now runs its base expression as a synchronisation does, through typed inputs and value processing, and shows the base generation would start from. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
 - ✨ Test an Example Data Template attribute's expression with sample values before generating anything, over REST or with `Test-JIMExampleDataExpression`. (#2055)
 - ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
+- ✨ Save configuration test cases: inputs, and what an Attribute Flow, Generated Value, Scope or Object Matching Rule should give, run from a Synchronisation Rule's new **Tests** tab to catch a breaking change. Also via REST and `Invoke-JIMConfigurationTest`. (#2055)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
@@ -117,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Synchronisation Rule's Scoping Criteria still compared, leaving the rule's scope reading nothing and deprovisioning its objects. It is now refused, before anything changes, while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
+- 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values now succeeds as no change, instead of being refused, and records nothing in its change history. (#2153)
 - 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
 - 🐛 File Connector imports match headers ignoring case, and fail naming a column the file lacks instead of clearing that attribute on every object. On upgrade, a file lacking a selected attribute's column fails to import until you add the column or deselect the attribute. (#2051)
 - 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when the key is written in a different case. (#2051)
@@ -127,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted now keeps its deletion record when the confirming import removes it, so its change history stays findable, as every other deletion's does. (#2100)
 - 🐛 Delivering a password to an Active Directory or Samba AD account no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it, and warns where that flag means no change will be asked for at the next sign-in. (#2159)
 - 🐛 An account provisioned while the person's own password change was already waiting is now given that password and enabled as its Synchronisation Rule's Initial Password says, rather than left disabled with nothing recorded. (#2160)
+- 🐛 A password change made by the person moments after their account was created is no longer overwritten by the account's Initial Password; it is delivered as the account's first password instead. (#2270)
 - 🐛 A password set where the Connected System could not apply the requested expiry now completes with a warning naming what was applied, instead of a plain success, so a reset on OpenLDAP or 389 Directory Server asking for a change at the next sign-in shows a warning. (#2159)
 - 🐛 The portal now refuses to save an Attribute Flow whose expression does not parse, naming the problem under the field (and suggesting the right case for a mistyped function name), instead of failing at synchronisation. (#2053)
 - 🐛 A scoping pattern that runs past its time limit on one object now stops only that object, with an error, when JIM evaluates exports, cleans up references to deleted objects or deletes a Connected System, instead of failing the whole run. (#2053)

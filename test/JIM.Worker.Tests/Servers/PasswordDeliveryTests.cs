@@ -2520,6 +2520,33 @@ public class PasswordDeliveryTests
     }
 
     /// <summary>
+    /// An account's Initial Password is queued while its Create is still in flight, which ends moments later (#2270): the
+    /// Create stays Executing only until its Initial Password is staged. The first password waits for it all the same,
+    /// since the Create's results (an enable it held back for this password, #2039) are written as it ends, but only
+    /// briefly: the full export wait would delay every new account's first password for no reason.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_ItsOwnCreateInFlight_WaitsBrieflyWithoutCountingAnAttemptAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value).ChangeType = PendingExportChangeType.Create;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges[change.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.NextRetryAt, Is.EqualTo(now + PasswordSynchronisationServer.CreateInFlightWait));
+            Assert.That(PasswordSynchronisationServer.CreateInFlightWait, Is.LessThan(PasswordSynchronisationServer.ExportInFlightWait));
+        }
+    }
+
+    /// <summary>
     /// The same holds for an administrator's set with a choice, which otherwise never waits for an export.
     /// </summary>
     [Test]
