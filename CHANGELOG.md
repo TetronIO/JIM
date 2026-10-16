@@ -117,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
 - 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Synchronisation Rule's Scoping Criteria still compared, leaving the rule's scope reading nothing and deprovisioning its objects. It is now refused, before anything changes, while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
 - 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values now succeeds as no change, instead of being refused, and records nothing in its change history. (#2153)
 - 🐛 Changing only the case of a directory object's name, such as its `cn`, now renames the entry in the directory, instead of being skipped. (#2051)
