@@ -153,6 +153,9 @@ internal sealed class SystemRepository : ISystemRepository
     // sequences to 1, and follows ON DELETE CASCADE FKs to children. Order in the list doesn't matter
     // for TRUNCATE — Postgres handles dependency resolution as long as every table in the dependency
     // chain is listed (or its referencing FKs are CASCADE).
+    // ExampleDataTemplateAttributes is listed so no template attribute can still reference a custom Metaverse
+    // Attribute when the mixed deletes remove it; the built-in template's attributes are restored by the seeding
+    // pipeline the reset re-runs afterwards.
     private const string TruncateAllCustomerDataSql = @"
         TRUNCATE TABLE
             ""WorkerTasks"",
@@ -168,7 +171,8 @@ internal sealed class SystemRepository : ISystemRepository
             ""ConnectedSystemObjects"",
             ""ConnectedSystems"",
             ""MetaverseObjects"",
-            ""TrustedCertificates""
+            ""TrustedCertificates"",
+            ""ExampleDataTemplateAttributes""
         RESTART IDENTITY CASCADE;";
 
     /// <summary>

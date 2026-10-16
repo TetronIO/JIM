@@ -1119,7 +1119,7 @@ public class ExampleDataServer
         (objectType.MetaverseObjectType?.Name, AttributeName(attribute));
 
     private static string? AttributeName(ExampleDataTemplateAttribute attribute) =>
-        attribute.MetaverseAttribute?.Name ?? attribute.ConnectedSystemObjectTypeAttribute?.Name;
+        attribute.MetaverseAttribute?.Name;
 
     /// <summary>
     /// Tests a template attribute's expression (#2055) against sample values for the attributes it reads, by the

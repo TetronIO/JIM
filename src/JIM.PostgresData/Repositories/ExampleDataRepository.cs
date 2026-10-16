@@ -117,9 +117,6 @@ public class ExampleDataRepository : IExampleDataRepository
             ThenInclude(ta => ta.MetaverseAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.ExampleDataSetInstances).
             ThenInclude(edsi => edsi.ExampleDataSet).
             ThenInclude(eds => eds.Values).
@@ -159,9 +156,6 @@ public class ExampleDataRepository : IExampleDataRepository
             ThenInclude(ta => ta.MetaverseAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.WeightedStringValues).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
@@ -189,9 +183,6 @@ public class ExampleDataRepository : IExampleDataRepository
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.MetaverseAttribute).
-            Include(t => t.ObjectTypes).
-            ThenInclude(o => o.TemplateAttributes).
-            ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
             Include(t => t.ObjectTypes).
             ThenInclude(o => o.TemplateAttributes).
             ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).
@@ -448,9 +439,6 @@ public class ExampleDataRepository : IExampleDataRepository
                 if (attribute.MetaverseAttribute != null)
                     attribute.MetaverseAttribute = await references.ResolveMetaverseAttributeAsync(attribute.MetaverseAttribute);
 
-                if (attribute.ConnectedSystemObjectTypeAttribute != null)
-                    attribute.ConnectedSystemObjectTypeAttribute = await references.ResolveConnectedSystemObjectTypeAttributeAsync(attribute.ConnectedSystemObjectTypeAttribute);
-
                 foreach (var instance in attribute.ExampleDataSetInstances)
                 {
                     instance.Id = 0;
@@ -488,7 +476,6 @@ public class ExampleDataRepository : IExampleDataRepository
         private readonly JimDbContext _database;
         private readonly Dictionary<int, MetaverseObjectType> _metaverseObjectTypes = new();
         private readonly Dictionary<int, MetaverseAttribute> _metaverseAttributes = new();
-        private readonly Dictionary<int, ConnectedSystemObjectTypeAttribute> _connectedSystemObjectTypeAttributes = new();
         private readonly Dictionary<int, ExampleDataSet> _exampleDataSets = new();
 
         internal PersistedTemplateReferences(JimDbContext database)
@@ -503,10 +490,6 @@ public class ExampleDataRepository : IExampleDataRepository
         internal async Task<MetaverseAttribute> ResolveMetaverseAttributeAsync(MetaverseAttribute incoming) =>
             await ResolveAsync(_metaverseAttributes, incoming.Id, "Metaverse Attribute",
                 id => _database.MetaverseAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
-
-        internal async Task<ConnectedSystemObjectTypeAttribute> ResolveConnectedSystemObjectTypeAttributeAsync(ConnectedSystemObjectTypeAttribute incoming) =>
-            await ResolveAsync(_connectedSystemObjectTypeAttributes, incoming.Id, "Connected System Object Type Attribute",
-                id => _database.ConnectedSystemAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
 
         internal async Task<ExampleDataSet> ResolveExampleDataSetAsync(ExampleDataSet incoming) =>
             await ResolveAsync(_exampleDataSets, incoming.Id, "Example Data Set",
