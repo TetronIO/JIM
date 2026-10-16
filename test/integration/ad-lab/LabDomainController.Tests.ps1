@@ -1066,6 +1066,55 @@ Describe 'Resolve-LabLayout' {
     }
 }
 
+Describe 'Set-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($PSVersionTable.PSEdition -eq 'Desktop'))) {
+    BeforeEach {
+        $script:LsaPath = 'TestRegistry:\Lsa'
+        $null = New-Item -Path $script:LsaPath -Force
+    }
+
+    It 'sets the window to zero where the value is absent, and says it changed it' {
+        Set-LabOldPasswordAllowedPeriod -Path $script:LsaPath | Should -BeTrue
+        (Get-ItemProperty -LiteralPath $script:LsaPath).OldPasswordAllowedPeriod | Should -Be 0
+    }
+
+    It 'writes a DWord, the type LSA reads' {
+        $null = Set-LabOldPasswordAllowedPeriod -Path $script:LsaPath
+        (Get-Item -LiteralPath $script:LsaPath).GetValueKind('OldPasswordAllowedPeriod') | Should -Be 'DWord'
+    }
+
+    It 'replaces another value' {
+        $null = New-ItemProperty -LiteralPath $script:LsaPath -Name OldPasswordAllowedPeriod -Value 5 -PropertyType DWord
+        Set-LabOldPasswordAllowedPeriod -Path $script:LsaPath | Should -BeTrue
+        (Get-ItemProperty -LiteralPath $script:LsaPath).OldPasswordAllowedPeriod | Should -Be 0
+    }
+
+    It 'leaves a value that is already right alone, and says so' {
+        $null = New-ItemProperty -LiteralPath $script:LsaPath -Name OldPasswordAllowedPeriod -Value 0 -PropertyType DWord
+        Set-LabOldPasswordAllowedPeriod -Path $script:LsaPath | Should -BeFalse
+    }
+
+    It 'runs on its own, as Invoke-Command sends it into a guest without the module' {
+        $body = ${function:Set-LabOldPasswordAllowedPeriod}
+        & ([scriptblock]::Create($body.ToString())) -Path $script:LsaPath | Should -BeTrue
+    }
+}
+
+Describe 'Get-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($PSVersionTable.PSEdition -eq 'Desktop'))) {
+    BeforeEach {
+        $script:LsaPath = 'TestRegistry:\Lsa'
+        $null = New-Item -Path $script:LsaPath -Force
+    }
+
+    It 'returns null where the value is absent (the 5 minute default applies)' {
+        Get-LabOldPasswordAllowedPeriod -Path $script:LsaPath | Should -BeNullOrEmpty
+    }
+
+    It 'returns the value in minutes' {
+        $null = New-ItemProperty -LiteralPath $script:LsaPath -Name OldPasswordAllowedPeriod -Value 0 -PropertyType DWord
+        Get-LabOldPasswordAllowedPeriod -Path $script:LsaPath | Should -Be 0
+    }
+}
+
 Describe 'Module surface' {
     It 'imports without Hyper-V or the ActiveDirectory module' {
         { Import-Module $script:ModulePath -Force } | Should -Not -Throw
