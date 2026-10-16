@@ -124,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted; each kept every database session it had opened, so a long-running deployment would eventually run out of memory. (#2115)
+- 🐛 The Pending Deletions page can now be reached from the portal: from the **Administration** page, and from an Object Type's Deletion Rules panel, which opens it filtered to that type. (#2059)
 - 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
 - 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
