@@ -139,7 +139,7 @@ public class SecurityAuditServerAggregationTests
     [Test]
     public async Task RecordFailedAuthenticationAsync_NullPrefixAndIp_NormalisesToEmptyStringForDedupeAsync()
     {
-        // Two callers with no known API key prefix and no known client IP (e.g. the bad-format failure path) must
+        // Two callers with no known API key prefix and no known client IP (e.g. SSO access token failures) must
         // still aggregate onto one row, not two: nulls are normalised to "" before matching, because Postgres
         // unique indexes treat NULLs as distinct from one another.
         await _jim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", "Invalid API key format", null, null);

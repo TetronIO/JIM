@@ -113,7 +113,7 @@ Change history, Activities and password records are the tables that grow without
 |-----------------|---------|--------|
 | `History.RetentionPeriod` | 90 days | General change history and Activities |
 | `History.ConfigurationChangeRetentionPeriod` | 3650 days | Configuration change Activities (the configuration change history) |
-| `History.SecurityEventRetentionPeriod` | 365 days | Security audit Activities (sign-in, API key authentication failure) |
+| `History.SecurityEventRetentionPeriod` | 365 days | Security audit Activities (sign-in, failed API key or SSO access token authentication) |
 | `History.PasswordEventRetentionPeriod` | 365 days | Password Synchronisation Activities and terminal queue rows (parked, expired, cancelled), which carry an encrypted password |
 | `History.CleanupBatchSize` | 100 | Records deleted per batch, to avoid long transactions and locks |
 

@@ -17,7 +17,7 @@ If you lose the secret, you must delete the key and create a new one.
 
 ## Prefix
 
-Every key begins with `jim_` for easy identification in logs and configuration files, followed by a random secret. Only the prefix is shown after creation, so you can identify which key is in use without exposing its secret.
+Every key begins with `jim_ak_` for easy identification in logs and configuration files, followed by a random secret. Only the prefix is shown after creation, so you can identify which key is in use without exposing its secret.
 
 ## Name and description
 
@@ -53,7 +53,7 @@ Open a key's history from the Changes tab on its detail page, or retrieve it wit
 
 1. Create the key with a meaningful name (for example "GitHub Actions deploy"), an expiry consistent with your rotation policy, and the role(s) it needs
 2. Capture the full key from the create response and store it in your secret manager immediately; you will not be able to retrieve it again
-3. Configure the integration to send the key in the `X-Api-Key` header on every request
+3. Configure the integration to send the key as a bearer token on every request: `Authorization: Bearer jim_ak_...`
 
 **Rotating a key:**
 

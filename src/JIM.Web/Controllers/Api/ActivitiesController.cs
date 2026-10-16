@@ -41,8 +41,8 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// <param name="search">Optional search query to filter by target name or type.</param>
     /// <param name="targetType">Optional filter for target types (repeat the query parameter for multiple values,
     /// e.g. <c>?targetType=Authentication&amp;targetType=ConnectedSystem</c>; additive/OR within the filter). Use
-    /// <c>Authentication</c> to poll security audit events (interactive sign-in success/failure, API key
-    /// authentication failure) for SIEM integration. An unparseable value returns 400.</param>
+    /// <c>Authentication</c> to poll security audit events (interactive sign-in success/failure, and failed API key
+    /// or SSO access token authentication) for SIEM integration. An unparseable value returns 400.</param>
     /// <param name="initiatorType">Optional filter for initiator types (User, ApiKey, System, Anonymous; repeat the
     /// query parameter for multiple values; additive/OR within the filter). An unparseable value returns 400.</param>
     /// <param name="operation">Optional filter for the operation the Activity performed (Create, Read, Update, Delete,

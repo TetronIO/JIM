@@ -241,7 +241,7 @@ function Get-ApiKeyStatus {
     param([string]$Key)
     Invoke-Native -AllowFailure -Command @(
         'curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '10', '--noproxy', $hostName,
-        '--cacert', $caPath, '--resolve', "${hostName}:443:127.0.0.1", '-H', "X-API-Key: $Key",
+        '--cacert', $caPath, '--resolve', "${hostName}:443:127.0.0.1", '-H', "Authorization: Bearer $Key",
         "https://${hostName}/api/v1/userinfo")
 }
 

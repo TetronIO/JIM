@@ -45,6 +45,8 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Ask before significant changes:** New features, architectural choices, or any non-trivial change with multiple sensible approaches - present the options with trade-offs and let the user decide. Do not assume.
 
+**Pre-release (before v1.0): no backwards compatibility to preserve.** JIM has no production deployments and no customer scripts yet, so breaking changes to the REST API, PowerShell module, configuration and wire formats are acceptable in any release until v1.0. Make the change cleanly: no deprecation windows, compatibility shims, dual code paths or migration aids for older clients. Still record user-facing breaking changes in the changelog. (Rule added after a session proposed keeping the `X-API-Key` header alongside `Authorization: Bearer` for compatibility.)
+
 **Commit without asking once approved:** When the user has said "yes" or context is clear, just commit. Do not ask "would you like me to commit?".
 
 **Plan before building:** For any task with 3+ steps or architectural decisions, use plan mode. If you have spent more than 2-3 attempts on the same problem without progress, stop, re-plan, and consider asking the user - they can often see what you are missing.

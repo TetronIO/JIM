@@ -60,6 +60,10 @@ The API uses URL path-based versioning. The current version is `v1`; all endpoin
 
 JIM is pre-v1.0, so breaking changes to the API can still occur between releases. Changes that affect existing integrations are called out here.
 
+**v0.17.0**
+
+- **API keys are sent as bearer tokens.** An API key now goes in the `Authorization` header, `Authorization: Bearer jim_ak_...`, exactly as an SSO access token does; the `X-Api-Key` header is no longer read, so a request that sends a key only there is unauthenticated and receives a `401`. Update any integration or script that sets `X-Api-Key`. Upgrade the JIM PowerShell module together with JIM: version 0.17.0 sends the new header, while earlier versions send `X-Api-Key` and are refused with "JIM rejected the API key", although the key itself is fine. Roll the module back with JIM, too. This is a pre-v1.0 breaking change.
+
 **v0.16.0**
 
 - **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) ends `CompleteWithError`, naming the failed steps in `errorMessage`; v0.15.0 and earlier ended it `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
@@ -81,8 +85,10 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 All endpoints require authentication except a small number of system endpoints (health probes, version, auth config). Most endpoints additionally require the **Administrator** role. JIM supports two methods, both detailed in [Authentication](authentication.md):
 
-- **API keys** in the `X-Api-Key` header, suitable for scripts, automation, and service-to-service integrations
-- **JWT Bearer tokens** in the `Authorization: Bearer <token>` header, suitable for user-driven integrations via OIDC/SSO
+- **API keys**, suitable for scripts, automation, and service-to-service integrations
+- **JWT access tokens**, suitable for user-driven integrations via OIDC/SSO
+
+Both are sent the same way, as a bearer token: `Authorization: Bearer <credential>`.
 
 ## Conventions
 

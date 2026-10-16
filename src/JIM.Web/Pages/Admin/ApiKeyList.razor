@@ -236,7 +236,7 @@
             Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
             OnAdornmentClick="CopyKeyToClipboard" />
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-            Use this key in the X-API-Key header when making API requests.
+            Send this key as a bearer token in the Authorization header when making API requests.
         </MudText>
         <MudText Typo="Typo.body2" Class="mt-4">
             <strong>Example usage:</strong>
@@ -320,7 +320,7 @@
     // The example request shown (syntax-highlighted) in the created-key dialog. '\' before the
     // newline is a bash line continuation.
     private string ExampleCurlCommand =>
-        $"curl -H \"X-API-Key: {_createdFullKey}\" \\\n  https://your-jim-server/api/v1/metaverse/objects";
+        $"curl -H \"Authorization: Bearer {_createdFullKey}\" \\\n  https://your-jim-server/api/v1/metaverse/objects";
 
     // Edit dialog
     private bool _editDialogVisible;

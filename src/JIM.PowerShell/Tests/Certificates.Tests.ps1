@@ -387,6 +387,111 @@ Describe 'Export-JIMCertificate' {
         }
     }
 
+    Context 'Authentication' {
+
+        AfterEach {
+            InModuleScope JIM { $script:JIMConnection = $null }
+        }
+
+        It 'Should send an API key connection as a Bearer token, never as X-API-Key' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url        = 'https://jim.example.com'
+                    AuthMethod = 'ApiKey'
+                    ApiKey     = 'jim_ak_certificate_export_key'
+                    Connected  = $true
+                }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer jim_ak_certificate_export_key' -and
+                    -not $Headers.ContainsKey('X-API-Key')
+                }
+            }
+        }
+
+        It 'Should refresh an SSO access token that is about to expire before downloading' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url            = 'https://jim.example.com'
+                    AuthMethod     = 'OAuth'
+                    ApiKey         = $null
+                    AccessToken    = 'eyJhbGciOiJSUzI1NiJ9.expiring.token'
+                    TokenExpiresAt = (Get-Date).AddMinutes(1)
+                    Connected      = $true
+                }
+                Mock Invoke-TokenRefresh { $script:JIMConnection.AccessToken = 'eyJhbGciOiJSUzI1NiJ9.refreshed.token' }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-TokenRefresh -Times 1 -Exactly
+                Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer eyJhbGciOiJSUzI1NiJ9.refreshed.token'
+                }
+            }
+        }
+
+        It 'Should not refresh an SSO access token that is still valid' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url            = 'https://jim.example.com'
+                    AuthMethod     = 'OAuth'
+                    ApiKey         = $null
+                    AccessToken    = 'eyJhbGciOiJSUzI1NiJ9.access.token'
+                    TokenExpiresAt = (Get-Date).AddHours(1)
+                    Connected      = $true
+                }
+                Mock Invoke-TokenRefresh { }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-TokenRefresh -Times 0 -Exactly
+            }
+        }
+
+        It 'Should report a failed refresh rather than send an expired token' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url            = 'https://jim.example.com'
+                    AuthMethod     = 'OAuth'
+                    ApiKey         = $null
+                    AccessToken    = 'eyJhbGciOiJSUzI1NiJ9.expired.token'
+                    TokenExpiresAt = (Get-Date).AddMinutes(-5)
+                    Connected      = $true
+                }
+                Mock Invoke-TokenRefresh { throw 'Access token expired and no refresh token available. Please run Connect-JIM again to re-authenticate.' }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                { Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru -ErrorAction Stop } | Should -Throw '*Connect-JIM again*'
+                Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+            }
+        }
+
+        It 'Should send an SSO connection access token as a Bearer token' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url            = 'https://jim.example.com'
+                    AuthMethod     = 'OAuth'
+                    ApiKey         = $null
+                    AccessToken    = 'eyJhbGciOiJSUzI1NiJ9.access.token'
+                    TokenExpiresAt = (Get-Date).AddHours(1)
+                    Connected      = $true
+                }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer eyJhbGciOiJSUzI1NiJ9.access.token'
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

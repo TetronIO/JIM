@@ -167,6 +167,7 @@ try
         return jim;
     });
     builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
+    builder.Services.AddSingleton<IFailedAuthenticationRecorder, FailedAuthenticationRecorder>();
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 
@@ -210,9 +211,9 @@ try
     // Skip authentication setup in OpenAPI generation mode (no IdP needed for schema generation)
     if (!isOpenApiGenerateMode)
     {
-    // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
-    // Configure authentication with multiple schemes
-    // Cookie is default for Blazor UI, but forwards to API Key when X-API-Key header is present
+    // Three schemes: the cookie for the Blazor portal, JWT bearer for SSO access tokens, and API keys for
+    // non-interactive callers. Both API credentials are bearer tokens in the Authorization header; the cookie scheme
+    // forwards to whichever one the token's shape names (see ApiAuthenticationSchemeSelector).
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -221,25 +222,8 @@ try
         .AddApiKeyAuthentication()
         .AddCookie(options =>
         {
-            // Forward to appropriate authentication scheme based on request headers
-            options.ForwardDefaultSelector = context =>
-            {
-                // Check if the request has an API key header
-                if (context.Request.Headers.ContainsKey("X-API-Key"))
-                {
-                    return ApiKeyAuthenticationHandler.SchemeName;
-                }
-
-                // Check if the request has a Bearer token (JWT)
-                var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    return JwtBearerDefaults.AuthenticationScheme;
-                }
-
-                // Otherwise use default Cookie authentication
-                return null;
-            };
+            // Forward a bearer token to the API key or JWT bearer scheme; no bearer token keeps the cookie.
+            options.ForwardDefaultSelector = ApiAuthenticationSchemeSelector.SelectScheme;
 
             // Global authentication epoch: reject any cookie issued before
             // ServiceSettings.SessionsValidFromUtc, forcing re-authentication. A factory reset advances
@@ -392,9 +376,7 @@ try
                     }
 
                     Log.Debug("Suppressing OIDC redirect for API request: {Path}, returning 401", ctx.Request.Path);
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Authentication required" });
+                    await ApiUnauthorisedResponse.WriteAsync(ctx.HttpContext);
                     ctx.HandleResponse(); // Mark response as handled
                 }
             };
@@ -424,13 +406,11 @@ try
             // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
             // deployment without anyone first signing in to the web portal. The resolved roles and
             // MetaverseObject id are attached to this request's principal.
-            options.Events = new JwtBearerEvents
+            // A token that fails validation is recorded in the security audit log (#2108); see JimJwtBearerEvents.
+            options.Events = JimJwtBearerEvents.Create(async ctx =>
             {
-                OnTokenValidated = async ctx =>
-                {
-                    await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
-                }
-            };
+                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+            });
         });
 
     // setup authorisation policies
@@ -451,7 +431,12 @@ try
     // The pagination depth filter (issue #487) applies the shared retrieval depth ceiling to every action,
     // including the endpoints that bind page/pageSize as bare query parameters rather than a PaginationRequest.
     // Registered globally so a new paginated endpoint is guarded by default rather than by the author remembering.
-    builder.Services.AddControllers(options => options.Filters.Add<PaginationDepthActionFilter>())
+    // ApiChallengeResultFilter puts the WWW-Authenticate challenge on 401s that actions return themselves (#2088).
+    builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<PaginationDepthActionFilter>();
+            options.Filters.Add<ApiChallengeResultFilter>();
+        })
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
@@ -500,52 +485,16 @@ try
                 }
             };
 
-            // OAuth2 security scheme for SSO authentication
-            var oauth2Scheme = new OpenApiSecurityScheme
-            {
-                Type = SecuritySchemeType.OAuth2,
-                Flows = new OpenApiOAuthFlows
-                {
-                    AuthorizationCode = new OpenApiOAuthFlow
-                    {
-                        AuthorizationUrl = new Uri(oidcConfig.AuthorizationEndpoint),
-                        TokenUrl = new Uri(oidcConfig.TokenEndpoint),
-                        Scopes = new Dictionary<string, string>
-                        {
-                            { "openid", "OpenID Connect" },
-                            { apiScope!, "Access JIM API" }
-                        }
-                    }
-                }
-            };
+            OpenApiSecurityConfiguration.Apply(document, new Uri(oidcConfig.AuthorizationEndpoint),
+                new Uri(oidcConfig.TokenEndpoint), apiScope!);
 
-            // API Key security scheme for non-interactive authentication
-            var apiKeyScheme = new OpenApiSecurityScheme
-            {
-                Type = SecuritySchemeType.ApiKey,
-                In = ParameterLocation.Header,
-                Name = "X-API-Key",
-                Description = "API key for non-interactive authentication. Format: jim_ak_<random>"
-            };
+            return Task.CompletedTask;
+        });
 
-            var components = document.Components ??= new OpenApiComponents();
-            var schemes = components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
-            schemes.Add("OAuth2", oauth2Scheme);
-            schemes.Add("ApiKey", apiKeyScheme);
-
-            // Both authentication methods are valid; API will accept either
-            (document.Security ??= []).Add(new OpenApiSecurityRequirement
-            {
-                {
-                    new OpenApiSecuritySchemeReference("OAuth2"),
-                    new List<string> { "openid", apiScope! }
-                },
-                {
-                    new OpenApiSecuritySchemeReference("ApiKey"),
-                    new List<string>()
-                }
-            });
-
+        // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement.
+        options.AddOperationTransformer((operation, context, _) =>
+        {
+            OpenApiSecurityConfiguration.ApplyToOperation(operation, context.Description.ActionDescriptor.EndpointMetadata);
             return Task.CompletedTask;
         });
     });
@@ -655,8 +604,11 @@ try
                 }
                 """)
             .WithOpenApiRoutePattern(openApiRoutePattern)
-            .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
-            .AddAuthorizationCodeFlow("OAuth2", flow =>
+            // One preferred scheme, not both: Scalar applies every preferred scheme together, and with API keys and
+            // SSO tokens now both in the Authorization header it merged them ("Bearer , Bearer jim_ak_..."), which
+            // JIM rightly refuses. OAuth2 stays selectable from Try It's authentication drop-down.
+            .AddPreferredSecuritySchemes(OpenApiSecurityConfiguration.ApiKeySchemeName)
+            .AddAuthorizationCodeFlow(OpenApiSecurityConfiguration.OAuth2SchemeName, flow =>
             {
                 flow.ClientId = clientId!;
                 flow.Pkce = Pkce.Sha256;
@@ -1116,32 +1068,20 @@ static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject
 }
 
 /// <summary>
-/// Records an aggregated interactive sign-in failure security audit event on a background task with a fresh DI
-/// scope, mirroring <see cref="RecordSuccessfulSignInEvent"/>. Non-blocking and never throws into the caller:
-/// <c>SecurityAuditServer.RecordFailedAuthenticationAsync</c> itself swallows audit-write failures.
+/// Records an aggregated interactive sign-in failure security audit event, off the request path, through the shared
+/// <see cref="IFailedAuthenticationRecorder"/>. Never throws into the caller.
 /// </summary>
 static void RecordFailedSignInEvent(HttpContext httpContext, string reason)
 {
-    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
-    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
-    if (factory == null)
+    var recorder = httpContext.RequestServices.GetService<IFailedAuthenticationRecorder>();
+    if (recorder == null)
     {
-        Log.Warning("RecordFailedSignInEvent: Could not resolve IJimApplicationFactory; failed sign-in event not recorded.");
+        Log.Warning("RecordFailedSignInEvent: Could not resolve IFailedAuthenticationRecorder; failed sign-in event not recorded.");
         return;
     }
 
-    _ = Task.Run(async () =>
-    {
-        try
-        {
-            using var jim = factory.Create();
-            await jim.SecurityAudit.RecordFailedAuthenticationAsync("Interactive sign-in failed", reason, apiKeyPrefix: null, clientIp);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Log.Warning(ex, "RecordFailedSignInEvent: Failed to record failed authentication event");
-        }
-    });
+    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
+    _ = recorder.RecordAsync(FailedAuthenticationEventNames.InteractiveSignIn, reason, apiKeyPrefix: null, clientIp);
 }
 
 /// <summary>

@@ -49,7 +49,7 @@ public interface IChangeHistoryRepository
 
     /// <summary>
     /// Deletes expired security event Activities (TargetType Authentication: interactive sign-in success/failure,
-    /// API key authentication failure) older than the specified date. The general Activity cleanup never touches
+    /// failed API key or SSO access token authentication) older than the specified date. The general Activity cleanup never touches
     /// these; this is the only path that removes security event history.
     /// </summary>
     Task<int> DeleteExpiredSecurityEventActivitiesAsync(DateTime olderThan, int maxRecords);

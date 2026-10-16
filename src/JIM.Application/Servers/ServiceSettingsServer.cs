@@ -334,7 +334,7 @@ namespace JIM.Application.Servers
 
         /// <summary>
         /// Gets the security event retention period (how long security audit event Activities - interactive sign-in
-        /// success/failure, API key authentication failure - are kept). Held separately from the general history and
+        /// success/failure, failed API key or SSO access token authentication - are kept). Held separately from the general history and
         /// configuration change retention periods, as its own retention class. Default: 365 days (~1 year).
         /// </summary>
         public async Task<TimeSpan> GetSecurityEventRetentionPeriodAsync()

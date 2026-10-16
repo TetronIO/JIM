@@ -60,11 +60,7 @@ function Invoke-JIMApi {
     }
 
     # Proactive token refresh: check before the request if token is near expiry
-    if ($script:JIMConnection.AuthMethod -eq 'OAuth') {
-        if ($script:JIMConnection.TokenExpiresAt -and $script:JIMConnection.TokenExpiresAt -lt (Get-Date).AddMinutes(2)) {
-            Invoke-TokenRefresh -Reason "Access token expired or expiring soon"
-        }
-    }
+    Update-JIMExpiringAccessToken
 
     # Build and execute the request, with reactive 401 retry for OAuth
     $response = Invoke-JIMApiRequest -Endpoint $Endpoint -Method $Method -Body $Body -ContentType $ContentType
@@ -171,20 +167,9 @@ function Invoke-JIMApiRequest {
 
     Write-Debug "Invoking JIM API: $Method $uri"
 
-    # Build request parameters with appropriate authentication header
-    $headers = @{
-        'Accept' = 'application/json'
-    }
-
-    if ($script:JIMConnection.AuthMethod -eq 'ApiKey') {
-        $headers['X-API-Key'] = $script:JIMConnection.ApiKey
-    }
-    elseif ($script:JIMConnection.AuthMethod -eq 'OAuth') {
-        $headers['Authorization'] = "Bearer $($script:JIMConnection.AccessToken)"
-    }
-    else {
-        throw "Unknown authentication method: $($script:JIMConnection.AuthMethod)"
-    }
+    # Build request parameters; both API keys and SSO access tokens are sent as bearer tokens
+    $headers = Get-JIMCredentialHeader
+    $headers['Accept'] = 'application/json'
 
     $params = @{
         Uri         = $uri
