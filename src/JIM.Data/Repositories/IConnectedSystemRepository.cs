@@ -343,13 +343,13 @@ public interface IConnectedSystemRepository
     /// Also updates the in-memory entity state to keep the objects consistent.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to mark as executing.</param>
-    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+    public Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
 
     /// <summary>
     /// Writes each retry state onto its Pending Export while that row is still Executing. See
     /// <see cref="ISyncRepository.ReleaseExecutingPendingExportsAsync"/> for the full rationale.
     /// </summary>
-    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states);
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt);
 
     /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in

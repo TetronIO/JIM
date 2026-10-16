@@ -1640,18 +1640,24 @@ public interface ISyncRepository
     /// Marks Pending Exports as Executing with the current UTC timestamp.
     /// Uses raw SQL in production for efficiency.
     /// </summary>
-    Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+    /// <returns>The time written to each one's <see cref="PendingExport.LastAttemptedAt"/>, to the microsecond the
+    /// database holds, so <see cref="ReleaseExecutingPendingExportsAsync"/> can tell this mark from a later one.</returns>
+    Task<DateTime> MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
 
     /// <summary>
-    /// Writes each retry state onto its Pending Export, but only while that row is still Executing, and returns the ids
-    /// it wrote (#2083). The inverse of <see cref="MarkPendingExportsAsExecutingAsync"/>, used when a batch is cancelled
+    /// Writes each retry state onto its Pending Export, but only while that row is still Executing under the mark made at
+    /// <paramref name="markedAt"/>, and returns the ids it wrote (#2083, #2197). The inverse of <see cref="MarkPendingExportsAsExecutingAsync"/>, used when a batch is cancelled
     /// or fails: an export the run never got to goes back as it was before the batch was sent, and one that failed gets
     /// one failed attempt. A row whose result was already recorded has left Executing, so it is never overwritten, and a
     /// Create whose success was recorded is never put back to be sent again. Only the Pending Export's own retry columns
-    /// are written; its attribute changes are left as they are.
+    /// are written; its attribute changes are left as they are. A row a later run has marked Executing again (possible once
+    /// a cancelled run has let the next start before it has finished putting its batch back) carries that run's mark, and
+    /// is left to it.
     /// </summary>
+    /// <param name="states">The state to write onto each Pending Export.</param>
+    /// <param name="markedAt">The time <see cref="MarkPendingExportsAsExecutingAsync"/> returned when the batch was marked.</param>
     /// <returns>The ids of the Pending Exports written.</returns>
-    Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states);
+    Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states, DateTime markedAt);
 
     /// <summary>
     /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
@@ -1687,6 +1693,14 @@ public interface ISyncRepository
     /// still apply there.
     /// </summary>
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
+
+    /// <summary>
+    /// Begins a database transaction that the writes made through this repository join until it is committed or
+    /// disposed, so a set of them lands together or not at all (#2197): an export's recorded result and the External ID
+    /// it assigned, say. Returns null when a transaction is already open, whose writes these then join and whose owner
+    /// commits them, or when the provider is not relational (the in-memory test repository).
+    /// </summary>
+    Task<ISyncRepositoryTransaction?> BeginTransactionAsync();
 
     #endregion
 

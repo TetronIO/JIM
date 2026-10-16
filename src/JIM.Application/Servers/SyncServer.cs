@@ -417,10 +417,11 @@ public class SyncServer : ISyncServer
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null)
+        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
+        Action<IReadOnlyList<string>>? containersCreated = null)
         => _exportExec.ExecuteExportsAsync(
             connectedSystem, connector, runMode, options, cancellationToken,
-            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations);
+            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations, containersCreated);
 
     #endregion
 }
