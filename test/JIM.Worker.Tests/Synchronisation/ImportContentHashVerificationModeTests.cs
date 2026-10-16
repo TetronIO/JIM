@@ -230,7 +230,7 @@ public class ImportContentHashVerificationModeTests
     private static ConnectedSystemImportObject CreateImportObjectWithStartDate(Guid hrId, DateTime startDate)
     {
         var importObject = CreateImportObject(hrId, "Jane Smith");
-        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = MockSourceSystemAttributeNames.START_DATE.ToString(), DateTimeValue = startDate });
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = MockSourceSystemAttributeNames.START_DATE.ToString(), DateTimeValues = { startDate } });
         return importObject;
     }
 

@@ -620,7 +620,7 @@ public class DriftDetectionWorkflowTests
                 {
                     new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
                     new() { Name = "displayName", StringValues = new List<string> { "Test User with End Date" } },
-                    new() { Name = "employeeEndDate", DateTimeValue = testEndDate }
+                    new() { Name = "employeeEndDate", DateTimeValues = { testEndDate } }
                 }
             }
         });

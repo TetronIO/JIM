@@ -25,7 +25,7 @@ else if (Value.UnresolvedReferenceValue != null)
 }
 else if (Value.Attribute.Type == AttributeDataType.DateTime && Value.DateTimeValue.HasValue)
 {
-    <MudTooltip Text="@Value.DateTimeValue.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+    <MudTooltip Text="@Value.DateTimeValue.Value.ToFriendlyAttributeDate()" Arrow="true" Placement="Placement.Top">
         <span>@Value.DateTimeValue.Value.ToRelativeTime()</span>
     </MudTooltip>
 }

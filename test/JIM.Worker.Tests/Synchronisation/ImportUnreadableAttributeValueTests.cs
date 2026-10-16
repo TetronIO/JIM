@@ -97,7 +97,7 @@ public class ImportUnreadableAttributeValueTests
         // must read that as "leave it as held", for a Boolean as much as for a date.
         var hrId = Guid.NewGuid();
         var held = Person(hrId, "Sam Okafor", startDate: FirstOfMarch);
-        held.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValue = false });
+        held.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValues = { false } });
         await RunFullImportAsync(held);
 
         var several = Person(hrId, "Sam Okafor");
@@ -364,7 +364,7 @@ public class ImportUnreadableAttributeValueTests
             new() { Name = DisplayName, StringValues = [displayName] }
         };
         if (startDate.HasValue)
-            attributes.Add(new ConnectedSystemImportObjectAttribute { Name = StartDate, DateTimeValue = startDate.Value });
+            attributes.Add(new ConnectedSystemImportObjectAttribute { Name = StartDate, DateTimeValues = { startDate.Value } });
         if (qualifications != null)
             attributes.Add(new ConnectedSystemImportObjectAttribute { Name = Qualifications, StringValues = qualifications });
 

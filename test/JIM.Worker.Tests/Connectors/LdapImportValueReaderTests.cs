@@ -126,33 +126,73 @@ public class LdapImportValueReaderTests
     }
 
     [Test]
-    public void ReadBoolean_MoreThanOneValue_ReadsNoneAndReportsEachAsMoreThanJimHolds()
+    public void ReadBoolean_TrueAndFalse_ReadsBothForJimToReport()
     {
-        // JIM holds one value for a Boolean. Reading none and reporting none made the import take the attribute as
-        // holding no value, and remove the one JIM held (#2153).
+        // The reader hands JIM what the directory holds (#2153 S5); JIM's import normaliser reports a true or false
+        // attribute holding both, once, for every Connector, rather than each Connector choosing.
         var read = LdapImportValueReader.ReadBoolean(new DirectoryAttribute("b", "TRUE", "FALSE"));
 
-        var reason = UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(read.Values, Is.Empty);
-            Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[] { ("TRUE", (string?)reason), ("FALSE", (string?)reason) }));
+            Assert.That(read.Values, Is.EqualTo(new[] { true, false }));
+            Assert.That(read.Unreadable, Is.Empty);
         }
     }
 
     [Test]
-    public void ReadDateTime_MoreThanOneValue_ReadsNoneAndReportsEachAsMoreThanJimHolds()
+    public void ReadDateTime_SeveralValues_ReadsEachAndReportsOnlyTheUnreadableOne()
     {
-        // Every value is reported for the count, including one that is not a date: the count is why none is imported.
-        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "nonsense", "20240101000000Z"));
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "nonsense", "20240101000000.123456Z"));
 
-        var reason = UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 3);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(read.Values, Is.Empty);
+            Assert.That(read.Values, Is.EqualTo(new[]
+            {
+                new DateTime(2023, 12, 15, 14, 30, 0, DateTimeKind.Utc),
+                new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(1_234_560)
+            }));
+            Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[] { ("nonsense", (string?)null) }));
+        }
+    }
+
+    [Test]
+    public void ReadDateTime_FirstTwoValuesUnreadable_ReportsEachOnce()
+    {
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "nonsense", "rubbish", "20231215143000Z"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.EqualTo(new[] { new DateTime(2023, 12, 15, 14, 30, 0, DateTimeKind.Utc) }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "nonsense", "rubbish" }));
+        }
+    }
+
+    [Test]
+    public void ReadDateTime_TwoValuesTheSameInstantInDifferentForms_CollapseWithoutReport()
+    {
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "20231215143000.0Z"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.EqualTo(new[] { new DateTime(2023, 12, 15, 14, 30, 0, DateTimeKind.Utc) }));
+            Assert.That(read.Unreadable, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void ReadDateTime_TwoValuesThatDifferBelow100Nanoseconds_ReportsBothAsColliding()
+    {
+        // A DateTime holds 100ns. Two directory values that differ only below that would read as one; merging them
+        // silently would lose a value, so each is reported instead.
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000.12345671Z", "20231215143000.12345678Z", "20240101000000Z"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.EqualTo(new[] { new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) }));
             Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[]
             {
-                ("20231215143000Z", (string?)reason), ("nonsense", (string?)reason), ("20240101000000Z", (string?)reason)
+                ("20231215143000.12345671Z", (string?)UnreadableValueReasons.FinerThanJimReads),
+                ("20231215143000.12345678Z", (string?)UnreadableValueReasons.FinerThanJimReads)
             }));
         }
     }
@@ -177,18 +217,6 @@ public class LdapImportValueReaderTests
         var read = LdapImportValueReader.ReadBoolean(new DirectoryAttribute("b", "yes"));
 
         Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[] { ("yes", (string?)null) }));
-    }
-
-    [Test]
-    public void MoreValuesThanJimHolds_ForEachTypeJimHoldsOneValueOf_GivesTheCount()
-    {
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 3), Does.Contain("3"));
-            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2), Does.Contain("2"));
-            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 2),
-                Is.Not.EqualTo(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2)), "Each names its own type.");
-        }
     }
 
     [Test]

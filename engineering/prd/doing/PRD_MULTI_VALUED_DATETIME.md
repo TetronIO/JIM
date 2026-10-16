@@ -1,6 +1,6 @@
 # Native Multi-Valued Date and Time Attributes
 
-- **Status:** Doing (F0, the LDAP stop-gap, the fix-first issues #2179 to #2183, slice S1, canonical dates, slice S2, the Boolean capability rule, and slice S3, plurality widening, delivered (S2's Boolean set writer moves to S5, which brings the import contract lists it needs); slices S4 to S6 and L1 outstanding)
+- **Status:** Doing (F0, the LDAP stop-gap, the fix-first issues #2179 to #2183, and slices S1 (canonical dates), S2 (the Boolean capability rule), S3 (plurality widening), S4 (Attribute Flow as a set), L1 (LDAP operational attributes) and S5 (every imported value kept) delivered; slice S6 outstanding)
 - **Created:** 2026-10-12
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#2153](https://github.com/TetronIO/JIM/issues/2153)

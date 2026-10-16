@@ -186,7 +186,7 @@ public class MvoValueChangeDto
             return StringValue;
 
         if (DateTimeValue.HasValue)
-            return DateTimeValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return JIM.Models.Utility.AttributeDateDisplay.Format(DateTimeValue.Value);
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);

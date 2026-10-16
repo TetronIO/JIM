@@ -67,8 +67,33 @@ public class ScimResourceReaderTests
         // JIM stores every date and time in UTC; a provider is free to send an offset.
         var result = ReadUser("""{ "id": "1", "meta": { "lastModified": "2026-02-04T15:53:42+02:00" } }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValue,
+        Assert.That(result.Attributes.Single(a => a.Name == "meta.lastModified").DateTimeValues.Single(),
             Is.EqualTo(new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc)));
+    }
+
+    [Test]
+    public void Read_MultiValuedDateTimeArray_StagesEveryElement()
+    {
+        // #2153 S5: assigning inside the loop kept only the last element.
+        var attribute = new ScimFlattenedAttribute("loginTimes", "loginTimes", AttributeDataType.DateTime, AttributePlurality.MultiValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "loginTimes": [ "2026-02-04T13:53:42Z", "2026-02-05T13:53:42.5+01:00" ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "loginTimes").DateTimeValues, Is.EqualTo(new[]
+        {
+            new DateTime(2026, 2, 4, 13, 53, 42, DateTimeKind.Utc),
+            new DateTime(2026, 2, 5, 12, 53, 42, 500, DateTimeKind.Utc)
+        }));
+    }
+
+    [Test]
+    public void Read_BooleanArrayHoldingBoth_StagesEachForJimToReport()
+    {
+        var attribute = new ScimFlattenedAttribute("flags", "flags", AttributeDataType.Boolean, AttributePlurality.SingleValued, false,
+            AttributeWritability.ReadOnly, ScimUrns.User);
+        var result = ScimResourceReader.Read(Resource("""{ "id": "1", "flags": [ true, false ] }"""), [attribute]);
+
+        Assert.That(result.Attributes.Single(a => a.Name == "flags").BoolValues, Is.EqualTo(new[] { true, false }));
     }
 
     [Test]
@@ -94,7 +119,7 @@ public class ScimResourceReaderTests
     {
         var result = ReadUser("""{ "id": "1", "active": true }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.True);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.True);
     }
 
     [Test]
@@ -104,7 +129,7 @@ public class ScimResourceReaderTests
         // consequential attribute JIM synchronises.
         var result = ReadUser("""{ "id": "1", "active": "false" }""");
 
-        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValue, Is.False);
+        Assert.That(result.Attributes.Single(a => a.Name == "active").BoolValues.Single(), Is.False);
     }
 
     [Test]

@@ -59,7 +59,7 @@ The figures in brackets describe the objects the run read, and count each one on
 
 Unchanged, deleted and errors appear only when there are any.
 
-**Errors** counts the problems the run recorded, one per [execution item](../configuration/activity-execution-items.md). An object JIM could not import at all appears only among the errors. An object with a value the Connector could not read is imported without that value, and JIM keeps any value it already held for the attribute, so the object counts in the brackets as well as among the errors.
+**Errors** counts the problems the run recorded, one per [execution item](../configuration/activity-execution-items.md). An object JIM could not import at all appears only among the errors. An object with a value JIM could not import is imported without that value, and JIM keeps any value it already held for the attribute, so the object counts in the brackets as well as among the errors.
 
 Objects a Full Import no longer found were not read, so they follow the brackets as **no longer found and marked as deleted**, and appear only when there are any.
 

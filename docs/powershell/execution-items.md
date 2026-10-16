@@ -83,8 +83,8 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `ErrorStackTrace` | `string` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | `int` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
 | `UnresolvedReferenceCount` | `int` | How many of the object's reference values the import could not resolve to a Connected System Object, under any Unresolved Reference Handling and whatever error the item carries; empty when none were left unresolved. The values themselves are on the Connected System Object. |
-| `AttributeValueErrors` | `object[]` | Every value the import found on the object but could not read as its attribute's type, in the order the Connector reported them; JIM left each attribute as it already held it. Empty when there were none. Each has `AttributeName`, `AttributeType`, `Value` and `Reason`. |
-| `AttributeValueErrorTotal` | `int` | How many values could not be read, which can exceed AttributeValueErrors where the item keeps only the first thousand; empty when there were none. |
+| `AttributeValueErrors` | `object[]` | Every value the import found on the object but could not import, in the order they were reported: values the Connector could not read as their attribute's type, and values JIM could not hold as read. JIM left each attribute as it already held it. Each value's Source says who found it: Connector when the Connector could not read it, Jim when JIM could not hold it as read (the portal's Found By). Empty when there were none. Each has `AttributeName`, `AttributeType`, `Value`, `Reason` and `Source`. |
+| `AttributeValueErrorTotal` | `int` | How many values could not be imported, which can exceed AttributeValueErrors where the item keeps only the first thousand; empty when there were none. |
 | `SourceLocation` | `string` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | `object[]` | For an `AmbiguousMatch`, the Metaverse Objects the match found, and for an `AmbiguousProvisioningMatch`, the Connected System Objects: up to 10, ordered by display name, each with whether it still exists and, for a Metaverse Object, what is joined to it now. Empty for any other item. Each has `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `ConnectedSystemId`, `ConnectedSystemNameSnapshot`, `MatchedValue`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `Ordinal`, `CandidateTotal`, `Exists` and `JoinedObjects`. |
@@ -200,14 +200,14 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 
 This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
 
-```powershell title="List every value an import could not read, and where"
+```powershell title="List every value an import could not import, who found it, and where"
 Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
     Where-Object { $_.ErrorType -eq 'ImportAttributeValueError' } |
     Get-JIMActivityExecutionItem |
     ForEach-Object {
         $item = $_
         $item.AttributeValueErrors | Select-Object @{ Name = 'Object'; Expression = { $item.DisplayNameSnapshot } },
-            @{ Name = 'Source'; Expression = { $item.SourceLocation } }, AttributeName, Value, Reason
+            @{ Name = 'Location'; Expression = { $item.SourceLocation } }, AttributeName, Value, Source, Reason
     }
 ```
 

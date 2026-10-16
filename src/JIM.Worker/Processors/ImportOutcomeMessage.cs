@@ -179,12 +179,17 @@ internal static class ImportOutcomeMessage
     /// them: left each attribute as it already held it, rather than treating a value it could not read as no value.
     /// </summary>
     /// <param name="values">Every value the Connector could not read, in the order it reported them. Must not be empty.</param>
+    /// <remarks>
+    /// JIM reports values too (#2153): two dates less than a microsecond apart, or both true and false. Those were read,
+    /// so where any value is JIM's the message says it couldn't be imported, never that it couldn't be read.
+    /// </remarks>
     internal static string ForUnreadableAttributeValues(IReadOnlyList<ConnectedSystemImportObjectAttributeValueError> values)
     {
+        var verb = values.Any(v => v.Source == ImportAttributeValueErrorSource.Jim) ? "import" : "read";
         if (values.Count == 1)
         {
             var only = values[0];
-            return $"Couldn't read a value of {only.AttributeName}{QuotedValue(only.Value)}: {AsSentence(only.Reason)} " +
+            return $"Couldn't {verb} a value of {only.AttributeName}{QuotedValue(only.Value)}: {AsSentence(only.Reason)} " +
                    $"JIM left {only.AttributeName} as it already held it. Correct the value in the Connected System, then run the import again.";
         }
 
@@ -194,7 +199,7 @@ internal static class ImportOutcomeMessage
 
         var sentences = new List<string>
         {
-            $"Couldn't read {values.Count:N0} values ({breakdown}), so JIM left those attributes as it already held them."
+            $"Couldn't {verb} {values.Count:N0} values ({breakdown}), so JIM left those attributes as it already held them."
         };
         sentences.AddRange(values
             .Take(ListedUnreadableValues)

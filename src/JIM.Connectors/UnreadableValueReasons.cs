@@ -33,22 +33,11 @@ internal static class UnreadableValueReasons
     };
 
     /// <summary>
-    /// The reason each of an attribute's values is not imported when the directory returned several and JIM holds one
-    /// value for an attribute of <paramref name="type"/>: a Boolean or a DateTime.
+    /// The reason each of two or more date values is not imported when they differ only below the 100 nanoseconds a
+    /// Connector can read (#2153): read, they would be one value, and merging them silently would lose one.
     /// </summary>
-    /// <param name="type">The attribute's data type.</param>
-    /// <param name="count">How many values the directory returned.</param>
-    /// <remarks>
-    /// Worded for a directory: the LDAP Connector is the one Connector that reads several values for these types. A
-    /// stop-gap until #2153 slice S5, which imports several dates as they are and has JIM report a second Boolean
-    /// value itself.
-    /// </remarks>
-    internal static string MoreValuesThanJimHolds(AttributeDataType type, int count) => type switch
-    {
-        AttributeDataType.DateTime => $"JIM holds one value for a date and time attribute, and the directory returned {count}.",
-        AttributeDataType.Boolean => $"JIM holds one value for a true or false attribute, and the directory returned {count}.",
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "JIM holds any number of values for an attribute of this type.")
-    };
+    internal const string FinerThanJimReads =
+        "Differs from another of this attribute's values by less than 100 nanoseconds, finer than JIM can read, so JIM cannot keep both.";
 
     private static bool IsWholeNumberOutside(string? value, BigInteger minimum, BigInteger maximum) =>
         BigInteger.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) &&

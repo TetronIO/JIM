@@ -66,7 +66,7 @@ public class NonStringDataTypeExportTests
                 {
                     new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
                     new() { Name = "displayName", StringValues = new List<string> { "Test User 1" } },
-                    new() { Name = "isActive", BoolValue = true }
+                    new() { Name = "isActive", BoolValues = { true } }
                 }
             }
         });
@@ -209,7 +209,7 @@ public class NonStringDataTypeExportTests
                 {
                     new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
                     new() { Name = "displayName", StringValues = new List<string> { "Test User 1" } },
-                    new() { Name = "startDate", DateTimeValue = testDate }
+                    new() { Name = "startDate", DateTimeValues = { testDate } }
                 }
             }
         });
@@ -727,7 +727,7 @@ public class NonStringDataTypeExportTests
                 new() { Name = "objectGUID", GuidValues = new List<Guid> { Guid.NewGuid() } },
                 new() { Name = "distinguishedName", StringValues = new List<string> { dn } },
                 new() { Name = "cn", StringValues = new List<string> { cn } },
-                new() { Name = "enabled", BoolValue = enabled }
+                new() { Name = "enabled", BoolValues = { enabled } }
             }
         };
     }
@@ -773,7 +773,7 @@ public class NonStringDataTypeExportTests
                 new() { Name = "objectGUID", GuidValues = new List<Guid> { Guid.NewGuid() } },
                 new() { Name = "distinguishedName", StringValues = new List<string> { dn } },
                 new() { Name = "cn", StringValues = new List<string> { cn } },
-                new() { Name = "hireDate", DateTimeValue = expectedDate }
+                new() { Name = "hireDate", DateTimeValues = { expectedDate } }
             }
         };
     }
