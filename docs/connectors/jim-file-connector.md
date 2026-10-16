@@ -17,7 +17,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Multi-valued attributes**<br /> Supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
 - **Schema auto-discovery**<br /> Column headers are read automatically to build the schema
 - **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Long Number, Decimal, Boolean, Guid, DateTime
-- **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
+- **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed. A date with no time zone is read as UTC, and one with an offset is converted to UTC
 - **Object type support**<br /> Objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
 - **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
 - **Auto-confirm export**<br /> An export counts as confirmed as soon as the file is written, and JIM records the values it wrote, so it knows what the file holds without reading it back (see [Export Only mode](#export-only-mode))

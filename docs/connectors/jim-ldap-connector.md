@@ -39,7 +39,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
 - **Reading values as their attribute's type**<br /> Each value is read as its attribute's data type, in the forms [How values are read](#how-values-are-read) lists.
-- **Values JIM cannot read**<br /> A value that does not fit its attribute's type is reported with the entry's distinguished name, never guessed at, as [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read) describes.
+- **Values JIM cannot read**<br /> A value that does not fit its attribute's type is reported with the entry's distinguished name, never guessed at, as [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import) describes.
 - **Overlapping Object Types**<br /> An entry carrying more than one selected structural class imports as the most specific of them: with both `user` and `computer` selected, an Active Directory computer imports as `computer`, and on an RFC 4512 directory with both `person` and `inetOrgPerson` selected, an `inetOrgPerson` entry imports as `inetOrgPerson`. Schema discovery records which classes each Object Type inherits from, so this holds whatever order the directory lists an entry's classes in. Object Types discovered before JIM recorded inheritance resolve by the order instead, read from where the entry lists `top` (first on Active Directory and Samba AD, often last in an RFC 4512 directory); refresh the schema of any Connected System with overlapping Object Types selected to record inheritance. Because of this rule, selecting or deselecting an overlapping Object Type changes the Object Type that entries JIM already holds import as; JIM refuses that change by default and keeps the existing objects, as [When an object changes Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type) explains.
 
 ### Export
@@ -68,14 +68,14 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 | Data type | Read from | Reported, not imported |
 |---|---|---|
-| Boolean | `TRUE` or `FALSE`, in any case | Anything else, such as `yes` or `1`; every value, when there is more than one |
+| Boolean | `TRUE` or `FALSE`, in any case | Anything else, such as `yes` or `1` |
 | Number | A whole number with an optional sign that fits 32 bits | Letters, or a number too large for the type |
 | Long Number | A whole number with an optional sign that fits 64 bits | Letters, or a number too large for the type |
-| DateTime | `GeneralizedTime` (minutes, seconds and a fraction optional; no time zone means UTC), `UTCTime` (years 50 to 99 are 19xx), or ISO 8601 with a time of day | A date that does not exist, text after the time zone, a date with no time, or a date that can be read two ways (below); every value, when there is more than one |
+| DateTime | `GeneralizedTime` (minutes, seconds and a fraction optional; no time zone means UTC), `UTCTime` (years 50 to 99 are 19xx), or ISO 8601 with a time of day | A date that does not exist, text after the time zone, a date with no time, or a date that can be read two ways (below) |
 | Guid (Active Directory `objectGUID`) | 16 bytes | Any other length, given as hexadecimal |
 | Text, Reference, Binary | As the directory returns them | Never |
 
-JIM holds one value for a Boolean or DateTime attribute. When an entry holds more than one value for such an attribute, JIM does not choose between them: it lists each value, with how many the directory returned, under **Attribute Values Not Imported** on the object's execution item (see [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read)), and leaves the attribute as it already held it. To import it again, leave the entry with a single value for that attribute, or, for an attribute the directory maintains itself, stop selecting it.
+Every value of a multi-valued DateTime attribute is imported, such as each of the times in an OpenLDAP password policy's `pwdFailureTime`, to the microsecond. Two values that differ only below 100 nanoseconds cannot be told apart once read, so JIM reports both rather than keeping one. A Boolean holds one value: an entry holding both `TRUE` and `FALSE` has each reported rather than one chosen. Either way the values are listed under **Attribute Values Not Imported** on the object's execution item (see [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import)), and the attribute is left as JIM already held it.
 
 A date of ten or twelve digits with a time zone can be either a `GeneralizedTime` or a `UTCTime`. JIM reads it as the one that gives a year from 1950 to 2049. If both do, as `200805121430Z` does (12 May 2008 14:30, or 5 August 2020 12:14:30), JIM does not guess and reports the value.
 
