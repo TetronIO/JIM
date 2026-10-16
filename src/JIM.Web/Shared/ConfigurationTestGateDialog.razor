@@ -54,7 +54,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MudDialog.Cancel())" data-testid="jim-test-gate-keep-editing">Keep editing</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(_acceptBlockedReason != null)"
+        <MudButton Variant="Variant.Outlined" Disabled="@(_acceptBlockedReason != null)"
                    OnClick="@(() => MudDialog.Close(DialogResult.Ok(new ConfigurationTestGateOptions(AcceptNewResults: true))))"
                    data-testid="jim-test-gate-accept">Accept new @(Regressions.Count == 1 ? "result" : "results")</MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Warning"
