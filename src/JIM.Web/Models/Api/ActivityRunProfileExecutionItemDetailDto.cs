@@ -68,7 +68,8 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>
     /// Every value the import found on the object but could not import, in the order they were reported: values the
     /// Connector could not read as their attribute's type, and values JIM could not hold as read. JIM left each
-    /// attribute as it already held it. Empty when there were none.
+    /// attribute as it already held it. Each value's Source says who found it: Connector when the Connector could not
+    /// read it, Jim when JIM could not hold it as read (the portal's Found By). Empty when there were none.
     /// </summary>
     public List<AttributeValueErrorDto> AttributeValueErrors { get; set; } = [];
 
