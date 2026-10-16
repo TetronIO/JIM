@@ -55,6 +55,11 @@ public class SchemaRefreshApplyAndRemoveTests
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here.
         _connectedSystemRepository.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+        // Nothing reads the removed attributes (#2265), so Apply and Remove is not refused.
+        _connectedSystemRepository.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        var exampleDataRepository = new Mock<IExampleDataRepository>();
+        exampleDataRepository.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repository.Setup(r => r.ExampleData).Returns(exampleDataRepository.Object);
 
         // The deletion-choice impact summary (#1537) is read on every rule delete; empty means no
         // contributed values, and the schema refresh's rule deletions pass keep anyway (#1485 semantics).

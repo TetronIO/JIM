@@ -317,9 +317,11 @@ What deleting the attribute would do: whether stored values block it, how many M
 | `BuiltIn` | `bool` | True if the attribute is built-in. Built-in attributes can never be deleted. |
 | `TotalObjectsWithValues` | `int` | The total number of Metaverse Objects (across all types) that hold a stored value for the attribute. |
 | `ObjectTypeValueCounts` | `object[]` | The per-Object-Type breakdown of Metaverse Objects holding a stored value for the attribute. Each has `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `MetaverseObjectTypePluralName` and `ObjectCount`. |
-| `References` | `object[]` | The configuration references (bindings, Attribute Flows, scoping criteria, Object Matching Rules) that would be cascade-removed, in dependency order, when the deletion proceeds. Empty when the attribute is unreferenced. Each has `Kind`, `Id`, `Description`, `SyncRuleId`, `SyncRuleName`, `MetaverseObjectTypeId` and `MetaverseObjectTypeName`. |
+| `References` | `object[]` | The configuration references (bindings, and Attribute Flows and Object Matching Rules that map the attribute directly) that would be cascade-removed, in dependency order, when the deletion proceeds. Empty when the attribute is unreferenced. Each has `Kind`, `Id`, `Description`, `SyncRuleId`, `SyncRuleName`, `MetaverseObjectTypeId` and `MetaverseObjectTypeName`. |
+| `Readers` | `object[]` | The configuration that reads the attribute: Scoping Criteria comparing it or reading it in an Expression, and Expressions in Attribute Flows, Object Matching Rules and Example Data Templates. Any reader refuses the deletion; change or remove each one first. These are never removed for you, because a Scoping Criterion removed from under a Synchronisation Rule changes which objects it manages. Each has `Kind`, `ItemId`, `ViaExpression`, `Expression`, `SyncRuleId`, `SyncRuleName`, `ExampleDataTemplateId`, `ExampleDataTemplateName` and `Description`. |
 | `Deleted` | `bool` | Whether the attribute was deleted: always false in a preview, and false when the deletion was refused. |
 | `BlockedByValues` | `bool` | Whether stored values block the deletion. Clear them before deleting the attribute. |
+| `BlockedByReaders` | `bool` | Whether configuration reads the attribute (see Readers), which refuses the deletion. |
 | `RequiresConfirmation` | `bool` | Whether deleting would also remove configuration that uses the attribute, so JIM asks for the attribute's name to confirm it. |
 <!-- END GENERATED: Get-JIMMetaverseAttributeDeletionPreview -->
 

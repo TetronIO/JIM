@@ -39,7 +39,9 @@ function Import-JIMConnectedSystemSchema {
         Flows are deleted, and a worker task obsoletes every Connected System Object of a removed Object Type, which
         deprovisions them as any deletion would, and deletes every stored value of a removed attribute. -Preview
         shows exactly what it would take, in its Dependents and RemovalImpact properties; follow the worker task
-        with Get-JIMWorkerTask. Cannot be used with -DisableDependents.
+        with Get-JIMWorkerTask. Refused, with nothing changed, while a Scoping Criterion or an Expression reads a
+        removed attribute; -Preview names each one in Dependents.RemovedAttributeReaders. Cannot be used with
+        -DisableDependents.
 
     .PARAMETER PassThru
         Returns the Connected System with its refreshed schema. -Preview returns its result without it.

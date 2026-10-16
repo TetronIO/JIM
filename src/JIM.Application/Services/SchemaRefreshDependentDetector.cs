@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Application.Expressions;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -27,10 +28,12 @@ public static class SchemaRefreshDependentDetector
     /// <param name="result">The refresh preview's result, whose removals and definition changes name what fell.</param>
     /// <param name="syncRules">The Connected System's Synchronisation Rules, with mappings and matching rules loaded.</param>
     /// <param name="refreshedAtUtc">When the refresh ran; named in each reason so a disabled item says which refresh disabled it.</param>
+    /// <param name="readers">What reads each attribute (#2265); null leaves <see cref="SchemaRefreshDependents.RemovedAttributeReaders"/> empty.</param>
     public static SchemaRefreshDependents Detect(
         SchemaRefreshResult result,
         IReadOnlyList<SyncRule> syncRules,
-        DateTime refreshedAtUtc)
+        DateTime refreshedAtUtc,
+        AttributeReaderIndex? readers = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(syncRules);
@@ -64,6 +67,9 @@ public static class SchemaRefreshDependentDetector
                 .Select(attribute => attribute.Id)
                 .ToHashSet();
         }
+
+        if (readers != null)
+            dependents.RemovedAttributeReaders = FindRemovedAttributeReaders(result, readers);
 
         var changedByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
         foreach (var (type, changes) in result.ChangedAttributes
@@ -183,6 +189,37 @@ public static class SchemaRefreshDependentDetector
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The configuration reading each attribute the refresh removes from a surviving Object Type (#2265): what
+    /// refuses Apply and Remove. Readers on a removed Object Type are left out, because their Synchronisation Rule
+    /// falls whole, so nothing is left reading nothing.
+    /// </summary>
+    /// <param name="result">The refresh preview's result.</param>
+    /// <param name="readers">What reads each attribute, as the configuration stands now.</param>
+    public static List<AttributeReader> FindRemovedAttributeReaders(SchemaRefreshResult result, AttributeReaderIndex readers)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(readers);
+
+        var removedTypeIds = result.RemovedObjectTypes
+            .Select(result.FindPreRefreshType)
+            .OfType<SchemaRefreshPreRefreshType>()
+            .Select(type => type.Id)
+            .ToHashSet();
+
+        var seen = new HashSet<(AttributeReaderKind, int)>();
+        // Matched exactly, as the removal itself is: a case-exact Connected System can hold a second attribute whose
+        // name differs only in case, and that one stays.
+        return result.RemovedAttributes
+            .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), AttributeNames: kvp.Value))
+            .Where(entry => entry.Type != null && !removedTypeIds.Contains(entry.Type.Id))
+            .SelectMany(entry => entry.Type!.Attributes
+                .Where(attribute => entry.AttributeNames.Contains(attribute.Name, StringComparer.Ordinal))
+                .SelectMany(attribute => readers.ForConnectedSystemAttribute(attribute.Id, attribute.Name, entry.Type.Id)))
+            .Where(reader => seen.Add((reader.Kind, reader.ItemId)))
+            .ToList();
     }
 
     private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription, string readBy = "")

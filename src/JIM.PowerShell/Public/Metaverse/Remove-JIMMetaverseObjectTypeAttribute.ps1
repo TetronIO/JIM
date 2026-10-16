@@ -13,9 +13,13 @@ function Remove-JIMMetaverseObjectTypeAttribute {
         - If any Metaverse Object of the target type holds a stored value for the attribute,
           unassignment is a hard block; the cmdlet refuses and reports the affected object count.
           Clear the values first.
-        - If Synchronisation Rules targeting the type reference the attribute (Attribute Flows,
-          scoping criteria, Object Matching Rules), those type-scoped references are cascade-removed
-          alongside the binding. This is guarded server-side by a type-the-name confirmation, which
+        - If configuration evaluating against the type reads the attribute (a Scoping Criterion
+          comparing it or reading it in an Expression, or an Expression in an Attribute Flow, Object
+          Matching Rule or Example Data Template), the cmdlet refuses and names each one. Change or
+          remove them first; JIM never removes them for you.
+        - If Synchronisation Rules targeting the type otherwise reference the attribute (Attribute
+          Flows, Object Matching Rules), those type-scoped references are cascade-removed alongside
+          the binding. This is guarded server-side by a type-the-name confirmation, which
           the cmdlet satisfies automatically once you confirm (or pass -Force); the cascade is
           recorded as child Activities.
         - If only the plain binding exists, it is simply removed.
@@ -101,6 +105,12 @@ function Remove-JIMMetaverseObjectTypeAttribute {
 
         if ($impact.blockedByValues) {
             Write-Error "Cannot unassign '$($impact.attributeName)' from '$($impact.metaverseObjectTypeName)': $($impact.objectsWithValues) Metaverse Object(s) of that type hold a stored value for it. Clear the values first, then retry."
+            return
+        }
+
+        if ($impact.blockedByReaders) {
+            $readers = (@($impact.readers) | ForEach-Object { $_.description }) -join '; '
+            Write-Error "Cannot unassign '$($impact.attributeName)' from '$($impact.metaverseObjectTypeName)': configuration on that type reads it. Change or remove each one first, then retry: $readers."
             return
         }
 

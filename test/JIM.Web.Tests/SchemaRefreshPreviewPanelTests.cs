@@ -234,6 +234,46 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void PreviewPanel_WithReadersOfARemovedAttribute_TurnsApplyAndRemoveOffAndNamesThem()
+    {
+        // #2265: deleting the attribute row would leave the Scoping Criterion comparing nothing, so Apply and Remove is
+        // refused while it reads the attribute; Apply and Disable keeps the row and stays available.
+        var result = new SchemaRefreshResult
+        {
+            Success = true,
+            TotalObjectTypes = 1,
+            TotalAttributes = 1,
+            RemovedAttributes = new Dictionary<string, List<string>> { ["user"] = ["department"] }
+        };
+        var dependents = new SchemaRefreshDependents
+        {
+            RemovedAttributeReaders =
+            [
+                new JIM.Models.Core.DTOs.AttributeReader
+                {
+                    Kind = JIM.Models.Core.DTOs.AttributeReaderKind.ScopingCriterion,
+                    ItemId = 70,
+                    SyncRuleId = 11,
+                    SyncRuleName = "HR Users Inbound",
+                    Description = "Scoping Criterion on 'department' in Synchronisation Rule 'HR Users Inbound'"
+                }
+            ]
+        };
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p
+            .Add(c => c.Result, result)
+            .Add(c => c.Dependents, dependents));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("[data-testid=jim-apply-remove-schema-refresh]").HasAttribute("disabled"), Is.True);
+            Assert.That(cut.Find("[data-testid=jim-schema-refresh-removal-refused]"), Is.Not.Null);
+            Assert.That(cut.Markup, Does.Contain("Scoping Criterion on 'department' in Synchronisation Rule 'HR Users Inbound'"));
+            Assert.That(cut.Find("[data-testid=jim-apply-disable-schema-refresh]").HasAttribute("disabled"), Is.False);
+        }
+    }
+
+    [Test]
     public void PreviewPanel_WithDestructiveChangesButNoDependents_OffersNoDisableOption()
     {
         // Nothing references the removed entries, so there is nothing to disable and the option would be a

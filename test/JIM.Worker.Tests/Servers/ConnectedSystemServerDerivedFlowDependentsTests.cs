@@ -58,6 +58,12 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         _activityRepo = new Mock<IActivityRepository>();
         _taskingRepo = new Mock<ITaskingRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+        _csRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _csRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _repo.Setup(r => r.Metaverse).Returns(_mvRepo.Object);
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.Tasking).Returns(_taskingRepo.Object);
