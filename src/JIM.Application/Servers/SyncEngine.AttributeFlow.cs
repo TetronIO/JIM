@@ -137,7 +137,6 @@ public partial class SyncEngine
                     var csoAttributeValues = cso.AttributeValues.Where(av => av.AttributeId == csotAttribute.Id).ToList();
                     if (csoAttributeValues.Count > 0)
                     {
-                        var sourceAttributeId = source.ConnectedSystemAttributeId!.Value;
                         if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
                             continue;
 
@@ -148,15 +147,24 @@ public partial class SyncEngine
                         if (csotAttribute.Type == AttributeDataType.Text)
                             effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
 
+                        // Every other type except Reference flows only the rows that hold a value of its type (#2153):
+                        // a row held under another type (#2128) or holding nothing is neither a value to flow nor a
+                        // value to count. The usual case, every row holding the type, reuses the list as it is.
+                        List<ConnectedSystemObjectAttributeValue>? typedValues = null;
+                        if (csotAttribute.Type is not (AttributeDataType.Text or AttributeDataType.Reference))
+                            typedValues = RowsHoldingValueOfType(csoAttributeValues, csotAttribute.Type);
+
                         // MVA -> SVA guard (#435): flowing more than one value to a single-valued target attribute
                         // is an error. A single-valued attribute can hold only one value, and JIM will not pick one
                         // arbitrarily; the attribute is skipped and an error is recorded (surfaced as an RPEI by the
                         // worker), while the object's other attributes still synchronise. Reference attributes are
-                        // inherently multi-valued and resolved in a later pass, so they are out of scope here.
+                        // inherently multi-valued and resolved in a later pass, so they are out of scope here. Values
+                        // are counted as a set (#2153): two rows holding the same value, such as one date in two
+                        // kinds, are one value.
                         if (syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued &&
                             csotAttribute.Type != AttributeDataType.Reference)
                         {
-                            var effectiveValueCount = effectiveTextValues?.Count ?? csoAttributeValues.Count;
+                            var effectiveValueCount = effectiveTextValues?.Count ?? CountDistinctValues(typedValues!, csotAttribute.Type);
                             if (effectiveValueCount > 1)
                             {
                                 Log.Error(
@@ -176,6 +184,15 @@ public partial class SyncEngine
                             }
                         }
 
+                        // An empty typed set (rows for the attribute, none of its type) is the ConnectedNoValue state,
+                        // resolved by "Null is a value" and priority (#91) exactly as an empty processed text set is,
+                        // never by removing the attribute's values directly (#2153).
+                        if (typedValues is { Count: 0 })
+                        {
+                            ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                            continue;
+                        }
+
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
@@ -189,29 +206,29 @@ public partial class SyncEngine
                                 break;
                             }
                             case AttributeDataType.Number:
-                                ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessNumberAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.LongNumber:
-                                ProcessLongNumberAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessLongNumberAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Decimal:
-                                ProcessDecimalAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessDecimalAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.DateTime:
-                                ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessDateTimeAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Binary:
-                                ProcessBinaryAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessBinaryAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Reference:
                                 if (!skipReferenceAttributes)
                                     ProcessReferenceAttribute(mvo, syncRuleMapping, source, cso, csoAttributeValues, isFinalReferencePass, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Guid:
-                                ProcessGuidAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessGuidAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Boolean:
-                                ProcessBooleanAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                ProcessBooleanAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.NotSet:
                             default:
@@ -1058,153 +1075,259 @@ public partial class SyncEngine
         TakeOverProvenance(mvo, targetAttributeId, contributingSystemId, contributingSyncRuleId);
     }
 
-    private static void ProcessNumberAttribute(
+    /// <summary>
+    /// Whether a Connected System Object row holds a value of <paramref name="type"/> in that type's own field (#2153).
+    /// A row held under another type (#2128) or holding nothing does not. Internal so the provenance inspector (#399)
+    /// shows exactly the rows the engine would flow. Reference rows are always taken as holding a value: their writer
+    /// resolves them itself.
+    /// </summary>
+    internal static bool HoldsValueOfType(ConnectedSystemObjectAttributeValue value, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => value.StringValue != null,
+        AttributeDataType.Number => value.IntValue.HasValue,
+        AttributeDataType.LongNumber => value.LongValue.HasValue,
+        AttributeDataType.Decimal => value.DecimalValue.HasValue,
+        AttributeDataType.DateTime => value.DateTimeValue.HasValue,
+        AttributeDataType.Boolean => value.BoolValue.HasValue,
+        AttributeDataType.Guid => value.GuidValue.HasValue,
+        AttributeDataType.Binary => value.ByteValue != null,
+        AttributeDataType.Reference => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// The rows that hold a value of <paramref name="type"/>. When every row does, which is the usual case, the list
+    /// itself is returned and nothing is allocated.
+    /// </summary>
+    private static List<ConnectedSystemObjectAttributeValue> RowsHoldingValueOfType(
+        List<ConnectedSystemObjectAttributeValue> rows, AttributeDataType type)
+    {
+        if (rows.TrueForAll(row => HoldsValueOfType(row, type)))
+            return rows;
+
+        return rows.FindAll(row => HoldsValueOfType(row, type));
+    }
+
+    /// <summary>
+    /// How many distinct values <paramref name="typedRows"/> (rows already known to hold <paramref name="type"/>) hold,
+    /// compared as the typed writers compare them: dates canonically, decimals numerically, binary by content. Zero or
+    /// one row is answered without allocating.
+    /// </summary>
+    private static int CountDistinctValues(List<ConnectedSystemObjectAttributeValue> typedRows, AttributeDataType type)
+    {
+        if (typedRows.Count <= 1)
+            return typedRows.Count;
+
+        return type switch
+        {
+            AttributeDataType.Number => typedRows.Select(row => row.IntValue!.Value).Distinct().Count(),
+            AttributeDataType.LongNumber => typedRows.Select(row => row.LongValue!.Value).Distinct().Count(),
+            AttributeDataType.Decimal => typedRows.Select(row => row.DecimalValue!.Value).Distinct().Count(),
+            AttributeDataType.DateTime => typedRows.Select(row => DateTimeAttributeValue.Key(row.DateTimeValue!.Value)).Distinct().Count(),
+            AttributeDataType.Boolean => typedRows.Select(row => row.BoolValue!.Value).Distinct().Count(),
+            AttributeDataType.Guid => typedRows.Select(row => row.GuidValue!.Value).Distinct().Count(),
+            AttributeDataType.Binary => typedRows.Select(row => row.ByteValue!).Distinct(ByteArrayContentComparer.Instance).Count(),
+            _ => typedRows.Count
+        };
+    }
+
+    /// <summary>Reads a Metaverse Object value's key in the target's typed field; false when the row holds none.</summary>
+    private delegate bool TryGetHeldKey<TKey>(MetaverseObjectAttributeValue value, out TKey key);
+
+    /// <summary>
+    /// Makes the target attribute hold exactly the set of values in <paramref name="sourceRows"/> (#2153): a set diff
+    /// against the Metaverse Object's effective values, so order never matters, duplicates collapse and an unchanged
+    /// set stages nothing. One held row is kept per wanted value (the first, should two rows hold it); every other row
+    /// is removed, including an asserted-null marker, a duplicate, or a value held in another type's field. Then
+    /// <see cref="TakeOverProvenance"/>. A single source value, the usual case, takes a path that allocates nothing
+    /// beyond the value it adds.
+    /// </summary>
+    /// <param name="sourceRows">The Connected System Object's rows for the attribute, every one holding the type.</param>
+    /// <param name="sourceKey">The key of a source row's value.</param>
+    /// <param name="heldKey">Reads a Metaverse Object row's key; false for a row holding no value of the type.</param>
+    /// <param name="assign">Writes a source row's value onto a new Metaverse Object value, in the form JIM holds it.</param>
+    /// <param name="comparer">How keys compare; null for the key type's default equality.</param>
+    private static void ApplyTypedValueSet<TKey>(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        int sourceAttributeId,
-        ConnectedSystemObject cso,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        List<ConnectedSystemObjectAttributeValue> sourceRows,
+        Func<ConnectedSystemObjectAttributeValue, TKey> sourceKey,
+        TryGetHeldKey<TKey> heldKey,
+        Action<MetaverseObjectAttributeValue, ConnectedSystemObjectAttributeValue> assign,
+        IEqualityComparer<TKey>? comparer,
+        int? contributingSystemId,
+        int? contributingSyncRuleId) where TKey : notnull
+    {
+        var targetAttribute = syncRuleMapping.TargetMetaverseAttribute!;
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        if (sourceRows.Count == 1)
+        {
+            var source = sourceRows[0];
+            var wantedKey = sourceKey(source);
+            var isHeld = false;
+
+            foreach (var row in GetEffectiveAttributeValues(mvo, targetAttribute.Id))
+            {
+                if (!isHeld && heldKey(row, out var key) && comparer.Equals(key, wantedKey))
+                    isHeld = true;
+                else
+                    mvo.PendingAttributeValueRemovals.Add(row);
+            }
+
+            if (!isHeld)
+                mvo.PendingAttributeValueAdditions.Add(NewTypedValue(mvo, targetAttribute, source, assign, contributingSystemId, contributingSyncRuleId));
+        }
+        else
+        {
+            var wantedKeys = new HashSet<TKey>(comparer);
+            var distinctSources = sourceRows.Where(row => wantedKeys.Add(sourceKey(row))).ToList();
+
+            var heldKeys = new HashSet<TKey>(comparer);
+            var removals = GetEffectiveAttributeValues(mvo, targetAttribute.Id)
+                .Where(row => !(heldKey(row, out var key) && wantedKeys.Contains(key) && heldKeys.Add(key)))
+                .ToList();
+            mvo.PendingAttributeValueRemovals.AddRange(removals);
+
+            mvo.PendingAttributeValueAdditions.AddRange(distinctSources
+                .Where(row => !heldKeys.Contains(sourceKey(row)))
+                .Select(row => NewTypedValue(mvo, targetAttribute, row, assign, contributingSystemId, contributingSyncRuleId)));
+        }
+
+        TakeOverProvenance(mvo, targetAttribute.Id, contributingSystemId, contributingSyncRuleId);
+    }
+
+    private static MetaverseObjectAttributeValue NewTypedValue(
+        MetaverseObject mvo,
+        MetaverseAttribute targetAttribute,
+        ConnectedSystemObjectAttributeValue source,
+        Action<MetaverseObjectAttributeValue, ConnectedSystemObjectAttributeValue> assign,
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
-        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
-        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
-
-        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
-        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !currentValues.Any(mvoav => mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        var value = new MetaverseObjectAttributeValue
         {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                IntValue = newCsoNewAttributeValue.IntValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
+            MetaverseObject = mvo,
+            Attribute = targetAttribute,
+            AttributeId = targetAttribute.Id,
+            ContributedBySystemId = contributingSystemId,
+            ContributedBySyncRuleId = contributingSyncRuleId
+        };
+        assign(value, source);
+        return value;
     }
+
+    /// <summary>Reads a nullable typed field as a key: false when it holds nothing.</summary>
+    private static bool TryGetValue<T>(T? field, out T key) where T : struct
+    {
+        key = field.GetValueOrDefault();
+        return field.HasValue;
+    }
+
+    private static void ProcessNumberAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
+        int? contributingSystemId,
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.IntValue!.Value,
+            static (MetaverseObjectAttributeValue held, out int key) => TryGetValue(held.IntValue, out key),
+            static (value, row) => value.IntValue = row.IntValue,
+            null, contributingSystemId, contributingSyncRuleId);
 
     private static void ProcessLongNumberAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
         int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
-        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !csoAttributeValues.Any(csoav => csoav.LongValue != null && csoav.LongValue.Equals(mvoav.LongValue)));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.LongValue!.Value,
+            static (MetaverseObjectAttributeValue held, out long key) => TryGetValue(held.LongValue, out key),
+            static (value, row) => value.LongValue = row.LongValue,
+            null, contributingSystemId, contributingSyncRuleId);
 
-        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
-        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !currentValues.Any(mvoav => mvoav.LongValue != null && mvoav.LongValue.Equals(csoav.LongValue)));
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                LongValue = newCsoNewAttributeValue.LongValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
-
+    /// <summary>
+    /// Decimal comparison is numeric and scale-insensitive (5.0m equals 5.00m, with equal hash codes), so a scale-only
+    /// difference between the Connected System Object and Metaverse Object values never stages a change.
+    /// </summary>
     private static void ProcessDecimalAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
         int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        // Decimal comparison is numeric and scale-insensitive (5.0m equals 5.00m), so a scale-only
-        // difference between the CSO and MVO values never stages a removal and re-addition.
-        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
-        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !csoAttributeValues.Any(csoav => csoav.DecimalValue != null && csoav.DecimalValue.Equals(mvoav.DecimalValue)));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.DecimalValue!.Value,
+            static (MetaverseObjectAttributeValue held, out decimal key) => TryGetValue(held.DecimalValue, out key),
+            static (value, row) => value.DecimalValue = row.DecimalValue,
+            null, contributingSystemId, contributingSyncRuleId);
 
-        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
-        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !currentValues.Any(mvoav => mvoav.DecimalValue != null && mvoav.DecimalValue.Equals(csoav.DecimalValue)));
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DecimalValue = newCsoNewAttributeValue.DecimalValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
-
+    /// <summary>
+    /// Dates are keyed canonically (#2153): a value read from the database is Kind Local and to the microsecond, one
+    /// made in memory is Kind Utc and perhaps to the 100ns, so the same date in two forms is one value and not a
+    /// change. Every date added is written canonical.
+    /// </summary>
     private static void ProcessDateTimeAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
         int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        var csoValue = csoAttributeValues.FirstOrDefault();
-        var mvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).SingleOrDefault();
-
-        if (mvoValue != null && csoValue == null)
-        {
-            mvo.PendingAttributeValueRemovals.Add(mvoValue);
-        }
-        else if (csoValue != null && mvoValue == null)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => DateTimeAttributeValue.Key(row.DateTimeValue!.Value),
+            static (MetaverseObjectAttributeValue held, out long key) =>
             {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-        // Compared canonically (#2153): a value read from the database is Kind Local and to the microsecond, one made in
-        // memory is Kind Utc, so the same date in two forms is not a change.
-        else if (csoValue != null && mvoValue != null && !DateTimeAttributeValue.AreEqual(mvoValue.DateTimeValue, csoValue.DateTimeValue))
-        {
-            mvo.PendingAttributeValueRemovals.Add(mvoValue);
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = CanonicalDate(csoValue.DateTimeValue),
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
+                key = held.DateTimeValue.HasValue ? DateTimeAttributeValue.Key(held.DateTimeValue.Value) : 0;
+                return held.DateTimeValue.HasValue;
+            },
+            static (value, row) => value.DateTimeValue = CanonicalDate(row.DateTimeValue),
+            null, contributingSystemId, contributingSyncRuleId);
 
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
+    /// <summary>
+    /// Booleans take the set shape too. Under the Boolean rule a source holds at most one value, but a legacy
+    /// multi-valued Boolean target or Connected System Object is handled as any other set rather than throwing.
+    /// </summary>
+    private static void ProcessBooleanAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
+        int? contributingSystemId,
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.BoolValue!.Value,
+            static (MetaverseObjectAttributeValue held, out bool key) => TryGetValue(held.BoolValue, out key),
+            static (value, row) => value.BoolValue = row.BoolValue,
+            null, contributingSystemId, contributingSyncRuleId);
+
+    private static void ProcessGuidAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
+        int? contributingSystemId,
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.GuidValue!.Value,
+            static (MetaverseObjectAttributeValue held, out Guid key) => TryGetValue(held.GuidValue, out key),
+            static (value, row) => value.GuidValue = row.GuidValue,
+            null, contributingSystemId, contributingSyncRuleId);
+
+    private static void ProcessBinaryAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> typedRows,
+        int? contributingSystemId,
+        int? contributingSyncRuleId) =>
+        ApplyTypedValueSet(mvo, syncRuleMapping, typedRows,
+            static row => row.ByteValue!,
+            static (MetaverseObjectAttributeValue held, out byte[] key) =>
+            {
+                key = held.ByteValue ?? [];
+                return held.ByteValue != null;
+            },
+            static (value, row) => value.ByteValue = row.ByteValue,
+            ByteArrayContentComparer.Instance, contributingSystemId, contributingSyncRuleId);
 
     /// <summary>
     /// A date in the form JIM holds it (#2153), or null for none. Every date the engine creates is written this way.
@@ -1217,42 +1340,6 @@ public partial class SyncEngine
     /// </summary>
     internal static long? DateKey(DateTime? value) =>
         value.HasValue ? DateTimeAttributeValue.Key(value.Value) : null;
-
-    private static void ProcessBinaryAttribute(
-        MetaverseObject mvo,
-        SyncRuleMapping syncRuleMapping,
-        int sourceAttributeId,
-        ConnectedSystemObject cso,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
-        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !csoAttributeValues.Any(csoav =>
-                csoav.ByteValue != null && JIM.Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
-
-        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
-        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !currentValues.Any(mvoav => JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                ByteValue = newCsoNewAttributeValue.ByteValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
 
     private static void ProcessReferenceAttribute(
         MetaverseObject mvo,
@@ -1375,84 +1462,6 @@ public partial class SyncEngine
         // deferred to the cross-page resolution pass, so the surviving rows are not yet this contribution's set.
         if (!hasUnresolvedReferences)
             TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
-
-    private static void ProcessGuidAttribute(
-        MetaverseObject mvo,
-        SyncRuleMapping syncRuleMapping,
-        int sourceAttributeId,
-        ConnectedSystemObject cso,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
-        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
-
-        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
-        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !currentValues.Any(mvoav => mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                GuidValue = newCsoNewAttributeValue.GuidValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
-    }
-
-    private static void ProcessBooleanAttribute(
-        MetaverseObject mvo,
-        SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId,
-        int? contributingSyncRuleId)
-    {
-        var csoValue = csoAttributeValues.FirstOrDefault();
-        var mvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).SingleOrDefault();
-
-        if (mvoValue != null && csoValue == null)
-        {
-            mvo.PendingAttributeValueRemovals.Add(mvoValue);
-        }
-        else if (csoValue != null && mvoValue == null)
-        {
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                BoolValue = csoValue.BoolValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-        else if (csoValue != null && mvoValue != null && mvoValue.BoolValue != csoValue.BoolValue)
-        {
-            mvo.PendingAttributeValueRemovals.Add(mvoValue);
-            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = mvo,
-                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                BoolValue = csoValue.BoolValue,
-                ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
-            });
-        }
-
-        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     /// <summary>
