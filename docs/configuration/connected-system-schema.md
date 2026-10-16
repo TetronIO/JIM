@@ -62,7 +62,7 @@ See [Configuration changes](configuration-changes.md#previewing-a-change-before-
 
 ## Operational attributes on the Schema tab
 
-Some Connectors report attributes the Connected System maintains for its own operation rather than data you write, such as when an entry was created or when a sign-in last failed. The [LDAP Connector](../connectors/jim-ldap-connector.md#operational-attributes) reports them on OpenLDAP, 389 Directory Server and other RFC 4512 directories. A directory publishes dozens, and most are of no interest, so the Schema tab treats them differently from the rest:
+Some Connectors report attributes the Connected System maintains for its own operation rather than data you write, such as when an entry was created or when a sign-in last failed. The [LDAP Connector](../connectors/jim-ldap-connector-operational-attributes.md) reports them on OpenLDAP, 389 Directory Server and other RFC 4512 directories. A directory publishes dozens, and most are of no interest, so the Schema tab treats them differently from the rest:
 
 - **Held back until you ask.** Above the attribute list, a notice says how many operational attributes are hidden, with **Show operational attributes** to list them and **Hide operational attributes** to put them away again. The choice lasts for your visit; it is not saved.
 - **Always listed once selected.** An operational attribute you have selected is never hidden, so you can always see, and clear, your own choice.

@@ -186,6 +186,7 @@ nav:
           - Delta Import: connectors/jim-ldap-connector-delta-import.md
           - Values Already in Use: connectors/jim-ldap-connector-values-in-use.md
           - Auxiliary Object Classes: connectors/jim-ldap-connector-auxiliary-classes.md
+          - Operational Attributes: connectors/jim-ldap-connector-operational-attributes.md
           - Domain Controllers and Containers: connectors/jim-ldap-connector-topology.md
           - Certificates: connectors/jim-ldap-connector-certificates.md
           - Passwords: connectors/jim-ldap-connector-passwords.md
