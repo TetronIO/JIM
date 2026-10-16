@@ -200,14 +200,14 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 
 This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
 
-```powershell title="List every value an import could not read, and where"
+```powershell title="List every value an import could not import, who found it, and where"
 Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
     Where-Object { $_.ErrorType -eq 'ImportAttributeValueError' } |
     Get-JIMActivityExecutionItem |
     ForEach-Object {
         $item = $_
         $item.AttributeValueErrors | Select-Object @{ Name = 'Object'; Expression = { $item.DisplayNameSnapshot } },
-            @{ Name = 'Source'; Expression = { $item.SourceLocation } }, AttributeName, Value, Reason
+            @{ Name = 'Location'; Expression = { $item.SourceLocation } }, AttributeName, Value, Source, Reason
     }
 ```
 
