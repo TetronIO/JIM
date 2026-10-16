@@ -860,6 +860,55 @@ public class ConfigurationSnapshotServiceTests
         }
     }
 
+    [TestCase(DateTimeResolution.Second)]
+    [TestCase(null)]
+    public void CreateSnapshot_ConnectedSystem_RecordsADateTimeResolutionOnlyWhenOneIsHeld(DateTimeResolution? resolution)
+    {
+        // #2153, D2: the resolution decides what export sends and compares, so a change to it is a change to
+        // configuration. Recorded only when held, so a snapshot captured before resolutions existed agrees with one
+        // captured after for every attribute that holds none, and an upgrade reports no change nobody made.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "AD",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "user", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "accountExpires", Type = AttributeDataType.DateTime, Selected = true, DateTimeResolution = resolution
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var node = Child(attribute, "dateTimeResolution");
+        if (resolution.HasValue)
+        {
+            Assert.That(node, Is.Not.Null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(node!.Value, Is.EqualTo("Second"));
+                Assert.That(node.Label, Is.EqualTo("Date and time resolution"));
+                Assert.That(ConfigurationChangeClassifier.ClassifyKey(ConfigurationSnapshotService.ConnectedSystemObjectType, "dateTimeResolution"),
+                    Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+            }
+        }
+        else
+        {
+            Assert.That(node, Is.Null);
+        }
+    }
+
     [Test]
     public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
     {

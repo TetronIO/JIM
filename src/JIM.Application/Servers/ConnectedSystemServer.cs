@@ -2830,6 +2830,17 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The resolution a schema refresh gives an attribute (#2153, decision D2): what the Connector discovered, for an
+    /// attribute whose effective type is a date; none for any other type, since a resolution only means something for a
+    /// date. An attribute an administrator retyped to a date takes the Connector's statement, which for a non-date
+    /// attribute is none, meaning the microsecond.
+    /// </summary>
+    private static DateTimeResolution? DiscoveredDateTimeResolution(ConnectorSchemaAttribute schemaAttribute, AttributeDataType effectiveType) =>
+        effectiveType == AttributeDataType.DateTime && schemaAttribute.Type == AttributeDataType.DateTime
+            ? schemaAttribute.DateTimeResolution
+            : null;
+
+    /// <summary>
     /// Merges a schema retrieved from a Connected System into that system's object types and attributes, and
     /// reports what changed. Object types and attributes are matched by name so that existing ids survive the
     /// refresh; this is what stops a Synchronisation Rule's mappings from being invalidated by one. Removal of
@@ -3008,6 +3019,10 @@ public partial class ConnectedSystemServer
                         if (!existingAttribute.CaseExactSetByAdministrator)
                             existingAttribute.CaseExact = schemaAttribute.CaseExact;
 
+                        // So does a date's resolution (#2153, D2): discovered, unless an administrator chose it.
+                        if (!existingAttribute.DateTimeResolutionSetByAdministrator)
+                            existingAttribute.DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, existingAttribute.Type);
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
@@ -3030,6 +3045,7 @@ public partial class ConnectedSystemServer
                             Writability = schemaAttribute.Writability,
                             Required = schemaAttribute.Required,
                             CaseExact = schemaAttribute.CaseExact,
+                            DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, schemaAttribute.Type),
                             IsOperational = schemaAttribute.IsOperational
                         });
                     }
@@ -3083,6 +3099,7 @@ public partial class ConnectedSystemServer
                         Writability = a.Writability,
                         Required = a.Required,
                         CaseExact = a.CaseExact,
+                        DateTimeResolution = DiscoveredDateTimeResolution(a, a.Type),
                         IsOperational = a.IsOperational
                     }).ToList()
                 };

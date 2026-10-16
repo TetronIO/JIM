@@ -245,6 +245,10 @@ public static class ConfigurationChangeClassifier
         ["isExternalId"] = B,
         ["isSecondaryExternalId"] = B,
         ["writability"] = B,
+        // How identity comparisons treat the attribute's text (#2051), and the step of time export sends and compares
+        // its dates at (#2153): both change what JIM decides is the same value.
+        ["caseExact"] = B,
+        ["dateTimeResolution"] = B,
 
         // Simple Mode Object Matching Rules, which attach to a Connected System Object Type rather than to a
         // Synchronisation Rule. Same keys, same classes as the Advanced Mode table above: they change which objects
