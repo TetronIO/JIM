@@ -146,12 +146,7 @@ public partial class ActivityServer
         activity.Executed = DateTime.UtcNow;
         activity.InitiatedByType = initiatorType;
         activity.InitiatedById = initiatorId;
-        activity.InitiatedByName = initiatorName ?? initiatorType switch
-        {
-            ActivityInitiatorType.System => "System",
-            ActivityInitiatorType.Anonymous => "Anonymous",
-            _ => "Unknown"
-        };
+        activity.InitiatedByName = ResolveInitiatorName(initiatorType, initiatorName);
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -175,37 +170,56 @@ public partial class ActivityServer
         activity.TotalActivityTime = now - activity.Created;
         activity.InitiatedByType = initiatorType;
         activity.InitiatedById = initiatorId;
-        activity.InitiatedByName = initiatorName ?? initiatorType switch
-        {
-            ActivityInitiatorType.System => "System",
-            ActivityInitiatorType.Anonymous => "Anonymous",
-            _ => "Unknown"
-        };
+        activity.InitiatedByName = ResolveInitiatorName(initiatorType, initiatorName);
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
     }
 
-    private void ValidateActivity(Activity activity)
+    /// <summary>
+    /// Throws <see cref="InvalidOperationException"/> if an initiator triad could not attribute an Activity, applying
+    /// the same rules <see cref="CreateActivityWithTriadAsync"/> does. An operation that records its Activity only
+    /// after an irreversible change (the factory reset, whose Activity must survive its own wipe) calls this first,
+    /// so an unattributable caller is refused before anything is changed rather than after.
+    /// </summary>
+    public void ValidateInitiator(ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
         // All activities MUST be attributed to a security principal for audit compliance.
         // This is a critical requirement - no exceptions.
-        if (activity.InitiatedByType == ActivityInitiatorType.NotSet)
+        if (initiatorType == ActivityInitiatorType.NotSet)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByType has not been set.");
 
         // System activities have no principal entity, so InitiatedById is allowed to be null. Anonymous activities
         // (an unidentified, unauthenticated caller) likewise have no principal entity: InitiatedById MUST be null,
         // enforced below. User and ApiKey activities must have an InitiatedById.
-        if (activity.InitiatedByType != ActivityInitiatorType.System
-            && activity.InitiatedByType != ActivityInitiatorType.Anonymous
-            && activity.InitiatedById == null)
+        if (initiatorType != ActivityInitiatorType.System
+            && initiatorType != ActivityInitiatorType.Anonymous
+            && initiatorId == null)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedById has not been set.");
 
-        if (activity.InitiatedByType == ActivityInitiatorType.Anonymous && activity.InitiatedById != null)
+        if (initiatorType == ActivityInitiatorType.Anonymous && initiatorId != null)
             throw new InvalidOperationException("Activity attributed to Anonymous must not carry an InitiatedById.");
 
-        if (string.IsNullOrWhiteSpace(activity.InitiatedByName))
+        if (string.IsNullOrWhiteSpace(ResolveInitiatorName(initiatorType, initiatorName)))
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByName has not been set.");
+    }
+
+    /// <summary>
+    /// The name a triad-attributed Activity records: the one given, or a placeholder for the initiator type.
+    /// </summary>
+    private static string ResolveInitiatorName(ActivityInitiatorType initiatorType, string? initiatorName)
+    {
+        return initiatorName ?? initiatorType switch
+        {
+            ActivityInitiatorType.System => "System",
+            ActivityInitiatorType.Anonymous => "Anonymous",
+            _ => "Unknown"
+        };
+    }
+
+    private void ValidateActivity(Activity activity)
+    {
+        ValidateInitiator(activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystem)
         {
