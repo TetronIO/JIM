@@ -62,3 +62,7 @@ docs/.conformance/baseline.tsv merge=union
 
 # Podman deployment files are read by Podman and systemd on Linux hosts
 deploy/podman/** text eol=lf
+
+# The deployment lab runs on a Linux host and sends bash, embedded in its PowerShell, to Linux VMs: a CR at the end of
+# each line breaks that bash, so these keep LF even though *.ps1 is CRLF elsewhere
+test/ci/deployment/lab/** text eol=lf
