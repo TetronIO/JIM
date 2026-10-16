@@ -37,8 +37,9 @@ public class AttributeDeletionImpact
     public List<AttributeObjectTypeValueCount> ObjectTypeValueCounts { get; set; } = [];
 
     /// <summary>
-    /// The configuration references (bindings, Attribute Flows, scoping criteria, Object Matching Rules) that would
-    /// be cascade-removed, in dependency order, when the deletion proceeds. Empty when the attribute is unreferenced.
+    /// The configuration references (bindings, and Attribute Flows and Object Matching Rules that map the attribute
+    /// directly) that would be cascade-removed, in dependency order, when the deletion proceeds. Empty when the
+    /// attribute is unreferenced.
     /// </summary>
     public List<AttributeReference> References { get; set; } = [];
 
