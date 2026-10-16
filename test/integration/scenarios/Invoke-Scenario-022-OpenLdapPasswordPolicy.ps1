@@ -35,13 +35,17 @@
          would have been parked, so this is the evidence for PRD Scenario 2.
       6. One entry is given a pwdPolicySubentry; a schema refresh then reports the override signal as
          Present.
+      7. Two failed binds against one provisioned entry make the overlay record two pwdFailureTime
+         values, a multi-valued operational date (#2153). With pwdFailureTime selected, a Full Import
+         holds both on the Connected System Object to the microsecond, and a second Full Import changes
+         nothing.
 
     OpenLDAP only. JIM binds as cn=jim-provisioner rather than the rootdn because slapo-ppolicy exempts
     the rootdn from every check; a scenario bound as cn=admin would see every password accepted.
 
 .PARAMETER Step
     Which part to execute. Steps are cumulative: a named step runs everything up to and including
-    itself (Discovery, Provision, Override, All).
+    itself (Discovery, Provision, Override, FailureTimes, All).
 
 .PARAMETER Template
     Accepted for runner compatibility and deliberately not used for sizing. This scenario asserts
@@ -100,7 +104,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Discovery", "Provision", "Override", "All")]
+    [ValidateSet("Discovery", "Provision", "Override", "FailureTimes", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -273,7 +277,7 @@ Write-Host "Step:        $Step (steps are cumulative)" -ForegroundColor Gray
 Write-Host ""
 
 # Cumulative dispatch: each step builds on the previous one's state.
-$stepOrder = @("Discovery", "Provision", "Override")
+$stepOrder = @("Discovery", "Provision", "Override", "FailureTimes")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -548,6 +552,134 @@ try {
         Add-TestResult -Name "The default policy's figures are unchanged by the refresh (minimumLength still $expectedMinimumLength)" `
             -Passed ((Get-PolicyProperty -Policy $policyAfterOverride -Name 'minimumLength') -eq $expectedMinimumLength) `
             -Detail "minimumLength was '$(Get-PolicyProperty -Policy $policyAfterOverride -Name 'minimumLength')'"
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 7: a multi-valued operational date imports every value (#2153)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("FailureTimes")) {
+        Write-TestSection "Test 7: Every pwdFailureTime value imports, to the microsecond, and stays put"
+
+        if ($provisionedEntries.Count -lt 2) {
+            throw "No second provisioned entry to fail binds against; the Provision step must run first."
+        }
+        # The second entry, so the Override step's pwdPolicySubentry plays no part.
+        $failureDn = $provisionedEntries[1].dn
+        Write-Host "  Entry under test: $failureDn" -ForegroundColor Gray
+
+        $ldapUri = "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)"
+        function Invoke-FailedBind {
+            # A wrong password: the overlay records the failure as a pwdFailureTime value on the entry.
+            docker exec $DirectoryConfig.ContainerName ldapwhoami -x -H $ldapUri -D $failureDn -w 'not-the-password' 2>&1 | Out-Null
+            Start-Sleep -Milliseconds 200
+        }
+
+        function Get-DirectoryFailureTimes {
+            $raw = Invoke-LDAPSearch `
+                -ContainerName $DirectoryConfig.ContainerName -Server "localhost" `
+                -Port $DirectoryConfig.LdapSearchPort -Scheme $DirectoryConfig.LdapSearchScheme `
+                -BaseDN $failureDn -BindDN $DirectoryConfig.BindDN -BindPassword $DirectoryConfig.BindPassword `
+                -Filter "(objectClass=*)" -Attributes @("pwdFailureTime")
+            return @($raw | Where-Object { "$_" -match '^pwdFailureTime:\s*(\S+)$' } | ForEach-Object { ("$_" -replace '^pwdFailureTime:\s*', '').Trim() })
+        }
+
+        function Get-HeldFailureTimes {
+            # Read as the database holds them: UTC, to the microsecond, in the directory's own form, with each
+            # row's id so a second import can be shown to have left the rows alone.
+            $escapedDn = $failureDn.Replace("'", "''")
+            $query = @"
+SELECT av."Id", to_char(av."DateTimeValue" AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS.US') || 'Z'
+FROM "ConnectedSystemObjectAttributeValues" av
+JOIN "ConnectedSystemAttributes" a ON a."Id" = av."AttributeId"
+WHERE a."Name" = 'pwdFailureTime' AND av."DateTimeValue" IS NOT NULL
+  AND av."ConnectedSystemObjectId" IN (
+    SELECT dn."ConnectedSystemObjectId" FROM "ConnectedSystemObjectAttributeValues" dn
+    JOIN "ConnectedSystemAttributes" dna ON dna."Id" = dn."AttributeId"
+    WHERE dna."Name" = 'distinguishedName' AND lower(dn."StringValue") = lower('$escapedDn'));
+"@
+            $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -F '|' -U jim -d jim -c $query 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Reading the held pwdFailureTime values failed: $rows" }
+            return @($rows | Where-Object { "$_".Trim() -ne '' } | ForEach-Object {
+                $parts = "$_".Split('|'); [pscustomobject]@{ Id = $parts[0]; Value = $parts[1] } })
+        }
+
+        # The directory's own values carry a fraction trimmed of trailing zeros (or none); the held form is
+        # always six digits. Normalise the directory's to six for the comparison.
+        function ConvertTo-SixDigit([string]$value) {
+            if ($value -match '^(\d{14})(?:\.(\d{1,6})\d*)?Z$') {
+                return "$($matches[1]).$((($matches[2] + '') + '000000').Substring(0, 6))Z"
+            }
+            return $value
+        }
+
+        # slapo-ppolicy records failed binds only up to pwdMaxRecordedFailure, which defaults to pwdMaxFailure, which
+        # this policy leaves at 0 (no lockout), so nothing would be recorded. Recording failures changes no
+        # enforcement; replace is idempotent on a re-run. Written as the rootdn: the policy entry is the
+        # administrator's.
+        $recordLdif = "dn: $policyDN`nchangetype: modify`nreplace: pwdMaxRecordedFailure`npwdMaxRecordedFailure: 10`n"
+        $recordResult = $recordLdif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H $ldapUri -D $DirectoryConfig.BindDN -w $DirectoryConfig.BindPassword 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not set pwdMaxRecordedFailure on $policyDN (exit code $LASTEXITCODE): $recordResult"
+        }
+
+        Invoke-FailedBind
+        Invoke-FailedBind
+        $directoryTimes = @(Get-DirectoryFailureTimes)
+        Write-Host "  Directory holds $($directoryTimes.Count) pwdFailureTime value(s): $($directoryTimes -join ', ')" -ForegroundColor Cyan
+        if ($directoryTimes.Count -lt 2) {
+            # Not subject to -ContinueOnError: with fewer than two values in the directory, nothing below
+            # can say anything about a multi-valued date.
+            throw "FIXTURE: two failed binds left $($directoryTimes.Count) pwdFailureTime value(s) on $failureDn. " +
+                  "The overlay records failures only where a policy applies and pwdMaxRecordedFailure allows; check olcPPolicyDefault names $policyDN."
+        }
+
+        # pwdFailureTime is operational: schema discovery offers it unselected (#2153 L1), so select it.
+        $ldapUserType = @(Get-JIMConnectedSystem -Id $config.LDAPSystemId -ObjectTypes) |
+            Where-Object { $_.name -eq $DirectoryConfig.UserObjectClass } | Select-Object -First 1
+        $failureAttribute = @($ldapUserType.attributes) | Where-Object { $_.name -eq 'pwdFailureTime' } | Select-Object -First 1
+        Add-TestResult -Name "Schema discovery offers pwdFailureTime as a multi-valued DateTime attribute" `
+            -Passed ($null -ne $failureAttribute -and $failureAttribute.type -eq 'DateTime' -and $failureAttribute.attributePlurality -eq 'MultiValued') `
+            -Detail "Found: $(if ($failureAttribute) { "type '$($failureAttribute.type)', plurality '$($failureAttribute.attributePlurality)'" } else { 'no such attribute' })"
+        if ($null -eq $failureAttribute) {
+            throw "pwdFailureTime is not in the schema of $($DirectoryConfig.UserObjectClass); nothing further can be tested."
+        }
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId $config.LDAPSystemId -ObjectTypeId $ldapUserType.id `
+            -AttributeId $failureAttribute.id -Selected $true | Out-Null
+
+        Write-Host "  Directory Full Import..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Full Import (pwdFailureTime selected)"
+
+        $held = @(Get-HeldFailureTimes)
+        $expected = @($directoryTimes | ForEach-Object { ConvertTo-SixDigit $_ } | Sort-Object)
+        $heldValues = @($held | ForEach-Object { $_.Value } | Sort-Object)
+        Add-TestResult -Name "The Connected System Object holds every pwdFailureTime value, to the microsecond" `
+            -Passed (($heldValues -join ',') -eq ($expected -join ',')) `
+            -Detail "Directory: $($expected -join ', '). Held: $($heldValues -join ', ')"
+
+        Write-Host "  Directory Full Import again (nothing changed)..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Full Import (unchanged)"
+        $heldAgain = @(Get-HeldFailureTimes)
+        Add-TestResult -Name "A second Full Import leaves every pwdFailureTime value as it was" `
+            -Passed ((@($heldAgain | ForEach-Object { $_.Id } | Sort-Object) -join ',') -eq (@($held | ForEach-Object { $_.Id } | Sort-Object) -join ',')) `
+            -Detail "Rows before: $(@($held | ForEach-Object { $_.Id }) -join ', '). After: $(@($heldAgain | ForEach-Object { $_.Id }) -join ', '). A changed row id means the value was removed and added again."
+
+        Invoke-FailedBind
+        $directoryTimes = @(Get-DirectoryFailureTimes)
+        Write-Host "  Directory Full Import after a third failed bind ($($directoryTimes.Count) value(s) in the directory)..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Full Import (a value added)"
+        $expected = @($directoryTimes | ForEach-Object { ConvertTo-SixDigit $_ } | Sort-Object)
+        $heldAfterAdd = @(Get-HeldFailureTimes)
+        $keptIds = @($held | ForEach-Object { $_.Id } | Where-Object { @($heldAfterAdd | ForEach-Object { $_.Id }) -contains $_ })
+        Add-TestResult -Name "A new pwdFailureTime value is added beside the others, which are left alone" `
+            -Passed (((@($heldAfterAdd | ForEach-Object { $_.Value } | Sort-Object)) -join ',') -eq ($expected -join ',') -and $keptIds.Count -eq $held.Count) `
+            -Detail "Directory: $($expected -join ', '). Held: $(@($heldAfterAdd | ForEach-Object { $_.Value }) -join ', '). Rows kept: $($keptIds.Count) of $($held.Count)."
+
+        # No Delta Import here: this scenario binds as a provisioner that may not read cn=accesslog, so the
+        # Connector refuses one. A Delta Import converts entries with the same code as a Full Import, which the
+        # LDAP Connector's unit tests cover for several dates.
     }
 
     # The worker logs everything it does through the password channel; an error there means a

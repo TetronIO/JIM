@@ -161,7 +161,7 @@ The document is checked when you save. A mistake is reported immediately, naming
 
 #### Related table fields
 
-A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`.
+A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`. Every row is a value, whatever the column's type, so a related table of dates imports each date. A related table of true or false values becomes a single-valued attribute, because a Boolean holds one value; a parent with rows holding both has each value reported rather than one chosen.
 
 | Field | Required | What it is |
 |-------|----------|------------|
@@ -194,7 +194,7 @@ Create [Run Profiles](../configuration/run-profiles.md) for the operations you n
 
 A Full Import reads every row of each selected Object Type, a page at a time (the Run Profile's Page Size), and reads the related tables for each page in one query rather than one per row. A related table's rows, and a change log's, are matched to their object as the database compares the anchor column: ignoring case, unless its collation is case-sensitive. The first page of each Object Type reports the row count, so the Activity shows a real percentage and time remaining.
 
-Most problems affect one row and are reported against that one object, leaving the rest of the import to continue: a value that cannot be converted to the attribute's type, for example, or a fractional value in a column you have recorded as a whole number (JIM reports it rather than rounding it). Every such value is reported with what the column held, the row's other columns are still read, and JIM leaves the attribute as it already held it; see [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read). A problem that would affect every row fails the run with a message saying what to change: a table the account cannot see, a `NULL` in an anchor column, or a number too wide for JIM to hold exactly.
+Most problems affect one row and are reported against that one object, leaving the rest of the import to continue: a value that cannot be converted to the attribute's type, for example, or a fractional value in a column you have recorded as a whole number (JIM reports it rather than rounding it). Every such value is reported with what the column held, the row's other columns are still read, and JIM leaves the attribute as it already held it; see [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import). A problem that would affect every row fails the run with a message saying what to change: a table the account cannot see, a `NULL` in an anchor column, or a number too wide for JIM to hold exactly.
 
 ### Delta Import
 

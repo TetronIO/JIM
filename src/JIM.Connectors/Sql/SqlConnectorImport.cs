@@ -1338,10 +1338,13 @@ internal sealed class SqlConnectorImport
                 attribute.DecimalValues.Add(ToDecimal(value));
                 break;
             case AttributeDataType.Boolean:
-                attribute.BoolValue = Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+                // Appended (#2153): a related table gives a row per value, and JIM reports a true or false attribute
+                // holding both rather than one row silently winning.
+                attribute.BoolValues.Add(Convert.ToBoolean(value, CultureInfo.InvariantCulture));
                 break;
             case AttributeDataType.DateTime:
-                attribute.DateTimeValue = ToUtc(value);
+                // Appended (#2153): a related table of dates imports every row, in any order, since the values are a set.
+                attribute.DateTimeValues.Add(ToUtc(value));
                 break;
             case AttributeDataType.Guid:
                 attribute.GuidValues.Add(_provider.ConvertToGuid(value));

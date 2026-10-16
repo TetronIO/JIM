@@ -211,6 +211,14 @@ public static class Helpers
     }
 
     /// <summary>
+    /// An attribute's date as the portal shows it ("12 Jul 2026 14:30:00", or "12 Jul 2026 14:30:00.25" when it has a
+    /// fraction of a second), so two values a fraction apart never look the same (#2153). For attribute values only;
+    /// Activity and audit timestamps keep <see cref="ToFriendlyDate"/>. Converts nothing: call <c>ToLocalTime()</c>
+    /// first where the surface shows local time.
+    /// </summary>
+    public static string ToFriendlyAttributeDate(this DateTime dateTime) => DateTimeAttributeValue.ToDisplayString(dateTime);
+
+    /// <summary>
     /// The date half of <see cref="ToFriendlyDate"/> ("12 Jul 2026"), for a heading that names a day once so the
     /// entries beneath it can carry the time alone. Same culture-independent form; callers convert to local time
     /// first where the day should be the viewer's.

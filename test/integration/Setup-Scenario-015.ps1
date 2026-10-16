@@ -404,7 +404,6 @@ $hrFlows = @(
     @{ Cs = "accountName"; Mv = "Account Name" },
     @{ Cs = "firstName";   Mv = "First Name" },
     @{ Cs = "lastName";    Mv = "Last Name" },
-    @{ Cs = "displayName"; Mv = "Display Name" },
     @{ Cs = "email";       Mv = "Email" },
     @{ Cs = "department";  Mv = "Department" }
 )
@@ -413,6 +412,10 @@ foreach ($flow in $hrFlows) {
         -TargetMetaverseAttributeId (Get-MvAttribute $flow.Mv).id `
         -SourceConnectedSystemAttributeId (Get-CsAttribute $hrPersonType $flow.Cs).id | Out-Null
 }
+
+# Display Name is derived from the HR names rather than taken from the CSV's displayName column.
+Add-DisplayNameExpressionMapping -SyncRuleId $hrImportRule.id -DisplayNameAttributeId (Get-MvAttribute "Display Name").id `
+    -FirstNameAttribute 'firstName' -LastNameAttribute 'lastName'
 
 # The CSV holds a user's badges in one pipe-separated field; Split makes each one a value of the
 # multi-valued Metaverse attribute, so a badge leaving the list is a single value removed.

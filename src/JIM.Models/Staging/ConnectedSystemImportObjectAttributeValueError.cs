@@ -28,4 +28,9 @@ public class ConnectedSystemImportObjectAttributeValueError
     /// Why the value could not be read, in a sentence an administrator can act on.
     /// </summary>
     public string Reason { get; set; } = null!;
+
+    /// <summary>
+    /// Who found the value could not be imported: the Connector, reading it, or JIM, holding it (#2153).
+    /// </summary>
+    public ImportAttributeValueErrorSource Source { get; set; } = ImportAttributeValueErrorSource.Connector;
 }

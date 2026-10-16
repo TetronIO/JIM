@@ -1045,7 +1045,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 };
 
                 // assign the right type of value(s), keeping any value that is not imported to report below: one that
-                // cannot be read as the attribute's type (#2128), or one of several JIM cannot hold (#2153)
+                // cannot be read as the attribute's type (#2128), or a date JIM cannot keep apart from another (#2153)
                 IReadOnlyList<LdapUnreadableValue> unreadableValues = [];
                 switch (importObjectAttribute.Type)
                 {
@@ -1080,13 +1080,13 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
                     case AttributeDataType.Boolean:
                         var booleans = LdapImportValueReader.ReadBoolean(attribute);
-                        importObjectAttribute.BoolValue = booleans.Values.Count == 1 ? booleans.Values[0] : null;
+                        importObjectAttribute.BoolValues.AddRange(booleans.Values);
                         unreadableValues = booleans.Unreadable;
                         break;
 
                     case AttributeDataType.DateTime:
                         var dateTimes = LdapImportValueReader.ReadDateTime(attribute);
-                        importObjectAttribute.DateTimeValue = dateTimes.Values.Count == 1 ? dateTimes.Values[0] : null;
+                        importObjectAttribute.DateTimeValues.AddRange(dateTimes.Values);
                         unreadableValues = dateTimes.Unreadable;
                         break;
 
@@ -1128,8 +1128,8 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                     // Report every value that is not imported, and leave the attribute off: what was read of a
                     // multi-valued attribute is only part of what the directory holds, and JIM leaves an attribute
                     // with a value it could not import as it already held it rather than reading it as the whole set
-                    // (#2066). Several values of a Boolean or a date and time arrive here too, every one of them
-                    // reported, because JIM holds one value for those types (#2153). The object is still returned, so
+                    // (#2066). Two dates that differ only below the 100 nanoseconds JIM can read arrive here too, both
+                    // reported rather than merged (#2153). The object is still returned, so
                     // every other attribute imports.
                     ReportUnreadableValues(importObject, searchResult.DistinguishedName, schemaAttribute, unreadableValues);
                     continue;
@@ -1163,7 +1163,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
     /// <summary>
     /// Records the values of one attribute that are not imported on the object (one that could not be read as its type,
-    /// #2128, or one of several JIM cannot hold, #2153), which keeps JIM from changing the attribute, and gives the
+    /// #2128, or a date JIM cannot keep apart from another, #2153), which keeps JIM from changing the attribute, and gives the
     /// entry's distinguished name as where the object was read from: an administrator can go straight to it, where its
     /// External ID (an objectGUID or entryUUID) means nothing to them.
     /// </summary>

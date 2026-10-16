@@ -348,9 +348,13 @@ $createdUsers = $indices | ForEach-Object -Parallel {
     # Slot i=0 reserved for disabled so small datasets always have at least one disabled user
     $uac = if ($i -eq 0) { 514 } elseif (($i % 10) -eq 9) { 514 } else { 512 }
 
+    # Active Directory refuses a sAMAccountName over 20 characters (00000523), which 18 of the first 1,000
+    # New-TestUser names are; Samba AD accepts them, so its names are unchanged.
+    $samAccountName = if ($using:useActiveDirectory) { Limit-ActiveDirectorySamAccountName -SamAccountName $user.SamAccountName -Index $i } else { $user.SamAccountName }
+
     [PSCustomObject]@{
         Index                = $i
-        SamAccountName       = $user.SamAccountName
+        SamAccountName       = $samAccountName
         DisplayName          = $user.DisplayName
         FirstName            = $user.FirstName
         LastName             = $user.LastName
@@ -425,9 +429,9 @@ for ($i = 0; $i -lt $createdUsers.Count; $i++) {
             # Active Directory: the LDIF built above is fed to ldapadd in the toolbox instead of ldbadd in
             # a container. "Already exists" (68) is tolerated, as it is for ldbadd; anything else throws.
             # Active Directory refuses an enabled account with no password, so its entries carry a unicodePwd
-            # (see $adUserPasswordValue above); without it the lab refused 901 of the first 1,000 (0000052D, 2026-10-16)
-            # without it. sAMAccountName is limited to 20 characters there; New-TestUser's names have not
-            # exceeded it yet, and if one does, the failure message names the entry and the directory's reason.
+            # (see $adUserPasswordValue above); without it the lab refused 901 of the first 1,000 (0000052D,
+            # 2026-10-16). sAMAccountName is limited to 20 characters there, so longer names were shortened when
+            # the records were generated (Limit-ActiveDirectorySamAccountName).
             Write-ActiveDirectoryLabLine "  Importing chunk $chunkIndex ($chunkCount users, total $($i + 1)/$($createdUsers.Count))..." -ForegroundColor Gray
             $chunkOutcome = Invoke-ActiveDirectoryLdifDelivery -DirectoryConfig $adConfig -Tool ldapadd -Ldif $ldifBuilder.ToString() `
                 -AcceptedResultCode 68 -Description "users chunk $chunkIndex (users $($i + 2 - $chunkCount) to $($i + 1))"

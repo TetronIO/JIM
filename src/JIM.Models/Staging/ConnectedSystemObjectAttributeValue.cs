@@ -138,7 +138,7 @@ public class ConnectedSystemObjectAttributeValue
             return StringValue;
 
         if (DateTimeValue != null)
-            return DateTimeValue.ToString();
+            return JIM.Models.Utility.AttributeDateDisplay.Format(DateTimeValue.Value);
 
         if (IntValue != null)
             return IntValue.ToString();

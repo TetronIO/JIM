@@ -140,10 +140,21 @@ public class SyncImportTaskProcessor
     private int _verificationBenignMismatchCount;
 
     /// <summary>
-    /// #2153: how many imported dates this run were put into the form JIM holds them (a sub-microsecond part dropped,
-    /// or a Kind other than UTC converted), for the end-of-import summary.
+    /// #2153: what putting this run's imported values into the form JIM holds them did, for the end-of-import summary.
     /// </summary>
-    private int _datesCanonicalisedCount;
+    private readonly ImportValueNormalisationSummary _normalisationSummary = new();
+
+    /// <summary>
+    /// #2153: each Object Type's date and true or false attributes by name, built once per run, so the import normaliser
+    /// acts only on attributes the schema says hold those types. Keyed by Object Type name, case-insensitive, as an import
+    /// object names its type; a name the schema does not know maps to null.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyDictionary<string, AttributeDataType>?> _dateAndBooleanAttributeCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// #2153: value-less rows swept from attributes an import carried, for the end-of-import summary.
+    /// </summary>
+    private int _valuelessRowsSweptCount;
 
     /// <summary>
     /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
@@ -1100,8 +1111,9 @@ public class SyncImportTaskProcessor
         // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
         Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
             totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
-        Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}",
-            _datesCanonicalisedCount);
+        Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}, Exact duplicates collapsed: {DuplicatesCollapsed}, Sub-microsecond collisions reported: {CollisionsReported}, True or false surpluses reported: {BooleanSurplusesReported}, Value-less rows swept: {ValuelessRowsSwept}",
+            _normalisationSummary.DatesCanonicalised, _normalisationSummary.DuplicatesCollapsed, _normalisationSummary.CollisionsReported,
+            _normalisationSummary.BooleanSurplusesReported, _valuelessRowsSweptCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
@@ -2136,6 +2148,23 @@ public class SyncImportTaskProcessor
         HeldUnderAnotherObjectType Held);
 
     /// <summary>
+    /// #2153: an Object Type's date and true or false attributes, by name, built on first use per run.
+    /// </summary>
+    private IReadOnlyDictionary<string, AttributeDataType>? GetDateAndBooleanAttributes(string? objectTypeName)
+    {
+        if (objectTypeName == null)
+            return null;
+
+        if (_dateAndBooleanAttributeCache.TryGetValue(objectTypeName, out var lookup))
+            return lookup;
+
+        var objectType = _connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Name.Equals(objectTypeName, StringComparison.OrdinalIgnoreCase));
+        lookup = objectType == null ? null : ImportValueNormaliser.BuildDateAndBooleanLookup(objectType);
+        _dateAndBooleanAttributeCache[objectTypeName] = lookup;
+        return lookup;
+    }
+
+    /// <summary>
     /// SPEC-1082 D5: returns the schema fingerprint for an object type, computing and caching it on
     /// first use per run. Deterministic for a given schema shape, so caching across the whole run
     /// (not just a page) is safe and avoids recomputing it per object.
@@ -2417,8 +2446,10 @@ public class SyncImportTaskProcessor
         // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
         // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
         // sub-microsecond source value was "changed" on every honest diff and raised a false Verification Mode alarm.
+        // The normaliser also reports what JIM cannot hold: two dates less than a microsecond apart, or both true and
+        // false for a true or false attribute. A reported attribute is left as JIM held it.
         foreach (var importObject in connectedSystemImportResult.ImportObjects)
-            _datesCanonicalisedCount += ImportValueNormaliser.CanonicaliseDates(importObject);
+            ImportValueNormaliser.Normalise(importObject, GetDateAndBooleanAttributes(importObject.ObjectType), _normalisationSummary);
 
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
@@ -2866,6 +2897,10 @@ public class SyncImportTaskProcessor
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
                                               connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
 
+                    // #2153: rows that held nothing, swept by the diff, for the end-of-import summary.
+                    if (connectedSystemObject.PendingAttributeValueRemovals.Count > 0)
+                        _valuelessRowsSweptCount += connectedSystemObject.PendingAttributeValueRemovals.Count(r => r.HeldDataType() == null);
+
                     // SPEC-1082 D7: request a stamp for this matched object, written by the save
                     // phase after this batch's attribute-value writes commit (D6 stamp-ordering
                     // invariant). Full Import stamps changed and unchanged objects alike with the
@@ -3167,8 +3202,8 @@ public class SyncImportTaskProcessor
             var noLongs = attribute.LongValues.Count == 0;
             var noDecimals = attribute.DecimalValues.Count == 0;
             var noStrings = attribute.StringValues.Count == 0;
-            var noBool = !attribute.BoolValue.HasValue;
-            var noDateTime = !attribute.DateTimeValue.HasValue;
+            var noBool = !attribute.HasBoolValues;
+            var noDateTime = !attribute.HasDateTimeValues;
             var noBytes = attribute.ByteValues.Count == 0;
             var noReferences = attribute.ReferenceValues.Count == 0;
 
@@ -3713,22 +3748,36 @@ public class SyncImportTaskProcessor
                     }
                     break;
                 case AttributeDataType.DateTime:
-                    connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                    // One row per value (#2153), never a row that holds nothing. The values are canonical and distinct:
+                    // the import normaliser saw to both before the page was hydrated.
+                    if (importObjectAttribute.HasDateTimeValues)
                     {
-                        Attribute = csAttribute,
-                        AttributeId = csAttribute.Id,
-                        DateTimeValue = importObjectAttribute.DateTimeValue,
-                        ConnectedSystemObject = connectedSystemObject
-                    });
+                        foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                AttributeId = csAttribute.Id,
+                                DateTimeValue = importObjectAttributeDateTimeValue,
+                                ConnectedSystemObject = connectedSystemObject
+                            });
+                        }
+                    }
                     break;
                 case AttributeDataType.Boolean:
-                    connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                    if (importObjectAttribute.HasBoolValues)
                     {
-                        Attribute = csAttribute,
-                        AttributeId = csAttribute.Id,
-                        BoolValue = importObjectAttribute.BoolValue,
-                        ConnectedSystemObject = connectedSystemObject
-                    });
+                        foreach (var importObjectAttributeBoolValue in importObjectAttribute.BoolValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                AttributeId = csAttribute.Id,
+                                BoolValue = importObjectAttributeBoolValue,
+                                ConnectedSystemObject = connectedSystemObject
+                            });
+                        }
+                    }
                     break;
                 case AttributeDataType.Reference:
                     foreach (var importObjectAttributeReferenceValue in importObjectAttribute.ReferenceValues)
@@ -3876,22 +3925,53 @@ public class SyncImportTaskProcessor
                     }
 
                     case AttributeDataType.DateTime:
-                        // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.DateTime));
-                        if (existingCsoDateTimeAttributeValue == null)
+                    {
+                        // A set diff keyed canonically (#2153), over the rows that hold a date. The stored value is the
+                        // database's microsecond, read as Kind Local, and the import is canonical, so a value and its
+                        // re-imported self are equal, and order is never a change.
+                        var importedDateTimes = importedObjectAttribute.DateTimeValues;
+                        if (importedDateTimes.Count == 1)
                         {
-                            // we don't have a CSO value for this attribute. set the initial value
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
+                            // The single-valued fast path allocates nothing beyond what it stages: one pass keeps the
+                            // row holding the imported date and removes every other.
+                            var importedKey = DateTimeAttributeValue.Key(importedDateTimes[0]);
+                            var held = connectedSystemObject.AttributeValues;
+                            var matched = false;
+                            for (var v = 0; v < held.Count; v++)
+                            {
+                                var heldValue = held[v];
+                                if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.DateTimeValue is not { } heldDate)
+                                    continue;
+
+                                if (!matched && DateTimeAttributeValue.Key(heldDate) == importedKey)
+                                    matched = true;
+                                else
+                                    connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
+                            }
+
+                            if (!matched)
+                                connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedDateTimes[0] });
+                            break;
                         }
-                        // Compared canonically (#2153): the stored value is the database's microsecond, read as Kind
-                        // Local, and the import is canonical, so a value and its re-imported self are equal.
-                        else if (!DateTimeAttributeValue.AreEqual(existingCsoDateTimeAttributeValue.DateTimeValue, importedObjectAttribute.DateTimeValue))
-                        {
-                            // update existing value by removing and adding
-                            connectedSystemObject.PendingAttributeValueRemovals.Add(existingCsoDateTimeAttributeValue);
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
-                        }
+
+                        var csoDateTimeAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.DateTimeValue != null)
+                            .ToList();
+                        var importDateTimeKeys = new HashSet<long>(importedObjectAttribute.DateTimeValues.Count);
+                        foreach (var importedDateTime in importedObjectAttribute.DateTimeValues)
+                            importDateTimeKeys.Add(DateTimeAttributeValue.Key(importedDateTime));
+
+                        // find values on the cso of type date that aren't on the imported object and remove them first
+                        var missingDateTimeAttributeValues = csoDateTimeAttrValues.Where(av => !importDateTimeKeys.Contains(DateTimeAttributeValue.Key(av.DateTimeValue!.Value))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingDateTimeAttributeValues);
+
+                        // find imported dates that aren't on the cso and add them
+                        var csoDateTimeKeys = csoDateTimeAttrValues.Select(av => DateTimeAttributeValue.Key(av.DateTimeValue!.Value)).ToHashSet();
+                        var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(dv => csoDateTimeKeys.Add(DateTimeAttributeValue.Key(dv))).ToList();
+                        foreach (var newDateTimeValue in newDateTimeValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
                         break;
+                    }
 
                     case AttributeDataType.Binary:
                         // find values on the cso of type byte array that aren't on the imported object and remove them first
@@ -4063,23 +4143,38 @@ public class SyncImportTaskProcessor
                     }
 
                     case AttributeDataType.Boolean:
-                        // there will be only a single value for a bool. is it the same or different?
-                        // if different, remove the old value, add the new one
-                        // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
+                    {
+                        // The same set shape as the other types (#2153), over the rows that hold a true or false value,
+                        // and no SingleOrDefault: an object holding both from before the Boolean rule converges on what
+                        // the import carries, which the normaliser has seen is one value.
                         // todo (#872): consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.Boolean));
-                        if (csoBooleanAttributeValue == null)
+                        // One pass, allocating nothing beyond what it stages.
+                        var importHasTrue = importedObjectAttribute.BoolValues.Contains(true);
+                        var importHasFalse = importedObjectAttribute.BoolValues.Contains(false);
+                        var csoHasTrue = false;
+                        var csoHasFalse = false;
+                        var heldValues = connectedSystemObject.AttributeValues;
+                        for (var v = 0; v < heldValues.Count; v++)
                         {
-                            // set initial value
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                            var heldValue = heldValues[v];
+                            if ((heldValue.AttributeId != 0 ? heldValue.AttributeId : heldValue.Attribute?.Id) != csoAttribute.Id || heldValue.BoolValue is not { } heldBool)
+                                continue;
+
+                            if (heldBool)
+                                csoHasTrue = true;
+                            else
+                                csoHasFalse = true;
+
+                            if (heldBool ? !importHasTrue : !importHasFalse)
+                                connectedSystemObject.PendingAttributeValueRemovals.Add(heldValue);
                         }
-                        else if (csoBooleanAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
-                        {
-                            // update existing value by removing and adding
-                            connectedSystemObject.PendingAttributeValueRemovals.Add(csoBooleanAttributeValue);
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
-                        }
+
+                        if (importHasTrue && !csoHasTrue)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = true });
+                        if (importHasFalse && !csoHasFalse)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = false });
                         break;
+                    }
 
                     case AttributeDataType.NotSet:
                     default:
@@ -4120,10 +4215,12 @@ public class SyncImportTaskProcessor
         if (importedAttributeTypes.Count == 0)
             return;
 
+        // A row that holds nothing at all goes too (#2153): the import says what the attribute holds, and a row with no
+        // value is no part of it. Such a row is stored only by a fault, and left in place it would be staged onwards.
         connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av =>
             (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) is { } attributeId &&
             importedAttributeTypes.TryGetValue(attributeId, out var type) &&
-            av.IsHeldUnderAnotherDataType(type)));
+            (av.IsHeldUnderAnotherDataType(type) || av.HeldDataType() == null)));
     }
 
     /// <summary>

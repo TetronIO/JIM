@@ -426,6 +426,52 @@ public class FileConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_WithMultiValuedDateAttribute_ParsesEachDelimitedValueAsUtcUnderANonInvariantCultureAsync()
+    {
+        // #2153 S5: dates split on the multi-value delimiter like every other type; a zoneless value is UTC and an
+        // offset is honoured, whatever the configured culture.
+        var filePath = Path.Join(_testFilesPath, "multivalued_dates_booleans.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDatesAndBooleans(filePath, "User", culture: "de-DE");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.AttributeValueErrors, Is.Null);
+            Assert.That(first.Attributes.Single(a => a.Name == "Logins").DateTimeValues, Is.EqualTo(new[]
+            {
+                new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 9, 30, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 3, 8, 0, 0, DateTimeKind.Utc)
+            }));
+            Assert.That(first.Attributes.Single(a => a.Name == "Logins").DateTimeValues.All(d => d.Kind == DateTimeKind.Utc), Is.True);
+            Assert.That(first.Attributes.Single(a => a.Name == "Flags").BoolValues, Is.EqualTo(new[] { true, false }),
+                "Both are handed to JIM, which reports a true or false attribute holding both.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_WithMultiValuedDateAttributeHoldingUnreadableValues_ReportsEachAndLeavesTheAttributeOutAsync()
+    {
+        var filePath = Path.Join(_testFilesPath, "multivalued_dates_booleans.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDatesAndBooleans(filePath, "User", culture: null);
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var second = result.ImportObjects[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Logins", "not-a-date"), ("Logins", "31/02/2026") }));
+            Assert.That(second.Attributes.Select(a => a.Name), Does.Not.Contain("Logins"));
+            Assert.That(second.Attributes.Single(a => a.Name == "Flags").BoolValues, Is.EqualTo(new[] { true }));
+        }
+    }
+
+    [Test]
     public async Task ImportAsync_WithStopOnFirstError_StopsAfterFirstErrorAsync()
     {
         // Arrange - file has 3 rows, each with an error in a different column
@@ -647,14 +693,14 @@ public class FileConnectorImportTests
         Assert.That(row2.ErrorType, Is.Null, "Row with empty DateTime should not cause error");
         var dateAttr2 = row2.Attributes.SingleOrDefault(a => a.Name == "StartDate");
         Assert.That(dateAttr2, Is.Not.Null);
-        Assert.That(dateAttr2!.DateTimeValue, Is.Null, "Empty DateTime should result in null DateTimeValue");
+        Assert.That(dateAttr2!.DateTimeValues, Is.Empty, "Empty DateTime should result in null DateTimeValue");
 
         // Row 3: Empty IsActive (Boolean) - should have no BoolValue
         var row3 = result.ImportObjects[2];
         Assert.That(row3.ErrorType, Is.Null, "Row with empty Boolean should not cause error");
         var boolAttr3 = row3.Attributes.SingleOrDefault(a => a.Name == "IsActive");
         Assert.That(boolAttr3, Is.Not.Null);
-        Assert.That(boolAttr3!.BoolValue, Is.Null, "Empty Boolean should result in null BoolValue");
+        Assert.That(boolAttr3!.BoolValues, Is.Empty, "Empty Boolean should result in null BoolValue");
 
         // Row 4: All empty (except Name) - should have no errors
         var row4 = result.ImportObjects[3];
@@ -1158,6 +1204,33 @@ public class FileConnectorImportTests
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
             SettingValues = CreateSettingValues(filePath, objectTypeName)
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithMultiValuedDatesAndBooleans(string filePath, string objectTypeName, string? culture)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "Logins", Type = AttributeDataType.DateTime, Selected = true, AttributePlurality = AttributePlurality.MultiValued },
+                new() { Id = 4, Name = "Flags", Type = AttributeDataType.Boolean, Selected = true, AttributePlurality = AttributePlurality.MultiValued }
+            }
+        };
+
+        var settingValues = CreateSettingValues(filePath, objectTypeName);
+        settingValues.Single(v => v.Setting.Name == "Culture").StringValue = culture;
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = settingValues
         };
     }
 

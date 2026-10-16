@@ -194,7 +194,7 @@ else
         if (!string.IsNullOrEmpty(value.StringValue))
             return value.StringValue;
         if (value.DateTimeValue.HasValue)
-            return value.DateTimeValue.Value.ToFriendlyDate();
+            return value.DateTimeValue.Value.ToFriendlyAttributeDate();
         if (value.IntValue.HasValue)
             return value.IntValue.Value.ToString();
         if (value.LongValue.HasValue)

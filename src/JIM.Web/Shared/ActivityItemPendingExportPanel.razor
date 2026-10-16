@@ -214,23 +214,6 @@
         };
     }
 
-    private static string GetAttributeValue(PendingExportAttributeValueChange change)
-    {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
-
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToLocalTime().ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
-    }
+    private static string GetAttributeValue(PendingExportAttributeValueChange change) =>
+        JIM.Web.Models.PendingExportValueDisplay.Text(change, localTime: true) ?? "[null]";
 }

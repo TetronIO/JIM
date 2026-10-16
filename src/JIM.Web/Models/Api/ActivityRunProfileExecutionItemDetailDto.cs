@@ -66,13 +66,15 @@ public class ActivityRunProfileExecutionItemDetailDto
     public int? UnresolvedReferenceCount { get; set; }
 
     /// <summary>
-    /// Every value the import found on the object but could not read as its attribute's type (#2066), in the order the
-    /// Connector reported them; JIM left each attribute as it already held it. Empty when there were none.
+    /// Every value the import found on the object but could not import, in the order they were reported: values the
+    /// Connector could not read as their attribute's type, and values JIM could not hold as read. JIM left each
+    /// attribute as it already held it. Each value's Source says who found it: Connector when the Connector could not
+    /// read it, Jim when JIM could not hold it as read (the portal's Found By). Empty when there were none.
     /// </summary>
     public List<AttributeValueErrorDto> AttributeValueErrors { get; set; } = [];
 
     /// <summary>
-    /// How many values could not be read, which can exceed <see cref="AttributeValueErrors"/> where the item keeps only
+    /// How many values could not be imported, which can exceed <see cref="AttributeValueErrors"/> where the item keeps only
     /// the first thousand; null when there were none.
     /// </summary>
     public int? AttributeValueErrorTotal { get; set; }

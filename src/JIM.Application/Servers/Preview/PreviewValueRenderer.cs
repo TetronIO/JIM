@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Transactional;
 using System.Globalization;
+using JIM.Utilities;
 
 namespace JIM.Application.Servers.Preview;
 
@@ -31,7 +32,7 @@ internal static class PreviewValueRenderer
         if (value.DecimalValue.HasValue)
             return value.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
         if (value.DateTimeValue.HasValue)
-            return value.DateTimeValue.Value.ToString("O");
+            return DateTimeAttributeValue.ToDisplayString(value.DateTimeValue.Value);
         if (value.BoolValue.HasValue)
             return value.BoolValue.Value.ToString();
         if (value.GuidValue.HasValue)
@@ -59,7 +60,7 @@ internal static class PreviewValueRenderer
         if (change.DecimalValue.HasValue)
             return change.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
         if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToString("O", CultureInfo.InvariantCulture);
+            return DateTimeAttributeValue.ToDisplayString(change.DateTimeValue.Value);
         if (change.BoolValue.HasValue)
             return change.BoolValue.Value.ToString();
         if (change.GuidValue.HasValue)
