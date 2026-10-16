@@ -33,6 +33,13 @@ public class MetaverseServerCustomAttributeTests
     public void SetUp()
     {
         _repo = new Mock<IRepository>();
+        // Nothing reads any attribute unless a test says otherwise (#2265).
+        var attributeReaderConnectedSystems = new Mock<IConnectedSystemRepository>();
+        attributeReaderConnectedSystems.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ConnectedSystems).Returns(attributeReaderConnectedSystems.Object);
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+        _repo.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _metaverseRepo = new Mock<IMetaverseRepository>();
         _activityRepo = new Mock<IActivityRepository>();
         _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);

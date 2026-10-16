@@ -40,6 +40,18 @@ public class ConnectedSystemActivityTests
         _mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+
+        _mockCsRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _mockCsRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _mockRepository.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
 
         // Capture the activity when CreateActivityAsync is called

@@ -7,6 +7,7 @@ using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
+using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Servers.Scoping;
 using JIM.Application.Interfaces;
@@ -2620,9 +2621,13 @@ public class SynchronisationController(
     /// missing input.</response>
     /// <response code="400">Schema import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected System not found.</response>
+    /// <response code="409">With <c>removeDependents</c>, refused before anything changed because a Scoping Criterion
+    /// or an Expression reads an attribute the Connected System no longer reports; the message names each one.
+    /// Change them first, or apply with <c>disableDependents</c>, which keeps the attributes.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-schema", Name = "ImportConnectedSystemSchema")]
     [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -2696,6 +2701,11 @@ public class SynchronisationController(
             var dto = ConnectedSystemDetailDto.FromEntity(updated!);
             dto.DependentDerivedFlows = dependents?.DependentDerivedFlows ?? [];
             return Ok(dto);
+        }
+        catch (AttributeReadByConfigurationException ex)
+        {
+            // Apply and Remove refused before anything persisted (#2265): configuration reads a removed attribute.
+            return Conflict(ApiErrorResponse.Conflict(ex.Message));
         }
         catch (Exception ex)
         {

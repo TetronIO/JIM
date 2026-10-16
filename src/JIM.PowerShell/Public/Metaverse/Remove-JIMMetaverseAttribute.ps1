@@ -12,9 +12,12 @@ function Remove-JIMMetaverseAttribute {
 
         - If any Metaverse Object holds a stored value for the attribute, deletion is a hard block;
           the cmdlet refuses and reports the affected object count. Clear the values first.
-        - If the attribute is referenced by configuration (bindings, Attribute Flows, scoping
-          criteria, Object Matching Rules) but holds no stored values, those references are
-          cascade-removed. This is guarded server-side by a type-the-name confirmation, which the
+        - If configuration reads the attribute (a Scoping Criterion comparing it or reading it in an
+          Expression, or an Expression in an Attribute Flow, Object Matching Rule or Example Data
+          Template), the cmdlet refuses and names each one. Change or remove them first; JIM never
+          removes them for you.
+        - If the attribute is otherwise referenced by configuration (bindings, Attribute Flows,
+          Object Matching Rules) but holds no stored values, those references are cascade-removed. This is guarded server-side by a type-the-name confirmation, which the
           cmdlet satisfies automatically once you confirm (or pass -Force); the cascade is recorded
           as child Activities of the deletion.
         - If the attribute is unreferenced, it is simply removed.
@@ -100,6 +103,12 @@ function Remove-JIMMetaverseAttribute {
 
         if ($impact.blockedByValues) {
             Write-Error "Cannot delete '$($impact.attributeName)': $($impact.totalObjectsWithValues) Metaverse Object(s) hold a stored value for it. Clear the values first, then retry."
+            return
+        }
+
+        if ($impact.blockedByReaders) {
+            $readers = (@($impact.readers) | ForEach-Object { $_.description }) -join '; '
+            Write-Error "Cannot delete '$($impact.attributeName)': configuration reads it. Change or remove each one first, then retry: $readers."
             return
         }
 

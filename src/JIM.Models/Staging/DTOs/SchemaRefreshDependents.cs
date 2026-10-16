@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Core.DTOs;
 
 namespace JIM.Models.Staging.DTOs;
 
@@ -42,9 +43,24 @@ public class SchemaRefreshDependents
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
+    /// Configuration on surviving Synchronisation Rules that reads an attribute the refresh removes: Scoping
+    /// Criteria comparing it or reading it in an Expression, and Attribute Flow and Object Matching Rule
+    /// Expressions reading it by name. Any reader refuses Apply and Remove, because deleting the attribute would
+    /// leave the reader evaluating against nothing (a Scoping Criterion that does takes objects out of scope).
+    /// Apply and Apply and Disable keep the attribute's row, so they stay available.
+    /// </summary>
+    public List<AttributeReader> RemovedAttributeReaders { get; set; } = new();
+
+    /// <summary>
+    /// Whether Apply and Remove is refused because configuration reads a removed attribute
+    /// (see <see cref="RemovedAttributeReaders"/>).
+    /// </summary>
+    public bool RemovalRefused => RemovedAttributeReaders.Count > 0;
+
+    /// <summary>
     /// Whether the refresh invalidates anything at all.
     /// </summary>
-    public bool HasAny => InvalidatedSyncRules.Count > 0 || InvalidatedMappings.Count > 0 || ReferencedObjectMatchingRules.Count > 0;
+    public bool HasAny => InvalidatedSyncRules.Count > 0 || InvalidatedMappings.Count > 0 || ReferencedObjectMatchingRules.Count > 0 || RemovedAttributeReaders.Count > 0;
 }
 
 /// <summary>

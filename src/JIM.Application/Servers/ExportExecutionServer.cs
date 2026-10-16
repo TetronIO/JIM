@@ -2382,56 +2382,96 @@ public class ExportExecutionServer
                 "each is counted as a failed attempt", connectedSystemName, notAttemptedWithoutCancellation);
         }
 
+        // A Create whose rule asks for an Initial Password stays Executing until that password is queued (#2270). A
+        // password change waiting on the account waits only while its Create is in flight (#2160); written now, the Create
+        // would let one be delivered and removed before staging below looks for it, and the Initial Password queued in its
+        // place would overwrite the person's own password.
+        var heldUntilStaged = initialPasswordRuleIds is { Count: > 0 }
+            ? provisionedAccounts.Where(pe => initialPasswordRuleIds.Contains(pe.ProvisioningSyncRuleId!.Value)).ToHashSet()
+            : [];
+        var writtenNow = heldUntilStaged.Count > 0
+            ? exportsToUpdate.Where(pe => !heldUntilStaged.Contains(pe)).ToList()
+            : exportsToUpdate;
+
         // Batch update all Pending Exports
-        if (exportsToUpdate.Count > 0)
+        await WritePendingExportsAsync(writtenNow, repository);
+
+        try
         {
-            using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
-                .SetTag("count", exportsToUpdate.Count))
+            // An "Allow the rename" answers one rejection; an export that has now succeeded for that account makes it moot.
+            await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, repository);
+
+            // Remove CSOs (and their now-superfluous Pending Exports) whose Delete just
+            // confirmed provisioning that was never otherwise confirmed.
+            if (unconfirmedProvisioningCsoDeletes.Count > 0)
             {
-                await repository.UpdatePendingExportsAsync(exportsToUpdate);
+                await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
+            }
+
+            // Batch update CSOs that need external ID or status changes
+            if (csosToUpdate.Count > 0)
+            {
+                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
+            }
+
+            // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync, because the delivery pass finds the
+            // account in the Connected System by the external ID that call has just assigned; staging first would
+            // record work against an account JIM could not yet address.
+            if (provisionedAccounts.Count > 0)
+            {
+                await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, accountsWithEnabledStateWritten,
+                    result, repository, initialPasswordTimeToLive, connectedSystemName);
+            }
+
+            // Only now, with their Initial Passwords queued, do the held Creates stop counting as in flight (#2270).
+            await WritePendingExportsAsync(heldUntilStaged.ToList(), repository);
+            heldUntilStaged.Clear();
+
+            // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
+            // so its external-Id additions are already reflected in each CSO's in-memory AttributeValues
+            // (D9's dedupe guarantee depends on this ordering; see D11).
+            if (successfulNonDeleteExports.Count > 0)
+            {
+                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+            }
+
+            // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
+            // derived flow reading them, once for the whole batch, so dependants (an email, a User Principal Name) re-derive
+            // at their next synchronisation (#1750 Phase 4).
+            if (derivedInputMarks != null)
+            {
+                await derivedInputMarks.FlushAsync(repository);
+                derivedInputMarks.LogSummary();
             }
         }
-
-        // An "Allow the rename" answers one rejection; an export that has now succeeded for that account makes it moot.
-        await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, repository);
-
-        // Remove CSOs (and their now-superfluous Pending Exports) whose Delete just
-        // confirmed provisioning that was never otherwise confirmed.
-        if (unconfirmedProvisioningCsoDeletes.Count > 0)
+        catch (Exception) when (heldUntilStaged.Count > 0)
         {
-            await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
+            // Their success is recorded, so whatever failed after it they must still leave Executing: one left there would
+            // be put back and sent again, creating the account twice (#2083). Written here rather than in a finally so a
+            // failure of this write is logged without hiding the one that brought the batch down.
+            try
+            {
+                await WritePendingExportsAsync(heldUntilStaged.ToList(), repository);
+            }
+            catch (Exception writeException) when (writeException is not OperationCanceledException)
+            {
+                Log.Error(writeException, "ProcessBatchSuccessAsync: Could not record {Count} successful Create(s) to {ConnectedSystemName} after the batch failed; " +
+                    "the batch's failure is recorded against them instead, as when any batch's results cannot be written", heldUntilStaged.Count, connectedSystemName);
+            }
+
+            throw;
         }
+    }
 
-        // Batch update CSOs that need external ID or status changes
-        if (csosToUpdate.Count > 0)
-        {
-            await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
-        }
+    private static async Task WritePendingExportsAsync(List<PendingExport> exports, ISyncRepository repository)
+    {
+        if (exports.Count == 0)
+            return;
 
-        // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync, because the delivery pass finds the
-        // account in the Connected System by the external ID that call has just assigned; staging first would
-        // record work against an account JIM could not yet address.
-        if (provisionedAccounts.Count > 0)
+        using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
+            .SetTag("count", exports.Count))
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, accountsWithEnabledStateWritten,
-                result, repository, initialPasswordTimeToLive, connectedSystemName);
-        }
-
-        // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
-        // so its external-Id additions are already reflected in each CSO's in-memory AttributeValues
-        // (D9's dedupe guarantee depends on this ordering; see D11).
-        if (successfulNonDeleteExports.Count > 0)
-        {
-            await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
-        }
-
-        // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
-        // derived flow reading them, once for the whole batch, so dependants (an email, a User Principal Name) re-derive
-        // at their next synchronisation (#1750 Phase 4).
-        if (derivedInputMarks != null)
-        {
-            await derivedInputMarks.FlushAsync(repository);
-            derivedInputMarks.LogSummary();
+            await repository.UpdatePendingExportsAsync(exports);
         }
     }
 

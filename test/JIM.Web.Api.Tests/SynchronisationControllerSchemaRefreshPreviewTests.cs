@@ -60,6 +60,18 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+
+        // Nothing reads any attribute, and every attribute is stored unselected, unless a test says otherwise (#2265).
+
+        _connectedSystemRepo.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _connectedSystemRepo.Setup(r => r.GetAttributeSelectionStatesAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+
+        var attributeReaderExampleData = new Mock<IExampleDataRepository>();
+
+        attributeReaderExampleData.Setup(r => r.GetAttributeReaderCandidatesAsync()).ReturnsAsync(() => []);
+
+        _repository.Setup(r => r.ExampleData).Returns(attributeReaderExampleData.Object);
         _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.

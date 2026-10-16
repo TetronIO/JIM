@@ -52,6 +52,13 @@ public class AttributeUnassignImpact
     public List<AttributeReference> References { get; set; } = [];
 
     /// <summary>
+    /// The configuration evaluating against the target Object Type that reads the attribute: Scoping Criteria
+    /// comparing it or reading it in an Expression, and Expressions in Attribute Flows, Object Matching Rules and
+    /// Example Data Templates. Any reader refuses the unassignment; change or remove each one first.
+    /// </summary>
+    public List<AttributeReader> Readers { get; set; } = [];
+
+    /// <summary>
     /// Set true by the execute method when the binding (and its type-scoped references) were actually removed.
     /// </summary>
     public bool Unassigned { get; set; }
@@ -62,8 +69,14 @@ public class AttributeUnassignImpact
     public bool BlockedByValues => ObjectsWithValues > 0;
 
     /// <summary>
+    /// True when configuration evaluating against the target Object Type reads the attribute (see
+    /// <see cref="Readers"/>): the unassignment is refused.
+    /// </summary>
+    public bool BlockedByReaders => Readers.Count > 0;
+
+    /// <summary>
     /// True when the unassignment may proceed but would remove references beyond the plain binding, so a type-the-name
     /// confirmation is required.
     /// </summary>
-    public bool RequiresConfirmation => WasBound && !BuiltIn && !BlockedByValues && References.Any(r => r.Kind != AttributeReferenceKind.Binding);
+    public bool RequiresConfirmation => WasBound && !BuiltIn && !BlockedByValues && !BlockedByReaders && References.Any(r => r.Kind != AttributeReferenceKind.Binding);
 }

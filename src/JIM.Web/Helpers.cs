@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
@@ -100,6 +101,16 @@ public static class Helpers
         var valued = plurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued";
         return $"{side}: {type.ToString().SplitOnCapitalLetters()}, {valued}";
     }
+
+    /// <summary>
+    /// The page that holds a piece of configuration reading an attribute: its Synchronisation Rule, or its Example
+    /// Data Template. Null for an Object Matching Rule defined on a Connected System Object Type, which has no page
+    /// of its own.
+    /// </summary>
+    public static string? AttributeReaderHref(AttributeReader reader) =>
+        reader.SyncRuleId is { } syncRuleId ? $"/admin/sync-rules/{syncRuleId}"
+        : reader.ExampleDataTemplateId is { } templateId ? $"/admin/example-data/templates/{templateId}"
+        : null;
 
     /// <summary>
     /// Converts a string to a format that can be used as a Url parameter.
