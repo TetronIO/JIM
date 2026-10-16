@@ -39,6 +39,16 @@ function Get-JIMConnectedSystemObjectType {
         Lists the attributes JIM may only set when it creates the object.
 
     .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+            Where-Object { $_.name -eq 'inetOrgPerson' } |
+            ForEach-Object { $_.attributes } |
+            Where-Object { $_.isOperational } |
+            Select-Object id, name, type, selected
+
+        Lists the operational attributes an LDAP directory offers on inetOrgPerson, such as createTimestamp and
+        pwdFailureTime. They are discovered unselected; select one with Set-JIMConnectedSystemAttribute -Selected $true.
+
+    .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal
 
         Gets every object type for Connected System 1, including the directory's own

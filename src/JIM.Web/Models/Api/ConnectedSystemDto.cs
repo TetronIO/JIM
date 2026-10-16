@@ -632,6 +632,14 @@ public class ConnectedSystemAttributeDto
     public string Writability { get; set; } = null!;
 
     /// <summary>
+    /// Whether the attribute is one the Connected System maintains for its own operation, such as an LDAP
+    /// directory's <c>createTimestamp</c> or <c>pwdFailureTime</c>. Always read-only, and never selected until an
+    /// administrator chooses it.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public bool IsOperational { get; set; }
+
+    /// <summary>
     /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
     /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
     /// resolution resolves the reference within that Object Type alone; null means the schema does not say
@@ -666,6 +674,7 @@ public class ConnectedSystemAttributeDto
             Required = entity.Required,
             SelectionLocked = entity.SelectionLocked,
             Writability = entity.Writability.ToString(),
+            IsOperational = entity.IsOperational,
             ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
             ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };
