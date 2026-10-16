@@ -30,7 +30,8 @@ namespace JIM.Models.Transactional.DTOs;
 /// in the Connected System part-way through that batch, and the export stages the account's Initial Password only once
 /// the batch has come back; a password change delivered and removed in between would let that Initial Password be
 /// queued over the person's own password. A change owing no first password therefore waits for the Create, and is
-/// then given the account's first password by staging instead.
+/// then given the account's first password by staging instead. The Create stays in flight until that staging is done
+/// (#2270), so its Initial Password is itself queued while the Create is in flight, and waits for it only briefly.
 /// </param>
 public sealed record AccountEnablementFacts(bool HoldsWithheldEnable, bool EnabledStateSetByAttributeFlow, bool ExportInFlight,
     Guid? StrandedExportId, bool CreateInFlight = false);

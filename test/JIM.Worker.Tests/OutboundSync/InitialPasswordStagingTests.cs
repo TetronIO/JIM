@@ -909,6 +909,53 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
+    /// A password change waiting on the account waits only while its Create is in flight (#2160), and is delivered and
+    /// removed the moment it is not. The Create therefore stays in flight until its Initial Password is queued (#2270):
+    /// were its Pending Export written first, a change delivered in between would be gone by the time staging looks for
+    /// it, and the Initial Password queued in its place would overwrite the person's own password.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_QueuesTheInitialPasswordBeforeTheCreateLeavesExecutingAsync()
+    {
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var queuedWhenTheStatusWasWritten = new List<bool>();
+        SyncRepo.OnPendingExportsUpdated = ids =>
+        {
+            if (ids.Contains(export.Id))
+                queuedWhenTheStatusWasWritten.Add(SyncRepo.PendingPasswordChanges.Values.Any(c => c.ConnectedSystemObjectId == cso.Id));
+        };
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+            Assert.That(queuedWhenTheStatusWasWritten, Has.Count.EqualTo(1), "the Create's status is written exactly once");
+            Assert.That(queuedWhenTheStatusWasWritten, Has.All.True,
+                "the Initial Password must be queued before the Create stops counting as in flight");
+        }
+    }
+
+    /// <summary>
+    /// Holding the Create back must not let it stay Executing when the batch fails afterwards: its success has been
+    /// recorded, and a failure that left it Executing would have it put back and sent again, creating the account twice
+    /// (#2083, #2270).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_BatchFailingAfterTheCreateSucceeded_StillWritesTheCreatesStatusAsync()
+    {
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        SyncRepo.FailConnectedSystemObjectUpdateWith = new InvalidOperationException("The database rejected the external id.");
+        var statusWritten = false;
+        SyncRepo.OnPendingExportsUpdated = ids => statusWritten |= ids.Contains(export.Id);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded("CN=Test User"));
+
+        Assert.That(statusWritten, Is.True, "a Create whose success was recorded must leave Executing whatever fails after it");
+    }
+
+    /// <summary>
     /// A Delete performed as a disable, against an account whose provisioning no import has confirmed yet, removes the
     /// Connected System Object rather than leaving its export awaiting confirmation. Its owed first password is marked
     /// all the same, before the object goes: a delivery in between would otherwise enable the account it disabled.

@@ -1365,7 +1365,7 @@ try {
         Write-Host "Setting user status to Archived in CSV (triggers AD account disable)..." -ForegroundColor Gray
 
         # Update the status field to "Archived" - this will set the ACCOUNTDISABLE bit via DisableUser()
-        # The expression is: IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))
+        # The expression is: IIF(Eq(mv["Status"], "Archived"), DisableUser(512), EnableUser(512))
         $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         $csv = Import-Csv $csvPath
