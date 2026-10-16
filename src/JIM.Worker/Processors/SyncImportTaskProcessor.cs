@@ -174,6 +174,13 @@ public class SyncImportTaskProcessor
     private bool _objectTypeChangesReconciled;
 
     /// <summary>
+    /// #2074: what each object's copy on an earlier page of this Delta Import did, by duplicate detection key, so a later
+    /// page's copy of the same object can take its place (<see cref="SupersedeEarlierPageCopy"/>). Only copies that left
+    /// a change behind are held: one that was rejected, or a delete of nothing, has nothing to undo.
+    /// </summary>
+    private readonly Dictionary<string, EarlierPageCopy> _earlierPageCopies = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
     /// Loaded once at import start from service settings.
     /// </summary>
@@ -2435,6 +2442,11 @@ public class SyncImportTaskProcessor
         // update has been applied by then.
         var (repeatedOnThisPage, returnedOnAnEarlierPage) = FindDuplicateExternalIds(connectedSystemImportResult.ImportObjects, crossPageSeenExternalIds);
 
+        // A Delta Import reads changes in order, so a later page's copy of an object is a later change to it, such as a
+        // re-insert after a delete, and takes the earlier copy's place (#2074). A Full Import reads every object once, so
+        // there a repeat across pages is a paging fault, and the later copy is rejected.
+        var laterPagesSupersede = crossPageSeenExternalIds != null && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport;
+
         // Set up progress tracking for this batch of imported objects.
         // At ~50ms per object (cache-miss), 100 objects = ~5 seconds between UI updates.
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
@@ -2459,6 +2471,11 @@ public class SyncImportTaskProcessor
             var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
             activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
+
+            // #2074: the object's duplicate detection key, and the object JIM holds whose earlier-page change this copy
+            // takes the place of.
+            string? duplicateKey = null;
+            ConnectedSystemObject? supersededHeldCso = null;
 
             try
             {
@@ -2573,7 +2590,7 @@ public class SyncImportTaskProcessor
                     if (!string.IsNullOrEmpty(externalIdValue))
                     {
                         // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
-                        var duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
+                        duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdAttribute, externalIdValue);
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
@@ -2582,10 +2599,15 @@ public class SyncImportTaskProcessor
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
 
-                        // An earlier page returned this object already, so this copy is rejected. Directory servers that do
-                        // not page properly (e.g. Samba AD) can repeat an object across pages. A change-log Delta Import can
-                        // also return a later change to it, such as a re-insert after a delete; this rejects that too (#2074).
-                        if (returnedOnAnEarlierPage.Contains(duplicateKey))
+                        // An earlier page of a Delta Import returned this object: this copy is a later change to it and takes
+                        // the earlier copy's place (#2074), unless this page repeats it too, which rejects every copy below.
+                        if (laterPagesSupersede && returnedOnAnEarlierPage.Contains(duplicateKey) && !repeatedOnThisPage.Contains(duplicateKey))
+                        {
+                            supersededHeldCso = SupersedeEarlierPageCopy(duplicateKey, externalIdValue, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                        }
+                        // An earlier page of a Full Import returned this object already, so this copy is rejected. Directory
+                        // servers that do not page properly (e.g. Samba AD) can repeat an object across pages.
+                        else if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
@@ -2631,7 +2653,10 @@ public class SyncImportTaskProcessor
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
                 {
-                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
+                    // The object an earlier page changed is used as that page left it, put back: a page's hydration reads
+                    // what was saved before the run, which knows nothing of the earlier page (#2074).
+                    connectedSystemObject = supersededHeldCso
+                        ?? await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
@@ -2671,6 +2696,9 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         // Snapshot CSO display fields so they're preserved even after CSO is deleted
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
+                        if (laterPagesSupersede && duplicateKey != null)
+                            _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, connectedSystemObject, connectedSystemObject.Status,
+                                CreatedCso: null, CountedAs: EarlierPageCopyCount.Deletion);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
@@ -2749,6 +2777,9 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                        if (laterPagesSupersede && duplicateKey != null)
+                            _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, HeldCso: null, HeldStatusBefore: default,
+                                connectedSystemObject, EarlierPageCopyCount.Creation);
 
                         if (heldElsewhere != null)
                             _objectTypeChangesCarriedOut.Add(new CarriedOutObjectTypeChange(activityRunProfileExecutionItem, connectedSystemObject, csObjectType, heldElsewhere));
@@ -2805,6 +2836,7 @@ public class SyncImportTaskProcessor
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
                     // in the Connected System. This is essential for proper reconciliation and subsequent lookups.
                     var statusTransitioned = false;
+                    var statusBeforeImport = connectedSystemObject.Status;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
                         Log.Debug("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in Connected System.",
@@ -2914,6 +2946,10 @@ public class SyncImportTaskProcessor
                         Log.Warning("ProcessImportObjectsAsync: CSO {CsoId} was already matched by a previous import object. Skipping duplicate addition to update list.",
                             connectedSystemObject.Id);
                     }
+
+                    if (laterPagesSupersede && duplicateKey != null)
+                        _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, connectedSystemObject, statusBeforeImport, CreatedCso: null,
+                            hasAttributeChanges || statusTransitioned ? EarlierPageCopyCount.Update : EarlierPageCopyCount.Unchanged);
 
                     // Only create RPEI if there are actual changes (attributes or status transition)
                     if (hasAttributeChanges || statusTransitioned)
@@ -3167,6 +3203,76 @@ public class SyncImportTaskProcessor
         var externalIdValue = GetExternalIdLookupValue(connectedSystemImportObject, externalIdAttribute);
         var cacheKey = CsoLookupKey.For(_connectedSystem.Id, externalIdAttribute.Id, externalIdValue);
         return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
+    }
+
+    /// <summary>
+    /// #2074: what an object's copy on an earlier page of a Delta Import did, kept until a later page's copy takes its
+    /// place. <paramref name="HeldCso"/> is the object JIM holds that it changed, with its status before the change;
+    /// <paramref name="CreatedCso"/> is the object it is to create, which a later page cannot otherwise find, because
+    /// objects created during an import are saved only after the last page.
+    /// </summary>
+    private sealed record EarlierPageCopy(
+        ActivityRunProfileExecutionItem ExecutionItem,
+        ConnectedSystemObject? HeldCso,
+        ConnectedSystemObjectStatus HeldStatusBefore,
+        ConnectedSystemObject? CreatedCso,
+        EarlierPageCopyCount CountedAs);
+
+    /// <summary>#2074: which of the run's figures an earlier page's copy was counted in.</summary>
+    private enum EarlierPageCopyCount { Creation, Update, Unchanged, Deletion }
+
+    /// <summary>
+    /// #2074: undoes what an object's copy on an earlier page of this Delta Import did, so the later copy now being
+    /// processed takes its place as though the earlier one had never been read. A change log returns an object's changes
+    /// in order, so the later copy is the object as it now stands: a re-insert after a delete, a further update, or a
+    /// delete after an insert. The earlier copy's item is withdrawn and it is counted as unchanged; the object JIM holds
+    /// is put back as it was, and returned so the later copy is applied to it; an object the earlier copy was to create
+    /// is not created.
+    /// </summary>
+    /// <returns>The object JIM holds that the later copy applies to, or null when the earlier copy changed nothing JIM
+    /// holds and the later copy is matched in the ordinary way.</returns>
+    private ConnectedSystemObject? SupersedeEarlierPageCopy(string duplicateKey, string externalId,
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        // Rejected, or a delete of something JIM does not hold: there is nothing to undo.
+        if (!_earlierPageCopies.Remove(duplicateKey, out var earlier))
+            return null;
+
+        _activityRunProfileExecutionItems.Remove(earlier.ExecutionItem);
+        switch (earlier.CountedAs)
+        {
+            case EarlierPageCopyCount.Update:
+                _updatedObjectCount--;
+                _unchangedObjectCount++;
+                break;
+            case EarlierPageCopyCount.Deletion:
+                _connectorReportedDeletionCount--;
+                _unchangedObjectCount++;
+                break;
+            case EarlierPageCopyCount.Creation:
+                // The created figure is the number of objects left to create, which the removal below lowers.
+                _unchangedObjectCount++;
+                break;
+        }
+
+        if (earlier.CreatedCso != null)
+        {
+            connectedSystemObjectsToBeCreated.Remove(earlier.CreatedCso);
+            _objectTypeChangesCarriedOut.RemoveAll(change => ReferenceEquals(change.Replacement, earlier.CreatedCso));
+            Log.Information("ProcessImportObjectsAsync: External ID '{ExternalId}' was returned by an earlier page of this Delta Import as a new object, and again by a later one. " +
+                "The later change takes its place; the object is not created from the earlier one.", LogSanitiser.Sanitise(externalId));
+            return null;
+        }
+
+        var held = earlier.HeldCso!;
+        held.Status = earlier.HeldStatusBefore;
+        held.PendingAttributeValueAdditions.Clear();
+        held.PendingAttributeValueRemovals.Clear();
+        connectedSystemObjectsToBeUpdated.Remove(held);
+        _csoIdsQueuedForUpdate.Remove(held.Id);
+        Log.Information("ProcessImportObjectsAsync: CSO {CsoId} was changed by an earlier page of this Delta Import ({EarlierChange}), and is changed again by a later one. " +
+            "The later change takes its place.", held.Id, earlier.CountedAs);
+        return held;
     }
 
     /// <summary>

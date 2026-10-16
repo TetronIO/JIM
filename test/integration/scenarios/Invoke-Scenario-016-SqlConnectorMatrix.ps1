@@ -140,6 +140,12 @@ $matrixRows = @(
         providers = @('SqlServer', 'Oracle')
     }
     @{
+        name = 'Delta.ChangeLogReinsert'
+        description = 'A row deleted and re-inserted with more than a page of changes between them is Normal afterwards, not left deleted (#2074)'
+        tiers = @('Quick', 'Default', 'FullMatrix')
+        providers = @('SqlServer', 'Oracle')
+    }
+    @{
         name = 'Delta.WatermarkColumn'
         description = 'Creates, updates and a related-table change propagated from watermark columns; a deletion is NOT detected, as documented'
         tiers = @('Default', 'FullMatrix')

@@ -110,6 +110,164 @@ public class ImportDuplicateExternalIdTests : WorkflowTestBase
         Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.EqualTo(2));
     }
 
+    #region A later page supersedes an earlier one in a Delta Import (#2074)
+
+    /// <summary>
+    /// A change-log Delta Import reads changes in order, so the same External ID on a later page is a later change to the
+    /// object, not a paging fault. The reported case: a row deleted and re-inserted, with a page boundary between the two.
+    /// Rejecting the re-insert left the object Obsolete, and the next synchronisation deleted it.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_HeldObjectDeletedOnOnePageAndAddedOnALaterPage_EndsNormalWithTheLaterValuesAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+        var held = SeedCso(connectedSystem, type, externalId, "Original");
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, changeType: ObjectChangeType.Deleted)], [ImportObject(type, externalId, "Back", ObjectChangeType.Added)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, held.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty, "The re-insert is a later change, not a duplicate");
+            Assert.That(stored!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), "The re-insert supersedes the delete");
+            Assert.That(DisplayNames(stored), Is.EqualTo(new[] { "Back" }));
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ObjectChangeType == ObjectChangeType.Deleted), Is.Empty,
+                "The run does not report a deletion that did not stand");
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectJimDoesNotHoldDeletedThenAddedOnALaterPage_CreatesItAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, changeType: ObjectChangeType.Deleted)], [ImportObject(type, externalId, "New", ObjectChangeType.Added)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty);
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// The milder variant: an object changed on both sides of a page boundary. The later change is the object as it now
+    /// stands, so it is applied, and the earlier one is not reported as a change of its own.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_HeldObjectUpdatedOnTwoPages_TakesTheLaterValuesWithoutADuplicateErrorAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+        var held = SeedCso(connectedSystem, type, externalId, "Original");
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, "First", ObjectChangeType.Updated)], [ImportObject(type, externalId, "Second", ObjectChangeType.Updated)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, held.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty);
+            Assert.That(DisplayNames(stored!), Is.EqualTo(new[] { "Second" }));
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// An object created during an import is saved only after the last page, so a later page cannot find it. Its later
+    /// copy replaces the earlier one rather than creating it a second time.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_NewObjectOnTwoPages_CreatesItOnceWithTheLaterValuesAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, "First", ObjectChangeType.Added)], [ImportObject(type, externalId, "Second", ObjectChangeType.Updated)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var created = (await SyncRepo.GetConnectedSystemObjectsAsync(connectedSystem.Id, 1, 10)).Results;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty);
+            Assert.That(created, Has.Count.EqualTo(1), "Created once");
+            Assert.That(DisplayNames(created.Single()), Is.EqualTo(new[] { "Second" }));
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Added), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_HeldObjectUpdatedThenDeletedOnALaterPage_IsMarkedDeletedAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+        var held = SeedCso(connectedSystem, type, externalId, "Original");
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, "First", ObjectChangeType.Updated)], [ImportObject(type, externalId, changeType: ObjectChangeType.Deleted)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, held.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty);
+            Assert.That(stored!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(1));
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_NewObjectAddedThenDeletedOnALaterPage_CreatesNothingAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, "First", ObjectChangeType.Added)], [ImportObject(type, externalId, changeType: ObjectChangeType.Deleted)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Is.Empty);
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// A page that returns the object twice is still a fault in the source, whichever kind of import reads it: both
+    /// copies are rejected, and what the earlier page did stands.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_LaterPageRepeatingTheObject_RejectsBothCopiesAndKeepsTheEarlierPageAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var externalId = Guid.NewGuid();
+        var held = SeedCso(connectedSystem, type, externalId, "Original");
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(type, externalId, "First", ObjectChangeType.Updated)],
+             [ImportObject(type, externalId, "Second", ObjectChangeType.Updated), ImportObject(type, externalId, "Third", ObjectChangeType.Updated)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, held.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DuplicateItems(activity), Has.Count.EqualTo(2));
+            Assert.That(DisplayNames(stored!), Is.EqualTo(new[] { "First" }));
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType Type)> ArrangeAsync()
@@ -119,10 +277,11 @@ public class ImportDuplicateExternalIdTests : WorkflowTestBase
         return (connectedSystem, type);
     }
 
-    private async Task<Activity> RunImportAsync(ConnectedSystem connectedSystem, List<List<ConnectedSystemImportObject>> pages)
+    private async Task<Activity> RunImportAsync(ConnectedSystem connectedSystem, List<List<ConnectedSystemImportObject>> pages,
+        ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
-        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Full Import", ConnectedSystemRunType.FullImport);
-        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.FullImport);
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, runType.ToString(), runType);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, runType);
         var workerTask = new SynchronisationWorkerTask(connectedSystem.Id, runProfile.Id)
         {
             Id = Guid.NewGuid(),
@@ -179,11 +338,13 @@ public class ImportDuplicateExternalIdTests : WorkflowTestBase
     private static string?[] DisplayNames(ConnectedSystemObject cso) =>
         cso.AttributeValues.Where(v => v.Attribute?.Name == "DisplayName").Select(v => v.StringValue).ToArray();
 
-    private static ConnectedSystemImportObject ImportObject(ConnectedSystemObjectType type, Guid externalId, string? displayName = null)
+    private static ConnectedSystemImportObject ImportObject(ConnectedSystemObjectType type, Guid externalId, string? displayName = null,
+        ObjectChangeType changeType = ObjectChangeType.NotSet)
     {
         var importObject = new ConnectedSystemImportObject
         {
             ObjectType = type.Name,
+            ChangeType = changeType,
             Attributes =
             [
                 new ConnectedSystemImportObjectAttribute
