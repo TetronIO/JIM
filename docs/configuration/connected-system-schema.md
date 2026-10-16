@@ -60,6 +60,17 @@ The same evaluation is available to automation: [`New-JIMConfigurationChangePrev
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
+## Operational attributes on the Schema tab
+
+Some Connectors report attributes the Connected System maintains for its own operation rather than data you write, such as when an entry was created or when a sign-in last failed. The [LDAP Connector](../connectors/jim-ldap-connector.md#operational-attributes) reports them on OpenLDAP, 389 Directory Server and other RFC 4512 directories. A directory publishes dozens, and most are of no interest, so the Schema tab treats them differently from the rest:
+
+- **Held back until you ask.** Above the attribute list, a notice says how many operational attributes are hidden, with **Show operational attributes** to list them and **Hide operational attributes** to put them away again. The choice lasts for your visit; it is not saved.
+- **Always listed once selected.** An operational attribute you have selected is never hidden, so you can always see, and clear, your own choice.
+- **Marked in the Class column.** An operational attribute belongs to no object class, so its **Class** column reads **Operational**.
+- **Unselected and read-only when discovered.** Nothing is imported until you select one, and it can never be the target of an Attribute Flow.
+
+Select one as you would any other attribute: tick it once it is listed, or name it in **Select attributes via CSV**, which selects it whether or not it is listed. The REST API and PowerShell return every attribute regardless, each carrying `isOperational`.
+
 ## When an object changes Object Type
 
 A Connected System Object belongs to one Object Type, and JIM recognises it by that Object Type's External ID. An object that starts arriving under a different Object Type therefore does not look like an existing object changing: it looks like a new object of the new type, while the old one seems to have disappeared. Taken at face value, the next Full Import would retire the old one, which can delete its Metaverse Object and deprovision it from every other Connected System before anything joins the new one.
