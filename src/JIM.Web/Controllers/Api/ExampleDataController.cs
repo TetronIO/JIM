@@ -730,7 +730,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         var metaverseObjectTypes = new Dictionary<int, MetaverseObjectType>();
         var metaverseAttributes = new Dictionary<int, MetaverseAttribute>();
-        var connectedSystemAttributes = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         var exampleDataSets = new Dictionary<int, ExampleDataSet>();
 
         var objectTypes = new List<ExampleDataObjectType>();
@@ -748,7 +747,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
 
             foreach (var attributeRequest in request.Attributes)
             {
-                var (attribute, error) = await BuildTemplateAttributeAsync(attributeRequest, metaverseObjectTypes, metaverseAttributes, connectedSystemAttributes, exampleDataSets);
+                var (attribute, error) = await BuildTemplateAttributeAsync(attributeRequest, metaverseObjectTypes, metaverseAttributes, exampleDataSets);
                 if (error != null)
                     return (null, error);
 
@@ -769,7 +768,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         ExampleDataTemplateAttributeRequest request,
         Dictionary<int, MetaverseObjectType> metaverseObjectTypes,
         Dictionary<int, MetaverseAttribute> metaverseAttributes,
-        Dictionary<int, ConnectedSystemObjectTypeAttribute> connectedSystemAttributes,
         Dictionary<int, ExampleDataSet> exampleDataSets)
     {
         var attribute = new ExampleDataTemplateAttribute
@@ -798,16 +796,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
                 return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {metaverseAttributeId} not found.")));
 
             attribute.MetaverseAttribute = metaverseAttribute;
-        }
-
-        if (request.ConnectedSystemObjectTypeAttributeId.HasValue)
-        {
-            var connectedSystemAttributeId = request.ConnectedSystemObjectTypeAttributeId.Value;
-            var connectedSystemAttribute = await ResolveConnectedSystemAttributeAsync(connectedSystemAttributeId, connectedSystemAttributes);
-            if (connectedSystemAttribute == null)
-                return (null, NotFound(ApiErrorResponse.NotFound($"Connected System Object Type attribute with ID {connectedSystemAttributeId} not found.")));
-
-            attribute.ConnectedSystemObjectTypeAttribute = connectedSystemAttribute;
         }
 
         foreach (var dataSetRequest in request.ExampleDataSets ?? [])
@@ -908,18 +896,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
             cache[id] = metaverseAttribute;
 
         return metaverseAttribute;
-    }
-
-    private async Task<ConnectedSystemObjectTypeAttribute?> ResolveConnectedSystemAttributeAsync(int id, Dictionary<int, ConnectedSystemObjectTypeAttribute> cache)
-    {
-        if (cache.TryGetValue(id, out var cached))
-            return cached;
-
-        var connectedSystemAttribute = await _application.ConnectedSystems.GetAttributeAsync(id);
-        if (connectedSystemAttribute != null)
-            cache[id] = connectedSystemAttribute;
-
-        return connectedSystemAttribute;
     }
 
     private async Task<ExampleDataSet?> ResolveExampleDataSetAsync(int id, Dictionary<int, ExampleDataSet> cache)

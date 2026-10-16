@@ -8457,15 +8457,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ContributedBySystemId"" = NULL WHERE ""ContributedBySystemId"" = {0}",
             connectedSystemId);
 
-        // 2c. Example-data template attributes referencing this system's schema attributes.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ExampleDataTemplateAttributes"" SET ""ConnectedSystemObjectTypeAttributeId"" = NULL
-              WHERE ""ConnectedSystemObjectTypeAttributeId"" IN (
-                SELECT ""Id"" FROM ""ConnectedSystemAttributes""
-                WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
-              )",
-            connectedSystemId);
-
         // 2d. On the preserve-history path, retained ConnectedSystemObjectChanges reference the object types deleted
         //     in step 13; null that FK first. (On the delete-history path those change rows have already been removed.)
         if (!deleteChangeHistory)

@@ -54,7 +54,7 @@ public partial class ExampleDataObjectType
 
         if (!visiting.Add(attribute))
         {
-            var name = attribute.MetaverseAttribute?.Name ?? attribute.ConnectedSystemObjectTypeAttribute?.Name ?? "(unknown)";
+            var name = attribute.MetaverseAttribute?.Name ?? "(unknown)";
             throw new ExampleDataTemplateException($"Circular dependency detected in example data attribute generation involving '{name}'. Check the expressions and attribute dependencies for a reference cycle.");
         }
 

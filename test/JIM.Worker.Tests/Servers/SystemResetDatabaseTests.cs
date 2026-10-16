@@ -356,8 +356,8 @@ public class SystemResetDatabaseTests
     }
 
     /// <summary>
-    /// The reset's TRUNCATE ... CASCADE wipes the built-in example data template's attributes as collateral (they are
-    /// pulled in via ExampleDataTemplateAttributes -> ConnectedSystemAttributes -> ... -> ConnectedSystems). The
+    /// The reset's TRUNCATE wipes the built-in example data template's attributes (ExampleDataTemplateAttributes is in
+    /// its list, so no template attribute can block the removal of a custom Metaverse Attribute). The
     /// built-in template is meant to survive a reset, so EnsureBuiltInExampleDataTemplateAsync recreates it. This
     /// verifies the recreate against real PostgreSQL, including the many-to-many reference object types (which a naive
     /// re-insert of a graph referencing existing rows would get wrong).

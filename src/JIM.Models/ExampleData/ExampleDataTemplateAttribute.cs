@@ -11,8 +11,6 @@ public class ExampleDataTemplateAttribute
     #region accessors
     public int Id { get; set; }
 
-    public ConnectedSystemObjectTypeAttribute? ConnectedSystemObjectTypeAttribute { get; set; }
-
     public MetaverseAttribute? MetaverseAttribute { get; set; }
 
     /// <summary>
@@ -138,34 +136,17 @@ public class ExampleDataTemplateAttribute
         var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
         var usingWeightedStringValues = WeightedStringValues is { Count: > 0 };
 
-        // need either a cs or mv attribute reference
-        if (ConnectedSystemObjectTypeAttribute == null && MetaverseAttribute == null)
-            throw new ExampleDataTemplateAttributeException("ConnectedSystemAttribute and MetaverseAttribute are null");
+        if (MetaverseAttribute == null)
+            throw new ExampleDataTemplateAttributeException("A Metaverse Attribute is required: Example Data generates Metaverse Attribute values only.");
 
         // needs to be within a 1-100 range
         if (PopulatedValuesPercentage < 1 || PopulatedValuesPercentage > 100)
             throw new ExampleDataTemplateAttributeException("PopulatedValuesPercentage is less than 1 or greater than 100");
 
         // check for invalid use of type-specific properties
-        AttributeDataType attributeDataType;
-        AttributePlurality attributePlurality;
-        string attributeName;
-
-        if (ConnectedSystemObjectTypeAttribute != null)
-        {
-            attributeDataType = ConnectedSystemObjectTypeAttribute.Type;
-            attributePlurality = ConnectedSystemObjectTypeAttribute.AttributePlurality;
-            attributeName = ConnectedSystemObjectTypeAttribute.Name;
-        }
-        else if (MetaverseAttribute != null)
-        {
-            attributeDataType = MetaverseAttribute.Type;
-            attributePlurality = MetaverseAttribute.AttributePlurality;
-            attributeName = MetaverseAttribute.Name;
-        }
-        else
-            throw new ExampleDataTemplateAttributeException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
-
+        var attributeDataType = MetaverseAttribute.Type;
+        var attributePlurality = MetaverseAttribute.AttributePlurality;
+        var attributeName = MetaverseAttribute.Name;
 
         if (attributeDataType != AttributeDataType.Boolean && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
             throw new ExampleDataTemplateAttributeException("Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");

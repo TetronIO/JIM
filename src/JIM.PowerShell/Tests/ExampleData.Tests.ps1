@@ -1245,8 +1245,6 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
                                     id                                   = 700
                                     metaverseAttributeId                 = 10
                                     metaverseAttributeName               = 'Firstname'
-                                    connectedSystemObjectTypeAttributeId = $null
-                                    connectedSystemObjectTypeAttributeName = $null
                                     populatedValuesPercentage            = 90
                                     boolTrueDistribution                 = $null
                                     boolShouldBeRandom                   = $null

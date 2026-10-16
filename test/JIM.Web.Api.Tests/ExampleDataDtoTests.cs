@@ -14,8 +14,8 @@ namespace JIM.Web.Api.Tests;
 
 /// <summary>
 /// The REST surface for Example Data Sets and Data Generation Templates (#1447). The raw template entity
-/// reached live schema entities (ExampleDataTemplateAttribute carries a ConnectedSystemObjectTypeAttribute),
-/// which is how PR #1446's OpenAPI recursion happened; the DTOs carry ids and names instead.
+/// reached live schema entities, which is how PR #1446's OpenAPI recursion happened; the DTOs carry ids and
+/// names instead.
 /// </summary>
 [TestFixture]
 public class ExampleDataDtoTests
@@ -90,7 +90,7 @@ public class ExampleDataDtoTests
         objectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
         {
             Id = 42,
-            ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Id = 91, Name = "EMPLOYEE_STATUS" },
+            MetaverseAttribute = new MetaverseAttribute { Id = 91, Name = "Employee Status" },
             WeightedStringValues =
             [
                 new ExampleDataTemplateAttributeWeightedValue { Id = 71, Value = "active", Weight = 0.9f },
@@ -157,7 +157,6 @@ public class ExampleDataDtoTests
         {
             Assert.That(metaverseTargeted.MetaverseAttributeId, Is.EqualTo(31));
             Assert.That(metaverseTargeted.MetaverseAttributeName, Is.EqualTo("First Name"));
-            Assert.That(metaverseTargeted.ConnectedSystemObjectTypeAttributeId, Is.Null);
             Assert.That(metaverseTargeted.PopulatedValuesPercentage, Is.EqualTo(100));
             Assert.That(metaverseTargeted.Pattern, Is.EqualTo("{0}"));
         }
@@ -170,21 +169,20 @@ public class ExampleDataDtoTests
             Assert.That(dataSetInstance.Order, Is.EqualTo(0));
         }
 
-        var schemaTargeted = attributes.Single(a => a.Id == 42);
+        var weighted = attributes.Single(a => a.Id == 42);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(schemaTargeted.ConnectedSystemObjectTypeAttributeId, Is.EqualTo(91));
-            Assert.That(schemaTargeted.ConnectedSystemObjectTypeAttributeName, Is.EqualTo("EMPLOYEE_STATUS"));
-            Assert.That(schemaTargeted.MetaverseAttributeId, Is.Null);
-            Assert.That(schemaTargeted.ManagerDepthPercentage, Is.EqualTo(80));
-            Assert.That(schemaTargeted.MvaRefMinAssignments, Is.EqualTo(1));
-            Assert.That(schemaTargeted.MvaRefMaxAssignments, Is.EqualTo(5));
+            Assert.That(weighted.MetaverseAttributeId, Is.EqualTo(91));
+            Assert.That(weighted.MetaverseAttributeName, Is.EqualTo("Employee Status"));
+            Assert.That(weighted.ManagerDepthPercentage, Is.EqualTo(80));
+            Assert.That(weighted.MvaRefMinAssignments, Is.EqualTo(1));
+            Assert.That(weighted.MvaRefMaxAssignments, Is.EqualTo(5));
         }
 
-        Assert.That(schemaTargeted.WeightedStringValues!.Select(w => (w.Value, w.Weight)),
+        Assert.That(weighted.WeightedStringValues!.Select(w => (w.Value, w.Weight)),
             Is.EqualTo(new[] { ("active", 0.9f), ("retired", 0.1f) }));
 
-        var dependency = schemaTargeted.AttributeDependency!;
+        var dependency = weighted.AttributeDependency!;
         using (Assert.EnterMultipleScope())
         {
             Assert.That(dependency.MetaverseAttributeId, Is.EqualTo(32));
@@ -193,7 +191,7 @@ public class ExampleDataDtoTests
             Assert.That(dependency.StringValue, Is.EqualTo("Employed"));
         }
 
-        Assert.That(schemaTargeted.ReferenceMetaverseObjectTypes!.Single().Name, Is.EqualTo("User"));
+        Assert.That(weighted.ReferenceMetaverseObjectTypes!.Single().Name, Is.EqualTo("User"));
     }
 
     [Test]
