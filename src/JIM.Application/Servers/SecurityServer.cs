@@ -389,6 +389,54 @@ public class SecurityServer
     }
 
     /// <summary>
+    /// How long the infrastructure API key works after JIM creates or renews it.
+    /// </summary>
+    public static readonly TimeSpan InfrastructureApiKeyLifetime = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Makes sure the infrastructure API key named by the JIM_INFRASTRUCTURE_API_KEY environment variable can be used,
+    /// called at every JIM.Web startup. Creates the key with the Administrator role when none has this hash, and
+    /// renews its expiry when it has expired, so that restarting JIM always restores a working recovery key (for
+    /// example after a Factory Reset removed every administrator). A key an administrator disabled stays disabled,
+    /// and a key that has not yet expired, or never expires, is left as it is.
+    /// </summary>
+    public async Task<InfrastructureApiKeyOutcome> EnsureInfrastructureApiKeyAsync(string keyHash, string keyPrefix)
+    {
+        var existingKey = await GetApiKeyByHashAsync(keyHash);
+        if (existingKey != null)
+        {
+            if (!existingKey.IsEnabled)
+                return InfrastructureApiKeyOutcome.Disabled;
+
+            if (existingKey.ExpiresAt == null || existingKey.ExpiresAt > DateTime.UtcNow)
+                return InfrastructureApiKeyOutcome.Unchanged;
+
+            existingKey.ExpiresAt = DateTime.UtcNow.Add(InfrastructureApiKeyLifetime);
+            await UpdateApiKeyAsync(existingKey, changeReason: "Renewed at startup from the JIM_INFRASTRUCTURE_API_KEY environment variable");
+            return InfrastructureApiKeyOutcome.Renewed;
+        }
+
+        var adminRole = await GetRoleAsync(Constants.BuiltInRoles.Administrator);
+        if (adminRole == null)
+            return InfrastructureApiKeyOutcome.AdministratorRoleMissing;
+
+        var apiKey = new ApiKey
+        {
+            Id = Guid.NewGuid(),
+            Name = "Infrastructure Key",
+            Description = "Auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable. It works for 24 hours, and restarting JIM renews it once it has expired.",
+            KeyHash = keyHash,
+            KeyPrefix = keyPrefix,
+            ExpiresAt = DateTime.UtcNow.Add(InfrastructureApiKeyLifetime),
+            IsEnabled = true,
+            IsInfrastructureKey = true,
+            Roles = [adminRole]
+        };
+        await CreateApiKeyAsync(apiKey);
+        return InfrastructureApiKeyOutcome.Created;
+    }
+
+    /// <summary>
     /// Creates a new API key.
     /// </summary>
     public async Task<ApiKey> CreateApiKeyAsync(ApiKey apiKey, MetaverseObject? initiatedBy = null, string? changeReason = null)
