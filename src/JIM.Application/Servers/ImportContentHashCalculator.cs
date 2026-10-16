@@ -54,7 +54,9 @@ public static class ImportContentHashCalculator
     /// Canonicalising dates (#2153) is that case: a single whole-microsecond UTC date and a single
     /// Boolean encode byte-identically to before, and the only dates whose bytes change are those with
     /// a sub-microsecond part or a Local Kind, whose stored value (the database's microsecond) never
-    /// equalled the raw payload. <c>ImportContentHashCalculatorTests</c> pins the version 1 golden
+    /// equalled the raw payload. Reading every value of a multi-valued date or true or false attribute is the same case:
+    /// a payload whose bytes change carries a value the old readers dropped, so its stored state differs from it, and a
+    /// set of one encodes as the single value always did. <c>ImportContentHashCalculatorTests</c> pins the version 1 golden
     /// hashes; if one changes, bump this.
     /// </para>
     /// </summary>
@@ -185,12 +187,20 @@ public static class ImportContentHashCalculator
                     .ToList();
 
             case AttributeDataType.DateTime:
-                // One value at most while the import contract is single-valued, so no LINQ. A date encodes as its
-                // canonical ticks (#2153), which is what the diff compares and the database keeps: UTC, floored to the
-                // microsecond. A whole-microsecond UTC or Unspecified date therefore encodes exactly as version 1 did.
-                return importAttribute.HasDateTimeValues
-                    ? new List<byte[]> { BitConverter.GetBytes(DateTimeAttributeValue.Key(importAttribute.DateTimeValues[0])) }
-                    : new List<byte[]>();
+                // A date encodes as its canonical ticks (#2153), which is what the diff compares and the database keeps:
+                // UTC, floored to the microsecond; several dates as the distinct keys, ascending. Zero or one value takes
+                // a fast path without LINQ, so a single whole-microsecond UTC or Unspecified date encodes exactly as
+                // version 1 did, by construction.
+                if (!importAttribute.HasDateTimeValues)
+                    return new List<byte[]>();
+                if (importAttribute.DateTimeValues.Count == 1)
+                    return new List<byte[]> { BitConverter.GetBytes(DateTimeAttributeValue.Key(importAttribute.DateTimeValues[0])) };
+                return importAttribute.DateTimeValues
+                    .Select(DateTimeAttributeValue.Key)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Select(BitConverter.GetBytes)
+                    .ToList();
 
             case AttributeDataType.Binary:
                 return importAttribute.ByteValues
@@ -206,10 +216,18 @@ public static class ImportContentHashCalculator
                     .ToList();
 
             case AttributeDataType.Boolean:
-                // Boolean attributes are single-valued by nature (see ConnectedSystemImportObjectAttribute.BoolValue).
-                return importAttribute.HasBoolValues
-                    ? new List<byte[]> { new[] { importAttribute.BoolValues[0] ? (byte)1 : (byte)0 } }
-                    : new List<byte[]>();
+                // A true or false attribute holds one value; the import normaliser reports both arriving (#2153). Encoded
+                // as distinct bytes, ascending, so a repeated value is no change; one value takes the version 1 path.
+                if (!importAttribute.HasBoolValues)
+                    return new List<byte[]>();
+                var hasFalse = importAttribute.BoolValues.Contains(false);
+                var hasTrue = importAttribute.BoolValues.Contains(true);
+                var booleans = new List<byte[]>(2);
+                if (hasFalse)
+                    booleans.Add(new[] { (byte)0 });
+                if (hasTrue)
+                    booleans.Add(new[] { (byte)1 });
+                return booleans;
 
             case AttributeDataType.NotSet:
             default:

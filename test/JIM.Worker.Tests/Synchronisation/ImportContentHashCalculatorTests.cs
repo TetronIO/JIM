@@ -187,7 +187,63 @@ public class ImportContentHashCalculatorTests
         }
     }
 
-    private const int ImportContentHashAlgorithmVersionUnderTest = ImportContentHashCalculator.ImportContentHashAlgorithmVersion;
+    /// <summary>
+    /// #2153 S5: every date of a multi-valued date attribute is part of the hash, so a second value changes it.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_SecondDate_ChangesTheHash()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var first = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var one = BuildDateAndBooleanImportObject(first, flag: null);
+        var two = BuildDateAndBooleanImportObject(first, flag: null);
+        two.Attributes[0].DateTimeValues.Add(first.AddDays(1));
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(two, objectType),
+            Is.Not.EqualTo(ImportContentHashCalculator.CalculateContentHash(one, objectType)));
+    }
+
+    /// <summary>
+    /// #2153 S5: dates hash as a set, as the diff compares them: order, a repeated value and Kind never matter.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_SameDatesInAnotherOrderWithADuplicate_SameHash()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var a = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var b = a.AddDays(1);
+        var c = a.AddDays(2);
+        var ordered = BuildDateAndBooleanImportObject(a, flag: null);
+        ordered.Attributes[0].DateTimeValues.AddRange([b, c]);
+        var shuffled = BuildDateAndBooleanImportObject(c, flag: null);
+        shuffled.Attributes[0].DateTimeValues.AddRange([a.ToLocalTime(), b, a]);
+
+        Assert.That(ImportContentHashCalculator.CalculateContentHash(shuffled, objectType),
+            Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(ordered, objectType)));
+    }
+
+    /// <summary>
+    /// #2153 S5: Booleans hash as a set too; a repeated value is not a change, and a second value is.
+    /// </summary>
+    [Test]
+    public void CalculateContentHash_Booleans_HashAsASet()
+    {
+        var objectType = BuildDateAndBooleanObjectType();
+        var date = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var single = BuildDateAndBooleanImportObject(date, flag: true);
+        var repeated = BuildDateAndBooleanImportObject(date, flag: true);
+        repeated.Attributes[1].BoolValues.Add(true);
+        var both = BuildDateAndBooleanImportObject(date, flag: true);
+        both.Attributes[1].BoolValues.Add(false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(repeated, objectType), Is.EqualTo(ImportContentHashCalculator.CalculateContentHash(single, objectType)));
+            Assert.That(ImportContentHashCalculator.CalculateContentHash(both, objectType), Is.Not.EqualTo(ImportContentHashCalculator.CalculateContentHash(single, objectType)));
+        }
+    }
+
+    private const int ImportContentHashAlgorithmVersionUnderTest =ImportContentHashCalculator.ImportContentHashAlgorithmVersion;
     private static readonly Guid GoldenVersion1Hash = new("a1301547-b9b5-82ce-c3ef-3c9634aa020e");
     private static readonly Guid GoldenVersion1Fingerprint = new("aadbf2e1-8be7-576c-4cf7-65d4188eef1c");
 
