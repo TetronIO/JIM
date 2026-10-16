@@ -121,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Pending Deletions page can now be reached from the portal, under **Admin** in the navigation menu and from the **Administration** page, rather than only by typing its address. (#2059)
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
 - 🐛 Restarting JIM now renews the infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) for another 24 hours once it has expired, so it can be used to recover access, such as after a Factory Reset that removed every administrator. A disabled key stays disabled. (#2278)
 - 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
