@@ -436,6 +436,28 @@ function Expand-LDIFFoldedLine {
     return ,$logicalLines.ToArray()
 }
 
+function Split-LdapSearchOutput {
+    <#
+    .SYNOPSIS
+        Splits ldapsearch output into lines without the "# pagedresults: cookie=" comment a paged search prints.
+    .DESCRIPTION
+        ldapsearch -E pr=... prints that comment after every page, -LLL notwithstanding, so the output of a paged
+        search that matched nothing is not empty. Every line is otherwise kept as printed. Returns no lines at all
+        when nothing but blank lines remains, so a caller can treat an empty result as "nothing found".
+    #>
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        $Output
+    )
+    $lines = @(@($Output) | ForEach-Object { "$_" -split "`n" } | Where-Object { $_ -notmatch '^# pagedresults:' })
+    if (-not ($lines | Where-Object { $_.Trim() })) {
+        return ,[string[]]@()
+    }
+    return ,[string[]]$lines
+}
+
 function Test-LDAPConnection {
     <#
     .SYNOPSIS
@@ -554,6 +576,11 @@ function Invoke-LDAPSearch {
             return $null
         }
 
+        # Without the paging comment, so a search that matched nothing returns nothing, as callers test for.
+        $result = Split-LdapSearchOutput -Output $result
+        if ($result.Count -eq 0) {
+            return $null
+        }
         return $result
     }
     catch {

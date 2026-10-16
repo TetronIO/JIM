@@ -1220,12 +1220,15 @@ try {
         }
 
         # A change of case alone to the name (#2051): a distinguished name compares ignoring case, so the rename is
-        # driven by cn changing case, and the directory must hold the new case afterwards.
+        # driven by cn changing case, and the directory must hold the new case afterwards. Display Name is derived from
+        # the first and last names, so it is those that change case.
         $caseOnlyDisplayName = $newDisplayName.ToUpperInvariant()
         Write-Host "Changing only the case of the display name to '$caseOnlyDisplayName'..." -ForegroundColor Gray
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
         if ($targetUser) {
+            $targetUser.firstName = $targetUser.firstName.ToUpperInvariant()
+            $targetUser.lastName = $targetUser.lastName.ToUpperInvariant()
             $targetUser.displayName = $caseOnlyDisplayName
         }
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8

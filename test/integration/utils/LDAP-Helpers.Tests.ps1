@@ -494,6 +494,24 @@ Describe 'Invoke-LDAPSearch' {
         }
     }
 
+    It 'returns $null when a paged search matches nothing' {
+        # ldapsearch prints "# pagedresults: cookie=" after each page even with -LLL, so the output of a search that
+        # found nothing is not empty: Test-LDAPGroupExists read a deleted group as present (Scenario 008, 2026-10-16).
+        Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('# pagedresults: cookie=') } }
+
+        Invoke-LDAPSearch -ContainerName 'c' -Server 'localhost' -BaseDN 'DC=x' -BindDN 'cn=a' -BindPassword 'p' -Filter '(cn=x)' |
+            Should -BeNullOrEmpty
+    }
+
+    It 'returns the entries without the paging comment' {
+        Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('dn: CN=x,DC=y', 'cn: x', '', '# pagedresults: cookie=') } }
+
+        $result = Invoke-LDAPSearch -ContainerName 'c' -Server 'localhost' -BaseDN 'DC=x' -BindDN 'cn=a' -BindPassword 'p' -Filter '(cn=x)'
+
+        ($result -join "`n") | Should -Match 'dn: CN=x,DC=y'
+        ($result -join "`n") | Should -Not -Match 'pagedresults'
+    }
+
     It 'returns $null when the tool fails' {
         Mock Invoke-LdapTool { @{ ExitCode = 32; Output = @('No such object (32)') } }
 

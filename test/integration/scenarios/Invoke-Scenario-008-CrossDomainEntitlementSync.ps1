@@ -1607,8 +1607,8 @@ try {
         else {
             # Group still exists - try one more export cycle
             Write-Host "    Group still exists in Target AD, trying confirming import + export..." -ForegroundColor Yellow
-            if ($targetImportProfile -and $targetExportProfile) {
-                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait
+            if ($targetDeltaImportProfile -and $targetExportProfile) {
+                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait
                 Start-Sleep -Seconds 1
                 Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
                 Start-Sleep -Seconds 2
