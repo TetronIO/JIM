@@ -309,6 +309,18 @@ Describe 'Get-LdapToolInvocation' {
             Should -Be 'jim-ldap-toolbox'
     }
 
+    It 'targets the toolbox when called from a child script that did not load these helpers' {
+        # Setup-Scenario-002.ps1 runs as a child script (&) and uses the caller's functions; inside it
+        # $script: is the child's scope, where nothing set the toolbox name, and StrictMode then threw.
+        $child = Join-Path $TestDrive 'child-script.ps1'
+        Set-Content -Path $child -Value @'
+Set-StrictMode -Version Latest
+(Get-LdapToolInvocation -DirectoryConfig @{ ContainerName = $null } -Tool ldapsearch -Arguments @('-x'))[1]
+'@
+
+        & $child | Should -Be 'jim-ldap-toolbox'
+    }
+
     It 'targets the toolbox when the config has no ContainerName key at all' {
         (Get-LdapToolInvocation -DirectoryConfig @{ Host = 'dc1.panoply.local' } -Tool ldapsearch -Arguments @('-x'))[1] |
             Should -Be 'jim-ldap-toolbox'

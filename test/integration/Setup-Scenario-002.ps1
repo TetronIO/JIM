@@ -62,6 +62,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 . "$PSScriptRoot/utils/Directory-Helpers.ps1"
+. "$PSScriptRoot/utils/LDAP-Helpers.ps1"
 
 # Derive Source and Target configs from directory type
 # S002 needs two LDAP connected systems — for SambaAD these are separate containers,
