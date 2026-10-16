@@ -69,7 +69,15 @@ public class ErrorTypeOrdinalTests
 
         // Before provisioning, matching found several existing accounts (#2052).
         [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31,
-        [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32
+        [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32,
+
+        // An export the Connected System refused, or JIM refused to send, for a reason an administrator can act on (#2118).
+        [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = 33,
+        [ActivityRunProfileExecutionItemErrorType.AccessDenied] = 34,
+        [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = 35,
+        [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = 36,
+        [ActivityRunProfileExecutionItemErrorType.MissingDependency] = 37,
+        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 38
     };
 
     [Test]
