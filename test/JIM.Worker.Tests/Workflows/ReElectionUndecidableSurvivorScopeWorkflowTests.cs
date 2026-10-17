@@ -244,6 +244,167 @@ public class ReElectionUndecidableSurvivorScopeWorkflowTests : SynchronisedDepro
     }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Retried by the next Delta Synchronisation (#2343)
+    //
+    // The held-back object's own data does not change when the survivor's value becomes readable: the Full Import that
+    // resolves it is of the OTHER system (Training), and writes only Training's object. So nothing an import does
+    // selects HR's held-back object for HR's next Delta Synchronisation; the hold-back itself must mark it.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task DeltaSync_HeldBackObsoleteObjectAfterAFullImportReadsTheSurvivorsValue_ProcessesTheHeldDeletionAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync();
+        MakeTrainingScopeUndecidable(ctx);
+        var hrCso = HrCso(ctx);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+        await ImportObsoletionAsync(hrCso);
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        await FullImportReadsTrainingValueAsync(ctx);
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects[mvoId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(hrCso.Id), Is.False,
+                "the next Delta Synchronisation finishes the held deletion, as a Full Synchronisation would");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(TrainingDescription),
+                "and Training, now decidably in scope, takes Description over");
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_HeldBackObsoleteObjectWhileTheSurvivorsScopeIsStillUndecidable_ReRecordsTheErrorAndChangesNothingAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync(deletionGracePeriod: TimeSpan.FromDays(7));
+        MakeTrainingScopeUndecidable(ctx);
+        var hrCso = HrCso(ctx);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+        await ImportObsoletionAsync(hrCso);
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects[mvoId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Select(i => (i.ConnectedSystemObjectId, i.ErrorType)),
+                Is.EqualTo(new[] { ((Guid?)hrCso.Id, (ActivityRunProfileExecutionItemErrorType?)ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed) }),
+                "the retry reports the same error, once, for the held-back object alone");
+            Assert.That(ItemFor(activity, hrCso.Id)?.ErrorMessage, Does.Contain("Training Import"));
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription));
+            Assert.That(mvo.DeletionEligibleDate, Is.Null, "the Deletion Rule is still not applied");
+            Assert.That(SyncRepo.ConnectedSystemObjects[hrCso.Id].MetaverseObjectId, Is.EqualTo(mvoId));
+            Assert.That(SyncRepo.ConnectedSystemObjects[hrCso.Id].Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(SyncRepo.ConnectedSystemObjects[hrCso.Id].SynchronisationPending, Is.True, "and it stays marked for the next one");
+            Assert.That(TrainingCso(ctx).SynchronisationPending, Is.False, "the survivor in the other system is not marked");
+            Assert.That(PendingExportsFor(ctx.Target), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_ObsoleteObjectHeldBackByAFullSynchronisation_IsRetriedByTheNextDeltaAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync();
+        MakeTrainingScopeUndecidable(ctx);
+        var hrCso = HrCso(ctx);
+        await ImportObsoletionAsync(hrCso);
+        var fullSync = await RunFullSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(ItemFor(fullSync, hrCso.Id)?.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed),
+            "arrange: the Full Synchronisation holds the object back");
+
+        await FullImportReadsTrainingValueAsync(ctx);
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(hrCso.Id), Is.False);
+    }
+
+    [Test]
+    public async Task DeltaSync_ObjectHeldBackLeavingScope_IsRetriedByTheNextDeltaAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        var hrDescription = ctx.HrImportRule.ConnectedSystemObjectType!.Attributes.First(a => a.Name == "HrDescription");
+        AddCriterion(ctx.HrImportRule, hrDescription, SearchComparisonType.Equals, HrDescription);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        MakeTrainingScopeUndecidable(ctx);
+        var hrCso = HrCso(ctx);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+        hrCso.AttributeValues.Single(av => av.AttributeId == hrDescription.Id).StringValue = "No longer in scope";
+        await ImportChangeAsync(hrCso);
+        var heldBack = await RunDeltaSyncAsync(ctx.Hr);
+        Assert.That(ItemFor(heldBack, hrCso.Id)?.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed),
+            "arrange: the scope exit is held back");
+
+        await FullImportReadsTrainingValueAsync(ctx);
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(ItemFor(activity, hrCso.Id)?.ObjectChangeType, Is.EqualTo(ObjectChangeType.DisconnectedOutOfScope));
+            Assert.That(SyncRepo.ConnectedSystemObjects[hrCso.Id].MetaverseObjectId, Is.Null, "the held scope exit is finished");
+            Assert.That(GetAttributeValue(SyncRepo.MetaverseObjects[mvoId], ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(TrainingDescription));
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_ValueWithdrawalHeldBack_IsRetriedByTheNextDeltaAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync();
+        MakeTrainingScopeUndecidable(ctx);
+        var hrCso = HrCso(ctx);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+        hrCso.AttributeValues.Remove(hrCso.AttributeValues.Single(av => av.Attribute.Name == "HrDescription"));
+        await ImportChangeAsync(hrCso);
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        await FullImportReadsTrainingValueAsync(ctx);
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(GetAttributeValue(SyncRepo.MetaverseObjects[mvoId], ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(TrainingDescription),
+                "the held withdrawal is finished: Training takes Description over");
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_AfterTheHeldBackObjectIsFinished_ProcessesNothingFurtherAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync();
+        MakeTrainingScopeUndecidable(ctx);
+        await ImportObsoletionAsync(HrCso(ctx));
+        await RunDeltaSyncAsync(ctx.Hr);
+        await FullImportReadsTrainingValueAsync(ctx);
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ObjectsToProcess, Is.Zero, "nothing is left marked once the held object is finished");
+            Assert.That(ItemsOf(activity), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_ObjectProcessedWithoutAHoldBack_IsNotProcessedAgainAsync()
+    {
+        var ctx = await SetUpSyncedTwoContributorsAsync();
+        ScopeTraining(ctx, SearchComparisonType.Equals, TrainingDescription);
+        await ImportObsoletionAsync(HrCso(ctx));
+        await RunDeltaSyncAsync(ctx.Hr);
+
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        Assert.That(activity.ObjectsToProcess, Is.Zero, "a decided object leaves no mark behind, so the usual delta pays nothing extra");
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Synchronisation Rule deletion recall
     // -----------------------------------------------------------------------------------------------------------------
 
@@ -496,6 +657,31 @@ public class ReElectionUndecidableSurvivorScopeWorkflowTests : SynchronisedDepro
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
         return Task.CompletedTask;
+    }
+
+    /// <summary>An import detects the object's deletion: obsoleted, stamped and marked pending synchronisation (#2092).</summary>
+    private static Task ImportObsoletionAsync(ConnectedSystemObject cso)
+    {
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+        return ImportChangeAsync(cso);
+    }
+
+    /// <summary>An import writes a change to the object: stamped and marked pending synchronisation (#2092).</summary>
+    private static Task ImportChangeAsync(ConnectedSystemObject cso)
+    {
+        cso.LastUpdated = DateTime.UtcNow;
+        cso.SynchronisationPending = true;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>A Full Import of Training reads the held value as its new type, writing Training's object alone.</summary>
+    private Task FullImportReadsTrainingValueAsync(DeprovisioningContext ctx)
+    {
+        var trainingCso = TrainingCso(ctx);
+        var held = trainingCso.AttributeValues.Single(av => av.Attribute.Name == "TrainingDescription");
+        held.IntValue = null;
+        held.StringValue = TrainingDescription;
+        return ImportChangeAsync(trainingCso);
     }
 
     private List<JIM.Models.Transactional.PendingExport> PendingExportsFor(ConnectedSystem system) =>
