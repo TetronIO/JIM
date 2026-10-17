@@ -46,6 +46,7 @@ public static class ScimResourceWriter
         var resource = new JsonObject();
         var schemas = new List<string> { baseSchemaUrn };
         var unknown = new List<string>();
+        var writeOnly = new List<string>();
 
         var lookup = new Dictionary<string, ScimFlattenedAttribute>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributes)
@@ -56,6 +57,14 @@ public static class ScimResourceWriter
             if (!lookup.TryGetValue(write.AttributeName, out var attribute))
             {
                 unknown.Add(write.AttributeName);
+                continue;
+            }
+
+            // Unlike a read-only attribute, a write-only one fails the object: dropping it would record a password
+            // as exported that was never sent (#2091).
+            if (attribute.IsWriteOnly)
+            {
+                writeOnly.Add(write.AttributeName);
                 continue;
             }
 
@@ -83,7 +92,7 @@ public static class ScimResourceWriter
         }
 
         resource[SchemasMember] = new JsonArray(schemas.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray());
-        return new ScimResourceWriteResult { Resource = resource, UnknownAttributes = unknown };
+        return new ScimResourceWriteResult { Resource = resource, UnknownAttributes = unknown, WriteOnlyAttributes = writeOnly };
     }
 
     /// <summary>
@@ -108,12 +117,19 @@ public static class ScimResourceWriter
         ArgumentNullException.ThrowIfNull(attributes);
 
         var unknown = new List<string>();
+        var writeOnly = new List<string>();
         var lookup = new Dictionary<string, ScimFlattenedAttribute>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributes)
             lookup[attribute.Name] = attribute;
 
         foreach (var change in changes)
         {
+            if (lookup.TryGetValue(change.AttributeName, out var writeOnlyAttribute) && writeOnlyAttribute.IsWriteOnly)
+            {
+                writeOnly.Add(change.AttributeName);
+                continue;
+            }
+
             if (!lookup.TryGetValue(change.AttributeName, out var attribute) || attribute.Writability == AttributeWritability.ReadOnly)
             {
                 unknown.Add(change.AttributeName);
@@ -128,7 +144,7 @@ public static class ScimResourceWriter
                 Apply(container, attribute, change);
         }
 
-        return new ScimResourceWriteResult { Resource = resource, UnknownAttributes = unknown };
+        return new ScimResourceWriteResult { Resource = resource, UnknownAttributes = unknown, WriteOnlyAttributes = writeOnly };
     }
 
     /// <summary>

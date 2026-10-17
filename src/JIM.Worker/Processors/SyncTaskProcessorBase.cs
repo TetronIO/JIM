@@ -6871,6 +6871,12 @@ public abstract class SyncTaskProcessorBase
                     "object's other attributes still export. If the dates must stay apart, keep them further apart than the Connected " +
                     "System's resolution, or check the attribute's Date Resolution on the Connected System's Schema tab.");
 
+            case AttributeFlowErrorKind.CredentialAttributeTarget:
+                return (ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported,
+                    $"Target attribute {target} holds credentials, so JIM never exports it through an Attribute Flow and {outcome}; " +
+                    "the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only " +
+                    "through Password Synchronisation, on Connected Systems whose Connector supports it.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting

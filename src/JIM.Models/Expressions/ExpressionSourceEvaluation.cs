@@ -55,6 +55,18 @@ public sealed class ExpressionSourceEvaluation
         new(outcome) { MissingInputs = missingInputs };
 
     /// <summary>
+    /// The inputs the Expression reads that the object holds only under another data type (#2319). Populated only for
+    /// <see cref="ExpressionSourceOutcome.InputHeldUnderAnotherDataType"/>.
+    /// </summary>
+    public IReadOnlyList<HeldExpressionInput> HeldInputs { get; private init; } = [];
+
+    /// <summary>
+    /// An input the Expression reads is held only under another data type, so it was not evaluated.
+    /// </summary>
+    public static ExpressionSourceEvaluation InputHeldUnderAnotherDataType(IReadOnlyList<HeldExpressionInput> heldInputs) =>
+        new(ExpressionSourceOutcome.InputHeldUnderAnotherDataType) { HeldInputs = heldInputs };
+
+    /// <summary>
     /// The Expression failed.
     /// </summary>
     public static ExpressionSourceEvaluation Failed(ExpressionEvaluationException exception) =>

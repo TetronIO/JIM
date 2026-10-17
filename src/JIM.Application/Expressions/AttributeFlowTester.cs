@@ -404,6 +404,10 @@ public static class AttributeFlowTester
             AttributeFlowOutcome.NoValue =>
                 $"The Expression produced no value, so {target} gets no value, resolved by Attribute Priority and \"Null is a value\".",
 
+            AttributeFlowOutcome.LeftAsHeld =>
+                $"Not evaluated: {string.Join(", ", evaluation.Source.HeldInputs)} until the next import, because a schema " +
+                $"refresh changed its data type, so {target} keeps its current value.",
+
             _ => evaluation.ErrorReason switch
             {
                 AttributeFlowErrorReason.MissingInputFailedMapping =>
@@ -463,6 +467,10 @@ public static class AttributeFlowTester
 
             GeneratedBaseOutcome.Waits when generated.Source?.MissingInputs.Count > 0 =>
                 $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Contribute no value, so {waits}.",
+
+            GeneratedBaseOutcome.Waits when generated.Source is { HeldInputs.Count: > 0 } heldSource =>
+                $"Not evaluated: {string.Join(", ", heldSource.HeldInputs)} until the next import, because a schema " +
+                $"refresh changed its data type, so {waits}.",
 
             GeneratedBaseOutcome.Waits => $"The base expression produced no value, so {waits}.",
 

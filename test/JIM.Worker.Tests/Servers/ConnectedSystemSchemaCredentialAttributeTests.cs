@@ -280,6 +280,31 @@ public class ConnectedSystemSchemaCredentialAttributeTests
         Assert.That(schemaObjectType.RecommendedExternalIdAttribute, Is.EqualTo(anchor), "A legitimate anchor recommendation must be untouched.");
     }
 
+    [Test]
+    public void FilterCredentialAttributesFromSchema_ScimCoreUser_BlocksPasswordAndReportsIt()
+    {
+        // The SCIM 2.0 Client Connector flattens the core User schema, write-only password included, either because
+        // the provider publishes it or because the Connector falls back on the RFC definition (#2091).
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "SCIM" };
+        var schemaObjectType = new ConnectorSchemaObjectType("User")
+        {
+            Attributes = JIM.Scim.Schema.ScimAttributeMapper.FlattenSchema(JIM.Scim.Schema.ScimCoreSchemas.User())
+                .Select(a => a.ToConnectorSchemaAttribute()).ToList()
+        };
+        var schema = new ConnectorSchema();
+        schema.ObjectTypes.Add(schemaObjectType);
+        var result = new SchemaRefreshResult();
+
+        ConnectedSystemServer.FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(schemaObjectType.Attributes.Select(a => a.Name), Does.Not.Contain("password"));
+            Assert.That(schemaObjectType.Attributes.Select(a => a.Name), Does.Contain("userName"));
+            Assert.That(result.BlockedCredentialAttributes["User"], Is.EqualTo(new[] { "password" }));
+        }
+    }
+
     #endregion
 
     #region Helpers

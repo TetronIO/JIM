@@ -19,4 +19,11 @@ public class ScimResourceWriteResult
     /// records as applied and the provider never received.
     /// </summary>
     public List<string> UnknownAttributes { get; init; } = [];
+
+    /// <summary>
+    /// The names of write-only attributes the change would have written, such as <c>password</c> (#2091). Kept apart
+    /// from unknown attributes because the remedy differs: a write-only attribute is never exported through an
+    /// Attribute Flow, whatever the schema says, so re-importing the schema would not help.
+    /// </summary>
+    public List<string> WriteOnlyAttributes { get; init; } = [];
 }

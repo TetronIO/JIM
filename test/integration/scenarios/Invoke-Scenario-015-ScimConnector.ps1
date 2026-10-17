@@ -23,6 +23,9 @@
                       provider's own User extension), then one badge is taken away and another added; the
                       confirming import must find exactly the kept and the added badge (#2181), both
                       in custom.badges and as entries of the core roles attribute (#2090)
+    11. Credentials - The provider publishes password (write-only), but JIM leaves it out of the
+                      Connected System's schema, and across every export above the provider received
+                      no write carrying a password (#2091)
 
     With the update flow in steps 4-6, steps 8 and 9 complete CRUD: every operation the connector can
     perform against a provider is driven end to end and confirmed by reading the provider back. Step 10
@@ -42,7 +45,7 @@
 
 .PARAMETER Step
     Which test step to execute (SourceImport, FullImport, Sync, Flow, Export, Confirm, DeltaImport,
-    Provision, Deprovision, MultiValuedRemoval, All)
+    Provision, Deprovision, MultiValuedRemoval, Credentials, All)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -86,7 +89,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SourceImport", "FullImport", "Sync", "Flow", "Export", "Confirm", "DeltaImport", "Provision", "Deprovision", "MultiValuedRemoval", "All")]
+    [ValidateSet("SourceImport", "FullImport", "Sync", "Flow", "Export", "Confirm", "DeltaImport", "Provision", "Deprovision", "MultiValuedRemoval", "Credentials", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -558,6 +561,29 @@ try {
 
         Add-StepResult -Name "MultiValuedRemoval" -Passed $true -Detail "gold removed, silver kept and platinum added in the provider, confirmed by import"
         Write-Host "  OK Multi-valued removal confirmed" -ForegroundColor Green
+    }
+
+    # --- No password leaves JIM through Attribute Flow (#2091) ---
+    if ($Step -in @("Credentials", "All")) {
+        Write-TestStep "Step 11" "Credentials (password is never part of the schema, and is never sent)"
+
+        $userType = $objectTypes | Where-Object { $_.name -eq "User" }
+        # userName must be there, or an empty attribute list would pass the password check below without proving it.
+        Assert-Equal -Actual @($userType.attributes | Where-Object { $_.name -eq "userName" }).Count -Expected 1 `
+            -Message "The SCIM User schema JIM imported holds userName"
+        $passwordAttributes = @($userType.attributes | Where-Object { $_.name -eq "password" })
+        Assert-Equal -Actual $passwordAttributes.Count -Expected 0 `
+            -Message "The SCIM User schema JIM imported holds no password attribute, although the provider publishes one"
+
+        # The provider logs a marker line for every write carrying a password; the value itself is never logged.
+        $providerLog = docker logs scim-provider 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Could not read the scim-provider container's log." }
+        $passwordWrites = @($providerLog | Select-String -SimpleMatch "PASSWORD-RECEIVED")
+        Assert-Equal -Actual $passwordWrites.Count -Expected 0 `
+            -Message "Writes carrying a password that the provider received over the whole scenario"
+
+        Add-StepResult -Name "Credentials" -Passed $true -Detail "password absent from the schema; the provider received no password"
+        Write-Host "  OK No password reached the provider" -ForegroundColor Green
     }
 
     $testResults.Success = $true

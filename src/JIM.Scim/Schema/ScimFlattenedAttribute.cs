@@ -89,6 +89,15 @@ public class ScimFlattenedAttribute
     /// of the parent attribute, the way a reference is, never at the sub-attribute's own path, which would reach every
     /// entry at once (#2090).
     /// </summary>
+    /// <summary>
+    /// Whether the provider's schema makes the attribute write-only: <c>mutability</c> <c>writeOnly</c> or
+    /// <c>returned</c> <c>never</c>, on the attribute or on the complex attribute containing it (RFC 7643 section 7).
+    /// The core User's <c>password</c> is the one every provider has. An export never writes such an attribute and a
+    /// response never returns one (#2091): a password reaches a service provider only through Password
+    /// Synchronisation, and a value the provider never returns could never be confirmed by import.
+    /// </summary>
+    public bool IsWriteOnly { get; }
+
     public bool IsEntryValue => Access == ScimValueAccess.ComplexSubAttribute && AttributePlurality == AttributePlurality.MultiValued;
 
     public ScimFlattenedAttribute(
@@ -106,7 +115,8 @@ public class ScimFlattenedAttribute
         string? canonicalType = null,
         bool selectsPrimary = false,
         string? extensionUrn = null,
-        bool caseExact = false)
+        bool caseExact = false,
+        bool isWriteOnly = false)
     {
         Name = name;
         ScimPath = scimPath;
@@ -123,6 +133,7 @@ public class ScimFlattenedAttribute
         SelectsPrimary = selectsPrimary;
         ExtensionUrn = extensionUrn;
         CaseExact = caseExact;
+        IsWriteOnly = isWriteOnly;
     }
 
     public ConnectorSchemaAttribute ToConnectorSchemaAttribute()

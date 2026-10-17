@@ -393,6 +393,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = "Synchronisation Failed",
             // The attribute still exports; only the merging of dates the Connected System cannot hold apart is reported.
             [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = "Dates Merged",
+            // Raised while evaluating exports, before anything is sent; the rest of the object still exports.
+            [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = "Credential Not Exported",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",

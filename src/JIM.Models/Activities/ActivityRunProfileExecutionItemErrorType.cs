@@ -304,5 +304,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// Applying it anyway would overwrite whoever got there first, so it is reported and left for the next import to
     /// reconcile.
     /// </summary>
-    ConcurrencyConflict
+    ConcurrencyConflict,
+
+    /// <summary>
+    /// An export Attribute Flow targets an attribute on the credential denylist, such as <c>password</c> (#2091).
+    /// Nothing is staged or sent for it, and the object's other attributes still export. A password reaches a Connected
+    /// System only through Password Synchronisation; the message names the attribute, never a value, and says to remove
+    /// the Attribute Flow.
+    /// </summary>
+    CredentialAttributeNotExported
 }

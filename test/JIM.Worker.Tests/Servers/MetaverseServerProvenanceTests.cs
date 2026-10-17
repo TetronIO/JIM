@@ -361,6 +361,115 @@ public class MetaverseServerProvenanceTests
         Assert.That(result!.Sources.Single().CandidateValues, Is.EqualTo(new[] { "2026-03-01 09:00:00.123456Z" }));
     }
 
+    /// <summary>
+    /// #2319: a source holding its value only under another data type (a schema refresh changed the attribute's type and
+    /// no import has read it since) shows the value it holds, noted as held as the old type until the next import,
+    /// rather than no value, which reads as "would clear": synchronisation leaves the Metaverse Object's value as it is.
+    /// </summary>
+    [TestCase(AttributeDataType.Text, AttributeDataType.Number)]
+    [TestCase(AttributeDataType.Number, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.LongNumber, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Decimal, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.DateTime, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Boolean, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Guid, AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Binary, AttributeDataType.Text)]
+    public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingHeldOnlyUnderAnotherType_ShowsTheHeldValueWithANoteAsync(
+        AttributeDataType type, AttributeDataType heldType)
+    {
+        _attribute.Type = type;
+        var mapping = NewAttributeMapping(1, 101);
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "dept", Type = type };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        var held = new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101 };
+        if (heldType == AttributeDataType.Number)
+            held.IntValue = 42;
+        else
+            held.StringValue = "42";
+        cso.AttributeValues.Add(held);
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        var source = result!.Sources.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(source.CandidateValues, Is.EqualTo(new[] { "42" }), "the held value is shown");
+            Assert.That(source.Note, Does.Contain($"Held as {heldType}").And.Contain("next import"));
+        }
+    }
+
+    /// <summary>
+    /// #2319: candidates are read as the source attribute's type, which is what the engine flows, not as the target's: a
+    /// Number source into a Text attribute shows its number.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingOfAnotherTypeThanTheTarget_ReadsTheSourceTypeAsync()
+    {
+        var mapping = NewAttributeMapping(1, 101);
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "staffNumber", Type = AttributeDataType.Number };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, IntValue = 1001 });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Sources.Single().CandidateValues, Is.EqualTo(new[] { "1001" }));
+            Assert.That(result.Sources.Single().Note, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// #2319: an Expression reading an input held only under another data type is not evaluated, exactly as
+    /// synchronisation does not evaluate it, and the note says why.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_ExpressionReadingAnInputHeldOnlyUnderAnotherType_IsNotEvaluatedWithANoteAsync()
+    {
+        var mapping = new SyncRuleMapping { Id = 1, SyncRuleId = _syncRule.Id, SyncRule = _syncRule, TargetMetaverseAttributeId = AttributeId, Enabled = true };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = "cs[\"dept\"] + \"-suffix\"", Order = 0 });
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "dept", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, IntValue = 42 });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        var source = result!.Sources.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(source.CandidateValues, Is.Empty, "no value built without the input");
+            Assert.That(source.State, Is.EqualTo(AttributeSourceState.NotEvaluated));
+            Assert.That(source.Note, Does.Contain("cs[\"dept\"]").And.Contain("held as Number").And.Contain("next import"));
+        }
+    }
+
     [Test]
     public async Task GetMetaverseAttributeProvenanceAsync_AttributeMappingIsCurrentContributor_ReturnsInUseAsync()
     {

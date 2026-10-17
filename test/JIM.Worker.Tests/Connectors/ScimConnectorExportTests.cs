@@ -266,9 +266,69 @@ public class ScimConnectorExportTests
             Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Post), Is.False);
         }
     }
+    [Test]
+    public async Task ExportAsync_CreateCarryingAPassword_FailsWithoutSendingAnythingAsync()
+    {
+        // #2091: a password reaches a service provider only through Password Synchronisation, never through an
+        // Attribute Flow, and the provider never returns it, so the export could not be confirmed either.
+        var provider = new MockScimProvider();
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Create(user, Change("userName", user, "alice"), Change("password", user, "S3cret!")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("Password Synchronisation").And.Contain("'password'"));
+            Assert.That(results[0].ErrorMessage, Does.Not.Contain("S3cret!"));
+            Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Post), Is.False);
+            Assert.That(handler.Requests.Any(r => (r.Body ?? string.Empty).Contains("S3cret!")), Is.False);
+        }
+    }
     #endregion
 
     #region update
+    [Test]
+    public async Task ExportAsync_UpdateCarryingAPassword_FailsWithoutSendingAPatchAsync()
+    {
+        var provider = new MockScimProvider();
+        provider.AddUser("alice", "alice");
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Against("alice", user, PendingExportChangeType.Update, Change("password", user, "S3cret!")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("Password Synchronisation"));
+            Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Patch), Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_UpdateCarryingAPasswordToAProviderWithoutPatch_FailsWithoutSendingAPutAsync()
+    {
+        var provider = new MockScimProvider();
+        provider.Options.SupportsPatch = false;
+        provider.AddUser("alice", "alice");
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Against("alice", user, PendingExportChangeType.Update, Change("password", user, "S3cret!")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("Password Synchronisation"));
+            Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Put), Is.False);
+        }
+    }
+
     [Test]
     public async Task ExportAsync_Update_SendsAPatchNamingOnlyWhatChangedAsync()
     {

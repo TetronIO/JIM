@@ -111,6 +111,79 @@ public class ProvisioningMatchWorkflowTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// #2323: a schema refresh made the Directory's Employee ID Text, and no import has read it since, so the account
+    /// still holds it as the Number it was imported as. The lookup compares the Text column and finds nothing; the
+    /// account may be the identity's own, so provisioning would create a second one. The identity is stopped with the
+    /// error instead, and is matched once a Full Import has read the attribute as its new type.
+    /// </summary>
+    [Test]
+    public async Task FullSync_OnlyAccountHoldsTheMatchAttributeUnderAnotherDataType_RecordsTheErrorAndNeitherJoinsNorProvisionsAsync()
+    {
+        var arranged = await ArrangeIdentityMatchingTwoAccountsAsync();
+        var held = HoldEmployeeIdAsNumber(arranged.Accounts[0], 1);
+        EmployeeIdOf(arranged.Accounts[1]).StringValue = "ADM001";
+
+        var activity = await RunFullSyncAsync(arranged.Hr);
+
+        var identity = SyncRepo.MetaverseObjects.Values.Single();
+        var item = ItemsOf(activity).SingleOrDefault(i => i.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed);
+        var directoryObjects = SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == arranged.Directory.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(directoryObjects.Select(c => c.Id), Is.EquivalentTo(arranged.Accounts), "nothing is provisioned");
+            Assert.That(directoryObjects.All(c => c.MetaverseObjectId == null), Is.True, "nothing is joined");
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == arranged.Directory.Id), Is.Empty);
+            Assert.That(item?.MetaverseObjectId, Is.EqualTo(identity.Id));
+            Assert.That(item?.ErrorMessage, Does.Contain("'Directory'").And.Contain(held.Id.ToString()).And.Contain("held as Number"));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_IdentitysAccountHoldsTheCurrentTypeWhileAnotherIsHeldUnderAnotherDataType_JoinsItAsync()
+    {
+        var arranged = await ArrangeIdentityMatchingTwoAccountsAsync();
+        HoldEmployeeIdAsNumber(arranged.Accounts[1], 1);
+
+        var activity = await RunFullSyncAsync(arranged.Hr);
+
+        var identity = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(SyncRepo.ConnectedSystemObjects[arranged.Accounts[0]].MetaverseObjectId, Is.EqualTo(identity.Id));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_NoAccountHoldsTheValueAndNoneIsHeldUnderAnotherDataType_ProvisionsAsync()
+    {
+        var arranged = await ArrangeIdentityMatchingTwoAccountsAsync();
+        EmployeeIdOf(arranged.Accounts[0]).StringValue = "EMP002";
+        EmployeeIdOf(arranged.Accounts[1]).StringValue = "ADM001";
+
+        var activity = await RunFullSyncAsync(arranged.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ItemsOf(activity).Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(SyncRepo.ConnectedSystemObjects.Values.Count(c => c.ConnectedSystemId == arranged.Directory.Id), Is.EqualTo(3),
+                "the identity is provisioned an account of its own");
+        }
+    }
+
+    private ConnectedSystemObjectAttributeValue EmployeeIdOf(Guid accountId) =>
+        SyncRepo.ConnectedSystemObjects[accountId].AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId");
+
+    /// <summary>The account's Employee ID as a schema refresh leaves it after redefining the attribute from Number to Text.</summary>
+    private ConnectedSystemObject HoldEmployeeIdAsNumber(Guid accountId, int employeeId)
+    {
+        var value = EmployeeIdOf(accountId);
+        value.StringValue = null;
+        value.IntValue = employeeId;
+        return SyncRepo.ConnectedSystemObjects[accountId];
+    }
+
     [Test]
     public async Task PreviewSyncForCsoAsync_IdentityMatchesTwoAccounts_ReportsTheErrorWithBothAccountsAsync()
     {

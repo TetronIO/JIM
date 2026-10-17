@@ -80,7 +80,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = 36,
         [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = 37,
         [ActivityRunProfileExecutionItemErrorType.MissingDependency] = 38,
-        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 39
+        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 39,
+
+        // An export Attribute Flow targets a credential attribute such as password, which is never exported (#2091).
+        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 40
     };
 
     [Test]
