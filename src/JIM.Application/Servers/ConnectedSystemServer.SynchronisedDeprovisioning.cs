@@ -97,8 +97,9 @@ public partial class ConnectedSystemServer
         var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
         var recallScope = ContributorRecallScope.ForDeletedConnectedSystem(task.ConnectedSystemId);
 
-        // The surviving systems' import rules whose scope can fail to evaluate (a pattern criterion): an object whose
-        // survivor such a rule cannot decide is held back rather than recalled on a guess. Empty, and free, otherwise.
+        // The surviving systems' import rules whose scope can fail to evaluate (any criterion, since a survivor can hold
+        // the attribute it reads under an earlier data type, #2329): an object whose survivor such a rule cannot decide is
+        // held back rather than recalled on a guess. Empty, and free, when no surviving import rule has criteria.
         var fallibleImportRules = allSyncRules
             .Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId && rule.Direction == SyncRuleDirection.Import &&
                            rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))

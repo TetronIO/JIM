@@ -36,11 +36,18 @@ public class ScopingEvaluationServer
     /// <summary>
     /// Whether evaluating the rule's scope can fail for some object rather than answer in or out: true when any criterion
     /// compares with a pattern, which can run past its time limit on a value, or compares an expression, which can fail
-    /// to evaluate or compute a value that is not of the type it is compared as (#2054). A caller that must not act on an
-    /// undecidable scope can check such rules ahead of acting and skip the check for every other rule.
+    /// to evaluate or compute a value that is not of the type it is compared as (#2054). On an import rule, any criterion
+    /// reading an attribute can fail too: a Connected System Object can hold the attribute only under an earlier data type
+    /// (#2329). A caller that must not act on an undecidable scope can check such rules ahead of acting and skip the check
+    /// for every other rule.
     /// </summary>
-    public static bool CanFailToEvaluate(SyncRule rule) =>
-        rule.ObjectScopingCriteriaGroups.Any(GroupCanFailToEvaluate);
+    public static bool CanFailToEvaluate(SyncRule rule) => rule.Direction == SyncRuleDirection.Import
+        ? rule.ObjectScopingCriteriaGroups.Any(GroupReadsAnAttribute)
+        : rule.ObjectScopingCriteriaGroups.Any(GroupCanFailToEvaluate);
+
+    private static bool GroupReadsAnAttribute(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria.Any(criterion => criterion.IsExpression || criterion.ConnectedSystemAttribute != null || criterion.ConnectedSystemAttributeId.HasValue) ||
+        group.ChildGroups.Any(GroupReadsAnAttribute);
 
     /// <summary>
     /// Whether any of the rule's criteria compares an expression (#2054). A caller that reads only the scoping
