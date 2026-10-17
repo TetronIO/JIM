@@ -34,6 +34,12 @@ namespace JIM.Application.Services;
 /// disabled rules, so enabling a flow can never introduce a cycle; <see cref="DerivedFlowGraphScope.EnabledMappingsOnly"/>
 /// is what synchronisation evaluates (decision 2).
 /// </para>
+/// <para>
+/// The graph also records which Connected Systems <em>generate</em> each attribute (#242), for
+/// <see cref="GetHostingSystemsReading"/> alone: a generated mapping reconciles its assignment against the attribute's
+/// current value whenever its own system synchronises the object, so it depends on that attribute as surely as a derived
+/// flow reading it does (#2309). It is not an edge, so it orders nothing and cannot form a cycle.
+/// </para>
 /// </remarks>
 public sealed class DerivedFlowGraph
 {
@@ -73,7 +79,11 @@ public sealed class DerivedFlowGraph
                 .Where(mapping => GetTargetAttributeId(mapping) != null && (includeDisabled || mapping.Enabled));
 
             foreach (var mapping in candidateMappings)
+            {
                 AddMappingIfDerived(typeGraph, rule, mapping);
+                if (mapping.Generation != null)
+                    AddGenerator(typeGraph, rule, mapping);
+            }
         }
 
         foreach (var typeGraph in _typeGraphs.Values.OrderBy(t => t.MetaverseObjectTypeId))
@@ -160,8 +170,10 @@ public sealed class DerivedFlowGraph
     /// <summary>
     /// The Connected System ids whose import Synchronisation Rules host a derived flow reading
     /// <paramref name="metaverseAttributeId"/>, directly or transitively through derived levels (if Email reads
-    /// Account Name and User Principal Name reads Email, a change to Account Name reaches the hosts of both). Ordered
-    /// ascending; empty when nothing derived reads the attribute.
+    /// Account Name and User Principal Name reads Email, a change to Account Name reaches the hosts of both), or a
+    /// generated mapping targeting it or any attribute reached that way (#2309): a change another writer makes to a
+    /// generated attribute (superseding the value, or clearing a sticky one) is reconciled only by the generating
+    /// system's own synchronisation. Ordered ascending; empty when nothing depends on the attribute.
     /// </summary>
     public IReadOnlyList<int> GetHostingSystemsReading(int metaverseObjectTypeId, int metaverseAttributeId)
     {
@@ -175,6 +187,9 @@ public sealed class DerivedFlowGraph
 
         while (frontier.TryDequeue(out var attributeId))
         {
+            if (typeGraph.GeneratorsByTarget.TryGetValue(attributeId, out var generators))
+                hostingSystems.UnionWith(generators);
+
             if (!typeGraph.ReadersByInput.TryGetValue(attributeId, out var readers))
                 continue;
 
@@ -220,6 +235,18 @@ public sealed class DerivedFlowGraph
     public static bool ReadsMetaverse(SyncRuleMapping mapping) => GetMetaverseInputNames(mapping).Count > 0;
 
     private static int? GetTargetAttributeId(SyncRuleMapping mapping) => mapping.ResolveTargetMetaverseAttributeId();
+
+    private static void AddGenerator(TypeGraph typeGraph, SyncRule rule, SyncRuleMapping mapping)
+    {
+        var targetAttributeId = GetTargetAttributeId(mapping)!.Value;
+        if (!typeGraph.GeneratorsByTarget.TryGetValue(targetAttributeId, out var generators))
+        {
+            generators = [];
+            typeGraph.GeneratorsByTarget[targetAttributeId] = generators;
+        }
+
+        generators.Add(rule.ConnectedSystemId);
+    }
 
     private TypeGraph GetOrCreateTypeGraph(SyncRule rule, Dictionary<int, MetaverseObjectType> suppliedTypes)
     {
@@ -460,6 +487,7 @@ public sealed class DerivedFlowGraph
         public List<DerivedFlow> Flows { get; } = [];
         public Dictionary<int, List<DerivedFlow>> ContributorsByTarget { get; } = new();
         public Dictionary<int, List<DerivedFlow>> ReadersByInput { get; } = new();
+        public Dictionary<int, HashSet<int>> GeneratorsByTarget { get; } = new();
         public Dictionary<int, int> Levels { get; } = new();
         public Dictionary<int, List<DerivedFlow>> FlowsByLevel { get; } = new();
         public HashSet<int> Unordered { get; } = [];

@@ -419,6 +419,56 @@ public class DerivedFlowGraphTests
     }
 
     [Test]
+    public void GetHostingSystemsReading_IncludesSystemsGeneratingTheAttribute()
+    {
+        // A generated mapping (#242) reconciles its assignment against the attribute's current value only while its own
+        // system synchronises the object, so a change any other writer makes to that attribute must bring the object
+        // back to it (#2309): another system superseding the value, or clearing a sticky one.
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
+        var ad = ImportRule(2, "AD Import", connectedSystemId: 20);
+        Generated(hr, 101, _model.AccountName, "cs[\"firstName\"]");
+        Direct(ad, 102, _model.AccountName, "sAMAccountName");
+
+        var graph = Build(DerivedFlowGraphScope.EnabledMappingsOnly, hr, ad);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10 }));
+            Assert.That(graph.HasCycle, Is.False, "a generated mapping is not a derived flow and orders nothing");
+            Assert.That(graph.MaxLevel(PersonTypeId), Is.EqualTo(0));
+        }
+    }
+
+    [Test]
+    public void GetHostingSystemsReading_ReachesSystemsGeneratingADerivedTarget()
+    {
+        // Account Name feeds AD's derived Email, which HR generates too: a change to Account Name can change Email, so
+        // HR must reconcile its Email assignment.
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
+        var ad = ImportRule(2, "AD Import", connectedSystemId: 20);
+        Generated(hr, 101, _model.Email, "cs[\"firstName\"]");
+        Expression(ad, 102, _model.Email, "mv[\"Account Name\"] + \"@corp.local\"");
+
+        var graph = Build(DerivedFlowGraphScope.EnabledMappingsOnly, hr, ad);
+
+        Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10, 20 }));
+    }
+
+    [Test]
+    public void GetHostingSystemsReading_RunTimeGraphOmitsDisabledGeneratedMappings()
+    {
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
+        var training = ImportRule(2, "Training Import", connectedSystemId: 30, enabled: false);
+        Generated(hr, 101, _model.AccountName, "cs[\"firstName\"]").Enabled = false;
+        Generated(training, 102, _model.AccountName, "cs[\"firstName\"]");
+
+        var graph = Build(DerivedFlowGraphScope.EnabledMappingsOnly, hr, training);
+
+        Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.Empty,
+            "a disabled mapping, or one on a disabled rule, keeps its assignment untouched, so its system has nothing to reconcile");
+    }
+
+    [Test]
     public void GetHostingSystemsReading_TerminatesOnACycle()
     {
         var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
