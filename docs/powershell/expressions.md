@@ -107,7 +107,7 @@ The result of evaluating the expression against the sample values. ResultLines g
 | `ResultType` | `string` | The type of the result (e.g., "String", "Int32", "Boolean"). |
 | `ErrorMessage` | `string` | Error message if the expression is invalid or evaluation failed. |
 | `ErrorPosition` | `int` | Position in the expression where an error occurred (if applicable). |
-| `Outcome` | `string` | What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an Attribute Flow was given and its sample values could be used. One of `Values`, `NoValue` or `Error`. |
+| `Outcome` | `string` | What the Attribute Flow's target attribute would be given: values, no value, or an error. Set only when an Attribute Flow was given and its sample values could be used. One of `Values`, `NoValue`, `Error` or `LeftAsHeld`. |
 | `ErrorReason` | `string` | Why the outcome is an error. Set only when `Outcome` is Error. One of `MissingInputFailedMapping`, `MissingInputFailedObject`, `EvaluationFailed`, `ResultNotConvertible`, `ResultMultiValued` or `GeneratedBaseNotSingleValue`. |
 | `OutcomeDescription` | `string` | What synchronisation would do, in one sentence. Set only when an Attribute Flow was given. |
 | `ValueLines` | `string[]` | The values the target attribute would hold after value processing and conversion to its type, one line per value in JIM's text form. Set only when `Outcome` is Values. |

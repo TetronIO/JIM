@@ -214,7 +214,9 @@ public class DriftDetectionService
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
 
                     // Compare values
-                    if (!ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(mapping.TargetConnectedSystemAttribute)))
+                    // A target held only under another data type reads as no value; it is not drift (#2319).
+                    if (!ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(mapping.TargetConnectedSystemAttribute)) &&
+                        !IsTargetHeldOnlyUnderAnotherDataType(cso, mapping.TargetConnectedSystemAttribute))
                     {
                         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}. " +
                             "Expected: '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -303,7 +305,7 @@ public class DriftDetectionService
         }
 
         var corrections = staged.Where(change => !SyncEngine.IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
-        if (corrections.Count == 0)
+        if (corrections.Count == 0 || IsTargetHeldOnlyUnderAnotherDataType(cso, target))
             return;
 
         var expectedValue = ExpectedValueOf(staged, target);
@@ -486,7 +488,8 @@ public class DriftDetectionService
 
         // The same comparison every export flow uses (exact for text, unless the attribute is an identifier that ignores
         // case; AttributeValueComparison), so drift and export staging agree on what counts as a difference.
-        if (ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(targetAttribute)))
+        if (ValuesEqual(expectedValue, actualValue, AttributeValueComparison.ComparerFor(targetAttribute)) ||
+            IsTargetHeldOnlyUnderAnotherDataType(cso, targetAttribute))
             return;
 
         Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} generated attribute {AttrName}. Expected (assigned): '{ExpectedValue}', Actual: '{ActualValue}'",
@@ -840,6 +843,24 @@ public class DriftDetectionService
             AttributeDataType.Reference => av.ReferenceValueId ?? av.ReferenceValue?.Id,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Whether the Connected System Object holds the target attribute only under another data type (#2319): a schema
+    /// refresh changed its type and no import has read it since. <see cref="GetActualValue"/> reads that as no value, so a
+    /// difference found against it is not drift, and a correction would only rewrite what the next import reads anyway.
+    /// The attribute is checked again once an import has read it as its new type. Called only once a difference has been
+    /// found, so the usual case costs nothing.
+    /// </summary>
+    private static bool IsTargetHeldOnlyUnderAnotherDataType(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute target)
+    {
+        if (SyncEngine.HeldOnlyUnderAnotherDataType(cso.AttributeValues, target.Id, target.Type) is not { } heldType)
+            return false;
+
+        Log.Warning("EvaluateDrift: Connected System Object {CsoId} holds attribute '{AttrName}' only as {HeldType}, not as its {AttrType} " +
+            "type, so it is not checked for drift until an import reads the attribute again.",
+            cso.Id, LogSanitiser.Sanitise(target.Name), heldType, target.Type);
+        return true;
     }
 
     /// <summary>

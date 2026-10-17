@@ -66,3 +66,9 @@ deploy/podman/** text eol=lf
 # The deployment lab runs on a Linux host and sends bash, embedded in its PowerShell, to Linux VMs: a CR at the end of
 # each line breaks that bash, so these keep LF even though *.ps1 is CRLF elsewhere
 test/ci/deployment/lab/** text eol=lf
+
+# Integration test images are built on Linux from these files (Dockerfiles, LDIF, ACL/SDDL, shell): a CR at the
+# end of each line corrupts what they feed to the directory tools (Samba rejected the JIM delegation SDDL), so
+# they keep LF even on a Windows checkout
+test/integration/docker/** text eol=lf
+test/integration/docker/**/*.ps1 text eol=crlf

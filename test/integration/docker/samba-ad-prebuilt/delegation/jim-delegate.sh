@@ -62,7 +62,7 @@ delegation_sddl() {
         echo "ERROR: the delegation file '${ACL_FILE}' is missing from this image" >&2
         exit 1
     fi
-    grep -v '^\s*#' "$ACL_FILE" | grep -v '^\s*$' | tr -d '\n ' | sed "s/__JIM_TRUSTEE_SID__/${sid}/g"
+    grep -v '^\s*#' "$ACL_FILE" | grep -v '^\s*$' | tr -d '\r\n ' | sed "s/__JIM_TRUSTEE_SID__/${sid}/g"
 }
 
 delegate_container() {

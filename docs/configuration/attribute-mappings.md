@@ -48,7 +48,7 @@ An expression whose input has no value on the object does not fail; it evaluates
 | **Fail this mapping** | Skips the mapping and records an **Expression Missing Input** error; the object's other attributes still flow. |
 | **Fail the object** | Nothing flows for the object at all, and it is recorded as an **Expression Missing Input** error. For identity-critical values such as a Distinguished Name. |
 
-JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expression-nulls.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
+JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. A `cs["..."]` input the object holds only under another data type, because a [schema refresh changed its type](connected-system-schema.md#moving-an-attribute-to-its-new-type) and no import has read it since, is not missing: the expression is not evaluated, the Metaverse Object keeps its value (a [generated value](generated-values.md) waits), and JIM logs a warning, whatever the Missing Input Behaviour. See [Missing Input Behaviour](../concepts/expression-nulls.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
 
 ### Changing a mapping after it is created
 

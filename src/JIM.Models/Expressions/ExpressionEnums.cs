@@ -116,7 +116,15 @@ public enum ExpressionSourceOutcome
     /// <summary>
     /// The Expression failed while it was evaluated.
     /// </summary>
-    EvaluationFailed
+    EvaluationFailed,
+
+    /// <summary>
+    /// The Expression was not evaluated because an input it reads is held only under another data type: a schema
+    /// refresh changed the attribute's type and no import has read it since. That is a value JIM cannot read as the
+    /// attribute's type, not the absence of one, so Missing Input Behaviour does not apply and the target is left as it
+    /// is until an import reads the attribute again.
+    /// </summary>
+    InputHeldUnderAnotherDataType
 }
 
 /// <summary>
@@ -138,7 +146,14 @@ public enum AttributeFlowOutcome
     /// <summary>
     /// An error: the attribute keeps its current value, and the error is reported.
     /// </summary>
-    Error
+    Error,
+
+    /// <summary>
+    /// Not evaluated, because an input the Expression reads is held only under another data type
+    /// (<see cref="ExpressionSourceOutcome.InputHeldUnderAnotherDataType"/>): the attribute keeps its current value and
+    /// nothing is staged until an import reads the input again. Not an error.
+    /// </summary>
+    LeftAsHeld
 }
 
 /// <summary>
@@ -190,9 +205,9 @@ public enum GeneratedBaseOutcome
     Base,
 
     /// <summary>
-    /// No base yet: an input is absent and Missing Input Behaviour is Contribute no value, the Expression returned no
-    /// value, or value processing left nothing. Synchronisation waits; a value already generated is kept, never
-    /// cleared.
+    /// No base yet: an input is absent and Missing Input Behaviour is Contribute no value, an input is held only under
+    /// another data type until an import reads it again, the Expression returned no value, or value processing left
+    /// nothing. Synchronisation waits; a value already generated is kept, never cleared.
     /// </summary>
     Waits,
 

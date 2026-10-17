@@ -29,8 +29,19 @@ BeforeAll {
     }
 
     function New-Snapshot {
-        param([string]$State = 'OPEN', [string]$MergeStateStatus = 'BLOCKED', $Checks = @(), $Threads = @())
-        [pscustomobject]@{ State = $State; MergeStateStatus = $MergeStateStatus; Checks = @($Checks); Threads = @($Threads) }
+        param(
+            [string]$State = 'OPEN', [string]$MergeStateStatus = 'BLOCKED', $Checks = @(), $Threads = @(),
+            [bool]$InMergeQueue = $false, $MergeQueuePosition = $null, $QueueRemoval = $null
+        )
+        [pscustomobject]@{
+            State = $State; MergeStateStatus = $MergeStateStatus; Checks = @($Checks); Threads = @($Threads)
+            InMergeQueue = $InMergeQueue; MergeQueuePosition = $MergeQueuePosition; QueueRemoval = $QueueRemoval
+        }
+    }
+
+    function New-Removal {
+        param([string]$Reason = 'failed_checks', $Checks = @())
+        [pscustomobject]@{ Reason = $Reason; Checks = @($Checks) }
     }
 
     function Get-Attention {
@@ -105,8 +116,8 @@ Describe 'Watch-PullRequest: what ends the wait' {
         (Get-Attention (New-Snapshot -MergeStateStatus DIRTY)).Reason | Should -Be 'Conflict'
     }
 
-    It 'reports Behind for a pull request behind main' {
-        (Get-Attention (New-Snapshot -MergeStateStatus BEHIND -Checks @((New-Check build-and-test)))).Reason | Should -Be 'Behind'
+    It 'keeps waiting on a pull request behind main, since the merge queue tests it against main itself' {
+        (Get-Attention (New-Snapshot -MergeStateStatus BEHIND -Checks @((New-Check build-and-test)))).Reason | Should -Be 'Waiting'
     }
 
     It 'reports Blocked when every check passed, no thread is open, and GitHub still holds the merge' {
@@ -116,6 +127,40 @@ Describe 'Watch-PullRequest: what ends the wait' {
 
     It 'reports a failed check before an open thread' {
         $snap = New-Snapshot -Checks @((New-Check changelog-lint -Conclusion FAILURE)) -Threads @((New-Thread T1))
+        (Get-Attention $snap).Reason | Should -Be 'ChecksFailed'
+    }
+}
+
+Describe 'Watch-PullRequest: the merge queue' {
+    It 'keeps waiting on a queued pull request whose own checks all passed, rather than reporting Blocked' {
+        $snap = New-Snapshot -MergeStateStatus BLOCKED -InMergeQueue $true -MergeQueuePosition 2 -Checks @((New-Check build-and-test))
+        $a = Get-Attention $snap
+        $a.Reason | Should -Be 'Waiting'
+        $a.Action | Should -Match 'position 2'
+    }
+
+    It 'reports RemovedFromQueue for an entry whose merge_group checks failed, naming the failed ones' {
+        $removal = New-Removal -Reason failed_checks -Checks @((New-Check 'Analyze (csharp)' -Conclusion FAILURE), (New-Check build-and-test))
+        $a = Get-Attention (New-Snapshot -MergeStateStatus CLEAN -Checks @((New-Check build-and-test)) -QueueRemoval $removal)
+        $a.Reason | Should -Be 'RemovedFromQueue'
+        $a.Checks.Name | Should -Be @('Analyze (csharp)')
+        $a.Action | Should -Match 'gh pr merge'
+    }
+
+    It 'reports RemovedFromQueue for an entry that conflicted with main, saying to merge main in' {
+        $a = Get-Attention (New-Snapshot -MergeStateStatus DIRTY -QueueRemoval (New-Removal -Reason merge_conflict))
+        $a.Reason | Should -Be 'RemovedFromQueue'
+        $a.Action | Should -Match 'origin/main'
+    }
+
+    It 'reports RemovedFromQueue for a manual removal, saying to ask before re-adding' {
+        $a = Get-Attention (New-Snapshot -MergeStateStatus CLEAN -QueueRemoval (New-Removal -Reason manual))
+        $a.Reason | Should -Be 'RemovedFromQueue'
+        $a.Action | Should -Match 'user'
+    }
+
+    It 'reports a failed check on the pull request itself before a queue removal' {
+        $snap = New-Snapshot -Checks @((New-Check changelog-lint -Conclusion FAILURE)) -QueueRemoval (New-Removal)
         (Get-Attention $snap).Reason | Should -Be 'ChecksFailed'
     }
 }
@@ -158,6 +203,60 @@ Describe 'Watch-PullRequest: reading the GraphQL response' {
     It 'keeps waiting on a commit with no checks yet, rather than reporting Blocked' {
         $json = '{ "data": { "repository": { "pullRequest": { "state": "OPEN", "mergeStateStatus": "BLOCKED", "commits": { "nodes": [ { "commit": { "statusCheckRollup": null } } ] }, "reviewThreads": { "nodes": [] } } } } }' | ConvertFrom-Json
         (& $script:ScriptPath -Response $json -PassThru).Reason | Should -Be 'Waiting'
+    }
+
+    Context 'the merge queue' {
+        BeforeAll {
+            # A green pull request with the given queue fields and latest queue event.
+            function New-QueueResponse {
+                param([string]$QueueFields, [string]$LastQueueEvent)
+                $events = if ($LastQueueEvent) { $LastQueueEvent } else { '' }
+                @"
+{ "data": { "repository": { "pullRequest": {
+  "state": "OPEN", "mergeStateStatus": "BLOCKED", $QueueFields,
+  "commits": { "nodes": [ { "commit": { "statusCheckRollup": { "contexts": { "nodes": [
+    { "__typename": "CheckRun", "name": "build-and-test", "status": "COMPLETED", "conclusion": "SUCCESS", "startedAt": "2026-10-13T10:00:00Z", "detailsUrl": "https://x/1" }
+  ] } } } } ] },
+  "reviewThreads": { "nodes": [] },
+  "timelineItems": { "nodes": [ $events ] }
+} } } }
+"@ | ConvertFrom-Json
+            }
+            $script:FailedRemoval = @'
+{ "__typename": "RemovedFromMergeQueueEvent", "reason": "failed_checks", "beforeCommit": { "oid": "5594bca", "statusCheckRollup": { "contexts": { "nodes": [
+  { "__typename": "CheckRun", "name": "Analyze (csharp)", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-10-13T11:00:00Z", "detailsUrl": "https://x/mg1" },
+  { "__typename": "CheckRun", "name": "build-and-test", "status": "COMPLETED", "conclusion": "SUCCESS", "startedAt": "2026-10-13T11:00:00Z", "detailsUrl": "https://x/mg2" }
+] } } } }
+'@
+        }
+
+        It 'reads a queued pull request as waiting, with its position' {
+            $json = New-QueueResponse -QueueFields '"isInMergeQueue": true, "mergeQueueEntry": { "state": "AWAITING_CHECKS", "position": 1 }, "autoMergeRequest": null' -LastQueueEvent '{ "__typename": "AddedToMergeQueueEvent" }'
+            $a = & $script:ScriptPath -Response $json -PassThru
+            $a.Reason | Should -Be 'Waiting'
+            $a.Action | Should -Match 'position 1'
+        }
+
+        It 'reads a removal for failed checks, with the merge_group checks that failed' {
+            $json = New-QueueResponse -QueueFields '"isInMergeQueue": false, "mergeQueueEntry": null, "autoMergeRequest": null' -LastQueueEvent $script:FailedRemoval
+            $a = & $script:ScriptPath -Response $json -PassThru
+            $a.Reason | Should -Be 'RemovedFromQueue'
+            $a.Checks.Name | Should -Be @('Analyze (csharp)')
+            $a.Checks[0].Url | Should -Be 'https://x/mg1'
+        }
+
+        It 'stops reporting a removal once auto-merge is armed again' {
+            $json = New-QueueResponse -QueueFields '"isInMergeQueue": false, "mergeQueueEntry": null, "autoMergeRequest": { "enabledAt": "2026-10-13T12:00:00Z" }' -LastQueueEvent $script:FailedRemoval
+            # Armed and green, GitHub re-queues it at once; if it stays BLOCKED
+            # instead, Blocked (an unsigned commit, say) is the right report.
+            (& $script:ScriptPath -Response $json -PassThru).Reason | Should -Not -Be 'RemovedFromQueue'
+        }
+
+        It 'keeps waiting when it was added back to the queue after a removal' {
+            $json = New-QueueResponse -QueueFields '"isInMergeQueue": false, "mergeQueueEntry": null, "autoMergeRequest": null' -LastQueueEvent '{ "__typename": "AddedToMergeQueueEvent" }'
+            # Added, and not yet showing as queued: treat it as queued, not as Blocked or removed.
+            (& $script:ScriptPath -Response $json -PassThru).Reason | Should -Be 'Waiting'
+        }
     }
 }
 
@@ -216,8 +315,40 @@ Describe 'Watch-PullRequest: reading the REST responses (when GraphQL is refused
         (Invoke-Rest $rest -Acknowledged '4252088407').Reason | Should -Be 'Waiting'
     }
 
-    It 'reads mergeable_state behind as Behind' {
+    It 'reads mergeable_state behind as still waiting' {
         $rest = New-Rest -MergeableState behind -CheckRuns @(@{ name = 'build-and-test'; status = 'completed'; conclusion = 'success'; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' })
-        (Invoke-Rest $rest).Reason | Should -Be 'Behind'
+        (Invoke-Rest $rest).Reason | Should -Be 'Waiting'
+    }
+
+    Context 'the merge queue' {
+        BeforeAll {
+            $script:GreenRun = @{ name = 'build-and-test'; status = 'completed'; conclusion = 'success'; started_at = '2026-10-13T10:00:00Z'; html_url = 'https://x/1' }
+            function New-QueueRest {
+                param([string[]]$Events, $AutoMerge = $null, $MergeGroupCheckRuns = @())
+                $rest = New-Rest -MergeableState blocked -CheckRuns @($script:GreenRun)
+                $rest.Pull | Add-Member -NotePropertyName auto_merge -NotePropertyValue $AutoMerge
+                $rest.Timeline = @($Events | ForEach-Object { [pscustomobject]@{ event = $_; created_at = '2026-10-13T11:00:00Z' } })
+                $rest.MergeGroupCheckRuns = @($MergeGroupCheckRuns | ForEach-Object { [pscustomobject]$_ })
+                $rest
+            }
+        }
+
+        It 'reads a pull request last added to the queue as waiting, not Blocked' {
+            (Invoke-Rest (New-QueueRest -Events 'committed', 'added_to_merge_queue')).Reason | Should -Be 'Waiting'
+        }
+
+        It 'reads a removal with the merge_group checks that failed' {
+            $rest = New-QueueRest -Events 'added_to_merge_queue', 'removed_from_merge_queue' -MergeGroupCheckRuns @(
+                @{ name = 'changelog-lint'; status = 'completed'; conclusion = 'failure'; started_at = '2026-10-13T11:00:00Z'; html_url = 'https://x/mg' },
+                $script:GreenRun)
+            $a = Invoke-Rest $rest
+            $a.Reason | Should -Be 'RemovedFromQueue'
+            $a.Checks.Name | Should -Be @('changelog-lint')
+        }
+
+        It 'stops reporting a removal once auto-merge is armed again' {
+            $rest = New-QueueRest -Events 'added_to_merge_queue', 'removed_from_merge_queue' -AutoMerge ([pscustomobject]@{ merge_method = 'squash' })
+            (Invoke-Rest $rest).Reason | Should -Not -Be 'RemovedFromQueue'
+        }
     }
 }
