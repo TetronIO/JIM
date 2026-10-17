@@ -1595,6 +1595,118 @@ public class ObjectMatchingServerTests
 
     #endregion
 
+    #region Export matching while an object holds the attribute under another data type (#2323)
+
+    /// <summary>
+    /// Seeds an account whose EmployeeId is held only as a Number: a schema refresh made the attribute Text and no import
+    /// has read it since, so the lookup, which compares the Text column, cannot see it.
+    /// </summary>
+    private ConnectedSystemObject SeedAccountHeldAsNumber(ConnectedSystem targetSystem, ConnectedSystemObjectType targetUserType, int employeeId)
+    {
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var cso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "unused");
+        cso.AttributeValues[0].StringValue = null;
+        cso.AttributeValues[0].IntValue = employeeId;
+        return cso;
+    }
+
+    [TestCase(false, TestName = "FindMatchingConnectedSystemObjectAsync_OnlyAccountHeldUnderAnotherDataType_Fails(Query)")]
+    [TestCase(true, TestName = "FindMatchingConnectedSystemObjectAsync_OnlyAccountHeldUnderAnotherDataType_Fails(Prefetched)")]
+    public void FindMatchingConnectedSystemObjectAsync_OnlyAccountHeldUnderAnotherDataType_FailsAsync(bool prefetched)
+    {
+        // The account may be this identity's own: finding nothing must not let it be provisioned a second account.
+        var (mvo, targetSystem, targetUserType, rule) = ArrangeEmployeeIdExportMatch("1001");
+        var held = SeedAccountHeldAsNumber(targetSystem, targetUserType, 1001);
+
+        var ex = Assert.ThrowsAsync<ObjectMatchingRuleFailedException>(() => Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule }, prefetched ? new ExportMatchCandidates() : null));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Rule, Is.SameAs(rule));
+            Assert.That(ex.Message, Does.Contain("neither joined nor provisioned"));
+            Assert.That(ex.Message, Does.Contain("1 existing Connected System Object"));
+            Assert.That(ex.Message, Does.Contain(held.Id.ToString()));
+            Assert.That(ex.Message, Does.Contain("is held as Number, not as its Text type"));
+            Assert.That(ex.Message, Does.Contain("Full Import"));
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FindMatchingConnectedSystemObjectAsync_AccountHoldsTheCurrentTypeWhileAnotherIsHeldUnderAnotherDataType_MatchesAsync(bool prefetched)
+    {
+        var (mvo, targetSystem, targetUserType, rule) = ArrangeEmployeeIdExportMatch("EMP001");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var account = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        SeedAccountHeldAsNumber(targetSystem, targetUserType, 2002);
+        ExportMatchCandidates? candidates = null;
+        if (prefetched)
+        {
+            candidates = new ExportMatchCandidates();
+            candidates.AddCandidate(rule.Id, "EMP001", account.Id);
+        }
+
+        var match = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule }, candidates);
+
+        Assert.That(match?.ConnectedSystemObject.Id, Is.EqualTo(account.Id));
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_AccountHoldsBothTypes_IsReadAsItsCurrentTypeAndFindsNothingAsync()
+    {
+        // As Attribute Flow reads it (#2319): a value of the current type is what the object holds, so it is not held only
+        // under another type, and a value that matches nothing lets the identity be provisioned.
+        var (mvo, targetSystem, targetUserType, rule) = ArrangeEmployeeIdExportMatch("EMP001");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var account = SeedAccountHeldAsNumber(targetSystem, targetUserType, 1001);
+        account.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), Attribute = csEmployeeIdAttr, AttributeId = csEmployeeIdAttr.Id, StringValue = "EMP002"
+        });
+
+        var match = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        Assert.That(match, Is.Null);
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_NoAccountAtAll_ReturnsNullSoTheIdentityIsProvisionedAsync()
+    {
+        var (mvo, targetSystem, targetUserType, rule) = ArrangeEmployeeIdExportMatch("EMP001");
+
+        var match = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule }, heldObjects: new Dictionary<(int, int), ExportMatchHeldObjects>());
+
+        Assert.That(match, Is.Null);
+    }
+
+    [Test]
+    public void FindMatchingConnectedSystemObjectAsync_HeldObjectsWithRunIndexes_LooksThemUpOnceForTheRunAsync()
+    {
+        var (mvo, targetSystem, targetUserType, rule) = ArrangeEmployeeIdExportMatch("1001");
+        var held = SeedAccountHeldAsNumber(targetSystem, targetUserType, 1001);
+        var heldObjects = new Dictionary<(int, int), ExportMatchHeldObjects>();
+
+        Assert.ThrowsAsync<ObjectMatchingRuleFailedException>(() => Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule }, heldObjects: heldObjects));
+        var lookedUp = heldObjects.Single();
+        Assert.ThrowsAsync<ObjectMatchingRuleFailedException>(() => Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule }, heldObjects: heldObjects));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lookedUp.Key, Is.EqualTo((rule.Id, targetUserType.Id)));
+            Assert.That(heldObjects.Single().Value, Is.SameAs(lookedUp.Value), "the held objects are looked up once for the run");
+            Assert.That(lookedUp.Value.Count, Is.EqualTo(1));
+            Assert.That(lookedUp.Value.First?.ConnectedSystemObjectId, Is.EqualTo(held.Id));
+        }
+    }
+
+    #endregion
+
     #region GetSourceType Tests
 
     [Test]
