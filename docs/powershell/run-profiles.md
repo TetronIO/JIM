@@ -47,7 +47,7 @@ Each Run Profile on the Connected System, or each one whose name matches `-Name`
 | `PageSize` | `int` | How many items to process in one batch. |
 | `PartitionName` | `string` | The partition name if this Run Profile targets a specific partition. |
 | `TargetsDeselectedPartition` | `bool` | True when this Run Profile targets a partition that is no longer selected on the Connected System, which makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run Profile is refused rather than reading scope the administrator has withdrawn. |
-| `FilePath` | `string` | The file a Full Import reads, for a file-based Connector; empty when it reads the Connected System's File Path. |
+| `FilePath` | `string` | The file a Full Import or Delta Import reads, for a file-based Connector; empty when it reads the Connected System's File Path. |
 | `VerifyImportContentHashes` | `bool` | Whether Verification Mode is enabled: the Full Import skips no object whose content looks unchanged, and instead raises an error for any object whose stored content hash disagrees with what was read. Only meaningful when `RunType` is `FullImport`. |
 | `AllowObjectTypeChanges` | `bool` | Whether this Full Import carries out an Object Type change rather than refusing it. Only ever true when `RunType` is `FullImport`, and only has an effect on a Connected System whose Connector can tell an Object Type change from a new object, as the LDAP Connector can. |
 | `Safeguards` | `object` | The limits on what this Run Profile may attempt. Always present. It has `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`. |
