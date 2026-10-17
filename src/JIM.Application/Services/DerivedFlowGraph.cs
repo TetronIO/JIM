@@ -36,7 +36,7 @@ namespace JIM.Application.Services;
 /// </para>
 /// <para>
 /// The graph also records which Connected Systems <em>generate</em> each attribute (#242), for
-/// <see cref="GetHostingSystemsReading"/> alone: a generated mapping reconciles its assignment against the attribute's
+/// <see cref="GetConnectedSystemsDependingOn"/> alone: a generated mapping reconciles its assignment against the attribute's
 /// current value whenever its own system synchronises the object, so it depends on that attribute as surely as a derived
 /// flow reading it does (#2309). It is not an edge, so it orders nothing and cannot form a cycle.
 /// </para>
@@ -170,12 +170,23 @@ public sealed class DerivedFlowGraph
     /// <summary>
     /// The Connected System ids whose import Synchronisation Rules host a derived flow reading
     /// <paramref name="metaverseAttributeId"/>, directly or transitively through derived levels (if Email reads
-    /// Account Name and User Principal Name reads Email, a change to Account Name reaches the hosts of both), or a
-    /// generated mapping targeting it or any attribute reached that way (#2309): a change another writer makes to a
-    /// generated attribute (superseding the value, or clearing a sticky one) is reconciled only by the generating
-    /// system's own synchronisation. Ordered ascending; empty when nothing depends on the attribute.
+    /// Account Name and User Principal Name reads Email, a change to Account Name reaches the hosts of both). Ordered
+    /// ascending; empty when nothing derived reads the attribute.
     /// </summary>
-    public IReadOnlyList<int> GetHostingSystemsReading(int metaverseObjectTypeId, int metaverseAttributeId)
+    public IReadOnlyList<int> GetHostingSystemsReading(int metaverseObjectTypeId, int metaverseAttributeId) =>
+        CollectDependentSystems(metaverseObjectTypeId, metaverseAttributeId, includeGenerators: false);
+
+    /// <summary>
+    /// The Connected System ids that must re-evaluate an object when <paramref name="metaverseAttributeId"/> changes:
+    /// <see cref="GetHostingSystemsReading"/>, plus those with a generated mapping targeting the attribute or any
+    /// attribute reached through it (#2309). A generated mapping reconciles its assignment only in its own system's
+    /// synchronisation, so a change another writer makes to the attribute (superseding the value, or clearing a sticky
+    /// one) needs that system to process the object again. What marking uses; ordered ascending.
+    /// </summary>
+    public IReadOnlyList<int> GetConnectedSystemsDependingOn(int metaverseObjectTypeId, int metaverseAttributeId) =>
+        CollectDependentSystems(metaverseObjectTypeId, metaverseAttributeId, includeGenerators: true);
+
+    private IReadOnlyList<int> CollectDependentSystems(int metaverseObjectTypeId, int metaverseAttributeId, bool includeGenerators)
     {
         if (!_typeGraphs.TryGetValue(metaverseObjectTypeId, out var typeGraph))
             return [];
@@ -187,7 +198,7 @@ public sealed class DerivedFlowGraph
 
         while (frontier.TryDequeue(out var attributeId))
         {
-            if (typeGraph.GeneratorsByTarget.TryGetValue(attributeId, out var generators))
+            if (includeGenerators && typeGraph.GeneratorsByTarget.TryGetValue(attributeId, out var generators))
                 hostingSystems.UnionWith(generators);
 
             if (!typeGraph.ReadersByInput.TryGetValue(attributeId, out var readers))

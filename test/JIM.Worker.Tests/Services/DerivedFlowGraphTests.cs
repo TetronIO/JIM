@@ -419,7 +419,7 @@ public class DerivedFlowGraphTests
     }
 
     [Test]
-    public void GetHostingSystemsReading_IncludesSystemsGeneratingTheAttribute()
+    public void GetConnectedSystemsDependingOn_IncludesSystemsGeneratingTheAttribute()
     {
         // A generated mapping (#242) reconciles its assignment against the attribute's current value only while its own
         // system synchronises the object, so a change any other writer makes to that attribute must bring the object
@@ -433,14 +433,16 @@ public class DerivedFlowGraphTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10 }));
+            Assert.That(graph.GetConnectedSystemsDependingOn(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10 }));
+            Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.Empty,
+                "no derived flow reads Account Name: the authoring step and withdrawal warnings must not count a generator");
             Assert.That(graph.HasCycle, Is.False, "a generated mapping is not a derived flow and orders nothing");
             Assert.That(graph.MaxLevel(PersonTypeId), Is.EqualTo(0));
         }
     }
 
     [Test]
-    public void GetHostingSystemsReading_ReachesSystemsGeneratingADerivedTarget()
+    public void GetConnectedSystemsDependingOn_ReachesSystemsGeneratingADerivedTarget()
     {
         // Account Name feeds AD's derived Email, which HR generates too: a change to Account Name can change Email, so
         // HR must reconcile its Email assignment.
@@ -451,11 +453,15 @@ public class DerivedFlowGraphTests
 
         var graph = Build(DerivedFlowGraphScope.EnabledMappingsOnly, hr, ad);
 
-        Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10, 20 }));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(graph.GetConnectedSystemsDependingOn(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 10, 20 }));
+            Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.EqualTo(new[] { 20 }));
+        }
     }
 
     [Test]
-    public void GetHostingSystemsReading_RunTimeGraphOmitsDisabledGeneratedMappings()
+    public void GetConnectedSystemsDependingOn_RunTimeGraphOmitsDisabledGeneratedMappings()
     {
         var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
         var training = ImportRule(2, "Training Import", connectedSystemId: 30, enabled: false);
@@ -464,7 +470,7 @@ public class DerivedFlowGraphTests
 
         var graph = Build(DerivedFlowGraphScope.EnabledMappingsOnly, hr, training);
 
-        Assert.That(graph.GetHostingSystemsReading(PersonTypeId, _model.AccountName.Id), Is.Empty,
+        Assert.That(graph.GetConnectedSystemsDependingOn(PersonTypeId, _model.AccountName.Id), Is.Empty,
             "a disabled mapping, or one on a disabled rule, keeps its assignment untouched, so its system has nothing to reconcile");
     }
 
