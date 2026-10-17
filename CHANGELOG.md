@@ -126,6 +126,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Attribute Flow editor now suggests SCIM counterparts for phone numbers, addresses, work email and the Enterprise User attributes, which it named in forms no SCIM Connected System has (`phoneNumbers.mobile`, not `phoneNumbers`). (#2095)
+- 🐛 SCIM `profileUrl` and `photos` now import as text: as references they never resolved, so every User carrying one failed its import. Refresh existing SCIM schemas, then run a Full Import. (#2095)
 - 🐛 A change an import commits while a Delta Synchronisation of the same Connected System is running, such as in the same Schedule parallel group, is now always synchronised. It could be skipped silently, by every later Delta and Full Synchronisation, until the object changed again. (#2092)
 - 🐛 An account deleted directly in a Connected System that an export Synchronisation Rule provisions to is now recreated: the synchronisation that disconnects its obsolete Connected System Object stages a provisioning Create in the same run, while the Metaverse Object is still in the rule's scope and is not being deleted. It was left without an account until something else about the person changed. (#2318)
 - 🐛 **Max detected deletions percent** on a Full Import no longer counts objects already marked as deleted, which let a run mark a larger share of what the Connected System still holds than the limit allowed. (#2089)

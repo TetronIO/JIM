@@ -18,6 +18,12 @@ namespace JIM.Scim.Schema;
 public static class ScimCoreSchemas
 {
     /// <summary>
+    /// The <c>referenceTypes</c> RFC 7643 section 8.7.1 gives <c>profileUrl</c> and <c>photos.value</c>: a URL outside
+    /// SCIM, which JIM holds as text rather than as a reference to another object (#2095).
+    /// </summary>
+    private const string ReferenceTypeExternal = "external";
+
+    /// <summary>
     /// The core User schema (RFC 7643 section 4.1).
     /// </summary>
     public static ScimSchema User()
@@ -41,7 +47,7 @@ public static class ScimCoreSchemas
                 ]),
                 Simple("displayName", ScimAttributeTypes.String),
                 Simple("nickName", ScimAttributeTypes.String),
-                Simple("profileUrl", ScimAttributeTypes.Reference),
+                Simple("profileUrl", ScimAttributeTypes.Reference, referenceTypes: [ReferenceTypeExternal]),
                 Simple("title", ScimAttributeTypes.String),
                 Simple("userType", ScimAttributeTypes.String),
                 Simple("preferredLanguage", ScimAttributeTypes.String),
@@ -52,7 +58,7 @@ public static class ScimCoreSchemas
                 MultiValuedWithCanonicalTypes("emails", ScimAttributeTypes.String, ["work", "home", "other"]),
                 MultiValuedWithCanonicalTypes("phoneNumbers", ScimAttributeTypes.String, ["work", "home", "mobile", "fax", "pager", "other"]),
                 MultiValuedWithCanonicalTypes("ims", ScimAttributeTypes.String, ["aim", "gtalk", "icq", "xmpp", "msn", "skype", "qq", "yahoo"]),
-                MultiValuedWithCanonicalTypes("photos", ScimAttributeTypes.Reference, ["photo", "thumbnail"]),
+                MultiValuedWithCanonicalTypes("photos", ScimAttributeTypes.Reference, ["photo", "thumbnail"], valueReferenceTypes: [ReferenceTypeExternal]),
                 Complex("addresses", multiValued: true, subAttributes:
                 [
                     Simple("formatted", ScimAttributeTypes.String),
@@ -168,7 +174,8 @@ public static class ScimCoreSchemas
         bool required = false,
         string? mutability = null,
         string? returned = null,
-        string? description = null)
+        string? description = null,
+        List<string>? referenceTypes = null)
     {
         return new ScimSchemaAttribute
         {
@@ -177,7 +184,8 @@ public static class ScimCoreSchemas
             Required = required,
             Mutability = mutability ?? ScimMutability.ReadWrite,
             Returned = returned ?? "default",
-            Description = description
+            Description = description,
+            ReferenceTypes = referenceTypes ?? []
         };
     }
 
@@ -197,11 +205,11 @@ public static class ScimCoreSchemas
     /// The RFC's multi-valued shape for labelled values: a <c>value</c>, a canonically-typed
     /// <c>type</c>, a <c>display</c> and a <c>primary</c> flag.
     /// </summary>
-    private static ScimSchemaAttribute MultiValuedWithCanonicalTypes(string name, string valueType, List<string> canonicalValues)
+    private static ScimSchemaAttribute MultiValuedWithCanonicalTypes(string name, string valueType, List<string> canonicalValues, List<string>? valueReferenceTypes = null)
     {
         return Complex(name, multiValued: true, subAttributes:
         [
-            Simple("value", valueType),
+            Simple("value", valueType, referenceTypes: valueReferenceTypes),
             Simple("display", ScimAttributeTypes.String, mutability: ScimMutability.ReadOnly),
             CanonicalType(canonicalValues),
             Simple("primary", ScimAttributeTypes.Boolean)

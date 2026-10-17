@@ -8,6 +8,11 @@ namespace JIM.Models.Core;
 /// Attribute, its shape, its bindings to the built-in Metaverse Object Types, and its advisory
 /// Standard Mappings (SCIM 2.0 and LDAP/AD counterpart names).
 ///
+/// A SCIM counterpart is the attribute name JIM.Scim flattens the RFC 7643 schema to
+/// (<c>phoneNumbers.mobile</c>, <c>enterpriseUser.department</c>), not the RFC path, because the
+/// Attribute Flow editor matches it against a Connected System attribute's name exactly (#2095).
+/// ScimStandardMappingConformanceTests holds every one to what the flattening produces.
+///
 /// The built-in schema is JIM's own canonical vocabulary; no wire standard (LDAP/AD or SCIM 2.0)
 /// is its foundation. Standard Mappings are advisory metadata only: they power Attribute Flow
 /// editor hints, connector wizard default-flow suggestions, and generated schema documentation,
@@ -25,6 +30,8 @@ public static class BuiltInMetaverseSchema
     private static readonly string[] UserAndGroup = { Constants.BuiltInObjectTypes.User, Constants.BuiltInObjectTypes.Group };
 
     private const string ScimEnterpriseNote = "SCIM Enterprise User extension (urn:ietf:params:scim:schemas:extension:enterprise:2.0:User).";
+
+    private const string ScimWorkAddressNote = "The work address; the home and other addresses have slots of their own.";
 
     private static StandardMappingDefinition Scim(string counterpartName, string? notes = null) => new(AttributeStandard.Scim, counterpartName, notes);
 
@@ -62,11 +69,11 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.Email, AttributeDataType.Text, AttributePlurality.SingleValued, UserAndGroup,
                 standardMappings: new[]
                 {
-                    Scim("emails", "SCIM emails is multi-valued; this single-valued attribute suits the primary value. Use Emails for the full collection."),
+                    Scim("emails.work", "RFC 7643 path: emails[type eq \"work\"].value."),
+                    Scim("emails.primary", "RFC 7643 path: emails[primary eq true].value."),
                     Ldap("mail")
                 }),
             Define(Constants.BuiltInAttributes.Emails, AttributeDataType.Text, AttributePlurality.MultiValued, UserAndGroup, AttributeRenderingHint.List,
-                Scim("emails", "Values only; SCIM sub-attributes such as type and primary are not modelled."),
                 Ldap("mail", "LDAP mail is multi-valued; deployments commonly treat the first value as primary.")),
             Define(Constants.BuiltInAttributes.HideFromAddressLists, AttributeDataType.Boolean, AttributePlurality.SingleValued, UserAndGroup,
                 standardMappings: Ldap("msExchHideFromAddressLists", "Exchange attribute.")),
@@ -95,22 +102,22 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.AltSecurityIdentities, AttributeDataType.Text, AttributePlurality.MultiValued, UserOnly, AttributeRenderingHint.List,
                 Ldap("altSecurityIdentities")),
             Define(Constants.BuiltInAttributes.Company, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
-                standardMappings: new[] { Scim("organization", ScimEnterpriseNote), Ldap("company") }),
+                standardMappings: new[] { Scim("enterpriseUser.organization", ScimEnterpriseNote), Ldap("company") }),
             Define(Constants.BuiltInAttributes.Country, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: Ldap("co", "Active Directory friendly country name.")),
             Define(Constants.BuiltInAttributes.CountryCode, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("addresses.country", "SCIM requires an ISO 3166-1 alpha-2 code."),
+                    Scim("addresses.work.country", ScimWorkAddressNote + " SCIM requires an ISO 3166-1 alpha-2 code."),
                     Ldap("c", "ISO 3166-1 alpha-2 country code.")
                 }),
             Define(Constants.BuiltInAttributes.Department, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
-                standardMappings: new[] { Scim("department", ScimEnterpriseNote), Ldap("department") }),
+                standardMappings: new[] { Scim("enterpriseUser.department", ScimEnterpriseNote), Ldap("department") }),
             Define(Constants.BuiltInAttributes.EmployeeEndDate, AttributeDataType.DateTime, AttributePlurality.SingleValued, UserOnly),
             Define(Constants.BuiltInAttributes.EmployeeId, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("employeeNumber", ScimEnterpriseNote + " A string value despite the name."),
+                    Scim("enterpriseUser.employeeNumber", ScimEnterpriseNote + " A string value despite the name."),
                     Ldap("employeeID")
                 }),
             Define(Constants.BuiltInAttributes.EmployeeNumber, AttributeDataType.Number, AttributePlurality.SingleValued, UserOnly,
@@ -121,7 +128,7 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("phoneNumbers", "The value with type fax."),
+                    Scim("phoneNumbers.fax", "RFC 7643 path: phoneNumbers[type eq \"fax\"].value."),
                     Ldap("facsimileTelephoneNumber")
                 }),
             Define(Constants.BuiltInAttributes.FirstName, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -133,7 +140,7 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.HomePhone, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("phoneNumbers", "The value with type home."),
+                    Scim("phoneNumbers.home", "RFC 7643 path: phoneNumbers[type eq \"home\"].value."),
                     Ldap("homePhone")
                 }),
             Define(Constants.BuiltInAttributes.HonorificPrefix, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -156,13 +163,13 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.Locality, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("addresses.locality"),
+                    Scim("addresses.work.locality", ScimWorkAddressNote),
                     Ldap("l", "The town or city.")
                 }),
             Define(Constants.BuiltInAttributes.Manager, AttributeDataType.Reference, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("manager", ScimEnterpriseNote + " The manager.value sub-attribute carries the referenced User's id."),
+                    Scim("enterpriseUser.manager", ScimEnterpriseNote + " The manager.value sub-attribute carries the referenced User's id."),
                     Ldap("manager", "A Distinguished Name reference.")
                 }),
             Define(Constants.BuiltInAttributes.MiddleName, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -170,7 +177,7 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.MobileNumber, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("phoneNumbers", "The value with type mobile."),
+                    Scim("phoneNumbers.mobile", "RFC 7643 path: phoneNumbers[type eq \"mobile\"].value."),
                     Ldap("mobile")
                 }),
             Define(Constants.BuiltInAttributes.Nickname, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -193,13 +200,13 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.Pager, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("phoneNumbers", "The value with type pager."),
+                    Scim("phoneNumbers.pager", "RFC 7643 path: phoneNumbers[type eq \"pager\"].value."),
                     Ldap("pager")
                 }),
             Define(Constants.BuiltInAttributes.Photo, AttributeDataType.Binary, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("photos", "SCIM photos carries URLs, not binary values; requires a transform, not a direct flow."),
+                    Scim("photos.photo", "SCIM photos carries URLs, not binary values; requires a transform, not a direct flow."),
                     Ldap("thumbnailPhoto", "Active Directory; the LDAP standard counterpart is jpegPhoto.")
                 }),
             Define(Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -207,10 +214,10 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.PostOfficeBoxes, AttributeDataType.Text, AttributePlurality.MultiValued, UserOnly, AttributeRenderingHint.ChipSet,
                 Ldap("postOfficeBox")),
             Define(Constants.BuiltInAttributes.PostalAddresses, AttributeDataType.Text, AttributePlurality.MultiValued, UserOnly, AttributeRenderingHint.List,
-                Scim("addresses.formatted", "The full mailing address."),
+                Scim("addresses.work.formatted", ScimWorkAddressNote + " The full mailing address."),
                 Ldap("postalAddress")),
             Define(Constants.BuiltInAttributes.PostalCode, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
-                standardMappings: new[] { Scim("addresses.postalCode"), Ldap("postalCode") }),
+                standardMappings: new[] { Scim("addresses.work.postalCode", ScimWorkAddressNote), Ldap("postalCode") }),
             Define(Constants.BuiltInAttributes.PreferredLanguage, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
@@ -223,14 +230,14 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.SidHistory, AttributeDataType.Binary, AttributePlurality.MultiValued, UserOnly, AttributeRenderingHint.List,
                 Ldap("sIDHistory")),
             Define(Constants.BuiltInAttributes.StateOrProvince, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
-                standardMappings: new[] { Scim("addresses.region"), Ldap("st") }),
+                standardMappings: new[] { Scim("addresses.work.region", ScimWorkAddressNote), Ldap("st") }),
             Define(Constants.BuiltInAttributes.StreetAddress, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
-                standardMappings: new[] { Scim("addresses.streetAddress"), Ldap("streetAddress") }),
+                standardMappings: new[] { Scim("addresses.work.streetAddress", ScimWorkAddressNote), Ldap("streetAddress") }),
             Define(Constants.BuiltInAttributes.Team, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly),
             Define(Constants.BuiltInAttributes.TelephoneNumber, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]
                 {
-                    Scim("phoneNumbers", "The value with type work."),
+                    Scim("phoneNumbers.work", "RFC 7643 path: phoneNumbers[type eq \"work\"].value."),
                     Ldap("telephoneNumber")
                 }),
             Define(Constants.BuiltInAttributes.TimeZone, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
@@ -240,7 +247,7 @@ public static class BuiltInMetaverseSchema
             Define(Constants.BuiltInAttributes.UserAccountControl, AttributeDataType.Number, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: Ldap("userAccountControl", "Active Directory bitmask.")),
             Define(Constants.BuiltInAttributes.UserCertificates, AttributeDataType.Binary, AttributePlurality.MultiValued, UserOnly, AttributeRenderingHint.List,
-                Scim("x509Certificates"),
+                Scim("x509Certificates.value"),
                 Ldap("userCertificate")),
             Define(Constants.BuiltInAttributes.UserPrincipalName, AttributeDataType.Text, AttributePlurality.SingleValued, UserOnly,
                 standardMappings: new[]

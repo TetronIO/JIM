@@ -52,12 +52,15 @@ SCIM's nested and multi-valued attributes are flattened into the flat attributes
 | `addresses` (type `work`) | `addresses.work.streetAddress`, ... | An address has no single value, so the slot is cut per sub-attribute. |
 | `roles`, `entitlements`, `x509Certificates` (no canonical types) | `roles.value`, `roles.type`, `roles.display` | Each sub-attribute becomes a multi-valued attribute. Only `roles.value` can be exported: each value is one entry, so exporting a value adds an entry and taking one away removes that entry alone, leaving the provider's other entries untouched. `roles.type` and `roles.display` are read-only, because once separated from their entries JIM cannot tell which entry each belongs to. The Boolean `primary` sub-attribute is left out: separated from its entry, it would say only that some entry is primary and some is not, and a Boolean attribute holds one value. |
 | A multi-valued `dateTime` attribute | unchanged | Every element of the array is imported, to the microsecond. |
-| `members`, `groups`, `manager` | unchanged | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
+| `members`, `groups`, `urn:...:enterprise:2.0:User:manager` | `members`, `groups`, `enterpriseUser.manager` | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
+| `profileUrl`, `photos` (type `photo`) | `profileUrl`, `photos.photo` | A URL to something outside SCIM is text. Only a reference to a SCIM resource type, such as a User or a Group, becomes a reference JIM resolves to another object. |
 | `urn:...:enterprise:2.0:User:department` | `enterpriseUser.department` | An extension attribute is prefixed with its schema's name. |
 
 Every resource also carries `id`, `externalId` and the `meta` attributes, which the SCIM specification defines rather than any schema document. `id` is the External ID JIM anchors Connected System Objects on, and is always read-only.
 
 A Connected System whose schema was imported before JIM left these `primary` sub-attributes out reports them as no longer reported at its next [schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema), which names any Attribute Flow mapping that reads one.
+
+Likewise, a Connected System whose schema was imported before JIM typed URLs as text reports `profileUrl` and the `photos` attributes as changed from Reference to Text at its next schema refresh. Run a Full Import afterwards: it replaces the values those attributes held as unresolved references with the URLs as text.
 
 !!! warning "Two entries sharing a canonical type"
     A provider is free to hold two `work` email addresses. `emails.work` holds one, so the first is imported and the run reports a warning naming the attribute. Nothing is silently dropped, but the second value does not reach JIM.
