@@ -32,7 +32,8 @@ function Set-JIMRunProfile {
         The partition the Run Profile targets, for a Connector with partitions.
 
     .PARAMETER FilePath
-        The file to read or write, for a file-based Connector.
+        The file a Full Import reads, for a file-based Connector. Set it to an empty string to read the file the Connected System's
+        File Path setting names.
 
     .PARAMETER VerifyImportContentHashes
         Whether Verification Mode is enabled: $true to enable it, $false to disable it. Only a Full Import Run

@@ -30,7 +30,7 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, 
         return true;
     }
 
-    public bool TryGetNextValue(int attributeId, ref int position, out ScopingValue value)
+    public bool TryGetNextValue(int attributeId, AttributeDataType type, ref int position, out ScopingValue value)
     {
         var values = metaverseObject.AttributeValues;
         while (position < values.Count)
@@ -48,7 +48,7 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, 
         return false;
     }
 
-    public int CountValues(int attributeId)
+    public int CountValues(int attributeId, AttributeDataType type)
     {
         var count = 0;
         var values = metaverseObject.AttributeValues;
@@ -60,11 +60,17 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, 
         return count;
     }
 
-    public ExpressionContext ExpressionContext(DateTime nowUtc) =>
-        new(metaverseAttributes: SyncEngine.BuildAttributeDictionary(metaverseObject))
+    /// <remarks>A Metaverse Object always holds a value as its attribute's type, so none is held under another.</remarks>
+    public AttributeDataType? HeldOnlyUnderAnotherDataType(int attributeId, AttributeDataType type) => null;
+
+    public ExpressionContext ExpressionContext(DateTime nowUtc, out IReadOnlyDictionary<string, AttributeDataType>? heldUnderAnotherDataType)
+    {
+        heldUnderAnotherDataType = null;
+        return new ExpressionContext(metaverseAttributes: SyncEngine.BuildAttributeDictionary(metaverseObject))
         {
             NowUtc = nowUtc
         };
+    }
 
     public ExpressionInputSource ExpressionSide => ExpressionInputSource.Metaverse;
 

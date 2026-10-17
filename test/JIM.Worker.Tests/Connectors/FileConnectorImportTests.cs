@@ -3,6 +3,7 @@
 
 using JIM.Connectors.File;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Utilities;
 using JIM.Models.Staging;
@@ -510,6 +511,60 @@ public class FileConnectorImportTests
         // Assert - should have all 3 objects, each with errors
         Assert.That(result, Is.Not.Null);
         Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public async Task ImportAsync_RunProfileWithNoFilePath_ImportsFromTheConnectedSystemFilePathAsync()
+    {
+        // Arrange
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = null,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        // Assert
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public async Task ImportAsync_RunProfileWithAFilePath_ImportsFromTheRunProfileFilePathAsync()
+    {
+        // Arrange - the Connected System names a file that does not exist, so only the Run Profile's own path can succeed
+        var connectedSystem = CreateConnectedSystem(Path.Combine(_testFilesPath, "nonexistent.csv"), "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = Path.Combine(_testFilesPath, "valid_users.csv"),
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        // Assert
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public void ImportAsync_NoFilePathOnRunProfileOrConnectedSystem_ThrowsNamingTheFilePathSetting()
+    {
+        // Arrange
+        var connectedSystem = CreateConnectedSystem(string.Empty, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = null,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidSettingValuesException>(async () =>
+            await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None));
+        Assert.That(ex!.Message, Does.Contain("File Path"));
     }
 
     [Test]

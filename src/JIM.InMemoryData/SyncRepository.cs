@@ -1219,6 +1219,28 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(newlyMarked);
     }
 
+    public Task<int> MarkConnectedSystemObjectsSynchronisationPendingAsync(IReadOnlyCollection<SynchronisationPendingMark> marks)
+    {
+        if (marks.Count == 0)
+            return Task.FromResult(0);
+
+        // As MarkConnectedSystemObjectsDerivedInputChangePendingAsync: a scan rather than the lagging _csosByMvo index,
+        // and every matched row's version moved, already-marked ones included.
+        var markSet = marks.ToHashSet();
+        var toMark = _csos.Values
+            .Where(cso => (cso.MetaverseObjectId ?? cso.MetaverseObject?.Id) is { } mvoId &&
+                          markSet.Contains(new SynchronisationPendingMark(mvoId, cso.ConnectedSystemId)))
+            .ToList();
+        var newlyMarked = toMark.Count(cso => !cso.SynchronisationPending);
+        foreach (var cso in toMark)
+        {
+            cso.SynchronisationPending = true;
+            BumpRowVersion(cso);
+        }
+
+        return Task.FromResult(newlyMarked);
+    }
+
     public Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
     {
         // Mirrors the production xmin guard: a row whose version moved since the run loaded it keeps its marks.

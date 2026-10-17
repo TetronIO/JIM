@@ -455,6 +455,27 @@ public class SynchronisationControllerRunProfileTests
     }
 
     [Test]
+    public async Task CreateRunProfileAsync_FilePathOnExportRunProfile_ReturnsBadRequestAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Export",
+            RunType = ConnectedSystemRunType.Export,
+            FilePath = "/connector-files/export.csv"
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
     public async Task CreateRunProfileAsync_NegativeSafeguardValue_ReturnsBadRequest()
     {
         var connectedSystemId = 1;
@@ -903,6 +924,32 @@ public class SynchronisationControllerRunProfileTests
             PageSize = 100
         };
         var request = new UpdateRunProfileRequest { Safeguards = new RunProfileSafeguardsDto { MaxDeletes = 10 } };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_FilePathOnExportRunProfile_ReturnsBadRequestAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Export",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.Export
+        };
+        var request = new UpdateRunProfileRequest { FilePath = "/connector-files/export.csv" };
 
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);

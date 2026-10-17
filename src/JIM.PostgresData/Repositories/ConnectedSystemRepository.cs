@@ -7935,8 +7935,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 change.SyncRuleId = null;
         }
 
+        // A deleted rule takes its timestamps with it, so record the deletion where the configuration watermark reads it
+        // (#2309), in the same save. Loaded tracked explicitly: JIM.Web runs the context NoTracking.
+        await StampSyncRuleDeletionAsync();
+
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Stamps <see cref="ServiceSettings.SyncRuleLastDeletedAt"/> on the tracked singleton, for the caller's next save.
+    /// Absent only before seeding, when there is no synchronisation to protect.
+    /// </summary>
+    private async Task StampSyncRuleDeletionAsync()
+    {
+        var serviceSettings = await Repository.Database.ServiceSettings.AsTracking().OrderBy(s => s.Id).FirstOrDefaultAsync();
+        if (serviceSettings != null)
+            serviceSettings.SyncRuleLastDeletedAt = DateTime.UtcNow;
     }
     #endregion
 
@@ -8618,7 +8633,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 )",
             connectedSystemId);
 
-        // 11. Delete Synchronisation Rules
+        // 11. Delete Synchronisation Rules, recording the deletion in the configuration watermark first (#2309): the rules
+        //     take their timestamps with them, and other systems' resolution may have depended on them. A system with no
+        //     rules changes no synchronisation configuration, so it leaves the watermark alone.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ServiceSettings"" SET ""SyncRuleLastDeletedAt"" = {1}
+              WHERE EXISTS (SELECT 1 FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId, DateTime.UtcNow);
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
@@ -8775,7 +8796,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(omr => (omr.SyncRuleId.HasValue && systemRuleIds.Contains(omr.SyncRuleId.Value))
                           || (omr.ConnectedSystemObjectTypeId.HasValue && omr.ConnectedSystemObjectType!.ConnectedSystemId == connectedSystemId))
             .ToListAsync());
-        db.SyncRules.RemoveRange(await db.SyncRules.AsTracking().Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync());
+        var systemRules = await db.SyncRules.AsTracking().Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync();
+        if (systemRules.Count > 0)
+            await StampSyncRuleDeletionAsync();
+        db.SyncRules.RemoveRange(systemRules);
         db.ConnectedSystemRunProfiles.RemoveRange(await db.ConnectedSystemRunProfiles.AsTracking().Where(rp => rp.ConnectedSystemId == connectedSystemId).ToListAsync());
         db.ConnectedSystemContainers.RemoveRange(await db.ConnectedSystemContainers.AsTracking()
             .Where(c => (c.ConnectedSystem != null && c.ConnectedSystem.Id == connectedSystemId)

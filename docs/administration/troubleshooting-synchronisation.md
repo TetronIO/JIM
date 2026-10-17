@@ -136,11 +136,16 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 ## **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
 
-**What it means.** A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values, so JIM could not tell whether the object is in the rule's scope. It took no action for the object: nothing was brought into scope or taken out, nothing was provisioned, exported or deprovisioned for it, and any join it already had is kept. The message names the rule, the attribute and the pattern. Every other object in the run carried on.
+**What it means.** JIM could not tell whether the object is in the rule's scope, so it took no action for it and kept any join; every other object carried on. The message gives the cause:
 
-While a Connected System is deleted, an object whose surviving contributor's scope cannot be decided is left exactly as it was, together with its Metaverse Object, and every other object is deprovisioned. The deletion then stops with the Connected System still in place, because an object of it remains. Fix the pattern, then delete the Connected System again: the run starts over and finishes the held-back objects.
+- A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values.
+- The object holds an attribute a criterion reads (directly or as an expression's input) only under its old data type: a schema refresh changed the type and no import has read it since.
 
-**How to fix.** Simplify the pattern in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` or `(.*)*` is the usual cause: on a long value that does not match, the expression tries an enormous number of ways before giving up. Anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
+While a Connected System is deleted, an object whose surviving contributor's scope cannot be decided is left as it was, with its Metaverse Object, and the deletion stops with the Connected System in place. Remove the cause, then delete it again: the run finishes the held-back objects.
+
+**How to fix.** For a pattern, simplify it in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` is the usual cause; anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
+
+For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 
 **Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error.
 

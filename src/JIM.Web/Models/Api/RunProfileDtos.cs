@@ -51,7 +51,8 @@ public class RunProfileDto
     public bool TargetsDeselectedPartition { get; set; }
 
     /// <summary>
-    /// File path for file-based connectors.
+    /// The file a Full Import or Delta Import reads, for a file-based Connector; null when it reads the Connected
+    /// System's File Path.
     /// </summary>
     public string? FilePath { get; set; }
 
