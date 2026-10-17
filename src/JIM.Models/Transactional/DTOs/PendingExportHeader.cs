@@ -91,6 +91,12 @@ public class PendingExportHeader
     public string? SourceMetaverseObjectDisplayName { get; set; }
 
     /// <summary>
+    /// The plural name of the source Metaverse Object's Metaverse Object Type, which its page's address is built from;
+    /// null when there is no source Metaverse Object.
+    /// </summary>
+    public string? SourceMetaverseObjectTypePluralName { get; set; }
+
+    /// <summary>
     /// The number of attribute value changes in this Pending Export.
     /// </summary>
     public int AttributeChangeCount { get; set; }
@@ -123,6 +129,7 @@ public class PendingExportHeader
             TargetObjectIdentifier = targetObjectIdentifier,
             SourceMetaverseObjectId = entity.SourceMetaverseObjectId,
             SourceMetaverseObjectDisplayName = sourceMvoDisplayName,
+            SourceMetaverseObjectTypePluralName = entity.SourceMetaverseObject?.Type?.PluralName,
             AttributeChangeCount = entity.AttributeValueChanges?.Count ?? 0,
             ConnectedSystemObjectId = entity.ConnectedSystemObject?.Id
         };

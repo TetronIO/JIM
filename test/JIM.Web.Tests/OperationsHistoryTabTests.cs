@@ -7,6 +7,7 @@ using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Utility;
 using JIM.Web.Pages.Admin.Components;
@@ -32,6 +33,7 @@ namespace JIM.Web.Tests;
 public class OperationsHistoryTabTests : JimComponentTestContext
 {
     private Mock<IActivityRepository> _activityRepository = null!;
+    private Mock<IMetaverseRepository> _metaverseRepository = null!;
     private FakeUiNotificationService _notifications = null!;
     private NavigationManager _navigation = null!;
 
@@ -40,6 +42,8 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _activityRepository = new Mock<IActivityRepository>();
         repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
+        _metaverseRepository = new Mock<IMetaverseRepository>();
+        repository.Setup(r => r.Metaverse).Returns(_metaverseRepository.Object);
 
         _notifications = new FakeUiNotificationService();
 
@@ -55,6 +59,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     public void SetUp()
     {
         _activityRepository.Reset();
+        _metaverseRepository.Reset();
         _activityRepository.Setup(r => r.GetWorkerTaskActivityFilterOptionsAsync())
             .ReturnsAsync(new ActivityFilterOptions());
         _navigation = Services.GetRequiredService<NavigationManager>();
@@ -261,5 +266,53 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         public void RaiseWorkerTaskChanged(WorkerTaskChangeNotification notification) => WorkerTaskChanged?.Invoke(notification);
 
         public void RaiseRealTimeAvailabilityChanged(bool available) => RealTimeAvailabilityChanged?.Invoke(available);
+    }
+
+    private static Activity MetaverseObjectActivity(Guid metaverseObjectId) => new()
+    {
+        Id = Guid.NewGuid(),
+        TargetType = ActivityTargetType.MetaverseObject,
+        TargetOperationType = ActivityTargetOperationType.Update,
+        TargetName = "Priya Shah",
+        MetaverseObjectId = metaverseObjectId,
+        Status = ActivityStatus.Complete
+    };
+
+    [Test]
+    public void OperationsHistoryTab_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
+    {
+        // The panel used to link /admin/metaverse/{id}, a route that does not exist (#2151).
+        var metaverseObjectId = Guid.NewGuid();
+        _metaverseRepository.Setup(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People" });
+        ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
+
+        var cut = Render<OperationsHistoryTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
+
+        cut.WaitForAssertion(() => Assert.That(
+            cut.FindAll("a").Select(a => a.GetAttribute("href")),
+            Does.Contain($"/t/people/v/{metaverseObjectId}")));
+    }
+
+    [Test]
+    public void OperationsHistoryTab_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        _metaverseRepository.Setup(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId))
+            .ReturnsAsync((MetaverseObjectHeader?)null);
+        ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
+
+        var cut = Render<OperationsHistoryTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            _metaverseRepository.Verify(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId), Times.AtLeastOnce);
+            Assert.That(cut.FindAll("a").Select(a => a.GetAttribute("href") ?? string.Empty),
+                Has.None.Contains(metaverseObjectId.ToString()));
+        });
     }
 }

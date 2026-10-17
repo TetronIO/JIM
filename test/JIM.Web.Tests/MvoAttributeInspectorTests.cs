@@ -67,6 +67,29 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
     }
 
     [Test]
+    public void Inspector_ReferenceValue_LinksTheReferencedObjectUnderItsTypesPluralName()
+    {
+        // The link used to be built from the type's singular name (/t/Person/v/{id}), a page that does not exist;
+        // the route takes the plural (#2151).
+        var managerId = Guid.NewGuid();
+        var provenance = BuildProvenance();
+        provenance.CurrentValues =
+        [
+            new ProvenanceValue
+            {
+                DisplayValue = "Priya Shah",
+                ReferenceMetaverseObjectId = managerId,
+                ReferenceTypeName = "Person",
+                ReferenceTypePluralName = "People"
+            }
+        ];
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        Assert.That(cut.FindComponent<ObjectChip>().Instance.Href, Is.EqualTo($"/t/people/v/{managerId}"));
+    }
+
+    [Test]
     public void Inspector_RendersHeaderAndCurrentValueAndOriginSentence()
     {
         var provenance = BuildProvenance();

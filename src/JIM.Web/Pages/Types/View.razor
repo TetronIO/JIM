@@ -742,12 +742,12 @@
         if (detailResult.EarliestChangeInitiator != null)
         {
             state.CreatedByName = detailResult.EarliestChangeInitiator.InitiatedByName;
-            state.CreatedByHref = GetInitiatorHref(detailResult.EarliestChangeInitiator.InitiatedByType, detailResult.EarliestChangeInitiator.InitiatedById);
+            state.CreatedByHref = Helpers.GetInitiatorHref(detailResult.EarliestChangeInitiator.InitiatedByType, detailResult.EarliestChangeInitiator.InitiatedById);
         }
         if (detailResult.LatestChangeInitiator != null)
         {
             state.LastUpdatedByName = detailResult.LatestChangeInitiator.InitiatedByName;
-            state.LastUpdatedByHref = GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
+            state.LastUpdatedByHref = Helpers.GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
         }
         state.Retirements = await jim.UniqueValues.GetRetiredValuesForObjectAsync(state.ObjectId);
 
@@ -1182,19 +1182,6 @@
     private async Task CopyToClipboardAsync(string text)
     {
         await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-    }
-
-    private static string? GetInitiatorHref(ActivityInitiatorType initiatedByType, Guid? initiatedById)
-    {
-        if (initiatedById == null)
-            return null;
-
-        return initiatedByType switch
-        {
-            ActivityInitiatorType.User => $"/t/users/v/{initiatedById}",
-            ActivityInitiatorType.ApiKey => $"/admin/apikeys/{initiatedById}",
-            _ => null
-        };
     }
 
     private static string MapDtoToMechanismType(MvoChangeHistoryDto dto)

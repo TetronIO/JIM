@@ -103,6 +103,37 @@ public class ActivityInitiatorTests : JimComponentTestContext
     }
 
     [Test]
+    public void Render_UserIdWithoutAnObjectLink_LinksThePersonUnderTheUserType()
+    {
+        // A list row names the person by id without looking them up; the built-in User type is where a person lives.
+        var personId = Guid.NewGuid();
+        var cut = Render<ActivityInitiator>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
+            .Add(c => c.InitiatedById, personId)
+            .Add(c => c.InitiatedByName, "Jay"));
+
+        Assert.That(cut.Find("[data-testid=jim-initiator-user] a").GetAttribute("href"), Is.EqualTo($"/t/users/v/{personId}"));
+    }
+
+    [Test]
+    public void Render_UserLookedUpAndNotFound_NamesThePersonWithoutALink()
+    {
+        // The caller looked the person up and found no Metaverse Object (deleted since, or a history row the #2066
+        // repair could not attribute), so a link by id could only lead to a page that does not exist (#2151).
+        var cut = Render<ActivityInitiator>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
+            .Add(c => c.InitiatedById, Guid.NewGuid())
+            .Add(c => c.InitiatedByName, "Jay")
+            .Add(c => c.UserLookedUp, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("[data-testid=jim-initiator-user]").TextContent, Does.Contain("Jay"));
+            Assert.That(cut.FindAll("[data-testid=jim-initiator-user] a"), Is.Empty);
+        }
+    }
+
+    [Test]
     public void Render_Anonymous_IsNeverALink()
     {
         var cut = Render<ActivityInitiator>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.Anonymous));
