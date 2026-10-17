@@ -68,6 +68,14 @@ public class ExportEvaluationCache
     public Dictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex> ExpressionMatchIndexes { get; } = [];
 
     /// <summary>
+    /// Run-scoped: for each attribute-sourced Object Matching Rule and target type, the unjoined objects holding the
+    /// rule's attribute only under another data type (#2323), keyed by (Object Matching Rule, Connected System Object
+    /// Type). Each is looked up on the first lookup that finds nothing and kept for the run, so the usual run, whose
+    /// lookups find their accounts or whose target holds no such value, reads the target once per rule at most.
+    /// </summary>
+    public Dictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExportMatchHeldObjects> ExportMatchHeldObjects { get; } = [];
+
+    /// <summary>
     /// The newest Created or Last Updated stamp among the export Synchronisation Rules as this run read them, enabled
     /// or not; null when there were none. The run evaluates against the rules as they stood then, so the scope review
     /// drain hands this to its clear, which keeps the flags when an export rule has been created or updated since

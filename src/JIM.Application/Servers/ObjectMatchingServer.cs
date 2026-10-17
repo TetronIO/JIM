@@ -470,9 +470,10 @@ public class ObjectMatchingServer
         ConnectedSystemObjectType connectedSystemObjectType,
         List<ObjectMatchingRule> matchingRules,
         ExportMatchCandidates? prefetched = null,
-        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null)
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExportMatchHeldObjects>? heldObjects = null)
         => FindMatchingConnectedSystemObjectAsync(
-            Application.SyncRepo, metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules, prefetched, expressionIndexes);
+            Application.SyncRepo, metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules, prefetched, expressionIndexes, heldObjects);
 
     /// <summary>
     /// As <see cref="FindMatchingConnectedSystemObjectAsync(MetaverseObject, ConnectedSystem, ConnectedSystemObjectType, List{ObjectMatchingRule}, ExportMatchCandidates?)"/>,
@@ -486,7 +487,8 @@ public class ObjectMatchingServer
         ConnectedSystemObjectType connectedSystemObjectType,
         List<ObjectMatchingRule> matchingRules,
         ExportMatchCandidates? prefetched = null,
-        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null)
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex>? expressionIndexes = null,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExportMatchHeldObjects>? heldObjects = null)
     {
         if (matchingRules.Count == 0)
         {
