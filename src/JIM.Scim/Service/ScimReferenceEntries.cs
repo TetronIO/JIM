@@ -18,6 +18,7 @@ public static class ScimReferenceEntries
 {
     private const string ValueMember = "value";
     private const string TypeMember = "type";
+    private const string ReferenceMember = "$ref";
 
     /// <summary>
     /// The text a reference's id is written as.
@@ -25,12 +26,15 @@ public static class ScimReferenceEntries
     public static string Format(Guid id) => id.ToString("D");
 
     /// <summary>
-    /// One reference as an attribute value.
+    /// One reference as an attribute value, with its <c>$ref</c> where a location is given (for a response).
     /// </summary>
-    public static JsonObject Entry(ScimHeldReference reference)
+    public static JsonObject Entry(ScimHeldReference reference, Func<ScimHeldReference, string>? location = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        return new JsonObject { [ValueMember] = Format(reference.TargetId), [TypeMember] = reference.TargetTypeName };
+        var entry = new JsonObject { [ValueMember] = Format(reference.TargetId), [TypeMember] = reference.TargetTypeName };
+        if (location != null)
+            entry[ReferenceMember] = location(reference);
+        return entry;
     }
 
     /// <summary>
@@ -39,8 +43,9 @@ public static class ScimReferenceEntries
     /// extension where they belong to one.
     /// </summary>
     /// <param name="references">The references held, keyed by the attribute's store name.</param>
+    /// <param name="location">For a response, each reference's location, written as its <c>$ref</c>.</param>
     public static JsonObject Compose(JsonObject payload, ScimServiceResourceType type,
-        IReadOnlyDictionary<string, IReadOnlyList<ScimHeldReference>> references)
+        IReadOnlyDictionary<string, IReadOnlyList<ScimHeldReference>> references, Func<ScimHeldReference, string>? location = null)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(type);
@@ -54,8 +59,8 @@ public static class ScimReferenceEntries
 
             var container = Container(resource, attribute.SchemaUrn);
             container[attribute.AttributeName] = attribute.MultiValued
-                ? new JsonArray(held.Select(r => (JsonNode)Entry(r)).ToArray())
-                : Entry(held[0]);
+                ? new JsonArray(held.Select(r => (JsonNode)Entry(r, location)).ToArray())
+                : Entry(held[0], location);
         }
 
         return resource;

@@ -38,6 +38,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
     // The version each resource reached in this session. A resource's version rises once per session, so a second
     // touch (an update after a reference change, two reference operations) restamps it without raising it again.
     private readonly Dictionary<Guid, long> _versions = [];
+    private bool _disposed;
 
     private bool _committed;
 
@@ -288,8 +289,16 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         _committed = true;
     }
 
+    /// <remarks>
+    /// Idempotent: a caller may release the write lock early and dispose again on the way out, and the second dispose
+    /// must not close a connection the context has opened since.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
+
         if (!_committed && _transaction.Connection != null)
             await _transaction.RollbackAsync();
         await _transaction.DisposeAsync();

@@ -706,6 +706,22 @@ public class ScimStoreDatabaseTests
     }
 
     [Test]
+    public async Task DisposeAsync_Twice_ReleasesTheConnectionOnceAsync()
+    {
+        // The server releases the write lock early on the members direct path, then reads on the same context, so a
+        // second dispose must not close a connection opened since.
+        var system = await SeedSystemAsync("dispose-twice");
+        await using var ctx = NewContext();
+        var session = (await new PostgresDataRepository(ctx).ScimStore.BeginWriteAsync(system.Id))!;
+        await session.DisposeAsync();
+        await ctx.Database.OpenConnectionAsync();
+
+        await session.DisposeAsync();
+
+        Assert.That(ctx.Database.GetDbConnection().State, Is.EqualTo(System.Data.ConnectionState.Open));
+    }
+
+    [Test]
     public async Task References_SourceNotLive_ThrowsAsync()
     {
         var system = await SeedSystemAsync("references-missing");

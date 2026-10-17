@@ -824,6 +824,7 @@
           "JIM.Connectors": "[0.16.0, )",
           "JIM.Data": "[0.16.0, )",
           "JIM.Models": "[0.16.0, )",
+          "JIM.Scim": "[0.16.0, )",
           "JIM.Utilities": "[0.16.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.13, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.13, )",
