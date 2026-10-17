@@ -63,8 +63,10 @@ public static class ScimPatchBuilder
         // A removal from a multi-valued attribute has to name the value going away: RFC 7644 section 3.5.2.2 reads
         // "remove members" or "remove badges" as taking every value, where "remove badges[value eq "gold"]" takes the
         // one. That holds for a reference and for a simple attribute alike, since both compare by value.
-        if (attribute.Access == ScimValueAccess.ComplexReference)
-            return ReferenceOperation(change, attribute, removing);
+        // An entry of a multi-valued complex attribute without canonical types (roles.value) is addressed as a reference
+        // is: its own path, roles.value, would reach every entry's value at once (#2090).
+        if (attribute.Access == ScimValueAccess.ComplexReference || attribute.IsEntryValue)
+            return EntryOperation(change, attribute, removing);
 
         if (removing && attribute.Access == ScimValueAccess.Simple)
             return new ScimPatchOperation { Op = ScimPatchOperations.Remove, Path = RemovalPath(change, attribute) };
@@ -74,14 +76,17 @@ public static class ScimPatchBuilder
             Op = change.Operation,
             Path = Qualify(attribute, attribute.ScimPath),
             // RFC 7644 section 3.5.2.2: a removal is expressed by the path alone. A canonically-typed slot or a
-            // sub-attribute of a single-valued complex attribute is one value at its own path. A sub-attribute of a
-            // multi-valued complex attribute with no canonical types (roles.value) still reaches every entry's
-            // value, which is #2090.
+            // sub-attribute of a single-valued complex attribute is one value at its own path.
             Value = removing ? null : ScimValueFormatter.ToNode(change.Value, attribute.Type)
         };
     }
 
-    private static ScimPatchOperation ReferenceOperation(ScimAttributeChange change, ScimFlattenedAttribute attribute, bool removing)
+    /// <summary>
+    /// An operation on one entry of a complex attribute identified by its <c>value</c>: a reference, or an entry of a
+    /// multi-valued complex attribute without canonical types. An add appends the entry to the attribute, where an add
+    /// at <c>roles.value</c> would replace every entry's value (RFC 7644 section 3.5.2.1).
+    /// </summary>
+    private static ScimPatchOperation EntryOperation(ScimAttributeChange change, ScimFlattenedAttribute attribute, bool removing)
     {
         if (removing)
             return new ScimPatchOperation { Op = ScimPatchOperations.Remove, Path = RemovalPath(change, attribute) };
