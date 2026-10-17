@@ -164,17 +164,9 @@ What you will see:
 - **Attribute Flow**<br /> Credential attributes do not appear in the source or target attribute lists, and naming one through the REST API or PowerShell is rejected.
 - **Exports**<br /> An Attribute Flow that still targets a credential attribute exports nothing to it. The object's other attributes export as usual, and every run reports the skipped flow on the object's execution item as **Credential Not Exported**.
 - **Synchronisation Rules**<br /> A Synchronisation Rule with an Attribute Flow that uses a credential attribute, as its source or its target, shows an error naming the attribute and cannot be saved until that Attribute Flow is removed.
-- **Upgrades**<br /> If a credential attribute was selected on an existing deployment, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule that references it stays intact until you remove the Attribute Flow. The upgrade itself deletes any credential value JIM was holding in a Pending Export or on a Connected System Object. See [Removing credentials JIM already holds](#removing-credentials-jim-already-holds).
+- **Credential attributes already in use**<br /> A credential attribute persisted in a Connected System's schema is deselected and locked by the next schema refresh rather than deleted, so a Synchronisation Rule that references it stays intact until you remove the Attribute Flow. JIM holds no credential value for it in a Pending Export or on a Connected System Object. Remove the Attribute Flow and the Metaverse Attribute that feeds it; [Credential errors after upgrading](../administration/upgrading.md#credential-errors-after-upgrading) has the steps.
 
 Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdCount` and `pwdProperties`, are unaffected and remain fully selectable; they carry no credential material.
-
-### Removing credentials JIM already holds
-
-Before `password` was blocked, an Attribute Flow could export a SCIM password, or a SQL or file column of that name, as an ordinary value. If yours did, the upgrade deletes the values JIM held for it in Pending Exports and on Connected System Objects. Three things it leaves for you:
-
-1. **Remove the Attribute Flow.** Open each Synchronisation Rule that shows the credential error and delete the Attribute Flow it names. Until you do, the rule cannot be saved and every export run reports the flow as not exported.
-2. **Remove the source of the value.** The password came from somewhere: usually an import Attribute Flow into a Metaverse Attribute. Remove that flow and clear the Metaverse Attribute, or the password stays in the Metaverse and in its change history. To deliver passwords to the system, set up [Password Synchronisation](connected-system-passwords.md#password-synchronisation) instead, where its Connector supports it (the SCIM Connector does not yet).
-3. **Let change history age out, or shorten it.** Change history recorded before the upgrade can still show the value. It is removed when it passes the `History.RetentionPeriod` [Service Setting](service-settings.md) (90 days by default); shorten that setting for a pass if it must go sooner, then restore it.
 
 ### When JIM warns instead of blocking
 
