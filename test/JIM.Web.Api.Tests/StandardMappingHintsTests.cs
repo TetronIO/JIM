@@ -28,9 +28,8 @@ public class StandardMappingHintsTests
         Mapping(1, AttributeStandard.Ldap, "givenName"),
         Mapping(2, AttributeStandard.Scim, "displayName"),
         Mapping(2, AttributeStandard.Ldap, "displayName"),
-        Mapping(3, AttributeStandard.Scim, "emails", "SCIM emails is multi-valued."),
+        Mapping(3, AttributeStandard.Scim, "emails.work", "The value with type work."),
         Mapping(3, AttributeStandard.Ldap, "mail"),
-        Mapping(4, AttributeStandard.Scim, "emails"),
         Mapping(4, AttributeStandard.Ldap, "mail", "LDAP mail is multi-valued.")
     ];
 
@@ -52,7 +51,7 @@ public class StandardMappingHintsTests
 
         var email = hints.ForAttribute(3);
         Assert.That(email, Has.Count.EqualTo(2));
-        Assert.That(email.Select(h => h.CounterpartName), Is.EquivalentTo(new[] { "emails", "mail" }));
+        Assert.That(email.Select(h => h.CounterpartName), Is.EquivalentTo(new[] { "emails.work", "mail" }));
         Assert.That(email.Select(h => h.StandardLabel), Is.EquivalentTo(new[] { "SCIM 2.0", "LDAP/AD" }));
     }
 
@@ -73,8 +72,8 @@ public class StandardMappingHintsTests
     {
         var mappings = new List<MetaverseAttributeStandardMapping>
         {
-            Mapping(4, AttributeStandard.Scim, "emails", "Values only."),
-            Mapping(4, AttributeStandard.Ldap, "emails", "First value is primary.")
+            Mapping(4, AttributeStandard.Scim, "displayName", "Values only."),
+            Mapping(4, AttributeStandard.Ldap, "displayName", "First value is primary.")
         };
 
         var hints = StandardMappingHints.Build(mappings, AttributeStandard.NotSet);
@@ -87,7 +86,7 @@ public class StandardMappingHintsTests
     {
         var hints = StandardMappingHints.Build(SampleMappings(), AttributeStandard.Scim);
 
-        Assert.That(hints.ForAttribute(3)[0].Notes, Is.EqualTo("SCIM emails is multi-valued."));
+        Assert.That(hints.ForAttribute(3)[0].Notes, Is.EqualTo("The value with type work."));
     }
 
     [Test]
@@ -134,10 +133,10 @@ public class StandardMappingHintsTests
     [Test]
     public void MatchesForAttributeName_CounterpartSharedByTwoAttributes_ReturnsBoth()
     {
-        var hints = StandardMappingHints.Build(SampleMappings(), AttributeStandard.Scim);
+        var hints = StandardMappingHints.Build(SampleMappings(), AttributeStandard.Ldap);
 
-        // SCIM "emails" suits both the single-valued Email and the multi-valued Emails; the administrator picks.
-        var matches = hints.MatchesForAttributeName("emails");
+        // LDAP "mail" suits both the single-valued Email and the multi-valued Emails; the administrator picks.
+        var matches = hints.MatchesForAttributeName("mail");
 
         Assert.That(matches.Select(m => m.MetaverseAttributeId), Is.EquivalentTo(new[] { 3, 4 }));
     }

@@ -128,6 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Synchronisation no longer removes a Metaverse Object's references when a schema refresh has changed the source attribute to Reference and no import has read it since. The value the Connected System Object still holds under its old type is left as held, as it already was for every other data type, with a warning, until an import reads the attribute again. (#2330)
+- 🐛 A Connected System Object attribute holding only an unresolved reference, left behind when a schema refresh changed the attribute away from Reference, is now treated as a held value by an Object Matching Rule, which waits for an import to read the attribute again rather than provisioning a second account beside that object. The attribute value inspector also no longer offers a Reference source's leftover text value as a candidate, since synchronisation does not flow it. (#2330)
 - 🐛 The SCIM 2.0 Client Connector now imports and exports Keycloak group membership and email addresses. Keycloak's schema leaves out what is inside `members`, `groups` and `emails`, so they were missing; JIM fills it in from the SCIM specification, and asks for attributes such as `members` that Keycloak returns only when named. (#2094)
 - 🐛 The SCIM 2.0 Client Connector now creates a group with members on Keycloak, which refuses members on a create: they are added once the group exists, and a create whose members could not be added is still recorded rather than posted again. (#2094)
 - 🐛 SCIM exports of more than 100 changes to one object no longer fail against providers that cap a request, such as Keycloak: added members travel as one operation, and requests are split, and halved again if the provider refuses. (#2094)
@@ -292,6 +294,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When more than one existing account matches an identity before provisioning, JIM now reports an **Ambiguous Provisioning Match** listing them for you to resolve, instead of joining whichever was created first. (#2052)
 - 🐛 Matching before provisioning now looks up every value of a multi-valued attribute, so an existing account holding the second value is joined instead of duplicated. (#2052)
 - 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
+- 🐛 The Attribute Flow editor now suggests SCIM counterparts for phone numbers, addresses, work email and the Enterprise User attributes, which it named in forms no SCIM Connected System has (`phoneNumbers.mobile`, not `phoneNumbers`). (#2095)
+- 🐛 SCIM `profileUrl` and `photos` now import as text: as references they never resolved, so every User carrying one failed its import. Refresh existing SCIM schemas, then run a Full Import. (#2095)
 
 ### Security
 

@@ -66,7 +66,6 @@ public class BuiltInMetaverseSchemaTests
         Assert.That(BuiltInMetaverseSchema.Attributes.Count(a => a.StandardMappings.Any(m => m.Standard == AttributeStandard.Ldap)), Is.GreaterThan(20));
     }
 
-    [TestCase("Emails", AttributeDataType.Text, AttributePlurality.MultiValued)]
     [TestCase("Account Enabled", AttributeDataType.Boolean, AttributePlurality.SingleValued)]
     [TestCase("Nickname", AttributeDataType.Text, AttributePlurality.SingleValued)]
     [TestCase("Preferred Language", AttributeDataType.Text, AttributePlurality.SingleValued)]
@@ -95,10 +94,21 @@ public class BuiltInMetaverseSchemaTests
     }
 
     [Test]
-    public void Attributes_ScimEmails_MapsToEmails()
+    public void Attributes_ScimEmailSlots_MapToEmail()
     {
+        // #2095: JIM.Scim flattens emails into one single-valued slot per type, so the single-valued Email is
+        // their counterpart; the work slot and the primary slot are the two a deployment typically flows.
+        var definition = BuiltInMetaverseSchema.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.Email);
+        Assert.That(definition.StandardMappings.Where(m => m.Standard == AttributeStandard.Scim).Select(m => m.CounterpartName),
+            Is.EquivalentTo(new[] { "emails.work", "emails.primary" }));
+    }
+
+    [Test]
+    public void Attributes_Emails_HasNoScimCounterpart()
+    {
+        // No flattened SCIM attribute carries the whole emails collection, so a counterpart here could never match.
         var definition = BuiltInMetaverseSchema.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.Emails);
         Assert.That(definition.Plurality, Is.EqualTo(AttributePlurality.MultiValued));
-        Assert.That(definition.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "emails"), Is.True);
+        Assert.That(definition.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim), Is.False);
     }
 }
