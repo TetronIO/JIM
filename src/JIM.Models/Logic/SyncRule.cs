@@ -256,16 +256,41 @@ public class SyncRule : IAuditable, IValidated
         if (AttributeFlowRules.Count == 0)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Attribute Flow Rules have been defined. Whilst valid, this means no data will flow between the two systems"));
 
+        AddCredentialAttributeErrors(response);
         AddCredentialLikeAttributeWarnings(response);
 
         return response;
     }
 
     /// <summary>
+    /// Refuses an Attribute Flow that reads or writes an attribute on the credential denylist (<c>password</c>,
+    /// <c>unicodePwd</c>), so the Synchronisation Rule cannot be saved until the mapping is removed (#2091).
+    /// <para>
+    /// An Error rather than a warning, unlike the heuristic below: the denylist names attributes that certainly hold
+    /// credentials. Export evaluation already stages nothing for such a mapping and schema import blocks the attribute;
+    /// this stops the configuration claiming otherwise, and replaces the warning the heuristic would no longer raise for
+    /// a denied name.
+    /// </para>
+    /// </summary>
+    private void AddCredentialAttributeErrors(List<ValidityStatusItem> response)
+    {
+        foreach (var attributeName in AttributeFlowRules
+                     .SelectMany(mapping => mapping.Sources.Select(source => source.ConnectedSystemAttribute?.Name)
+                         .Append(mapping.TargetConnectedSystemAttribute?.Name))
+                     .Where(CredentialAttributes.IsCredentialAttribute)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error,
+                $"The Attribute Flow using '{attributeName}' must be removed: it holds credentials, which JIM never imports " +
+                "or exports through an Attribute Flow. To set passwords, use Password Synchronisation on the Connected System."));
+        }
+    }
+
+    /// <summary>
     /// Warns where an Attribute Flow targets an attribute whose name suggests it holds a credential (#1119,
     /// requirement 16).
     /// <para>
-    /// The eight well-known credential attributes are blocked outright by <see cref="CredentialAttributes"/>, but
+    /// The well-known credential attributes are blocked outright by <see cref="CredentialAttributes"/>, but
     /// an administrator can rename an attribute and a target system can use a name JIM has never heard of, so
     /// nothing otherwise stops an Attribute Flow carrying a password as an ordinary value. Doing so persists the
     /// secret as a Connected System Object attribute value and a Metaverse Object attribute value, in both change
