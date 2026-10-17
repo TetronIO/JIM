@@ -28,4 +28,5 @@ exec /opt/keycloak/bin/kc.sh start-dev \
   --hostname="https://$hostname:8443" \
   --hostname-backchannel-dynamic=true \
   --http-enabled=true \
-  --health-enabled=true
+  --health-enabled=true \
+  --http-management-scheme=http
