@@ -143,13 +143,15 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 It took no action for the object: nothing was brought into scope or taken out, nothing was provisioned, exported or deprovisioned for it, and any join it already had is kept. Every other object in the run carried on.
 
-While a Connected System is deleted, an object whose surviving contributor's scope cannot be decided is left exactly as it was, together with its Metaverse Object, and every other object is deprovisioned. The deletion then stops with the Connected System still in place, because an object of it remains. Remove the cause, then delete the Connected System again: the run starts over and finishes the held-back objects.
+The same applies when the criterion belongs to another Connected System's rule: an object stops contributing to a Metaverse Object (deleted at source, out of its rule's scope, or no longer supplying a value), and another object still joined to that Metaverse Object would take its values over only if it is in its own rule's scope, which cannot be decided. The leaving object gets this error and its Metaverse Object is left exactly as it was: nothing is recalled or handed over, its Deletion Rule is not applied, and an object deleted at source keeps its join until a later Full Synchronisation processes the deletion.
+
+While a Connected System is deleted, an object whose surviving contributor's scope cannot be decided is left exactly as it was, together with its Metaverse Object, and every other object is deprovisioned. The deletion then stops with the Connected System still in place, because an object of it remains. Remove the cause, then delete the Connected System again: the run starts over and finishes the held-back objects. Deleting a Synchronisation Rule works the same way: a Metaverse Object whose values it cannot recall safely keeps them, and the rule stays, disabled, until you delete it again.
 
 **How to fix.** For a pattern, simplify it in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` or `(.*)*` is the usual cause: on a long value that does not match, the expression tries an enormous number of ways before giving up. Anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
 
 For a value held under its old data type, run a Full Import of the Connected System the named rule imports from, which reads the attribute as its new type; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type). Nothing in the rule needs changing.
 
-**Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error.
+**Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error. Where the rule named belongs to another Connected System, run the Full Synchronisation on the Connected System of the object that carries the error.
 
 ## **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 

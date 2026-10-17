@@ -29,6 +29,15 @@ public class ConnectedSystemObjectObsoletionResult
     public List<ActivityRunProfileExecutionItem> ExecutionItems { get; } = [];
 
     /// <summary>
+    /// Why the object was held back, or null when it was processed: a surviving contributor's scope for a rule that would
+    /// re-elect it could not be decided (#2336). A held-back object, and its Metaverse Object, are left exactly as they
+    /// were (no Deletion Rule, recall, re-election or broken join, so every other member of this result is empty), and its
+    /// one execution item records the <c>ScopingCriterionFailed</c> error. It stays obsolete, so its deletion is processed
+    /// by a later Full Synchronisation once the scope can be decided.
+    /// </summary>
+    public Exceptions.ScopingCriterionFailedException? UndecidableSurvivorScope { get; set; }
+
+    /// <summary>
     /// Pre-disconnected Connected System Objects to delete quietly (no RPEI; the disconnection was
     /// already recorded when the Metaverse Object was deleted).
     /// </summary>

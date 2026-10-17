@@ -2237,6 +2237,14 @@ public class SyncPreviewServer
             resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id),
             leaveSurvivorsAsFound: true);
 
+        // A surviving contributor whose scope cannot be decided holds the object back (#2336): the run records the
+        // ScopingCriterionFailed error and changes nothing, so the preview reports that error and proposes nothing.
+        if (teardown.UndecidableSurvivorScope is { } undecidable)
+        {
+            result.Errors.Add(ScopingCriterionFailedMessage(undecidable, context.ConnectedSystemId));
+            return result;
+        }
+
         if (teardown.MvoAttributeChange is { } recall)
             RecordMetaverseChanges(result, recall.Additions, recall.Removals);
 
