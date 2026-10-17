@@ -116,7 +116,7 @@ While a Connected System is deleted, an object whose surviving contributor's sco
 
 **Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error.
 
-## **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them are the same date, so it is sent ...`
+## **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 
 **What it means.** Some of the dates a multi-valued attribute exports are the same date at the step of time the Connected System keeps, its [Date resolution](../configuration/connected-system-attributes.md#date-resolution): two times within one second, for a directory that keeps whole seconds. The Connected System can hold them only as one value, so JIM sent them as one. Nothing failed: the attribute and the object's other attributes exported, and the next import confirms what was sent.
 

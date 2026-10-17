@@ -6799,9 +6799,9 @@ public abstract class SyncTaskProcessorBase
                     : $"The Expression for target attribute {target} returned {error.ValueCount} dates";
                 return (ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution,
                     $"{collapsedSource}, but target attribute {target} holds dates to {DescribeDateTimeResolution(error.TargetDateTimeResolution)}, " +
-                    $"where some of them are the same date, so it is sent {error.TargetValueCount}. The attribute and the object's other " +
-                    "attributes still export. If the dates must stay apart, keep them further apart than the Connected System's resolution, " +
-                    "or check the attribute's Date and Time Resolution on the Connected System's schema.");
+                    $"where some of them become the same date, so it is sent {error.TargetValueCount} distinct values. The attribute and the " +
+                    "object's other attributes still export. If the dates must stay apart, keep them further apart than the Connected " +
+                    "System's resolution, or check the attribute's Date Resolution on the Connected System's Schema tab.");
 
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:

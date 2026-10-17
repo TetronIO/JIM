@@ -50,7 +50,7 @@ public enum AttributeFlowErrorKind
     /// <summary>
     /// Two or more of the dates an export sends to a multi-valued attribute are the same date at the step of time the
     /// Connected System holds the attribute to (#2153, decision D2): two times in one second, for a directory that holds
-    /// whole seconds. The Connected System can hold them only as one, so it is sent them as one, and this reports that.
+    /// whole seconds. The Connected System can hold them only as one, so JIM sends them as one, and this reports that.
     /// Unlike every other kind, the attribute still exports; only the merging is reported. Recorded as
     /// <c>DatesCollapseAtTargetResolution</c>.
     /// </summary>
