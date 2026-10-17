@@ -51,6 +51,12 @@ public static class ScimAttributeMapper
     /// <summary>The sub-attribute holding the URI of a referenced resource (RFC 7643 section 2.4).</summary>
     private const string RefSubAttribute = "$ref";
 
+    /// <summary>The <c>referenceTypes</c> value for a resource outside SCIM, such as a photo URL (RFC 7643 section 7).</summary>
+    private const string ReferenceTypeExternal = "external";
+
+    /// <summary>The <c>referenceTypes</c> value for a URI that is not a resource, such as a schema URN (RFC 7643 section 7).</summary>
+    private const string ReferenceTypeUri = "uri";
+
     /// <summary>
     /// Flattens every attribute in a schema, skipping unnamed attributes and any whose flattened name
     /// repeats one already emitted.
@@ -101,7 +107,7 @@ public static class ScimAttributeMapper
 
         if (!IsComplex(attribute))
         {
-            return [Build(attribute, name, path, schemaUrn, MapType(attribute.Type), PluralityOf(attribute), attribute.Required, WritabilityOf(attribute),
+            return [Build(attribute, name, path, schemaUrn, MapType(attribute), PluralityOf(attribute), attribute.Required, WritabilityOf(attribute),
                 ScimValueAccess.Simple, attribute.Name, subAttributeName: null, canonicalType: null, selectsPrimary: false, extensionUrn)];
         }
 
@@ -129,13 +135,13 @@ public static class ScimAttributeMapper
         // it from its entry, and as a single-valued Boolean it would report a surplus on every import of a
         // resource whose entries' flags differ.
         return subAttributes
-            .Where(sub => !attribute.MultiValued || AttributeDataTypeCapabilities.SupportsMultiValued(MapType(sub.Type)))
+            .Where(sub => !attribute.MultiValued || AttributeDataTypeCapabilities.SupportsMultiValued(MapType(sub)))
             .Select(sub => Build(
                 sub,
                 $"{name}.{sub.Name}",
                 $"{path}.{sub.Name}",
                 schemaUrn,
-                MapType(sub.Type),
+                MapType(sub),
                 PluralityOf(attribute),
                 attribute.Required && sub.Required,
                 WritabilityOfSubAttribute(attribute, sub),
@@ -172,7 +178,14 @@ public static class ScimAttributeMapper
     /// <see cref="AttributeDataType.Text"/>: a vendor type JIM does not model is still importable as
     /// text, and dropping the attribute would lose data silently.
     /// </summary>
-    public static AttributeDataType MapType(string? scimType)
+    /// <param name="scimType">The attribute's <c>type</c> keyword.</param>
+    /// <param name="referenceTypes">
+    /// The attribute's <c>referenceTypes</c>. A <c>reference</c> is only a JIM
+    /// <see cref="AttributeDataType.Reference"/> when it names a SCIM resource type; one naming only
+    /// <c>external</c> or <c>uri</c>, or nothing at all, holds a URL that no object can be resolved from, and is
+    /// <see cref="AttributeDataType.Text"/> (#2095).
+    /// </param>
+    public static AttributeDataType MapType(string? scimType, IReadOnlyCollection<string>? referenceTypes = null)
     {
         if (string.IsNullOrWhiteSpace(scimType))
             return AttributeDataType.Text;
@@ -187,10 +200,22 @@ public static class ScimAttributeMapper
             "decimal" => AttributeDataType.Decimal,
             "datetime" => AttributeDataType.DateTime,
             "binary" => AttributeDataType.Binary,
-            "reference" => AttributeDataType.Reference,
+            "reference" => ReferencesAScimResource(referenceTypes) ? AttributeDataType.Reference : AttributeDataType.Text,
             _ => AttributeDataType.Text
         };
     }
+
+    private static AttributeDataType MapType(ScimSchemaAttribute attribute) => MapType(attribute.Type, attribute.ReferenceTypes);
+
+    /// <summary>
+    /// Whether a <c>reference</c> attribute's <c>referenceTypes</c> name a SCIM resource type, as opposed to only
+    /// <c>external</c> (a URL outside SCIM, such as <c>profileUrl</c>) or <c>uri</c> (RFC 7643 section 7).
+    /// </summary>
+    private static bool ReferencesAScimResource(IReadOnlyCollection<string>? referenceTypes) =>
+        referenceTypes != null && referenceTypes.Any(type =>
+            !string.IsNullOrWhiteSpace(type) &&
+            !string.Equals(type, ReferenceTypeExternal, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(type, ReferenceTypeUri, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Flattens a multi-valued complex attribute into one slot per canonical type, plus a primary slot
@@ -236,7 +261,7 @@ public static class ScimAttributeMapper
                     $"{name}.{suffix}",
                     $"{path}{filter}.{value.Name}",
                     schemaUrn,
-                    MapType(value.Type),
+                    MapType(value),
                     AttributePlurality.SingleValued,
                     // A canonical slot is never required: a provider requires the attribute, never a
                     // particular canonical type within it.
@@ -257,7 +282,7 @@ public static class ScimAttributeMapper
                 $"{name}.{suffix}.{sub.Name}",
                 $"{path}{filter}.{sub.Name}",
                 schemaUrn,
-                MapType(sub.Type),
+                MapType(sub),
                 AttributePlurality.SingleValued,
                 required: false,
                 MostRestrictive(WritabilityOf(attribute), WritabilityOf(sub)),

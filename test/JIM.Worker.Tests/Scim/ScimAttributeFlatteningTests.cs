@@ -27,13 +27,66 @@ public class ScimAttributeFlatteningTests
     [TestCase(ScimAttributeTypes.Decimal, AttributeDataType.Decimal)]
     [TestCase(ScimAttributeTypes.DateTime, AttributeDataType.DateTime)]
     [TestCase(ScimAttributeTypes.Binary, AttributeDataType.Binary)]
-    [TestCase(ScimAttributeTypes.Reference, AttributeDataType.Reference)]
     public void Flatten_SimpleAttribute_MapsScimTypeToTheJimEquivalent(string scimType, AttributeDataType expected)
     {
         var flattened = ScimAttributeMapper.Flatten(Simple("anAttribute", scimType), ScimUrns.User);
 
         Assert.That(flattened, Has.Count.EqualTo(1));
         Assert.That(flattened[0].Type, Is.EqualTo(expected));
+    }
+
+    [TestCase("User")]
+    [TestCase("Group,User")]
+    [TestCase("User,external")]
+    public void Flatten_ReferenceToAScimResourceType_IsAReference(string referenceTypes)
+    {
+        var attribute = new ScimSchemaAttribute { Name = "sponsor", Type = ScimAttributeTypes.Reference, ReferenceTypes = [.. referenceTypes.Split(',', StringSplitOptions.RemoveEmptyEntries)] };
+
+        var flattened = ScimAttributeMapper.Flatten(attribute, ScimUrns.User);
+
+        Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Reference));
+    }
+
+    [TestCase("external")]
+    [TestCase("uri")]
+    [TestCase("EXTERNAL,uri")]
+    [TestCase("")]
+    public void Flatten_ReferenceToAnExternalUrlOrUri_IsTextBecauseNoObjectCanBeResolvedFromIt(string referenceTypes)
+    {
+        // #2095: a URL such as profileUrl names no SCIM resource, so staging it as a reference leaves it unresolved
+        // on every import. RFC 7643 section 7 says only a resource type name points at another SCIM resource.
+        var attribute = new ScimSchemaAttribute { Name = "profileUrl", Type = ScimAttributeTypes.Reference, ReferenceTypes = [.. referenceTypes.Split(',', StringSplitOptions.RemoveEmptyEntries)] };
+
+        var flattened = ScimAttributeMapper.Flatten(attribute, ScimUrns.User);
+
+        Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Text));
+    }
+
+    [Test]
+    public void FlattenSchema_CoreUserUrlAttributes_AreText()
+    {
+        var flattened = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flattened.Single(a => a.Name == "profileUrl").Type, Is.EqualTo(AttributeDataType.Text));
+            foreach (var slot in new[] { "photos.photo", "photos.thumbnail", "photos.primary" })
+                Assert.That(flattened.Single(a => a.Name == slot).Type, Is.EqualTo(AttributeDataType.Text), slot);
+        }
+    }
+
+    [Test]
+    public void FlattenSchema_CoreUserAndGroupReferenceCollections_StayReferences()
+    {
+        // Rule 1 keys on the $ref sub-attribute, not on its referenceTypes, so typing URLs as Text leaves these alone.
+        var user = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.User());
+        var group = ScimAttributeMapper.FlattenSchema(ScimCoreSchemas.Group());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(user.Single(a => a.Name == "groups").Type, Is.EqualTo(AttributeDataType.Reference));
+            Assert.That(group.Single(a => a.Name == "members").Type, Is.EqualTo(AttributeDataType.Reference));
+        }
     }
 
     [Test]

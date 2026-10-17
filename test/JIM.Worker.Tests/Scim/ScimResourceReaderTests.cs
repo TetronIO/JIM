@@ -306,6 +306,30 @@ public class ScimResourceReaderTests
 
         Assert.That(result.Attributes.Single(a => a.Name == "enterpriseUser.manager").ReferenceValues, Is.EqualTo(new[] { "boss1" }));
     }
+
+    [Test]
+    public void Read_ExternalUrls_AreStagedAsTextNotAsReferences()
+    {
+        // #2095: staged as a reference, a URL can never resolve to another object, so every import of a User
+        // carrying one errored as an unresolved reference.
+        var result = ReadUser("""
+        {
+          "id": "1",
+          "profileUrl": "https://login.example.com/bjensen",
+          "photos": [ { "value": "https://photos.example.com/profilephoto/72930000000Ccne/F", "type": "photo" } ]
+        }
+        """);
+
+        var profileUrl = result.Attributes.Single(a => a.Name == "profileUrl");
+        var photo = result.Attributes.Single(a => a.Name == "photos.photo");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(profileUrl.StringValues, Is.EqualTo(new[] { "https://login.example.com/bjensen" }));
+            Assert.That(profileUrl.ReferenceValues, Is.Empty);
+            Assert.That(photo.StringValues, Is.EqualTo(new[] { "https://photos.example.com/profilephoto/72930000000Ccne/F" }));
+            Assert.That(photo.ReferenceValues, Is.Empty);
+        }
+    }
     #endregion
 
     #region extensions

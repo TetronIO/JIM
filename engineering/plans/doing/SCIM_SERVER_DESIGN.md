@@ -308,7 +308,7 @@ Migrations for the tables and indexes, the change feed, tombstones and purge flo
 
 Introduces the feature flag and its gates (D16), in the same PR as the Connector's registration.
 
-The store reader seam, the connector (Full and Delta Import), registration in `ConnectorFactory` and `SeedingServer.BuiltInConnectors`, capability flags (`SupportsFullImport` and `SupportsDeltaImport` true, `SupportsExport` false), and import tests including tombstones, the purge-floor failure and the missing-reader failure.
+The store reader seam, the connector (Full and Delta Import), registration in `ConnectorFactory` and `SeedingServer.BuiltInConnectors`, capability flags (`SupportsFullImport` and `SupportsDeltaImport` true, `SupportsExport` false), `SchemaStandard => AttributeStandard.Scim` so the Attribute Flow editor offers only the SCIM Standard Mappings, which name the flattened attributes D6 shares ([#2095](https://github.com/TetronIO/JIM/issues/2095); the default, `NotSet`, mixes in LDAP hints), and import tests including tombstones, the purge-floor failure and the missing-reader failure.
 
 ### Phase 4: HTTP surface
 

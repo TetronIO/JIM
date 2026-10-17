@@ -293,6 +293,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When more than one existing account matches an identity before provisioning, JIM now reports an **Ambiguous Provisioning Match** listing them for you to resolve, instead of joining whichever was created first. (#2052)
 - 🐛 Matching before provisioning now looks up every value of a multi-valued attribute, so an existing account holding the second value is joined instead of duplicated. (#2052)
 - 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
+- 🐛 The Attribute Flow editor now suggests SCIM counterparts for phone numbers, addresses, work email and the Enterprise User attributes, which it named in forms no SCIM Connected System has (`phoneNumbers.mobile`, not `phoneNumbers`). (#2095)
+- 🐛 SCIM `profileUrl` and `photos` now import as text: as references they never resolved, so every User carrying one failed its import. Refresh existing SCIM schemas, then run a Full Import. (#2095)
 
 ### Security
 
