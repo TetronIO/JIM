@@ -71,10 +71,19 @@ public sealed class ScopingCriterionExplanation
     public List<ScopingExpressionInputExplanation> ExpressionInputs { get; set; } = [];
 
     /// <summary>
-    /// Why an expression criterion could not be evaluated for the object (<see cref="ScopingCriterionOutcome.Invalid"/>);
-    /// null otherwise. Quotes no value read from an attribute that may hold a credential.
+    /// Why an expression criterion could not be evaluated for the object, or why an attribute criterion could not because
+    /// the object holds the attribute only under another data type (<see cref="ScopingCriterionOutcome.Invalid"/>); null
+    /// otherwise. Quotes no value read from an attribute that may hold a credential.
     /// </summary>
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// The data type the object holds the compared attribute, or an expression input, as when it holds it only under
+    /// another type than its current one (#2329), which no import has read since a schema refresh changed it; null
+    /// otherwise. The criterion is then <see cref="ScopingCriterionOutcome.Invalid"/>, and <see cref="FailureReason"/>
+    /// says what resolves it.
+    /// </summary>
+    public AttributeDataType? HeldAsDataType { get; set; }
 
     /// <summary>The criterion as a condition, for example "Department equals Finance"; a masked value reads as hidden.</summary>
     public string Description { get; set; } = string.Empty;

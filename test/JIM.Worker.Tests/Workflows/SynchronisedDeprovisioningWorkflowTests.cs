@@ -203,6 +203,57 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
     }
 
     [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_SurvivorsScopedAttributeHeldUnderAnotherType_LeavesTheObjectAsItWasAndKeepsTheSystemAsync()
+    {
+        // #2329: a schema refresh changed the type of the attribute the surviving Training contributor's import rule
+        // scopes on, and no import has read it since, so Training holds it only under the old type. The criterion is a
+        // plain "has a value", which cannot run past a time limit, yet its answer is still unknown: the object is held
+        // back exactly as it is for an undecidable pattern, never recalled on a guess.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        var trainingRule = SyncRepo.SyncRules.Values.Single(r => r.Id == ctx.TrainingImportRuleId);
+        var trainingDescriptionAttr = trainingRule.ConnectedSystemObjectType!.Attributes.First(a => a.Name == "TrainingDescription");
+        trainingRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria =
+            [
+                new SyncRuleScopingCriteria
+                {
+                    ConnectedSystemAttribute = trainingDescriptionAttr,
+                    ConnectedSystemAttributeId = trainingDescriptionAttr.Id,
+                    ComparisonType = SearchComparisonType.HasValue
+                }
+            ]
+        });
+        var trainingCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Training!.Id);
+        var held = trainingCso.AttributeValues.Single(av => av.AttributeId == trainingDescriptionAttr.Id);
+        held.StringValue = null;
+        held.IntValue = 42;
+        var hrCsoId = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id).Id;
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        Assert.ThrowsAsync<SynchronisedDeprovisioningIncompleteException>(
+            () => Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task));
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var errors = DbContext.ActivityRunProfileExecutionItems
+            .Where(rpei => rpei.ActivityId == activity.Id && rpei.ErrorType == ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription),
+                "the Metaverse Object is left as it was: HR's Description neither recalled nor replaced");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(hrCsoId), Is.True, "the held-back object is kept");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Not.Null,
+                "the Connected System is not deleted while an object was held back");
+            Assert.That(errors, Has.Count.EqualTo(1));
+            Assert.That(errors.Single().ErrorMessage, Does.Contain("Training Import").And.Contain("Number").And.Contain("Full Import"));
+        }
+    }
+
+    [Test]
     public async Task ExecuteSynchronisedDeprovisioningAsync_ExportScopeUndecidableBeforeRecall_HoldsTheObjectBackAsync()
     {
         // The export rule's pattern runs past its time limit on the Metaverse Object's Description as it stands. Deleting
