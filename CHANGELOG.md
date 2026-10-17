@@ -128,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Synchronisation no longer removes a Metaverse Object's references when a schema refresh has changed the source attribute to Reference and no import has read it since. The value the Connected System Object still holds under its old type is left as held, as it already was for every other data type, with a warning, until an import reads the attribute again. (#2330)
 - 🐛 A Connected System Object attribute holding only an unresolved reference, left behind when a schema refresh changed the attribute away from Reference, is now treated as a held value by an Object Matching Rule, which waits for an import to read the attribute again rather than provisioning a second account beside that object. The attribute value inspector also no longer offers a Reference source's leftover text value as a candidate, since synchronisation does not flow it. (#2330)
 - 🐛 The SCIM 2.0 Client Connector now imports and exports Keycloak group membership and email addresses. Keycloak's schema leaves out what is inside `members`, `groups` and `emails`, so they were missing; JIM fills it in from the SCIM specification, and asks for attributes such as `members` that Keycloak returns only when named. (#2094)
 - 🐛 The SCIM 2.0 Client Connector now creates a group with members on Keycloak, which refuses members on a create: they are added once the group exists, and a create whose members could not be added is still recorded rather than posted again. (#2094)
