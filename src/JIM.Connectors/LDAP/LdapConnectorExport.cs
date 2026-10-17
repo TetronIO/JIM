@@ -2651,7 +2651,8 @@ internal class LdapConnectorExport
         if (LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(ex, pendingExport, _directoryType))
             return LdapAccountEnableRefusalClassifier.FailureFor(ex);
 
-        return ConnectedSystemExportResult.Failed(ex.Message);
+        // Any other result the directory returned is a refusal, not a JIM fault (#2118).
+        return LdapDirectoryRefusalClassifier.FailureFor(ex) ?? ConnectedSystemExportResult.Failed(ex.Message);
     }
 
     /// <summary>
@@ -2668,7 +2669,7 @@ internal class LdapConnectorExport
             LogSanitiser.Sanitise(_placeholderMemberDn), LogSanitiser.Sanitise(dn), LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
 
         return ConnectedSystemExportResult.Failed(
-            $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}' — " +
+            $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}'; " +
             $"the directory may have referential integrity enabled. " +
             $"Update the '{LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN}' connector setting to point to an existing entry in the directory.",
             ConnectedSystemExportErrorType.PlaceholderMemberConstraintViolation);

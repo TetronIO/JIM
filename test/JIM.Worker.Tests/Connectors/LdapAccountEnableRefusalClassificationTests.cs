@@ -99,7 +99,7 @@ public class LdapAccountEnableRefusalClassificationTests
     /// and the modify is sent once.
     /// </summary>
     [Test]
-    public async Task ExecuteAsync_FlaggedUpdateRefusedForAnotherReason_IsNotResentAndStaysAGeneralFailureAsync()
+    public async Task ExecuteAsync_FlaggedUpdateRefusedForAnotherReason_IsNotResentAndStaysAnOrdinaryRefusalAsync()
     {
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
@@ -109,7 +109,8 @@ public class LdapAccountEnableRefusalClassificationTests
         var results = await Export(executor, LdapDirectoryType.ActiveDirectory)
             .ExecuteAsync([UserUpdate("userAccountControl", intValue: 512, initialPasswordFollows: true)], CancellationToken.None);
 
-        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        // Still the directory refusing the change (#2118), just not for the want of a password.
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
         executor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Once);
     }
 
@@ -123,7 +124,8 @@ public class LdapAccountEnableRefusalClassificationTests
         var results = await Export(executor, LdapDirectoryType.OpenLDAP)
             .ExecuteAsync([UserUpdate("userAccountControl", intValue: 512, initialPasswordFollows: true)], CancellationToken.None);
 
-        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        // Still the directory refusing the change (#2118), just not for the want of a password.
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
         executor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Once);
     }
 
@@ -156,7 +158,7 @@ public class LdapAccountEnableRefusalClassificationTests
     }
 
     [Test]
-    public async Task ExecuteAsync_UpdateNotCarryingUserAccountControl_StaysAGeneralFailureAsync()
+    public async Task ExecuteAsync_UpdateNotCarryingUserAccountControl_StaysAnOrdinaryRefusalAsync()
     {
         // The same code on an Update that does not touch the account's enabled state is some other password
         // restriction; naming the enablement remedies would send an administrator to fix the wrong thing.
@@ -166,7 +168,8 @@ public class LdapAccountEnableRefusalClassificationTests
 
         var results = await Export(executor, LdapDirectoryType.ActiveDirectory).ExecuteAsync([UserUpdate("description", stringValue: "Contractor")], CancellationToken.None);
 
-        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        // Still the directory refusing the change (#2118), just not for the want of a password.
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
     }
 
     [Test]
@@ -192,11 +195,12 @@ public class LdapAccountEnableRefusalClassificationTests
 
         var results = await Export(executor, LdapDirectoryType.OpenLDAP).ExecuteAsync([EnabledUserCreate("uid=jbloggs,ou=People,dc=yellowstone,dc=local")], CancellationToken.None);
 
-        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        // Still the directory refusing the change (#2118), just not for the want of a password.
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
     }
 
     [Test]
-    public async Task ExecuteAsync_CreateRefusedForAnotherReason_StaysAGeneralFailureAsync()
+    public async Task ExecuteAsync_CreateRefusedForAnotherReason_StaysAnOrdinaryRefusalAsync()
     {
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
@@ -205,7 +209,8 @@ public class LdapAccountEnableRefusalClassificationTests
 
         var results = await Export(executor, LdapDirectoryType.ActiveDirectory).ExecuteAsync([EnabledUserCreate()], CancellationToken.None);
 
-        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+        // Still the directory refusing the change (#2118), just not for the want of a password.
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
     }
 
     private static LdapConnectorExport Export(Mock<ILdapOperationExecutor> executor, LdapDirectoryType directoryType, int concurrency = 1) =>
