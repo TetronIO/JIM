@@ -170,7 +170,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 | Keep your security knowledge sharp | OWASP Top 10 awareness documented, security testing requirements | Aligned |
 | Produce clean and maintainable code | Code style conventions, one class per file, async patterns | Aligned |
 | Secure your development environment | Devcontainer with controlled toolchain, secrets via .env (gitignored) | Aligned |
-| Protect your code repository | GitHub with branch protection ruleset enforcing: required PRs, required status checks (build, test, CodeQL, vulnerability scanning, automated code review), up-to-date branches, conversation resolution, anti-deletion, and anti-force-push. No secrets in code. See DEVELOPER_GUIDE.md section 7. | Aligned |
+| Protect your code repository | GitHub with branch protection ruleset enforcing: required PRs, required status checks (build, test, CodeQL, vulnerability scanning, automated code review), up-to-date branches (met through a merge queue that tests every PR against the latest `main` before it merges), conversation resolution, signed commits, anti-deletion, and anti-force-push. No secrets in code. See DEVELOPER_GUIDE.md section 7. | Aligned |
 | Secure the build and deployment pipeline | GitHub Actions CI/CD, SHA256 checksums on releases | Aligned |
 | Continually test your security | Security test requirements in CLAUDE.md, input validation tests | Aligned |
 | Plan for security flaws | SECURITY.md vulnerability disclosure, fast/hard failure philosophy | Aligned |
