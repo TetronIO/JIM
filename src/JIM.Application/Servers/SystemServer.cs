@@ -49,9 +49,10 @@ public class SystemServer
     /// via the infrastructure API key).
     /// </param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when one or more activities are currently <c>InProgress</c> (racing a wipe against an
-    /// ongoing sync run can corrupt customer data), or when the lockout guard refuses an
-    /// administrator-inclusive wipe with no initial administrator configured.
+    /// Thrown when the initiator could not attribute the reset Activity, when one or more activities are
+    /// currently <c>InProgress</c> (racing a wipe against an ongoing sync run can corrupt customer data), or
+    /// when the lockout guard refuses an administrator-inclusive wipe with no initial administrator configured.
+    /// Each is raised before anything is wiped.
     /// </exception>
     public async Task<SystemResetResult> ResetSystemAsync(
         ActivityInitiatorType initiatorType,
@@ -64,6 +65,10 @@ public class SystemServer
             "ResetSystemAsync: Factory reset requested by {User} (includeAdministrators={IncludeAdministrators})",
             LogSanitiser.Sanitise(initiatorName),
             includeAdministrators);
+
+        // The reset Activity is recorded after the wipe so that it survives it, which is too late to find out the
+        // caller cannot be attributed: the data would be gone with no record of who removed it. Refuse first.
+        Application.Activities.ValidateInitiator(initiatorType, initiatorId, initiatorName);
 
         // Refuse if anything is mid-flight. Synchronisation integrity is paramount: a wipe
         // committed while a sync run is writing to the same tables would leave the database

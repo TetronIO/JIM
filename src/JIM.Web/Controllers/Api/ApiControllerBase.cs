@@ -7,6 +7,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Utilities;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Web.Controllers.Api;
@@ -72,18 +73,34 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
     /// otherwise a person by the Metaverse Object authorisation was granted to, as <see cref="GetCurrentUserAsync"/>
     /// resolves them. Never the identity provider's subject, which is not a Metaverse Object id: a principal recorded
     /// by it links to nothing (#2066).
+    /// Returns false when the principal carries no id to attribute to; the caller must then refuse the request with
+    /// 401 rather than record the change against a principal that cannot be identified (#2096).
     /// </summary>
-    protected (ActivityInitiatorType Type, Guid? Id, string? Name) GetInitiatorInfo()
+    protected bool TryGetInitiatorInfo(out ActivityInitiatorType initiatorType, out Guid initiatorId, out string? initiatorName)
     {
         if (IsApiKeyAuthenticated())
         {
-            Guid? apiKeyId = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var keyId) ? keyId : null;
-            return (ActivityInitiatorType.ApiKey, apiKeyId, GetApiKeyName() ?? "API Key");
+            initiatorType = ActivityInitiatorType.ApiKey;
+            initiatorName = GetApiKeyName() ?? "API Key";
+            return Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out initiatorId);
         }
 
-        var name = User.FindFirst("name")?.Value ?? User.Identity?.Name;
-        Guid? userId = IdentityUtilities.TryGetUserId(User, out var metaverseObjectId) ? metaverseObjectId : null;
-        return (ActivityInitiatorType.User, userId, name);
+        initiatorType = ActivityInitiatorType.User;
+        initiatorName = User.FindFirst("name")?.Value ?? User.Identity?.Name;
+        if (IdentityUtilities.TryGetUserId(User, out initiatorId))
+            return true;
+
+        // Unreachable for an authorised caller: a principal the pipeline could not resolve receives no roles.
+        Logger.LogWarning("Could not identify the initiating principal: no API key id or Metaverse Object id claim");
+        return false;
+    }
+
+    /// <summary>
+    /// The response for a write whose initiating principal could not be identified (<see cref="TryGetInitiatorInfo"/>).
+    /// </summary>
+    protected UnauthorizedObjectResult UnidentifiedInitiator()
+    {
+        return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
     }
 
     /// <summary>
