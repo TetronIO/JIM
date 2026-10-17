@@ -77,7 +77,15 @@ The JIM server exposes `/api/v1/auth/config`, an unauthenticated discovery endpo
 - `clientId`: the client ID for public/PKCE flows (`JIM_SSO_PUBLIC_CLIENT_ID` if set, else `JIM_SSO_CLIENT_ID`)
 - `scopes`: the OAuth scopes to request: `openid`, `profile`, `offline_access`, and (when set) `JIM_SSO_API_SCOPE`
 
-Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, and `JIM_SSO_API_SCOPE` for the audience, regardless of which public client issued the token. As long as the public and confidential clients belong to the same realm/tenant and both request the same API scope, tokens from either are valid.
+Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, regardless of which client the token was issued to. The audience (`aud`) it requires comes from `JIM_SSO_API_SCOPE`:
+
+| `JIM_SSO_API_SCOPE` | Audience JIM requires |
+|---|---|
+| `api://` followed by an identifier and a permission, such as `api://{id}/access_as_user` (Microsoft Entra ID) | The value without the permission: `api://{id}` |
+| A bare `api://{id}`, such as AD FS's identifier | The value as it stands |
+| Anything else (Keycloak's `jim-api`, say), or unset | `JIM_SSO_CLIENT_ID` |
+
+As long as the public and confidential clients belong to the same realm or tenant and both request the same API scope, tokens from either are valid. JIM does not check which client a token was issued to, so give the audience only to the clients meant to call JIM's API. The [Keycloak guide](sso-setup/keycloak.md#step-4-create-the-api-client-scope) shows how; with Entra ID or AD FS, review which applications your identity provider permits to request JIM's API scope.
 
 !!! info "Why `offline_access`?"
     JIM requests the `offline_access` scope so the identity provider issues a **refresh token**. The PowerShell module uses this for two things: silent in-session token renewal (so long-running sessions don't expire mid-task), and optional cross-session token persistence (so opening a new terminal doesn't require re-authenticating in the browser). The refresh token is the only credential persisted, and it is stored in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux); never in plain text. Your public client must be permitted to receive `offline_access`. Most identity providers grant it to public clients by default; the per-provider guides note where it must be enabled explicitly.
