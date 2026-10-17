@@ -408,6 +408,34 @@ public class MetaverseServerProvenanceTests
     }
 
     /// <summary>
+    /// #2330: a Reference source whose row still holds Text (a schema refresh changed the attribute to Reference) holds no
+    /// reference, so the engine flows nothing from it; the inspector must not offer the stale text as a candidate. Rows
+    /// are judged held by the one rule the model defines, not by a looser copy that took every Reference row as held.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseAttributeProvenanceAsync_ReferenceSourceHeldOnlyAsText_ShowsNoCandidateAsync()
+    {
+        _attribute.Type = AttributeDataType.Reference;
+        var mapping = NewAttributeMapping(1, 101);
+        var csoAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "manager", Type = AttributeDataType.Reference };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new ConnectedSystemObjectType { Name = "user", Attributes = new List<ConnectedSystemObjectTypeAttribute> { csoAttribute } }
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = csoAttribute, AttributeId = 101, StringValue = "42" });
+
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(MetaverseObjectTypeId, AttributeId))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+        _mockMetaverseRepo.Setup(r => r.GetJoinedConnectedSystemObjectForProvenanceAsync(_mvoId, _connectedSystem.Id, _syncRule.ConnectedSystemObjectTypeId))
+            .ReturnsAsync(cso);
+
+        var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
+
+        Assert.That(result!.Sources.Single().CandidateValues, Is.Empty);
+    }
+
+    /// <summary>
     /// #2319: candidates are read as the source attribute's type, which is what the engine flows, not as the target's: a
     /// Number source into a Text attribute shows its number.
     /// </summary>

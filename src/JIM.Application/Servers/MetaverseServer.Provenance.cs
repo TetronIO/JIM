@@ -293,7 +293,7 @@ public partial class MetaverseServer
             // Only the rows the engine flows, those holding a value of the type (#2153), and a date in JIM's canonical
             // text form, so one instant held in two kinds or precisions is one candidate, written as an Expression's is.
             : csoValues
-                .Where(v => SyncEngine.HoldsValueOfType(v, sourceAttributeType))
+                .Where(v => v.HoldsValueOfType(sourceAttributeType))
                 .Select(v => sourceAttributeType == AttributeDataType.DateTime
                     ? ExpressionText.FormatDate(v.DateTimeValue!.Value)
                     : v.ToStringNoName())
