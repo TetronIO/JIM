@@ -285,12 +285,14 @@ Describe 'Get-DocumentedCommand' {
         $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'upgrading.md'
 
         & $script:ScriptPath -Path $page -Heading 'Upgrading with the installer' -Tab 'Air-gapped' | Should -BeLike '*sha256sum -c checksums.sha256*setup.sh --upgrade*'
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'upgrading-podman.md'
         & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Stop JIM' | Should -BeLike '*systemctl stop jim.service*'
         & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Keep the current pod files' | Should -BeLike '*jim.yaml.previous*jim-database.yaml.previous*'
         $airGapped = & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Put the new release''s files in place, and its images.' -Block 2
         $airGapped | Should -BeLike '*podman load*'
         $airGapped | Should -BeLike '*cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/*'
         & $script:ScriptPath -Path $page -Heading 'Upgrading on Podman' -Step 'Start JIM' | Should -BeLike '*systemctl restart jim-database.service*systemctl start jim.service*'
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'upgrading.md'
         & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Stop the services:' | Should -BeLike 'docker compose stop jim.web jim.worker jim.scheduler'
         & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Point `JIM_VERSION` back' -Block 2 | Should -BeLike '*.previous*'
         & $script:ScriptPath -Path $page -Heading 'Rolling back' -Step 'Start the services' | Should -BeLike '*docker compose*up -d*'
