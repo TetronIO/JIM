@@ -10,7 +10,7 @@
 .DESCRIPTION
     With the debug stream active, PowerShell's own Invoke-RestMethod and Invoke-WebRequest emit a
     "WebRequest Detail" record dumping the request headers and body verbatim. JIM sends its API key
-    as the X-API-Key header on every authenticated call, so that record carried the key every time
+    as a Bearer token in the Authorization header on every authenticated call, so that record carried the key every time
     somebody ran a cmdlet under -Debug, or in a session with $DebugPreference set. The OAuth token
     exchange leaked both halves of itself the same way, and the four password cmdlets leaked the
     password they had deliberately taken as a SecureString.
@@ -68,7 +68,7 @@ Describe 'Credentials and the debug stream' {
     It 'does not write the request headers verbatim' {
         # The header dump is the shape of the leak rather than the key itself; asserting on it too
         # means a future PowerShell that renames the record still fails this if it starts printing.
-        Get-EverythingWritten | Should -Not -Match 'X-API-Key:'
+        Get-EverythingWritten | Should -Not -Match 'Authorization:'
     }
 
     It 'still writes JIM own diagnostics under -Debug' {
@@ -94,9 +94,9 @@ Describe 'HTTP calls that carry a credential' {
         # carry nothing to leak, and the built-in debug record helps diagnose a connectivity problem.
         # Every authenticated call funnels through Invoke-JIMApi, so this list is the whole surface.
         $credentialCarryingCalls = @(
-            @{ File = 'Private/Invoke-JIMApi.ps1'; Carries = 'the API key header, and a password on the set-password endpoints' }
+            @{ File = 'Private/Invoke-JIMApi.ps1'; Carries = 'the Authorization header, and a password on the set-password endpoints' }
             @{ File = 'Private/Invoke-OAuthBrowserFlow.ps1'; Carries = 'the authorisation code, refresh token and issued tokens' }
-            @{ File = 'Public/Certificates/Export-JIMCertificate.ps1'; Carries = 'the API key header' }
+            @{ File = 'Public/Certificates/Export-JIMCertificate.ps1'; Carries = 'the Authorization header' }
         )
 
         foreach ($call in $credentialCarryingCalls) {

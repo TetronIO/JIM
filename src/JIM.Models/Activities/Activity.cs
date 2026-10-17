@@ -275,7 +275,7 @@ public class Activity
     public bool RunProfileExecutionStatsFinalised { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // security audit event fields (for Authentication activities: interactive sign-in and API key authentication)
+    // security audit event fields (for Authentication activities: interactive sign-in, API key and SSO access token)
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -294,16 +294,16 @@ public class Activity
     /// The <c>jim_ak_XXXX</c> prefix of the API key involved in an authentication event. Never the full key or its
     /// hash. Null for interactive sign-in events. For aggregated failure rows, a null (unknown) prefix is normalised
     /// to an empty string so the aggregation-window unique index dedupes consistently (Postgres unique indexes treat
-    /// NULLs as distinct from one another, which would otherwise defeat the aggregation upsert for the bad-format
-    /// failure path, where no prefix is available).
+    /// NULLs as distinct from one another, which would otherwise defeat the aggregation upsert for every failure with
+    /// no key: SSO access token failures, interactive sign-in failures, and the API key "Authentication error" path).
     /// </summary>
     [MaxLength(16)]
     public string? ApiKeyPrefix { get; set; }
 
     /// <summary>
-    /// The reason an authentication attempt failed (e.g. "Invalid API key format", "API key not found", "API key is
-    /// disabled", "API key has expired", "Authentication error", or a short sanitised OIDC failure category). Null
-    /// for successful sign-in events.
+    /// The reason an authentication attempt failed (e.g. "API key not found", "API key is disabled", "API key has
+    /// expired", "Authentication error", or a short sanitised OIDC failure category). Null for successful sign-in
+    /// events.
     /// </summary>
     [MaxLength(200)]
     public string? SecurityEventReason { get; set; }

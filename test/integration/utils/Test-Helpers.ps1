@@ -1956,6 +1956,140 @@ function New-TestUser {
     }
 }
 
+function Limit-ActiveDirectorySamAccountName {
+    <#
+    .SYNOPSIS
+        Shortens a New-TestUser account name to Active Directory's 20-character sAMAccountName limit.
+
+    .DESCRIPTION
+        Active Directory refuses a longer sAMAccountName (00000523); Samba AD and the RFC directories accept
+        one. New-TestUser ends every name with its index, so the name is cut before the index and the index
+        kept, which keeps it unique. A name already within the limit is returned unchanged.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SamAccountName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Index
+    )
+
+    $limit = 20
+    if ($SamAccountName.Length -le $limit) {
+        return $SamAccountName
+    }
+
+    $suffix = [string]$Index
+    return $SamAccountName.Substring(0, $limit - $suffix.Length) + $suffix
+}
+
+function Get-DisplayNameExpression {
+    <#
+    .SYNOPSIS
+        The import expression that builds the Metaverse Display Name from a source's first and last names.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FirstNameAttribute,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LastNameAttribute
+    )
+
+    return "cs[""$FirstNameAttribute""] + "" "" + cs[""$LastNameAttribute""]"
+}
+
+function Add-DisplayNameExpressionMapping {
+    <#
+    .SYNOPSIS
+        Gives an import Synchronisation Rule a Display Name built from the source's first and last names.
+
+    .DESCRIPTION
+        Display Name is derived, as identity systems commonly derive it, rather than taken from a source's
+        displayName column. A missing first or last name fails the mapping (FailMapping): the object is
+        reported in error and keeps its Display Name, rather than taking "Ada " or an empty value that the
+        directories' CN expressions would turn into a malformed Distinguished Name. A rule that already flows
+        into Display Name is left as it is, so setup stays repeatable.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        $SyncRuleId,
+
+        [Parameter(Mandatory = $true)]
+        $DisplayNameAttributeId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FirstNameAttribute,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LastNameAttribute
+    )
+
+    $existing = @(Get-JIMSyncRuleMapping -SyncRuleId $SyncRuleId) |
+        Where-Object { $_.targetMetaverseAttributeId -eq $DisplayNameAttributeId }
+    if ($existing) {
+        Write-Host "  Display Name mapping already exists; leaving it as configured" -ForegroundColor Gray
+        return
+    }
+
+    $expression = Get-DisplayNameExpression -FirstNameAttribute $FirstNameAttribute -LastNameAttribute $LastNameAttribute
+    New-JIMSyncRuleMapping -SyncRuleId $SyncRuleId `
+        -TargetMetaverseAttributeId $DisplayNameAttributeId `
+        -Expression $expression `
+        -MissingInputBehaviour FailMapping | Out-Null
+    Write-Host "  ✓ Display Name mapping created ($expression, FailMapping)" -ForegroundColor Green
+}
+
+function Split-TestDisplayName {
+    <#
+    .SYNOPSIS
+        Splits a test user's display name into the first and last names that rebuild it.
+
+    .DESCRIPTION
+        Display Name is derived from first and last names (Get-DisplayNameExpression), so a test user given a
+        display name must carry names that rejoin to exactly it. Everything before the last space is the first
+        name, so "Test WLCD Recall" stays whole.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $lastSpace = $DisplayName.LastIndexOf(' ')
+    if ($lastSpace -lt 1) {
+        throw "Split-TestDisplayName: '$DisplayName' has no space, so no first and last name rebuild it."
+    }
+
+    return @{
+        FirstName = $DisplayName.Substring(0, $lastSpace)
+        LastName  = $DisplayName.Substring($lastSpace + 1)
+    }
+}
+
+function Set-TestUserDisplayName {
+    <#
+    .SYNOPSIS
+        Gives a New-TestUser user a display name, with the first and last names that rebuild it.
+    #>
+    # Changes only the in-memory test user it is given; there is no system state to confirm.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$User,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $names = Split-TestDisplayName -DisplayName $DisplayName
+    $User.DisplayName = $DisplayName
+    $User.FirstName = $names.FirstName
+    $User.LastName = $names.LastName
+}
+
 function Get-RandomSubset {
     <#
     .SYNOPSIS
@@ -3626,6 +3760,33 @@ function Assert-ScheduleExecutionSuccess {
     Write-Host "  ✓ $Name completed successfully (Status: Complete, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
+function ConvertTo-ScheduleStepTime {
+    <#
+    .SYNOPSIS
+        Returns a schedule execution step's time as a DateTime, whatever the current culture.
+
+    .DESCRIPTION
+        PowerShell's JSON reader has usually turned the API's ISO 8601 string into a DateTime already, and
+        that is returned as it is. Parsing it again would turn it back into text in the invariant culture's
+        month-first form and read that in the current culture, which throws outside the US. A string is read
+        invariantly, as UTC.
+    #>
+    [OutputType([datetime])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Value
+    )
+
+    if ($Value -is [datetime]) {
+        return $Value
+    }
+
+    return [datetime]::Parse(
+        [string]$Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+}
+
 function Assert-ParallelExecutionTiming {
     <#
     .SYNOPSIS
@@ -3706,8 +3867,8 @@ function Assert-ParallelExecutionTiming {
             $stepsWithTiming += @{
                 Name = $stepName
                 ConnectedSystemId = $s.connectedSystemId
-                StartedAt = [DateTime]::Parse($s.startedAt)
-                CompletedAt = [DateTime]::Parse($s.completedAt)
+                StartedAt = ConvertTo-ScheduleStepTime -Value $s.startedAt
+                CompletedAt = ConvertTo-ScheduleStepTime -Value $s.completedAt
             }
         }
 

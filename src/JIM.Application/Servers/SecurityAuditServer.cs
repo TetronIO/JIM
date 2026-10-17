@@ -11,7 +11,7 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// Records authentication (security audit) events onto the Activity system: interactive sign-in success, and
-/// aggregated authentication failure (both interactive sign-in and API key). See
+/// aggregated authentication failure (interactive sign-in, API key and SSO access token). See
 /// engineering/plans/done/SECURITY_AUDIT_EVENTS.md for the design this implements.
 ///
 /// Failed authentication is written on behalf of an unauthenticated, attacker-controlled source, so failures are
@@ -35,18 +35,19 @@ public class SecurityAuditServer
     }
 
     /// <summary>
-    /// Records a failed authentication attempt (API key or interactive sign-in), aggregating it onto the Activity
-    /// for its (API key prefix, client IP, failure reason) 15-minute UTC window: same window bucket increments
+    /// Records a failed authentication attempt (API key, SSO access token or interactive sign-in), aggregating it
+    /// onto the Activity for its (API key prefix, client IP, failure reason) 15-minute UTC window: same window bucket increments
     /// <see cref="Activity.AttemptCount"/> and advances <see cref="Activity.LastSeen"/> in place; a new window
     /// bucket creates a fresh, Anonymous-attributed Activity. Never throws: audit-write failures are logged and
     /// swallowed, because the authentication outcome this instruments is primary.
     /// </summary>
-    /// <param name="targetName">A short label describing the event class (e.g. "API key authentication failed" or
-    /// "Interactive sign-in failed"), used as the created Activity's TargetName. Ignored when the attempt
-    /// aggregates onto an existing row.</param>
-    /// <param name="reason">The failure reason (e.g. "Invalid API key format", "API key not found").</param>
-    /// <param name="apiKeyPrefix">The <c>jim_ak_XXXX</c> prefix of the API key involved, or null when not
-    /// applicable (interactive sign-in, or the API key's format was invalid before a prefix could be read).</param>
+    /// <param name="targetName">A short label describing the event class (e.g. "API key authentication failed",
+    /// "Access token authentication failed" or "Interactive sign-in failed"), used as the created Activity's
+    /// TargetName. Ignored when the attempt aggregates onto an existing row, so reasons must not be shared between
+    /// event classes.</param>
+    /// <param name="reason">The failure reason (e.g. "API key not found", "API key has expired").</param>
+    /// <param name="apiKeyPrefix">The <c>jim_ak_XXXX</c> prefix of the API key involved, or null when no key is
+    /// involved (interactive sign-in, or an SSO access token).</param>
     /// <param name="clientIp">The client's IP address, or null when unavailable.</param>
     public async Task RecordFailedAuthenticationAsync(string targetName, string reason, string? apiKeyPrefix, string? clientIp)
     {
@@ -93,8 +94,8 @@ public class SecurityAuditServer
         var windowStart = FloorToWindow(now);
 
         // Postgres unique indexes treat NULLs as distinct from one another, which would defeat deduplication for
-        // paths with no known prefix/IP (e.g. a bad-format API key). Normalise to "" so those attempts still
-        // aggregate onto a single row instead of one row per attempt.
+        // paths with no known prefix/IP (SSO access token and interactive sign-in failures). Normalise to "" so those
+        // attempts still aggregate onto a single row instead of one row per attempt.
         var normalisedPrefix = apiKeyPrefix ?? string.Empty;
         var normalisedIp = clientIp ?? string.Empty;
 

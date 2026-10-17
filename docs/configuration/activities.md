@@ -27,7 +27,7 @@ Activities move through a small set of statuses:
 
 ## Initiated by
 
-Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in or API key attempt. This is the audit trail. An activity a Schedule produced names the Schedule, with **(Schedule)** beside it, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind has one icon, the same on every page that shows it.
+Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in, API key or SSO access token attempt. This is the audit trail. An activity a Schedule produced names the Schedule, with **(Schedule)** beside it, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind has one icon, the same on every page that shows it.
 
 ## Summary statistics
 
@@ -95,7 +95,7 @@ On an activity's detail page, the Target links to where that object is managed: 
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
 
-- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), **Security** ([interactive sign-in and API key authentication events](../administration/security-audit-events.md)), or **Password Synchronisation** ([a password change fanning out to the systems an identity has accounts in](../concepts/passwords.md), and what each of them did with it). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
+- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), **Security** ([interactive sign-in, API key and SSO access token authentication events](../administration/security-audit-events.md)), or **Password Synchronisation** ([a password change fanning out to the systems an identity has accounts in](../concepts/passwords.md), and what each of them did with it). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
 - **Schedule filters**<br /> On the Operations > History tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
@@ -150,4 +150,4 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 
 - [Run Profiles](run-profiles.md): the operations that produce most activities
 - [Schedules](schedules.md): the Activities a Schedule's steps produce, and the Schedule Execution view that links them
-- [Security Audit Events](../administration/security-audit-events.md): interactive sign-in and API key authentication events, aggregation, and their own retention period
+- [Security Audit Events](../administration/security-audit-events.md): interactive sign-in, API key and SSO access token authentication events, aggregation, and their own retention period

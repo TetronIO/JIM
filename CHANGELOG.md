@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A Metaverse Object's Connections tab now explains each connection: expand a row to see how it joined, the Synchronisation Rule responsible, and whether each relevant rule's scoping still includes it. JIM records the joining rule from now on. (#348)
 - ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
 - ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
+- ✨ The REST API and `Get-JIMActivity` now return a failed authentication's reason, client IP, attempt count and timing, as the portal shows, so a SIEM can tell a forged-token spray from one expired token. (#2108)
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
@@ -78,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
 - 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
 - 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
 - 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
@@ -123,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Rolling back an air-gapped upgrade on Docker's containerd image store no longer tries to download the previous release's PostgreSQL image: the installer keeps it on the host, as `postgres:jim-previous`, when it upgrades. (#2299)
+- 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted; each kept every database session it had opened, so a long-running deployment would eventually run out of memory. (#2115)
+- 🐛 The Pending Deletions page can now be reached from the portal: from the **Administration** page, and from an Object Type's Deletion Rules panel, which opens it filtered to that type. (#2059)
+- 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
+- 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
 - 🐛 Restarting JIM now renews the infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) for another 24 hours once it has expired, so it can be used to recover access, such as after a Factory Reset that removed every administrator. A disabled key stays disabled. (#2278)
 - 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
@@ -196,6 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A Connected System's tabs fit on one line at common laptop widths instead of scrolling with Details and Danger Zone cut off, and a Schedule's trigger writes every time the same way ("Sun at 1:00 AM", where some read "Sun at 1am").
 - 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` now create and retime Schedules from the Specific Times and Interval patterns, which the API used to refuse or ignore; a Sunday-only `New-JIMSchedule` no longer runs every day.
+- 🐛 The Schedule editor no longer saves run times at different minutes past the hour (06:00 and 18:30), which ran every time at the first time's minute (18:00, not 18:30). It now says why beside the times and keeps **Save** disabled until they share a minute, as the REST API and PowerShell already do. (#2070)
 - 🐛 A Schedule's next run now reads as a time to come ("in 14 hours") on the Home page and on Operations > Schedules, instead of "just now".
 - 🐛 An Activity now names each object it provisioned, deprovisioned or disconnected by its own type in a Connected System that takes more than one, where a user could read as "group: Alice Smith". Activities recorded before this release keep the type they recorded.
 - 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
@@ -268,6 +276,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
+- 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
+- 🔒 The SCIM 2.0 Client Connector now refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted, including by the connection test when you save the settings. A Connected System already saved with one fails its next Run Profile before anything is sent; change it to the authorisation server's HTTPS address. (#2093)
 
 ### Performance
 

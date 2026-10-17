@@ -63,7 +63,7 @@ These pages take JIM into production and keep it there: installing it on Docker 
 
     ---
 
-    The authentication activity JIM records in its Activity log: interactive sign-in success and failure, and API key authentication failure, with its retention and SIEM integration.
+    The authentication activity JIM records in its Activity log: interactive sign-in success and failure, and failed API key or SSO access token authentication, with its retention and SIEM integration.
 
 -   **[Preview Features](preview-features.md)**
 

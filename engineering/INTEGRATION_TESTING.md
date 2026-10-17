@@ -1586,7 +1586,7 @@ Integration tests require JIM to be configured with Connected Systems, Synchroni
 
 #### Authentication for Non-Interactive Testing
 
-Tests authenticate using API keys (X-API-Key header), avoiding the need for SSO/browser interaction:
+Tests authenticate using API keys (sent as bearer tokens in the `Authorization` header), avoiding the need for SSO/browser interaction:
 
 ```powershell
 # API key stored as environment variable or GitHub secret

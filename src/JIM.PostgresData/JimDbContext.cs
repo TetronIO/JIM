@@ -1139,8 +1139,8 @@ public class JimDbContext : DbContext
         // upsert in SecurityAuditServer race-safe: a concurrent insert for the same window bucket hits this
         // constraint instead of creating a duplicate row. ApiKeyPrefix/ClientIpAddress are normalised to "" rather
         // than left null for aggregated rows specifically because Postgres unique indexes treat NULLs as distinct
-        // from one another, which would defeat deduplication for the bad-format failure path (no key prefix
-        // available); see Activity.ApiKeyPrefix and Activity.ClientIpAddress for the normalisation contract.
+        // from one another, which would defeat deduplication for every failure with no key prefix (SSO access
+        // token and interactive sign-in failures); see Activity.ApiKeyPrefix and Activity.ClientIpAddress for the normalisation contract.
         modelBuilder.Entity<Activity>()
             .HasIndex(a => new { a.TargetType, a.ApiKeyPrefix, a.ClientIpAddress, a.SecurityEventReason, a.AggregationWindowStart })
             .IsUnique()

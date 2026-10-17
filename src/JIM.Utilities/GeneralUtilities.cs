@@ -92,6 +92,36 @@ public static class Utilities
         return $"{GetMetaverseObjectHref(mvoId, typePluralName)}?view=inspect&attr={attributeId}";
     }
 
+    /// <summary>
+    /// The query parameter the Pending Deletions page reads its Object Type filter from: the type's plural name,
+    /// as in the Metaverse Object list addresses (/t/users), so an Object Type's page can link straight to its own
+    /// pending deletions.
+    /// </summary>
+    public const string PendingDeletionsTypeQueryParameter = "type";
+
+    /// <summary>
+    /// The Pending Deletions page, filtered to one Metaverse Object Type when its plural name is given.
+    /// </summary>
+    public static string GetPendingDeletionsHref(string? typePluralName = null)
+    {
+        const string href = "/admin/pending-deletions";
+        return string.IsNullOrWhiteSpace(typePluralName)
+            ? href
+            : $"{href}?{PendingDeletionsTypeQueryParameter}={Uri.EscapeDataString(typePluralName.ToLowerInvariant())}";
+    }
+
+    /// <summary>
+    /// Resolves the Pending Deletions page's Object Type query parameter to one of the given types, matching the
+    /// plural name without regard to case. Null when no name is given or none matches.
+    /// </summary>
+    public static MetaverseObjectType? FindMetaverseObjectTypeForPendingDeletions(IEnumerable<MetaverseObjectType> objectTypes, string? typePluralName)
+    {
+        if (string.IsNullOrWhiteSpace(typePluralName))
+            return null;
+
+        return objectTypes.FirstOrDefault(t => string.Equals(t.PluralName, typePluralName, StringComparison.OrdinalIgnoreCase));
+    }
+
     public static string? GetMetaverseObjectHrefText(MetaverseObjectHeader metaverseObjectHeader)
     {
         return metaverseObjectHeader.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;

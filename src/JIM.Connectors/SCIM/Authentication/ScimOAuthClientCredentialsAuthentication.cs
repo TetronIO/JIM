@@ -45,6 +45,10 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
     {
         ArgumentNullException.ThrowIfNull(tokenClient);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
+        // The secret travels in the request body (client_secret_post), so this class refuses a cleartext
+        // endpoint whatever constructs it. The URI is not echoed: it may carry credentials of its own.
+        if (!ScimTransportSecurity.IsPermitted(tokenEndpoint))
+            throw new ArgumentException("The token endpoint must use HTTPS, or HTTP to a loopback address only.", nameof(tokenEndpoint));
         if (string.IsNullOrWhiteSpace(clientId))
             throw new ArgumentException("A client ID is required.", nameof(clientId));
         ArgumentNullException.ThrowIfNull(clientSecret);

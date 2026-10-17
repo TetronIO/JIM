@@ -96,6 +96,32 @@ public class ScimAuthenticationTests
     #region OAuth 2.0 client credentials
 
     [Test]
+    public void OAuth_Constructor_HttpNonLoopbackTokenEndpoint_Throws()
+    {
+        // The Client Secret travels in the request body, so the class itself refuses a cleartext endpoint
+        // whatever constructs it.
+        using var tokenClient = new HttpClient(new StubHttpMessageHandler(_ => TokenResponse("issued-token")));
+
+        Assert.Throws<ArgumentException>(() => new ScimOAuthClientCredentialsAuthentication(
+            tokenClient,
+            new Uri("http://keycloak.example.com/realms/jim/protocol/openid-connect/token"),
+            clientId: "scim-client",
+            clientSecret: "top-secret"));
+    }
+
+    [Test]
+    public void OAuth_Constructor_HttpLoopbackTokenEndpoint_IsAccepted()
+    {
+        using var tokenClient = new HttpClient(new StubHttpMessageHandler(_ => TokenResponse("issued-token")));
+
+        Assert.That(() => _ = new ScimOAuthClientCredentialsAuthentication(
+            tokenClient,
+            new Uri("http://localhost:8080/realms/jim/protocol/openid-connect/token"),
+            clientId: "scim-client",
+            clientSecret: "top-secret"), Throws.Nothing);
+    }
+
+    [Test]
     public async Task OAuth_FirstRequest_AcquiresTokenAndAppliesItAsync()
     {
         var handler = new StubHttpMessageHandler(_ => TokenResponse("issued-token"));

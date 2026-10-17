@@ -48,7 +48,7 @@ This opens a browser window for OIDC authentication. Once authenticated, the ses
 ### API Key
 
 ```powershell
-Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 ```
 
 API keys are the recommended method for automation, CI/CD pipelines, and scripting. Keys can be created via the JIM web UI or using `New-JIMApiKey`.
@@ -117,7 +117,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 ```powershell
 # Install and connect
 Install-Module -Name JIM
-Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 
 # List Connected Systems
 Get-JIMConnectedSystem

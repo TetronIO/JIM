@@ -101,6 +101,49 @@ Describe 'Get-JIMActivity' {
         }
     }
 
+    Context 'Security audit events' {
+
+        AfterEach {
+            InModuleScope JIM { $script:JIMConnection = $null }
+        }
+
+        It 'Returns a failed authentication with its reason, client IP, attempt count and window' {
+            # Read parity with the portal (#2108): a script, or a SIEM, has to tell a forged-token spray from one
+            # expired token. Mocked below Invoke-JIMApi, so the module's own output normalisation runs.
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url        = 'https://jim.example.com'
+                    AuthMethod = 'ApiKey'
+                    ApiKey     = 'jim_ak_activities_test_key'
+                    Connected  = $true
+                }
+                Mock Invoke-JIMApiRequest {
+                    [PSCustomObject]@{
+                        id                     = '0199d2a4-0000-7000-8000-000000000001'
+                        targetType             = 'Authentication'
+                        targetName             = 'Access token authentication failed'
+                        securityEventReason    = 'Access token signature invalid'
+                        clientIpAddress        = '203.0.113.7'
+                        apiKeyPrefix           = $null
+                        attemptCount           = 500
+                        firstSeen              = '2026-10-11T20:16:01Z'
+                        lastSeen               = '2026-10-11T20:29:42Z'
+                        aggregationWindowStart = '2026-10-11T20:15:00Z'
+                    }
+                }
+
+                $activity = Get-JIMActivity -Id ([guid]'0199d2a4-0000-7000-8000-000000000001')
+
+                $activity.SecurityEventReason | Should -Be 'Access token signature invalid'
+                $activity.ClientIpAddress | Should -Be '203.0.113.7'
+                $activity.AttemptCount | Should -Be 500
+                $activity.LastSeen | Should -Not -BeNullOrEmpty
+                $activity.AggregationWindowStart | Should -Not -BeNullOrEmpty
+                ($activity.PSObject.Properties.Name -ccontains 'SecurityEventReason') | Should -BeTrue
+            }
+        }
+    }
+
     Context 'Filter parameters' {
 
         # The Activity query supports far more filtering than the cmdlet used to expose; these prove each

@@ -7,7 +7,13 @@ audience: automation-author
 
 # API Authentication
 
-All API requests must be authenticated. JIM supports two authentication methods: **JWT Bearer tokens** (via OIDC) and **API keys**.
+All API requests must be authenticated. JIM supports two kinds of credential: **JWT access tokens** (via OIDC) and **API keys**. Both are sent the same way, as a bearer token in the `Authorization` header:
+
+```http
+Authorization: Bearer <credential>
+```
+
+JIM tells the two apart by the credential itself: a value beginning `jim_ak_` is an API key, and anything else is treated as an SSO access token.
 
 ## JWT Bearer Tokens
 
@@ -40,16 +46,18 @@ API keys can be created via:
 - The **JIM web UI**: navigate to the API Keys management page
 - The **PowerShell module**: use the `New-JIMApiKey` cmdlet
 
-All API keys are prefixed with `jim_` for easy identification.
+All API keys are prefixed with `jim_ak_` for easy identification.
 
 ### Usage
 
-Include the API key in the `X-Api-Key` header:
+Send the API key as a bearer token in the `Authorization` header:
 
 ```bash
-curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+curl -H "Authorization: Bearer jim_ak_xxxxxxxxxxxx" \
   https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
+
+The `Authorization` header is the only place JIM reads an API key from. A key sent in any other header (for example `X-Api-Key`) is ignored, and the request is treated as unauthenticated.
 
 ## Examples
 
@@ -63,7 +71,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 ### Listing Connected Systems with an API Key
 
 ```bash
-curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+curl -H "Authorization: Bearer jim_ak_xxxxxxxxxxxx" \
   https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
@@ -74,11 +82,22 @@ curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
 Connect-JIM -Url "https://jim.example.com"
 
 # Or connect with an API key
-Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 
 # Make API calls via the module
 Get-JIMConnectedSystem
 ```
+
+## Authentication Failures
+
+A request that is not authenticated receives `401 Unauthorized` with a `WWW-Authenticate` header naming the Bearer scheme, as RFC 6750 describes:
+
+| Request | `WWW-Authenticate` |
+|---|---|
+| No credential | `Bearer realm="JIM"` |
+| A credential JIM rejected (unknown, disabled or expired API key, or an invalid access token) | `Bearer realm="JIM", error="invalid_token"` |
+
+The response does not say why a credential was rejected. Each failed API key or access token attempt is recorded in JIM's [security audit log](../administration/security-audit-events.md), with the reason, which administrators can review.
 
 ## Security Recommendations
 

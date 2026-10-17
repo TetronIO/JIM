@@ -247,6 +247,54 @@ public class ScimConnectorTests
         Assert.That(results, Is.Empty);
     }
 
+    [Test]
+    public void ValidateSettingValues_HttpNonLoopbackTokenEndpoint_ReturnsInvalidAndSendsNoRequest()
+    {
+        // The connectivity test acquires a token, so it must never run against a cleartext token endpoint:
+        // that would send the Client Secret before validation had refused the configuration.
+        using var handler = ReachableProvider();
+        var connector = new StubbedTransportScimConnector(handler);
+        var settings = CreateSettingValues("https://scim.example.com/scim/v2",
+            tokenEndpointUrl: "http://jim.keycloak:8080/realms/jim/protocol/openid-connect/token");
+
+        var results = connector.ValidateSettingValues(settings, _logger);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(1));
+            Assert.That(results[0].IsValid, Is.False);
+            Assert.That(results[0].SettingValue?.Setting.Name, Is.EqualTo(ScimConnectorConstants.SettingTokenEndpointUrl));
+            Assert.That(handler.Requests, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void ValidateSettingValues_HttpLoopbackTokenEndpoint_ReturnsValid()
+    {
+        using var handler = ReachableProvider();
+        var connector = new StubbedTransportScimConnector(handler);
+        var settings = CreateSettingValues("https://scim.example.com/scim/v2",
+            tokenEndpointUrl: "http://localhost:8080/realms/jim/protocol/openid-connect/token");
+
+        var results = connector.ValidateSettingValues(settings, _logger);
+
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void ValidateSettingValues_HttpTokenEndpointLeftOverWithOtherAuthenticationMethod_IsIgnored()
+    {
+        using var handler = ReachableProvider();
+        var connector = new StubbedTransportScimConnector(handler);
+        var settings = CreateSettingValues("https://scim.example.com/scim/v2",
+            tokenEndpointUrl: "http://keycloak.example.com/realms/jim/protocol/openid-connect/token",
+            authenticationMethod: ScimConnectorConstants.AuthMethodStaticBearerToken);
+
+        var results = connector.ValidateSettingValues(settings, _logger);
+
+        Assert.That(results, Is.Empty);
+    }
+
     private static StubHttpMessageHandler ReachableProvider()
     {
         return new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
@@ -267,9 +315,12 @@ public class ScimConnectorTests
         return setting!;
     }
 
-    private static List<ConnectedSystemSettingValue> CreateSettingValues(string? baseUrl)
+    private static List<ConnectedSystemSettingValue> CreateSettingValues(
+        string? baseUrl,
+        string? tokenEndpointUrl = null,
+        string authenticationMethod = ScimConnectorConstants.AuthMethodOAuthClientCredentials)
     {
-        return new List<ConnectedSystemSettingValue>
+        var settingValues = new List<ConnectedSystemSettingValue>
         {
             new()
             {
@@ -279,9 +330,20 @@ public class ScimConnectorTests
             new()
             {
                 Setting = new ConnectorDefinitionSetting { Name = ScimConnectorConstants.SettingAuthenticationMethod },
-                StringValue = ScimConnectorConstants.AuthMethodOAuthClientCredentials
+                StringValue = authenticationMethod
             }
         };
+
+        if (tokenEndpointUrl != null)
+        {
+            settingValues.Add(new ConnectedSystemSettingValue
+            {
+                Setting = new ConnectorDefinitionSetting { Name = ScimConnectorConstants.SettingTokenEndpointUrl },
+                StringValue = tokenEndpointUrl
+            });
+        }
+
+        return settingValues;
     }
 
     private static void AssertSingleInvalidBaseUrlResult(List<ConnectorSettingValueValidationResult> results)
