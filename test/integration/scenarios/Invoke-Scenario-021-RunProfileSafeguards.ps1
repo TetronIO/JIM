@@ -550,7 +550,16 @@ try {
         $deltaProfileId = $config.LDAPDeltaImportProfileId
 
         # Step 3a: Baseline, so the Delta Import starts from a current watermark and reports nothing stale
-        Write-TestStep "3a" "LDAP Full Import then Delta Import (baseline watermark)"
+        Write-TestStep "3a" "Provision the HR population to LDAP, then LDAP Full Import and Delta Import (baseline watermark)"
+        # Self-sufficient when run alone (-Step DeltaImportLimit): provision whatever earlier steps have not
+        Invoke-ImportAndSync -Config $config -Name "Test 3 baseline" | Out-Null
+        $pendingBaseline3 = Get-LdapPendingExportCount -Config $config
+        if ($pendingBaseline3 -gt 0) {
+            Assert-ExportAppliedInFull -Config $config -Expected $pendingBaseline3 -Name "Test 3 baseline"
+            Invoke-LdapConfirmingImport -Config $config -Name "Test 3 baseline"
+        }
+        $ldapBaselineSync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $ldapBaselineSync.activityId -Name "LDAP Delta Sync (Test 3 baseline)"
         $baselineFull = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $baselineFull.activityId -Name "LDAP Full Import (Test 3 baseline)"
         $baselineDelta = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -Wait -PassThru
