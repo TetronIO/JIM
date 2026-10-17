@@ -145,6 +145,49 @@ public class ImportOutcomeMessageTests
     }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // ForWithheldConnectorReportedDeletes: Run Profile Safeguards on a Delta Import (#2089)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void ForWithheldConnectorReportedDeletes_CountLimitTripped_NamesTheCountTheShareAndTheLimit()
+    {
+        var message = ImportOutcomeMessage.ForWithheldConnectorReportedDeletes(count: 501, baseCount: 10000, maxCount: 500, maxPercent: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("501 objects (5% of 10,000)"));
+            Assert.That(message, Does.Contain("limit of 500;"));
+            Assert.That(message, Does.Contain("Delta Import"));
+        }
+    }
+
+    [Test]
+    public void ForWithheldConnectorReportedDeletes_BothLimitsTripped_NamesBothLimits()
+    {
+        var message = ImportOutcomeMessage.ForWithheldConnectorReportedDeletes(count: 4120, baseCount: 10000, maxCount: 500, maxPercent: 10);
+
+        Assert.That(message, Does.Contain("limits of 500 and 10%;"));
+    }
+
+    [Test]
+    public void ForWithheldConnectorReportedDeletes_SingleObject_UsesTheSingular()
+    {
+        var message = ImportOutcomeMessage.ForWithheldConnectorReportedDeletes(count: 1, baseCount: 10, maxCount: 0, maxPercent: null);
+
+        Assert.That(message, Does.Contain("1 object (10% of 10)"));
+    }
+
+    [Test]
+    public void ForImport_WithheldDeletions_AreCountedAmongTheObjectsRead()
+    {
+        // The Connector returned these deletes, so they are among the objects read; they were withheld, not applied (#2089).
+        var message = ImportOutcomeMessage.ForImport(objects: 10, created: 0, updated: 1, unchanged: 0,
+            connectorReportedDeletions: 0, detectedDeletions: 0, errors: 0, throughput: string.Empty, withheldDeletions: 9);
+
+        Assert.That(message, Does.Contain("9 deletions withheld"));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // ForDeselectedObjectTypesHeldBack: deselected Object Types still managed by enabled Synchronisation Rules (#1474)
     // -----------------------------------------------------------------------------------------------------------------
 
