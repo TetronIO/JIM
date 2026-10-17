@@ -23,8 +23,9 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [AllowAnonymous]
 [Produces("application/json")]
-public class HealthController(JimApplication application) : ControllerBase
+public class HealthController(ILogger<HealthController> logger, JimApplication application) : ControllerBase
 {
+    private readonly ILogger<HealthController> _logger = logger;
     private readonly JimApplication _application = application;
 
     /// <summary>
@@ -70,11 +71,13 @@ public class HealthController(JimApplication application) : ControllerBase
         }
         catch (Exception ex)
         {
+            // This endpoint is anonymous, so the cause goes to the log only; exception text can carry
+            // connection details (host, port, database, user name) that must not reach the caller.
+            _logger.LogError(ex, "Readiness check failed");
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {
                 status = "not_ready",
                 reason = "error",
-                error = ex.Message,
                 timestamp = DateTime.UtcNow
             });
         }
