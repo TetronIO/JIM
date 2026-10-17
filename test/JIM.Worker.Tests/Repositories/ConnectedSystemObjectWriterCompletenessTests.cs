@@ -36,7 +36,9 @@ public class ConnectedSystemObjectWriterCompletenessTests
         // Import update, Full Import deletion detection and explicit Delta Import deletes.
         "BulkUpdateConnectedSystemObjectsRawAsync",
         // Schema Refresh Removal.
-        "ObsoleteConnectedSystemObjectsByIdsAsync"
+        "ObsoleteConnectedSystemObjectsByIdsAsync",
+        // A Unique Value Generation commit loser, whose own data is unchanged but must be processed again (#2309).
+        "MarkConnectedSystemObjectsSynchronisationPendingAsync"
     ];
 
     /// <summary>Methods that write the table without announcing a change, with the reason each needs no mark.</summary>

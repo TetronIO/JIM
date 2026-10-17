@@ -69,7 +69,7 @@ Feature-flagged behaviour (#1781) is tested as though the feature had shipped, n
 
 **Assert on JIM's own markup and component state, never on MudBlazor's generated CSS class names.** Those are a third party's implementation detail and churn between MudBlazor releases; a suite that breaks on every upgrade gets ignored, which is worse than no suite. Prefer `FindComponent<T>()`/`HasComponent<T>()` and a component's own parameters over DOM structure.
 
-Derive fixtures from `JimComponentTestContext`, which registers MudBlazor's services and sets bUnit's JS interop to loose mode (MudBlazor calls into JavaScript widely; without loose mode components throw on unconfigured invocations).
+Derive fixtures from `JimComponentTestContext`, which registers MudBlazor's services and sets bUnit's JS interop to loose mode (MudBlazor calls into JavaScript widely; without loose mode components throw on unconfigured invocations). It also disposes every rendered component after each test, so a fixture needs no `[TearDown]` for that. Where a test must dispose mid-test, call `DisposeRenderedComponentsAsync()`, never bUnit's `DisposeComponentsAsync()` directly: bUnit 2.11.3 clears its root list outside the dispatcher, so a component still finishing a delay when the test ends is either never disposed or fails the teardown with "Collection was modified" (the base class comment has the detail).
 
 ```csharp
 [TestFixture]

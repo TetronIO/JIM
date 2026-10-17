@@ -18,9 +18,6 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class GeneratedValueDecisionBannerTests : JimComponentTestContext
 {
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static GeneratedValueDecisionHeader Decision(string attribute, GeneratedValueDecisionStatus status) => new()
     {
         AssignmentId = Guid.NewGuid(),

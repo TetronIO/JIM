@@ -455,12 +455,11 @@ public partial class SyncRepository : ISyncRepository
             .MaxAsync(r => (DateTime?)(r.LastUpdated ?? r.Created));
         var latestMappingChange = await _context.SyncRuleMappings
             .MaxAsync(m => (DateTime?)(m.LastUpdated ?? m.Created));
+        // A deleted rule leaves no row to read, so its deletion is recorded on the Service Settings singleton (#2309).
+        var latestRuleDeletion = await _context.ServiceSettings
+            .MaxAsync(s => s.SyncRuleLastDeletedAt);
 
-        if (latestRuleChange == null)
-            return latestMappingChange;
-        if (latestMappingChange == null)
-            return latestRuleChange;
-        return latestRuleChange > latestMappingChange ? latestRuleChange : latestMappingChange;
+        return new[] { latestRuleChange, latestMappingChange, latestRuleDeletion }.Max();
     }
 
     public async Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)

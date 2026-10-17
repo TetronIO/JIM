@@ -37,9 +37,6 @@ public class AuxiliaryClassesDialogTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new UnusedJimApplicationFactory());
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private sealed class UnusedJimApplicationFactory : IJimApplicationFactory
     {
         public JimApplication Create() =>

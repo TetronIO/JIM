@@ -34,9 +34,6 @@ public class ConnectedSystemSchemaTabOperationalAttributeTests : JimComponentTes
         Services.AddSingleton<IConfigurationChangePreviewStarter>(new UnusedPreviewStarter());
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private sealed class UnusedPreviewStarter : IConfigurationChangePreviewStarter
     {
         public Task<Guid?> StartAsync(ConfigurationChangePreviewRequest request) =>

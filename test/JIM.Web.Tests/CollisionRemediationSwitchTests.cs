@@ -18,9 +18,6 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class CollisionRemediationSwitchTests : JimComponentTestContext
 {
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static GeneratedValueParticipant Participant(int systemId, bool reportsCollisions) => new()
     {
         ConnectedSystemId = systemId,
