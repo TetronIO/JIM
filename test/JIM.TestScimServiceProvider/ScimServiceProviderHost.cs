@@ -32,8 +32,16 @@ public static class ScimServiceProviderHost
         app.Run(async context =>
         {
             using var request = await ToRequestMessageAsync(context.Request);
+            var passwordWritesBefore = provider.PasswordWritesReceived;
             using var response = provider.Respond(request);
             await WriteAsync(context.Response, response);
+
+            // Scenario 15 reads this line from the container's log to prove JIM sent no password (#2091). The
+            // value itself is never logged.
+            if (provider.PasswordWritesReceived > passwordWritesBefore)
+                app.Logger.LogWarning("{Marker}: {Method} {Path} carried a password attribute.",
+                    MockScimProvider.PasswordReceivedLogMarker,
+                    LogSanitiser.Sanitise(context.Request.Method), LogSanitiser.Sanitise(context.Request.Path));
 
             app.Logger.LogInformation("{Method} {Path} -> {StatusCode}",
                 LogSanitiser.Sanitise(context.Request.Method),

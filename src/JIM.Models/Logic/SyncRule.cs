@@ -282,7 +282,8 @@ public class SyncRule : IAuditable, IValidated
         {
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error,
                 $"The Attribute Flow using '{attributeName}' must be removed: it holds credentials, which JIM never imports " +
-                "or exports through an Attribute Flow. To set passwords, use Password Synchronisation on the Connected System."));
+                "or exports through an Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected " +
+                "Systems whose Connector supports it."));
         }
     }
 

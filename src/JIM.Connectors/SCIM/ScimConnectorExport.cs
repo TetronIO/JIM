@@ -503,7 +503,8 @@ internal sealed class ScimConnectorExport
     {
         return ConnectedSystemExportResult.Failed(
             $"{string.Join(", ", writeOnlyAttributes.Select(a => $"'{LogSanitiser.Sanitise(a)}'"))} is write-only on the service provider, so JIM never exports it through an Attribute Flow. " +
-            "Nothing was sent. Remove the Attribute Flow targeting it; to set passwords, use Password Synchronisation on the Connected System instead.");
+            "Nothing was sent. Remove the Attribute Flow targeting it. JIM delivers passwords only through Password Synchronisation, " +
+            "which the SCIM Connector does not support yet.");
     }
 
     private static ConnectedSystemExportResult MissingResourceIdFailure()

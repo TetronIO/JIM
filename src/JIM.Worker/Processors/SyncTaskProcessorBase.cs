@@ -6806,8 +6806,8 @@ public abstract class SyncTaskProcessorBase
             case AttributeFlowErrorKind.CredentialAttributeTarget:
                 return (ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported,
                     $"Target attribute {target} holds credentials, so JIM never exports it through an Attribute Flow and {outcome}; " +
-                    "the object's other attributes were unaffected. Remove the Attribute Flow targeting it. To set passwords, use " +
-                    "Password Synchronisation on the Connected System instead.");
+                    "the object's other attributes were unaffected. Remove the Attribute Flow targeting it. JIM delivers passwords only " +
+                    "through Password Synchronisation, on Connected Systems whose Connector supports it.");
 
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:

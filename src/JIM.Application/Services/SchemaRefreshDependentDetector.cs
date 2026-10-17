@@ -204,7 +204,7 @@ public static class SchemaRefreshDependentDetector
     /// </summary>
     private static (string Reason, bool ViaExpression)? FindCredentialAttributeInvalidation(SyncRuleMapping mapping)
     {
-        const string remedy = "JIM never imports or exports credentials through an Attribute Flow; remove this mapping, and use Password Synchronisation to set passwords.";
+        const string remedy = "JIM never imports or exports credentials through an Attribute Flow; remove this mapping. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it.";
 
         var target = mapping.TargetConnectedSystemAttribute?.Name;
         if (CredentialAttributes.IsCredentialAttribute(target))

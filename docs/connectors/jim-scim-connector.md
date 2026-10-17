@@ -98,6 +98,10 @@ A `dateTime` value is written in UTC, with a fraction of a second only where it 
 
 An attribute the provider's schema does not have, or will not accept a write to, fails that object rather than exporting the rest of it: a partial change recorded as applied is worse than one that failed.
 
+#### Passwords
+
+SCIM's User `password` is write-only: a provider accepts it and never returns it. JIM never exports a password through an Attribute Flow, so the attribute is left out of the Connected System's schema, and a Synchronisation Rule cannot flow a value to it. Any attribute a provider's schema marks write-only, or never returned, is treated the same way: the Connector refuses to send it and fails that object, without sending anything. JIM delivers passwords only through [Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation), which the SCIM Connector does not support yet, so JIM cannot set passwords on a SCIM service provider today. Set them in the provider, or have users sign in through a federated identity provider.
+
 !!! note "Referenced objects are exported first"
     RFC 7644 makes the client responsible for creating dependencies before the things that refer to them. JIM orders exports accordingly, and where a provider still rejects a change because something it references is missing, that is reported as a dependency-ordering problem and retried once the dependency lands.
 

@@ -1318,7 +1318,7 @@ public class SyncPreviewServer
                 $"{flowError.ValueCount} dates for '{flowError.TargetAttributeName}' become {flowError.TargetValueCount} distinct values at the Connected System's {flowError.TargetDateTimeResolution} resolution, so {flowError.TargetValueCount} would be sent; the attribute would still export."),
             AttributeFlowErrorKind.CredentialAttributeTarget => (
                 SyncPreviewMessageCode.CredentialAttributeNotExported,
-                $"'{flowError.TargetAttributeName}' holds credentials, so nothing would be exported for it; remove the Attribute Flow and use Password Synchronisation instead."),
+                $"'{flowError.TargetAttributeName}' holds credentials, so nothing would be exported for it; remove the Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it."),
             AttributeFlowErrorKind.ExpressionResultMultiValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
                 $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
