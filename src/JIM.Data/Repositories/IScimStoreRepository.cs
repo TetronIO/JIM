@@ -29,6 +29,18 @@ public interface IScimStoreRepository
     Task<IScimStoreWriteSession?> BeginWriteAsync(int connectedSystemId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A live resource of a Connected System's store, or null when there is none of that type with that id (or only a
+    /// tombstone). Reads outside any write session, for GET.
+    /// </summary>
+    Task<ScimStoreResource?> GetLiveResourceAsync(int connectedSystemId, int resourceTypeId, Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The references a resource holds, through every attribute, with the type of each resource referred to. Reads
+    /// outside any write session, for GET.
+    /// </summary>
+    Task<IReadOnlyList<ScimStoreReferenceTarget>> GetReferencesAsync(Guid sourceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The resource types a Connected System's store accepts.
     /// </summary>
     Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default);
