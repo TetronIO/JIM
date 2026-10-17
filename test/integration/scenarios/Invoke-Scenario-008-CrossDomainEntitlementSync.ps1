@@ -1551,7 +1551,6 @@ try {
 
         $validations = @()
         $mvoDeleted = $false
-        $targetGroupDeleted = $false
 
         if ($groupMvoId) {
             # Re-fetch the MVO to check its state after sync
@@ -1598,56 +1597,16 @@ try {
         # so we don't need to run it again here. The delete pending export created during
         # synchronous MVO deletion is executed as part of the forward sync cycle.
 
-        # Check if group is deleted from Target AD
-        $groupStillExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
-        if (-not $groupStillExists) {
-            $targetGroupDeleted = $true
+        # Check the group is deleted from Target AD. The forward sync already ran the Target Export and a
+        # confirming Delta Import, so the deletion is complete here: no retry or extra export cycle, which
+        # would only hide an export that failed to delete.
+        if (-not (Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig)) {
+            $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
             Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD" -ForegroundColor Green
         }
         else {
-            # Group still exists - try one more export cycle
-            Write-Host "    Group still exists in Target AD, trying confirming import + export..." -ForegroundColor Yellow
-            if ($targetImportProfile -and $targetExportProfile) {
-                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait
-                Start-Sleep -Seconds 1
-                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
-                Start-Sleep -Seconds 2
-
-                $retryGroupExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
-                if (-not $retryGroupExists) {
-                    $targetGroupDeleted = $true
-                    Write-Host "    Group '$groupToDelete' deleted from Target after retry" -ForegroundColor Green
-                }
-            }
-        }
-
-        # Final validation of Target AD deletion
-        if ($targetGroupDeleted) {
-            $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
-        }
-        else {
-            # One more sync cycle might be needed - run export to Target
-            Write-Host "    Group still exists in Target AD after waiting. Running Target export..." -ForegroundColor Yellow
-            if ($targetExportProfile) {
-                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
-                Start-Sleep -Seconds 2
-
-                # Check one more time
-                $finalCheckExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
-                if (-not $finalCheckExists) {
-                    $targetGroupDeleted = $true
-                    $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
-                    Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD after export" -ForegroundColor Green
-                }
-                else {
-                    $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
-                    Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD after export" -ForegroundColor Red
-                }
-            }
-            else {
-                $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
-                Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD (Target Export profile not available)" -ForegroundColor Red
-            }
+            $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
+            Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD after export and confirming import" -ForegroundColor Red
         }
 
         # Verify group is no longer in Source AD (double-check)
