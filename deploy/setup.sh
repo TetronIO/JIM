@@ -2722,7 +2722,7 @@ upgrade_installation() {
         || fatal "No JIM installation at ${install_dir}. Set JIM_INSTALL_DIR to the folder JIM is installed in."
     load_installation "$install_dir"
     [ "$RUNTIME" = "docker" ] \
-        || fatal "--upgrade upgrades JIM on Docker. To upgrade JIM on Podman, see ${DOCS_BASE}/administration/upgrading/"
+        || fatal "--upgrade upgrades JIM on Docker. To upgrade JIM on Podman, see ${DOCS_BASE}/administration/upgrading-podman/"
     check_prerequisites
 
     local current target
