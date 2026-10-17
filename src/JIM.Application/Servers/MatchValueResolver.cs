@@ -88,17 +88,36 @@ public sealed class MatchValueResolver
                 target.Type, null);
 
         var values = new List<object>();
-        foreach (var value in attributeValues
-                     .Where(av => av.AttributeId == attributeId)
-                     .Select(av => SyncEngine.ToExpressionValue(av, attribute.Type))
-                     .Where(value => value != null && value is not "" && !values.Contains(value)))
+        var anyHeldUnderAnotherType = false;
+        foreach (var attributeValue in attributeValues.Where(av => av.AttributeId == attributeId))
         {
-            values.Add(value!);
+            var value = SyncEngine.ToExpressionValue(attributeValue, attribute.Type);
+            if (value == null)
+                anyHeldUnderAnotherType |= attributeValue.IsHeldUnderAnotherDataType(attribute.Type);
+            else if (value is not "" && !values.Contains(value))
+                values.Add(value);
         }
 
-        return values.Count == 0
-            ? MatchValueResolution.NoValue(target.Type, null)
-            : MatchValueResolution.WithValues(values, target.Type, null);
+        if (values.Count > 0)
+            return MatchValueResolution.WithValues(values, target.Type, null);
+
+        // Nothing of the attribute's type. A value held under another one (#2319) is not no value: matching on it as
+        // no value would find nothing and project a duplicate of the identity the object already has.
+        return anyHeldUnderAnotherType &&
+               SyncEngine.HeldOnlyUnderAnotherDataType(attributeValues, attributeId.Value, attribute.Type) is { } heldType
+            ? MatchValueResolution.Failed(DescribeHeldUnderAnotherDataType($"The Connected System attribute '{attribute.Name}'", heldType, attribute.Type),
+                target.Type, null)
+            : MatchValueResolution.NoValue(target.Type, null);
+    }
+
+    /// <summary>
+    /// Why a rule reading a value held only under another data type cannot be worked out (#2319), and what resolves it.
+    /// </summary>
+    private static string DescribeHeldUnderAnotherDataType(string subject, AttributeDataType heldType, AttributeDataType? currentType)
+    {
+        var current = currentType.HasValue ? $", not as its {currentType.Value} type" : string.Empty;
+        return $"{subject} is held as {heldType}{current}: a schema refresh changed its data type and no import has read it since. " +
+               "Run a Full Import to read it as its new type; the object is matched on the next synchronisation.";
     }
 
     private MatchValueResolution ResolveExpression(
@@ -107,7 +126,22 @@ public sealed class MatchValueResolver
         IReadOnlyCollection<ConnectedSystemObjectAttributeValue> attributeValues,
         ConnectedSystemObjectType? objectType)
     {
-        var context = new ExpressionContext(connectedSystemAttributes: BuildInputs(attributeValues, objectType));
+        var inputs = BuildInputs(attributeValues, objectType, out var heldUnderAnotherDataType);
+
+        // An input held only under another data type (#2319) reads as no value, and the expression would compute nothing,
+        // or a wrong value, from it. Only an input the expression reads counts.
+        if (heldUnderAnotherDataType != null)
+        {
+            var heldInputs = ExpressionInputResolver.FindHeldInputs(expression, heldUnderAnotherDataType);
+            if (heldInputs.Count > 0)
+            {
+                var subject = heldInputs.Count == 1 ? $"The input {heldInputs[0].Accessor}" : $"The inputs {string.Join(", ", heldInputs)}";
+                return MatchValueResolution.Failed(
+                    DescribeHeldUnderAnotherDataType(subject, heldInputs[0].HeldDataType, currentType: null), target.Type, expression);
+            }
+        }
+
+        var context = new ExpressionContext(connectedSystemAttributes: inputs);
 
         // Only the evaluation is guarded, matching Attribute Flow (SyncEngine.EvaluateExpressionSource): every failure
         // an expression can cause arrives as the one ExpressionEvaluationException (#2153, N5). Anything else is a JIM
@@ -149,9 +183,22 @@ public sealed class MatchValueResolver
     /// </summary>
     internal static Dictionary<string, object?> BuildInputs(
         IReadOnlyCollection<ConnectedSystemObjectAttributeValue> attributeValues,
-        ConnectedSystemObjectType? objectType)
+        ConnectedSystemObjectType? objectType) =>
+        BuildInputs(attributeValues, objectType, out _);
+
+    /// <summary>
+    /// As <see cref="BuildInputs(IReadOnlyCollection{ConnectedSystemObjectAttributeValue}, ConnectedSystemObjectType?)"/>,
+    /// also returning the attributes held only under another data type (#2319), exactly as
+    /// <see cref="SyncEngine.BuildCsoAttributeDictionary(ConnectedSystemObject, ConnectedSystemObjectType, out IReadOnlyDictionary{string, AttributeDataType}?)"/>
+    /// does for Attribute Flow; null when there are none, the usual case.
+    /// </summary>
+    internal static Dictionary<string, object?> BuildInputs(
+        IReadOnlyCollection<ConnectedSystemObjectAttributeValue> attributeValues,
+        ConnectedSystemObjectType? objectType,
+        out IReadOnlyDictionary<string, AttributeDataType>? heldUnderAnotherDataType)
     {
         var inputs = new ExpressionAttributeDictionary();
+        List<ConnectedSystemObjectTypeAttribute>? heldCandidates = null;
 
         foreach (var attributeValue in attributeValues)
         {
@@ -164,9 +211,14 @@ public sealed class MatchValueResolver
                 continue;
             }
 
-            inputs.Add(attribute.Name, SyncEngine.ToExpressionValue(attributeValue, attribute.Type));
+            var value = SyncEngine.ToExpressionValue(attributeValue, attribute.Type);
+            if (value == null && attributeValue.IsHeldUnderAnotherDataType(attribute.Type))
+                (heldCandidates ??= []).Add(attribute);
+
+            inputs.Add(attribute.Name, value);
         }
 
+        heldUnderAnotherDataType = SyncEngine.FindAttributesHeldOnlyUnderAnotherDataType(attributeValues, heldCandidates);
         return inputs.Build();
     }
 }

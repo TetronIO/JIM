@@ -217,7 +217,9 @@ public partial class MetaverseServer
         // cso is non-null here: DetermineFixedState returns NotJoined otherwise, which is handled above.
         if (sourceType == SyncRuleMappingSourcesType.AttributeMapping)
         {
-            candidate.CandidateValues = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttribute.Type, candidateValueCap);
+            var (values, note) = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttribute.Type, candidateValueCap);
+            candidate.CandidateValues = values;
+            candidate.Note = note;
         }
         else if (sourceType == SyncRuleMappingSourcesType.GeneratedMapping)
         {
@@ -245,20 +247,43 @@ public partial class MetaverseServer
 
     /// <summary>
     /// The value(s) a plain attribute mapping would currently supply from its joined Connected System Object,
-    /// after the mapping's own inbound text processing (#843) for a text target, matching exactly what the sync
-    /// engine's <c>ProcessMapping</c> would flow.
+    /// after the mapping's own inbound text processing (#843) for a text source, matching exactly what the sync
+    /// engine's <c>ProcessMapping</c> would flow. Values are read as the source attribute's type, as the engine reads
+    /// them (#2319), not the target's. A source holding the attribute only under another data type shows the value it
+    /// holds, with a note: synchronisation leaves the Metaverse Object's value as it is until an import reads it (#2184).
     /// </summary>
-    private static List<string> EvaluateAttributeSourceCandidateValues(
+    private static (List<string> Values, string? Note) EvaluateAttributeSourceCandidateValues(
         SyncRuleMapping mapping, ConnectedSystemObject cso, AttributeDataType targetAttributeType, int cap)
     {
         var source = mapping.Sources.OrderBy(s => s.Order).FirstOrDefault(s => s.ConnectedSystemAttributeId.HasValue);
         if (source?.ConnectedSystemAttributeId == null)
-            return new List<string>();
+            return (new List<string>(), null);
 
         var sourceAttributeId = source.ConnectedSystemAttributeId.Value;
         var csoValues = cso.AttributeValues.Where(av => av.AttributeId == sourceAttributeId).ToList();
 
-        var values = targetAttributeType == AttributeDataType.Text
+        // The schema's definition is the type the engine dispatches on; the mapping's own copy and the target's type
+        // stand in only where it is not loaded.
+        var sourceAttributeType = cso.Type?.Attributes.FirstOrDefault(a => a.Id == sourceAttributeId)?.Type
+                                  ?? source.ConnectedSystemAttribute?.Type
+                                  ?? targetAttributeType;
+
+        if (sourceAttributeType != AttributeDataType.Reference &&
+            SyncEngine.HeldOnlyUnderAnotherDataType(csoValues, sourceAttributeId, sourceAttributeType) is { } heldType)
+        {
+            var heldValues = csoValues
+                .Select(v => v.ToStringNoName())
+                .Where(v => !string.IsNullOrEmpty(v))
+                .Select(v => v!)
+                .Distinct(StringComparer.Ordinal)
+                .Take(cap)
+                .ToList();
+            return (heldValues,
+                $"Held as {heldType} until the next import: a schema refresh changed this attribute to {sourceAttributeType}, so " +
+                "synchronisation leaves the Metaverse Object's value as it is until an import reads the attribute again.");
+        }
+
+        var values = sourceAttributeType == AttributeDataType.Text
             ? csoValues
                 .Select(v => SyncEngine.ApplyInboundTextProcessing(v.StringValue, mapping.InboundValueProcessing, mapping.CaseNormalisation))
                 .Where(v => v != null)
@@ -268,8 +293,8 @@ public partial class MetaverseServer
             // Only the rows the engine flows, those holding a value of the type (#2153), and a date in JIM's canonical
             // text form, so one instant held in two kinds or precisions is one candidate, written as an Expression's is.
             : csoValues
-                .Where(v => SyncEngine.HoldsValueOfType(v, targetAttributeType))
-                .Select(v => targetAttributeType == AttributeDataType.DateTime
+                .Where(v => SyncEngine.HoldsValueOfType(v, sourceAttributeType))
+                .Select(v => sourceAttributeType == AttributeDataType.DateTime
                     ? ExpressionText.FormatDate(v.DateTimeValue!.Value)
                     : v.ToStringNoName())
                 .Where(v => !string.IsNullOrEmpty(v))
@@ -277,7 +302,7 @@ public partial class MetaverseServer
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
-        return values.Take(cap).ToList();
+        return (values.Take(cap).ToList(), null);
     }
 
     /// <summary>
@@ -294,7 +319,21 @@ public partial class MetaverseServer
         if (expressionSource?.Expression == null)
             return (new List<string>(), null);
 
-        var csAttributeDictionary = SyncEngine.BuildCsoAttributeDictionary(cso, cso.Type);
+        var csAttributeDictionary = SyncEngine.BuildCsoAttributeDictionary(cso, cso.Type, out var heldUnderAnotherDataType);
+
+        // As synchronisation does (#2319): an Expression reading an input held only under another data type is not
+        // evaluated, and the Metaverse Object's value is left as it is until an import reads the input again.
+        if (heldUnderAnotherDataType != null)
+        {
+            var heldInputs = ExpressionInputResolver.FindHeldInputs(expressionSource.Expression, heldUnderAnotherDataType);
+            if (heldInputs.Count > 0)
+            {
+                return (new List<string>(),
+                    $"Not evaluated: {string.Join(", ", heldInputs)} until the next import, because a schema refresh changed its data " +
+                    "type. Synchronisation leaves the Metaverse Object's value as it is until an import reads it again.");
+            }
+        }
+
         var context = new ExpressionContext(metaverseAttributes: null, connectedSystemAttributes: csAttributeDictionary);
 
         object? result;

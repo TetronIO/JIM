@@ -37,16 +37,31 @@ public static class AttributeFlowPipeline
     /// reads nothing from <c>mv[...]</c>, and counting it as missing would fail every object.</param>
     /// <param name="nowUtc">The instant <c>Now()</c> and <c>Today()</c> read; null for the real time, as synchronisation
     /// runs. A test "as of" a moment passes it.</param>
+    /// <param name="connectedSystemAttributesHeldUnderAnotherDataType">The <c>cs[...]</c> attributes the object holds only
+    /// under another data type (<see cref="SyncEngine.BuildCsoAttributeDictionary(ConnectedSystemObject, ConnectedSystemObjectType, out IReadOnlyDictionary{string, AttributeDataType}?)"/>,
+    /// #2319), by name, with the type each is held as; null when there are none, the usual case. An Expression reading
+    /// one is not evaluated, whatever the Missing Input Behaviour: the value is held, just not as the attribute's type,
+    /// so treating it as absent would clear or rebuild the target from nothing.</param>
     public static ExpressionSourceEvaluation EvaluateSource(
         IExpressionEvaluator expressionEvaluator,
         string expression,
         MissingInputBehaviour missingInputBehaviour,
         IDictionary<string, object?>? connectedSystemAttributes,
         IDictionary<string, object?>? metaverseAttributes,
-        DateTime? nowUtc = null)
+        DateTime? nowUtc = null,
+        IReadOnlyDictionary<string, AttributeDataType>? connectedSystemAttributesHeldUnderAnotherDataType = null)
     {
         ArgumentNullException.ThrowIfNull(expressionEvaluator);
         ArgumentException.ThrowIfNullOrWhiteSpace(expression);
+
+        // Before Missing Input Behaviour: an input held under another data type also reads as no value, and must not be
+        // resolved as one. Nothing to check, and nothing allocated, in the usual case of every value held as its type.
+        if (connectedSystemAttributesHeldUnderAnotherDataType is { Count: > 0 })
+        {
+            var heldInputs = ExpressionInputResolver.FindHeldInputs(expression, connectedSystemAttributesHeldUnderAnotherDataType);
+            if (heldInputs.Count > 0)
+                return ExpressionSourceEvaluation.InputHeldUnderAnotherDataType(heldInputs);
+        }
 
         if (missingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
         {
@@ -97,6 +112,8 @@ public static class AttributeFlowPipeline
         {
             case ExpressionSourceOutcome.NoValue:
                 return new AttributeFlowEvaluation { Outcome = AttributeFlowOutcome.NoValue, Source = source, TargetType = targetType };
+            case ExpressionSourceOutcome.InputHeldUnderAnotherDataType:
+                return new AttributeFlowEvaluation { Outcome = AttributeFlowOutcome.LeftAsHeld, Source = source, TargetType = targetType };
             case ExpressionSourceOutcome.MissingInputFailedMapping:
                 return Error(AttributeFlowErrorReason.MissingInputFailedMapping);
             case ExpressionSourceOutcome.MissingInputFailedObject:
@@ -148,9 +165,10 @@ public static class AttributeFlowPipeline
 
         var target = mapping.TargetMetaverseAttribute
             ?? throw new ArgumentException("An import Attribute Flow has a target Metaverse attribute.", nameof(mapping));
-        var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType);
+        var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType, out var heldUnderAnotherDataType);
 
-        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc);
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc,
+            heldUnderAnotherDataType);
         return Resolve(evaluated, target.Type, target.AttributePlurality, InboundTextProcessing(mapping, target));
     }
 
@@ -197,7 +215,10 @@ public static class AttributeFlowPipeline
 
         switch (source.Outcome)
         {
+            // An input held under another data type (#2319) waits too: a base built without it would generate a wrong
+            // value, and a value already generated is kept.
             case ExpressionSourceOutcome.NoValue:
+            case ExpressionSourceOutcome.InputHeldUnderAnotherDataType:
                 return new GeneratedBaseEvaluation { Outcome = GeneratedBaseOutcome.Waits, Source = source };
             case ExpressionSourceOutcome.MissingInputFailedMapping:
                 return Error(AttributeFlowErrorReason.MissingInputFailedMapping);
@@ -257,8 +278,9 @@ public static class AttributeFlowPipeline
         if (string.IsNullOrWhiteSpace(source?.Expression))
             return new GeneratedBaseEvaluation { Outcome = GeneratedBaseOutcome.NoBaseExpression };
 
-        var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType);
-        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc);
+        var connectedSystemAttributes = SyncEngine.BuildCsoAttributeDictionary(connectedSystemObject, connectedSystemObjectType, out var heldUnderAnotherDataType);
+        var evaluated = EvaluateSource(expressionEvaluator, source.Expression!, source.MissingInputBehaviour, connectedSystemAttributes, metaverseAttributes, nowUtc,
+            heldUnderAnotherDataType);
         return ResolveGeneratedBase(evaluated, GeneratedBaseTextProcessing(mapping));
     }
 

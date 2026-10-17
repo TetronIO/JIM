@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using JIM.Models.Core;
 using JIM.Models.Expressions;
 
 namespace JIM.Application.Expressions;
@@ -64,6 +65,29 @@ public static partial class ExpressionInputResolver
         return ResolveCached(expression)
             .Where(input => input.Source == side && HasNoValue(availableAttributes, input.AttributeName))
             .Select(input => input.Accessor)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Returns the <c>cs[...]</c> inputs an Expression reads that the object holds only under another data type (#2319),
+    /// each with the type it is held as. An input the Expression does not read is not returned, however it is held.
+    /// </summary>
+    /// <param name="expression">The Expression whose inputs to check.</param>
+    /// <param name="heldUnderAnotherDataType">The object's attributes held only under another data type, by name
+    /// (compared ignoring case, as an Expression names them), with the type each is held as.</param>
+    public static IReadOnlyList<HeldExpressionInput> FindHeldInputs(
+        string? expression,
+        IReadOnlyDictionary<string, AttributeDataType> heldUnderAnotherDataType)
+    {
+        ArgumentNullException.ThrowIfNull(heldUnderAnotherDataType);
+
+        return ResolveCached(expression)
+            .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+            .Select(input => heldUnderAnotherDataType.TryGetValue(input.AttributeName, out var heldType)
+                ? new HeldExpressionInput(input.Accessor, heldType)
+                : null)
+            .Where(held => held != null)
+            .Select(held => held!)
             .ToList();
     }
 

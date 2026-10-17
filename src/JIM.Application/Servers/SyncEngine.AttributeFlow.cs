@@ -154,14 +154,13 @@ public partial class SyncEngine
                                 // the attribute's type is not the absence of a value (#2066), so the Metaverse Object
                                 // is left exactly as it is: no removal, no addition, no asserted-null marker and no
                                 // provenance takeover. The next import that reads the attribute replaces the row.
-                                var heldUnderAnotherType = csoAttributeValues.Find(av => av.IsHeldUnderAnotherDataType(csotAttribute.Type));
-                                if (heldUnderAnotherType != null)
+                                if (HeldOnlyUnderAnotherDataType(csoAttributeValues, csotAttribute.Id, csotAttribute.Type) is { } heldType)
                                 {
                                     Log.Warning(
                                         "ProcessMapping: Connected System Object {CsoId} holds attribute '{SourceAttr}' only as " +
                                         "{HeldType}, not as its {AttrType} type, so no value flowed to '{TargetAttr}' and the " +
                                         "Metaverse Object's value is left as it is until an import reads the attribute again.",
-                                        cso.Id, LogSanitiser.Sanitise(csotAttribute.Name), heldUnderAnotherType.HeldDataType(),
+                                        cso.Id, LogSanitiser.Sanitise(csotAttribute.Name), heldType,
                                         csotAttribute.Type, LogSanitiser.Sanitise(syncRuleMapping.TargetMetaverseAttribute.Name));
                                     continue;
                                 }
@@ -525,9 +524,9 @@ public partial class SyncEngine
         if (!HasExpressionEvaluator(expressionEvaluator, source))
             return null;
 
-        var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType);
+        var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType, out var heldUnderAnotherDataType);
         var evaluated = AttributeFlowPipeline.EvaluateSource(expressionEvaluator!, source.Expression!, source.MissingInputBehaviour,
-            csAttributeDictionary, metaverseAttributes);
+            csAttributeDictionary, metaverseAttributes, connectedSystemAttributesHeldUnderAnotherDataType: heldUnderAnotherDataType);
 
         return ContinueAfterSource(evaluated, cso, syncRuleMapping, source, errors) ? evaluated : null;
     }
@@ -579,6 +578,18 @@ public partial class SyncEngine
             case ExpressionSourceOutcome.EvaluationFailed:
                 throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, evaluated.EvaluationException!);
 
+            case ExpressionSourceOutcome.InputHeldUnderAnotherDataType:
+                // Not a fault, and not a missing input (#2319): the object holds the value, just not as the attribute's
+                // current type, because a schema refresh changed it and no import has read it since. Each caller leaves
+                // the attribute as it is (an ordinary mapping stages nothing; a generated one waits), never silently.
+                Log.Warning(
+                    "EvaluateExpressionSource: Connected System Object {CsoId} holds {HeldInputs} only under another data type, so the " +
+                    "Expression for '{TargetAttr}' was not evaluated and the Metaverse Object's value is left as it is until an import " +
+                    "reads the attribute again.",
+                    cso.Id, LogSanitiser.Sanitise(string.Join(", ", evaluated.HeldInputs)),
+                    LogSanitiser.Sanitise(syncRuleMapping.TargetMetaverseAttribute?.Name));
+                return true;
+
             case ExpressionSourceOutcome.NoValue when evaluated.MissingInputs.Count > 0:
                 // Not a fault: the same outcome an Expression returning null produces.
                 Log.Debug("EvaluateExpressionSource: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
@@ -620,6 +631,11 @@ public partial class SyncEngine
         var evaluation = AttributeFlowPipeline.EvaluateInbound(cso, csoType, syncRuleMapping, source, expressionEvaluator!, metaverseAttributes);
 
         if (!ContinueAfterSource(evaluation.Source, cso, syncRuleMapping, source, errors))
+            return;
+
+        // An input held only under another data type (#2319): leave the Metaverse Object exactly as it is, as a direct
+        // mapping does (#2184): no removal, no addition, no asserted-null marker and no provenance takeover.
+        if (evaluation.Outcome == AttributeFlowOutcome.LeftAsHeld)
             return;
 
         // The one result handler (#2179): every value converted to the target's type before anything is staged, so a
@@ -1514,9 +1530,23 @@ public partial class SyncEngine
     /// </summary>
     internal static Dictionary<string, object?> BuildCsoAttributeDictionary(
         ConnectedSystemObject cso,
-        ConnectedSystemObjectType csoType)
+        ConnectedSystemObjectType csoType) =>
+        BuildCsoAttributeDictionary(cso, csoType, out _);
+
+    /// <summary>
+    /// As <see cref="BuildCsoAttributeDictionary(ConnectedSystemObject, ConnectedSystemObjectType)"/>, also returning the
+    /// attributes the object holds only under another data type (#2319), which the <c>cs[...]</c> view reads as no
+    /// value. An Expression reading one must not be evaluated (<see cref="AttributeFlowPipeline.EvaluateSource"/>).
+    /// </summary>
+    /// <param name="heldUnderAnotherDataType">Those attributes by name, with the type each is held as; null when there
+    /// are none, the usual case, which costs no allocation and no further pass over the values.</param>
+    internal static Dictionary<string, object?> BuildCsoAttributeDictionary(
+        ConnectedSystemObject cso,
+        ConnectedSystemObjectType csoType,
+        out IReadOnlyDictionary<string, AttributeDataType>? heldUnderAnotherDataType)
     {
         var attributes = new ExpressionAttributeDictionary();
+        List<ConnectedSystemObjectTypeAttribute>? heldCandidates = null;
 
         foreach (var attributeValue in cso.AttributeValues)
         {
@@ -1528,11 +1558,71 @@ public partial class SyncEngine
                 continue;
             }
 
-            attributes.Add(csotAttribute.Name, ToExpressionValue(attributeValue, csotAttribute.Type));
+            var value = ToExpressionValue(attributeValue, csotAttribute.Type);
+            if (value == null && attributeValue.IsHeldUnderAnotherDataType(csotAttribute.Type))
+                (heldCandidates ??= []).Add(csotAttribute);
+
+            attributes.Add(csotAttribute.Name, value);
         }
 
+        heldUnderAnotherDataType = FindAttributesHeldOnlyUnderAnotherDataType(cso.AttributeValues, heldCandidates);
         return attributes.Build();
     }
+
+    /// <summary>
+    /// The one rule every reader of a Connected System Object attribute applies (#2184, #2319): whether the object holds
+    /// the attribute only under another data type. A schema refresh can change an attribute's type while objects hold
+    /// values of it, and keeps those values where the old type put them until an import reads the attribute again
+    /// (#2128). Such a value is one JIM cannot read as the attribute's type, which is not the absence of a value (#2066):
+    /// Attribute Flow leaves the Metaverse Object as it is, an Expression is not evaluated, Object Matching cannot work
+    /// the rule out, and Drift Detection does not compare it.
+    /// </summary>
+    /// <param name="rows">The object's attribute values; only those of <paramref name="attributeId"/> are read.</param>
+    /// <param name="attributeId">The attribute.</param>
+    /// <param name="type">The attribute's current data type.</param>
+    /// <returns>The data type the value is held as, or null when a value of the attribute holds <paramref name="type"/>
+    /// (that value is what is read) or none holds anything (no value).</returns>
+    internal static AttributeDataType? HeldOnlyUnderAnotherDataType(
+        IEnumerable<ConnectedSystemObjectAttributeValue> rows, int attributeId, AttributeDataType type)
+    {
+        AttributeDataType? heldType = null;
+        foreach (var row in rows.Where(row => AttributeIdOf(row) == attributeId))
+        {
+            if (row.HoldsValueOfType(type))
+                return null;
+
+            heldType ??= row.HeldDataType();
+        }
+
+        return heldType;
+    }
+
+    /// <summary>
+    /// Which of <paramref name="candidates"/> (attributes with a value held under another data type) the object holds
+    /// only under another data type, by name, with the type each is held as. Null when there are none, so a caller
+    /// with no candidates, the usual case, does nothing more.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, AttributeDataType>? FindAttributesHeldOnlyUnderAnotherDataType(
+        IEnumerable<ConnectedSystemObjectAttributeValue> rows, List<ConnectedSystemObjectTypeAttribute>? candidates)
+    {
+        if (candidates == null)
+            return null;
+
+        Dictionary<string, AttributeDataType>? held = null;
+        foreach (var (name, heldType) in candidates
+                     .DistinctBy(attribute => attribute.Id)
+                     .Select(attribute => (attribute.Name, HeldType: HeldOnlyUnderAnotherDataType(rows, attribute.Id, attribute.Type)))
+                     .Where(candidate => candidate.HeldType.HasValue))
+        {
+            (held ??= new Dictionary<string, AttributeDataType>(StringComparer.OrdinalIgnoreCase)).TryAdd(name, heldType!.Value);
+        }
+
+        return held;
+    }
+
+    /// <summary>The attribute a value belongs to: its foreign key, or its loaded attribute where a loader set only that.</summary>
+    private static int AttributeIdOf(ConnectedSystemObjectAttributeValue value) =>
+        value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
 
     /// <summary>
     /// The value an expression sees for one Connected System Object attribute value, typed by the attribute's data
