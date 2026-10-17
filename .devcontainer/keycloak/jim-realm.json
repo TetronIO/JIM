@@ -1067,8 +1067,7 @@
     "offline_access",
     "address",
     "phone",
-    "microprofile-jwt",
-    "jim-api"
+    "microprofile-jwt"
   ],
   "browserSecurityHeaders": {
     "contentSecurityPolicyReportOnly": "",
