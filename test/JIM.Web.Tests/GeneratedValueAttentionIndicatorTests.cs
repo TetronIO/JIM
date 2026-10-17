@@ -16,9 +16,6 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class GeneratedValueAttentionIndicatorTests : JimComponentTestContext
 {
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     [Test]
     public void Render_NotYetLoaded_RendersNothing()
     {

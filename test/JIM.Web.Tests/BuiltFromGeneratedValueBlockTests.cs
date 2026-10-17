@@ -22,9 +22,6 @@ public class BuiltFromGeneratedValueBlockTests : JimComponentTestContext
     private const string SwitchMarker = "[data-testid='built-from-generated-value-keep-unique']";
     private const string NotInEffectMarker = "[data-testid='built-from-generated-value-not-in-effect']";
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static GeneratedValueBuiltValueDescription Described(GeneratedValueBuiltValueKind kind = GeneratedValueBuiltValueKind.Form,
         bool collisionRemediation = true) => new()
     {
