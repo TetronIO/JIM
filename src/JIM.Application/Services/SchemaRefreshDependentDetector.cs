@@ -148,6 +148,13 @@ public static class SchemaRefreshDependentDetector
         Dictionary<int, SchemaAttributeDefinitionChange>? changedAttributes,
         string refreshDescription)
     {
+        // A mapping reading or writing a credential attribute (password, unicodePwd) is invalidated on every refresh,
+        // whatever the result says: a persisted credential attribute is quarantined rather than removed, so it never
+        // appears as removed, yet the mapping can never flow (#2091).
+        var credentialInvalidation = FindCredentialAttributeInvalidation(mapping);
+        if (credentialInvalidation != null)
+            return credentialInvalidation;
+
         // Export target.
         var targetId = mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id;
         if (targetId is { } exportTargetId)
@@ -186,6 +193,38 @@ public static class SchemaRefreshDependentDetector
             var redefinedInput = changedAttributes?.Values.FirstOrDefault(change => expressionInputNames.Contains(change.AttributeName, StringComparer.OrdinalIgnoreCase));
             if (redefinedInput != null)
                 return (DescribeDefinitionChange(redefinedInput, refreshDescription, ", read by this mapping's Expression,"), true);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Why a mapping reading or writing a credential attribute is invalidated, or null when it touches none: directly,
+    /// as its export target or a source, or as a Connected System input of an Expression (#2091).
+    /// </summary>
+    private static (string Reason, bool ViaExpression)? FindCredentialAttributeInvalidation(SyncRuleMapping mapping)
+    {
+        const string remedy = "JIM never imports or exports credentials through an Attribute Flow; remove this mapping, and use Password Synchronisation to set passwords.";
+
+        var target = mapping.TargetConnectedSystemAttribute?.Name;
+        if (CredentialAttributes.IsCredentialAttribute(target))
+            return ($"Attribute '{target}' holds credentials. {remedy}", false);
+
+        foreach (var source in mapping.Sources)
+        {
+            var sourceName = source.ConnectedSystemAttribute?.Name;
+            if (CredentialAttributes.IsCredentialAttribute(sourceName))
+                return ($"Attribute '{sourceName}' holds credentials. {remedy}", false);
+
+            if (string.IsNullOrWhiteSpace(source.Expression))
+                continue;
+
+            var credentialInput = ExpressionInputResolver.ResolveCached(source.Expression)
+                .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+                .Select(input => input.AttributeName)
+                .FirstOrDefault(CredentialAttributes.IsCredentialAttribute);
+            if (credentialInput != null)
+                return ($"Attribute '{credentialInput}', read by this mapping's Expression, holds credentials. {remedy}", true);
         }
 
         return null;

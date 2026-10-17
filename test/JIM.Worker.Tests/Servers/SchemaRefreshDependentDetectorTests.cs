@@ -336,6 +336,56 @@ public class SchemaRefreshDependentDetectorTests
             }
         };
 
+    [Test]
+    public void Detect_ExportMappingWritingACredentialAttribute_IsInvalidatedOnAnyRefresh()
+    {
+        // #2091: password was denied after Connected Systems could already map it. The refresh preserves the persisted
+        // attribute (quarantined, not removed), so nothing in the result names it; the mapping still has to go.
+        var password = new ConnectedSystemObjectTypeAttribute { Id = 204, Name = "password", Type = AttributeDataType.Text };
+        _userType.Attributes.Add(password);
+        var result = new SchemaRefreshResult { Success = true };
+        var rule = new SyncRule
+        {
+            Id = 14, Name = "SCIM Users Outbound", Direction = SyncRuleDirection.Export, Enabled = true,
+            ConnectedSystemObjectTypeId = _userType.Id, ConnectedSystemObjectType = _userType
+        };
+        var mapping = new SyncRuleMapping { Id = 106, TargetConnectedSystemAttribute = password, TargetConnectedSystemAttributeId = password.Id };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = new MetaverseAttribute { Id = 902, Name = "Initial Secret", Type = AttributeDataType.Text } });
+        rule.AttributeFlowRules.Add(mapping);
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EqualTo(new[] { 106 }));
+            Assert.That(dependents.InvalidatedMappings.Single().Reason, Does.Contain("'password'").And.Contain("Password Synchronisation"));
+        }
+    }
+
+    [Test]
+    public void Detect_ImportMappingOrExpressionReadingACredentialAttribute_IsInvalidated()
+    {
+        var password = new ConnectedSystemObjectTypeAttribute { Id = 205, Name = "Password", Type = AttributeDataType.Text };
+        _userType.Attributes.Add(password);
+        var result = new SchemaRefreshResult { Success = true };
+        var rule = ImportRule(15, "File Users Inbound", _userType);
+        rule.AttributeFlowRules.Add(MappingReading(107, password));
+        var expressionMapping = new SyncRuleMapping { Id = 108, TargetMetaverseAttribute = new MetaverseAttribute { Id = 903, Name = "Hint", Type = AttributeDataType.Text } };
+        expressionMapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "Left(cs[\"password\"], 2)" });
+        rule.AttributeFlowRules.Add(expressionMapping);
+        rule.AttributeFlowRules.Add(MappingReading(109, _mailAttr));
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EquivalentTo(new[] { 107, 108 }));
+            Assert.That(dependents.InvalidatedMappings.Single(m => m.MappingId == 108).ViaExpression, Is.True);
+        }
+    }
+
     private static SyncRule ImportRule(int id, string name, ConnectedSystemObjectType type) => new()
     {
         Id = id,
