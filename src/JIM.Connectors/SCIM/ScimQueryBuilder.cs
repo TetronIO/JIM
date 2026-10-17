@@ -18,12 +18,17 @@ public static class ScimQueryBuilder
     /// <param name="pageSize">The Run Profile's page size, sent as <c>count</c>.</param>
     /// <param name="filter">An optional SCIM filter, used by delta import.</param>
     /// <param name="excludedAttributes">Attributes the administrator does not want returned.</param>
+    /// <param name="attributes">
+    /// The attributes to ask for by name, where the provider would otherwise leave some out; when any are given they
+    /// are sent instead of <paramref name="excludedAttributes"/>.
+    /// </param>
     public static string BuildPageQuery(
         string endpoint,
         ScimImportPosition position,
         int pageSize,
         string? filter = null,
-        IReadOnlyList<string>? excludedAttributes = null)
+        IReadOnlyList<string>? excludedAttributes = null,
+        IReadOnlyList<string>? attributes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(endpoint);
         ArgumentNullException.ThrowIfNull(position);
@@ -54,10 +59,14 @@ public static class ScimQueryBuilder
         if (!string.IsNullOrWhiteSpace(filter))
             Append("filter", filter);
 
-        // RFC 7644 section 3.9 makes attributes and excludedAttributes mutually exclusive. JIM sends only
+        // RFC 7644 section 3.9 makes attributes and excludedAttributes mutually exclusive. JIM prefers
         // excludedAttributes: naming an inclusive set risks a provider returning nothing else, and the
         // attributes an administrator has not selected yet still need to be importable the moment they do.
-        if (excludedAttributes is { Count: > 0 })
+        // The inclusive set is for the one case it is needed: an attribute the provider returns only when
+        // asked for it by name (#2094), which no exclusion can bring back.
+        if (attributes is { Count: > 0 })
+            Append("attributes", string.Join(',', attributes));
+        else if (excludedAttributes is { Count: > 0 })
             Append("excludedAttributes", string.Join(',', excludedAttributes));
 
         return query.ToString();

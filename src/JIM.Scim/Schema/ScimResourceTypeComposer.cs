@@ -58,7 +58,7 @@ public static class ScimResourceTypeComposer
         }
         else
         {
-            flattened.AddRange(ScimAttributeMapper.FlattenSchema(baseSchema));
+            flattened.AddRange(ScimAttributeMapper.FlattenSchema(WithCoreSubAttributes(baseSchema, resourceType.Name, warnings)));
         }
 
         AddExtensionAttributes(resourceType, schemasByUrn, flattened, warnings);
@@ -91,9 +91,70 @@ public static class ScimResourceTypeComposer
             if (!usedPrefixes.Add(prefix))
                 prefix = extension.Schema!;
 
-            flattened.AddRange(ScimAttributeMapper.FlattenSchema(extensionSchema, prefix));
+            flattened.AddRange(ScimAttributeMapper.FlattenSchema(WithCoreSubAttributes(extensionSchema, resourceType.Name, warnings), prefix));
         }
     }
+
+    /// <summary>
+    /// Fills in the sub-attributes of a core attribute the provider published as complex with nothing inside (#2094).
+    /// <para>
+    /// Keycloak publishes a Group's <c>members</c>, and a User's <c>groups</c> and <c>emails</c>, this way. A complex
+    /// attribute with no sub-attributes flattens to nothing, so the Connected System would have no membership to import
+    /// or export at all. RFC 7643 defines these attributes, so its definition supplies what is inside them, while
+    /// everything the provider did say about the attribute (whether it is multi-valued, writable, returned only on
+    /// request) is kept. An attribute JIM has no definition for is left as it is; reported, so the gap reads as the
+    /// provider's.
+    /// </para>
+    /// </summary>
+    private static ScimSchema WithCoreSubAttributes(ScimSchema schema, string? resourceTypeName, List<string> warnings)
+    {
+        var core = ScimCoreSchemas.ByUrn(schema.Id);
+        if (core == null || !schema.Attributes.Any(IsEmptyComplex))
+            return schema;
+
+        var filled = new List<string>();
+        var attributes = schema.Attributes.Select(attribute =>
+        {
+            var definition = IsEmptyComplex(attribute)
+                ? core.Attributes.FirstOrDefault(c => string.Equals(c.Name, attribute.Name, StringComparison.OrdinalIgnoreCase) && c.SubAttributes.Count > 0)
+                : null;
+            if (definition == null)
+                return attribute;
+
+            filled.Add(attribute.Name!);
+            return WithSubAttributes(attribute, definition.SubAttributes);
+        }).ToList();
+
+        if (filled.Count > 0)
+        {
+            warnings.Add($"The service provider's schema for the {LogSanitiser.Sanitise(resourceTypeName)} resource type defines " +
+                         $"{string.Join(", ", filled.Select(name => $"'{LogSanitiser.Sanitise(name)}'"))} without saying what is inside, " +
+                         "so JIM used the RFC 7643 definition of what is inside, keeping everything else the provider said about it.");
+        }
+
+        return new ScimSchema { Id = schema.Id, Name = schema.Name, Description = schema.Description, Attributes = attributes, Meta = schema.Meta };
+    }
+
+    private static bool IsEmptyComplex(ScimSchemaAttribute attribute) =>
+        string.Equals(attribute.Type, ScimAttributeTypes.Complex, StringComparison.OrdinalIgnoreCase)
+        && attribute.SubAttributes.All(s => string.IsNullOrWhiteSpace(s.Name));
+
+    /// <summary>A copy of the provider's attribute with the given sub-attributes, so the provider's own documents are not changed.</summary>
+    private static ScimSchemaAttribute WithSubAttributes(ScimSchemaAttribute attribute, List<ScimSchemaAttribute> subAttributes) => new()
+    {
+        Name = attribute.Name,
+        Type = attribute.Type,
+        Description = attribute.Description,
+        SubAttributes = subAttributes,
+        MultiValued = attribute.MultiValued,
+        Required = attribute.Required,
+        CanonicalValues = attribute.CanonicalValues,
+        CaseExact = attribute.CaseExact,
+        Mutability = attribute.Mutability,
+        Returned = attribute.Returned,
+        Uniqueness = attribute.Uniqueness,
+        ReferenceTypes = attribute.ReferenceTypes
+    };
 
     /// <summary>
     /// Finds a schema in the provider's published set, falling back to the RFC's own definition when the

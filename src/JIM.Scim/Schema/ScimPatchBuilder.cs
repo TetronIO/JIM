@@ -40,6 +40,9 @@ public static class ScimPatchBuilder
         foreach (var attribute in attributes)
             lookup[attribute.Name] = attribute;
 
+        // The add each entry-valued attribute's further adds are merged into, keyed by its path.
+        var openAdds = new Dictionary<string, ScimPatchOperation>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var change in changes)
         {
             if (lookup.TryGetValue(change.AttributeName, out var writeOnlyAttribute) && writeOnlyAttribute.IsWriteOnly)
@@ -59,10 +62,46 @@ public static class ScimPatchBuilder
                 continue;
             }
 
-            operations.Add(BuildOperation(change, attribute));
+            var operation = BuildOperation(change, attribute);
+            if (!TryMergeAdd(operation, openAdds))
+                operations.Add(operation);
         }
 
         return new ScimPatchBuildResult { Operations = operations, UnknownAttributes = unknown, WriteOnlyAttributes = writeOnly };
+    }
+
+    /// <summary>
+    /// Folds an add of entries to a multi-valued attribute into the add before it on the same attribute, so a thousand
+    /// new members are one operation with a thousand values rather than a thousand operations (#2094). Providers cap the
+    /// operations in a request (Keycloak at 100) rather than the values in one, and RFC 7644 section 3.5.2.1 makes the
+    /// two equivalent. Anything else touching the attribute in between closes the add, so the order the provider applies
+    /// changes in is never altered.
+    /// </summary>
+    /// <returns>Whether the operation was merged into an earlier one, and so is not to be sent itself.</returns>
+    private static bool TryMergeAdd(ScimPatchOperation operation, Dictionary<string, ScimPatchOperation> openAdds)
+    {
+        var key = operation.Path ?? string.Empty;
+        var mergeable = string.Equals(operation.Op, ScimPatchOperations.Add, StringComparison.Ordinal) && operation.Value is JsonArray;
+
+        if (!mergeable)
+        {
+            // A removal's path may carry a value filter (members[value eq "x"]); it still touches the attribute.
+            var bracket = key.IndexOf('[', StringComparison.Ordinal);
+            openAdds.Remove(bracket < 0 ? key : key[..bracket]);
+            return false;
+        }
+
+        if (!openAdds.TryGetValue(key, out var open))
+        {
+            openAdds[key] = operation;
+            return false;
+        }
+
+        var target = (JsonArray)open.Value!;
+        foreach (var entry in ((JsonArray)operation.Value!).Select(e => e?.DeepClone()).ToList())
+            target.Add(entry);
+
+        return true;
     }
 
     private static ScimPatchOperation BuildOperation(ScimAttributeChange change, ScimFlattenedAttribute attribute)

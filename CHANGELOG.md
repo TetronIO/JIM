@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
 - 🔄 **Max detected deletions** and **Max detected deletions percent** can now be set on a Delta Import Run Profile, in the portal, REST API and PowerShell. A Delta Import whose Connected System reports more deletions than a limit marks none of them as deleted and warns, and each following Delta Import reports them again until you act. (#2089)
 - 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
 - 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
@@ -126,6 +127,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The SCIM 2.0 Client Connector now imports and exports Keycloak group membership and email addresses. Keycloak's schema leaves out what is inside `members`, `groups` and `emails`, so they were missing; JIM fills it in from the SCIM specification, and asks for attributes such as `members` that Keycloak returns only when named. (#2094)
+- 🐛 The SCIM 2.0 Client Connector now creates a group with members on Keycloak, which refuses members on a create: they are added once the group exists, and a create whose members could not be added is still recorded rather than posted again. (#2094)
+- 🐛 SCIM exports of more than 100 changes to one object no longer fail against providers that cap a request, such as Keycloak: added members travel as one operation, and requests are split, and halved again if the provider refuses. (#2094)
+- 🐛 A SCIM import now fails, rather than finishing, when the provider returns an empty page while its count says more remain; a Full Import would have treated the resources it never returned as deleted. (#2094)
 - 🐛 **Max detected deletions percent** on a Full Import no longer counts objects already marked as deleted, which let a run mark a larger share of what the Connected System still holds than the limit allowed. (#2089)
 - 🐛 An export the target system refused, such as access denied, a schema violation or a write outside the selected containers, is now reported as **Access Denied**, **Export Rejected** or **Export Refused** with the remedy, completing the run with a warning rather than as an unanticipated error. (#2118)
 - 🐛 The SCIM 2.0 Client Connector now exports every value of `roles`, `entitlements` and `x509Certificates`, adding or removing one without touching the rest; it sent only the first. `roles.type` and similar become read-only at the next schema refresh. (#2090)

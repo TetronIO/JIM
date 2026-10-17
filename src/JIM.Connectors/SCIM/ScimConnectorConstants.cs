@@ -81,4 +81,12 @@ public static class ScimConnectorConstants
     /// than expressing a preference.
     /// </summary>
     public const int MaximumRetryDelaySeconds = 300;
+
+    /// <summary>
+    /// The most operations JIM sends in one PATCH request (#2094). RFC 7644 sets no limit and providers do not advertise
+    /// one, but they enforce them: Keycloak refuses more than 100 with 400 <c>tooMany</c>. A provider whose limit is
+    /// lower still is met by halving the request each time it refuses, which is safe because it refuses before applying
+    /// anything.
+    /// </summary>
+    public const int MaximumPatchOperationsPerRequest = 100;
 }

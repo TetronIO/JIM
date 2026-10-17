@@ -93,7 +93,7 @@ internal sealed class ScimConnectorImport
         cancellationToken.ThrowIfCancellationRequested();
 
         var target = targets[position.ResourceTypeIndex];
-        var query = ScimQueryBuilder.BuildPageQuery(target.Endpoint, position, _runProfile.PageSize, filter, _excludedAttributes);
+        var query = ScimQueryBuilder.BuildPageQuery(target.Endpoint, position, _runProfile.PageSize, filter, _excludedAttributes, target.RequestedAttributes);
 
         // JIM's own counts cannot move while this request is in flight, so this is the only thing telling
         // an administrator a slow page apart from a stuck one.
@@ -199,6 +199,18 @@ internal sealed class ScimConnectorImport
         //   - a provider reporting the page's size as totalResults rather than the collection's (a real
         //     and easy mistake to make) would truncate the walk on the total alone.
         var readSoFar = position.StartIndex - 1 + returned;
+
+        // An empty page is the end of the data only where the provider's own count agrees (#2094). One that says
+        // more remain has failed to return them, and ending the walk here would have the Full Import read every
+        // resource it never reached as deleted. Keycloak 26.7 did this for a token holding only query-users.
+        if (position.Mode != ScimPaginationMode.Cursor && returned == 0 && page.TotalResults > readSoFar)
+        {
+            throw new InvalidOperationException(
+                $"The SCIM service provider returned an empty page at startIndex {position.StartIndex:N0} while its totalResults says it holds " +
+                $"{page.TotalResults:N0} resources, so {page.TotalResults - readSoFar:N0} were not returned. The import has been stopped rather than " +
+                "treating them as deleted. Check that the account JIM uses can read every resource, and that the provider counts only resources it returns.");
+        }
+
         var providerRanOut = returned == 0
                              || (page.TotalResults > 0 && readSoFar >= page.TotalResults && returned < _runProfile.PageSize);
 
@@ -283,18 +295,59 @@ internal sealed class ScimConnectorImport
             .Where(r => !string.IsNullOrWhiteSpace(r.Name) && !string.IsNullOrWhiteSpace(r.Endpoint))
             .Where(r => selected.ContainsKey(r.Name!))
             .OrderBy(r => r.Name, StringComparer.Ordinal)
-            .Select(r => new ScimImportTarget(
-                r.Name!,
-                r.Endpoint!,
-                SelectedAttributes(selected[r.Name!], r.Name!)))
+            .Select(r =>
+            {
+                var attributes = SelectedAttributes(selected[r.Name!], r.Name!);
+                return new ScimImportTarget(r.Name!, r.Endpoint!, attributes, RequestedAttributes(attributes));
+            })
             .ToList();
+    }
+
+    /// <summary>
+    /// The attributes import cannot work without, asked for whenever the request names its attributes: <c>id</c>
+    /// anchors every Connected System Object, <c>externalId</c> is how JIM recognises a resource it provisioned, and
+    /// <c>meta</c> carries the last-modified date delta import watermarks against.
+    /// </summary>
+    private static readonly string[] AlwaysRequested = [ScimCommonAttributes.Id, ScimCommonAttributes.ExternalId, "meta"];
+
+    /// <summary>
+    /// The attributes to name in the request, or none where asking for everything returns everything selected.
+    /// <para>
+    /// An attribute the provider declares <c>returned: request</c> comes back only when named (#2094): Keycloak
+    /// returns a Group's <c>members</c> no other way, so without this every group imported with no members, and
+    /// where Keycloak was authoritative for membership those empty sets flowed on as removals. Naming an inclusive
+    /// set is otherwise avoided, so it is used only when a selected attribute needs it, and then names every selected
+    /// attribute, less any the administrator has excluded.
+    /// </para>
+    /// </summary>
+    private List<string> RequestedAttributes(List<ScimFlattenedAttribute> attributes)
+    {
+        if (!attributes.Any(a => a.IsReturnedOnRequest))
+            return [];
+
+        return AlwaysRequested
+            .Concat(attributes.Select(RequestName))
+            .Where(name => !_excludedAttributes.Contains(name, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// How an attribute is named in <c>attributes</c>: by the attribute its value lives under, since asking for a
+    /// complex or multi-valued attribute returns every part of it, and URN-qualified for an extension attribute
+    /// (RFC 7644 section 3.10).
+    /// </summary>
+    private static string RequestName(ScimFlattenedAttribute attribute)
+    {
+        var name = attribute.SourceAttributeName.Split('.')[0];
+        return attribute.ExtensionUrn == null ? name : $"{attribute.ExtensionUrn}:{name}";
     }
 
     /// <summary>
     /// The attributes to stage for a resource type: those the administrator has selected.
     /// <para>
     /// The provider is still asked for everything (naming an inclusive set risks it returning nothing
-    /// else), but staging is another matter: an attribute deselected on purpose would otherwise be
+    /// else) unless a selected attribute is returned only on request, but staging is another matter: an attribute deselected on purpose would otherwise be
     /// stored anyway, which is data JIM was told not to keep. Where the Connected System Object Type
     /// carries no attributes yet, nothing has been selected or deselected, so everything readable is
     /// staged rather than nothing.
@@ -317,7 +370,8 @@ internal sealed class ScimConnectorImport
     }
 
     /// <summary>
-    /// A resource type to walk, with the flattened attributes its resources are read through.
+    /// A resource type to walk, with the flattened attributes its resources are read through and the attributes to ask
+    /// for by name, if any.
     /// </summary>
-    private sealed record ScimImportTarget(string Name, string Endpoint, List<ScimFlattenedAttribute> Attributes);
+    private sealed record ScimImportTarget(string Name, string Endpoint, List<ScimFlattenedAttribute> Attributes, List<string> RequestedAttributes);
 }

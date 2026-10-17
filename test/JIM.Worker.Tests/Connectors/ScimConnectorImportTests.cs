@@ -3,10 +3,12 @@
 
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using JIM.Connectors.SCIM;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.TestScimServiceProvider;
 using Serilog;
 using ILogger = Serilog.ILogger;
 
@@ -278,6 +280,93 @@ public class ScimConnectorImportTests
             Assert.That(results, Has.Count.EqualTo(1));
             Assert.That(results[0].PaginationTokens, Is.Empty);
         }
+    }
+
+    [Test]
+    public void ImportAsync_EmptyPageWhileTotalResultsSaysMoreRemain_FailsTheRunAsync()
+    {
+        // #2094: ending the walk here would leave the unread resources out of a Full Import, which then reads them as
+        // deleted. Keycloak 26.7 answered this way for a token holding only query-users.
+        using var handler = UserProvider(query => query.Contains("startIndex=1")
+            ? Json(UserPage(1, 5, "alice", "bob"))
+            : Json("""{ "totalResults": 5, "Resources": [] }"""));
+
+        Assert.That(async () => await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "User"), RunProfile(pageSize: 2)),
+            Throws.InstanceOf<InvalidOperationException>().With.Message.Contains("totalResults"));
+    }
+
+    [Test]
+    public async Task ImportAsync_EmptyPageOnceTotalResultsIsReached_FinishesAsync()
+    {
+        // A provider that returns a full last page and then an empty one has simply run out.
+        using var handler = UserProvider(query => query.Contains("startIndex=1")
+            ? Json(UserPage(1, 2, "alice", "bob"))
+            : Json("""{ "totalResults": 2, "Resources": [] }"""));
+
+        var results = await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "User"), RunProfile(pageSize: 2));
+
+        Assert.That(results.SelectMany(r => r.ImportObjects).ToList(), Has.Count.EqualTo(2));
+    }
+    #endregion
+
+    #region attributes returned on request
+    /// <summary>
+    /// #2094: Keycloak declares a Group's <c>members</c> <c>returned: request</c>, and returns it only when asked by name.
+    /// Without asking, every group imported empty and nothing said so.
+    /// </summary>
+    [Test]
+    public async Task ImportAsync_SelectedAttributeReturnedOnlyOnRequest_IsAskedForAndImportedAsync()
+    {
+        var provider = new MockScimProvider();
+        provider.Options.ReturnsGroupMembersOnlyOnRequest = true;
+        provider.AddUser("alice", "alice");
+        provider.AddGroup("engineers", "Engineers").Attributes["members"] =
+            new JsonArray(new JsonObject { ["value"] = "alice" });
+        using var handler = provider.CreateHandler();
+
+        var results = await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "Group"), RunProfile(pageSize: 10));
+
+        var group = results.SelectMany(r => r.ImportObjects).Single();
+        var groupQuery = handler.Requests.First(r => r.RequestUri!.AbsolutePath.EndsWith("/Groups", StringComparison.Ordinal)).RequestUri!.Query;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(group.Attributes.Single(a => a.Name == "members").ReferenceValues, Is.EqualTo(new[] { "alice" }));
+            Assert.That(Uri.UnescapeDataString(groupQuery), Does.Contain("attributes=").And.Contain("members").And.Contain("meta").And.Contain("id"));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_RequestedAttributes_LeaveOutWhatTheAdministratorExcludedAsync()
+    {
+        var provider = new MockScimProvider();
+        provider.Options.ReturnsGroupMembersOnlyOnRequest = true;
+        provider.AddGroup("engineers", "Engineers");
+        using var handler = provider.CreateHandler();
+
+        await RunImportAsync(handler, ConnectedSystem(excludedAttributes: "displayName", selectedObjectTypes: "Group"), RunProfile(pageSize: 10));
+
+        var groupQuery = Uri.UnescapeDataString(handler.Requests
+            .First(r => r.RequestUri!.AbsolutePath.EndsWith("/Groups", StringComparison.Ordinal)).RequestUri!.Query);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groupQuery, Does.Contain("members"));
+            Assert.That(groupQuery, Does.Not.Contain("displayName"));
+            Assert.That(groupQuery, Does.Not.Contain("excludedAttributes"));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_NoSelectedAttributeReturnedOnlyOnRequest_SendsNoAttributesParameterAsync()
+    {
+        // Asking for everything stays the default: an inclusive list risks a provider returning nothing else.
+        var provider = new MockScimProvider();
+        provider.AddGroup("engineers", "Engineers");
+        using var handler = provider.CreateHandler();
+
+        await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "Group"), RunProfile(pageSize: 10));
+
+        var groupQuery = handler.Requests.First(r => r.RequestUri!.AbsolutePath.EndsWith("/Groups", StringComparison.Ordinal)).RequestUri!.Query;
+        Assert.That(groupQuery, Does.Not.Contain("attributes="));
     }
     #endregion
 

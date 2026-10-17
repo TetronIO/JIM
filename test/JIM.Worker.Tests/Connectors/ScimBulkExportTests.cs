@@ -105,6 +105,28 @@ public class ScimBulkExportTests
     }
 
     [Test]
+    public async Task ExportAsync_Bulk_GroupCreateWithMembers_TravelsOutsideTheBulkRequestAsync()
+    {
+        // #2094: the members are added by PATCH once the provider has assigned the group's id, which one bulk operation
+        // per change cannot express.
+        var provider = BulkProvider();
+        provider.Options.RejectsMembersOnGroupWrite = true;
+        var handler = provider.CreateHandler();
+        var group = ObjectType("Group");
+
+        var results = await ExportAsync(handler, BulkEnabled(),
+            NewUser("ada"),
+            Create(group, Change("displayName", group, "Engineers"), Change("members", group, "ada", PendingExportAttributeChangeType.Add)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Select(r => r.Success), Is.All.True);
+            Assert.That(BulkRequests(handler).Single().Body, Does.Not.Contain("Engineers"));
+            Assert.That(handler.Requests.Count(r => r.Method == HttpMethod.Patch), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_BulkEnabledButTheProviderDoesNotAdvertiseIt_SendsPerObjectRequestsAsync()
     {
         // A capability the provider has not promised is not one to use: guessing turns a discovery gap

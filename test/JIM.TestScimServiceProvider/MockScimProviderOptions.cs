@@ -38,6 +38,31 @@ public sealed class MockScimProviderOptions
     /// </summary>
     public bool PublishesCustomUserExtension { get; set; }
 
+    /// <summary>
+    /// Publishes a Group's <c>members</c> as <c>returned: request</c> and leaves it out of every response whose
+    /// <c>attributes</c> parameter does not name it, as Keycloak does (#2094). A client that never names it imports every
+    /// group with no members.
+    /// </summary>
+    public bool ReturnsGroupMembersOnlyOnRequest { get; set; }
+
+    /// <summary>
+    /// Refuses a Group create or replace carrying members with 400 <c>invalidSyntax</c>, accepting an empty
+    /// <c>members</c>, as Keycloak does (#2094). Members can be added only by PATCH.
+    /// </summary>
+    public bool RejectsMembersOnGroupWrite { get; set; }
+
+    /// <summary>
+    /// The most operations one PATCH request may carry, enforced with 400 <c>tooMany</c> and never advertised, as
+    /// Keycloak caps PATCH at 100 (#2094). A refused request applies nothing.
+    /// </summary>
+    public int? MaximumPatchOperations { get; set; }
+
+    /// <summary>
+    /// Answers an index-paged request past the first page with an empty page while <c>totalResults</c> still counts the
+    /// whole collection, as Keycloak 26.7 did for a token holding only query-users (#2094).
+    /// </summary>
+    public bool ReturnsEmptyPagesAfterTheFirst { get; set; }
+
     /// <summary>What <c>/ServiceProviderConfig</c> claims about PATCH, and whether PATCH is honoured.</summary>
     public bool SupportsPatch { get; set; } = true;
 
