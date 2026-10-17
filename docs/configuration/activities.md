@@ -19,7 +19,7 @@ Activities move through a small set of statuses:
 - **In progress**<br /> Currently executing.
 - **Complete**<br /> Finished successfully.
 - **Complete with warning**<br /> Finished, but some objects hit a problem JIM recognises (a rejected import object, an export refusal its Connector classified), or a safeguard stepped in. Each object's error is on its execution item.
-- **Complete with error**<br /> For a Run Profile execution, at least one object hit an error JIM did not anticipate: a fault in JIM, or an export refusal its Connector could not classify. For a password delivery, the target system refused the password, and the message says why.
+- **Complete with error**<br /> For a Run Profile execution, at least one object hit an error JIM did not anticipate: a fault in JIM, or an export failure its Connector could not classify, such as a dropped connection. For a password delivery, the target system refused the password, and the message says why.
 - **Failed with error**<br /> Failed due to a critical error before or during execution, or every object the run recorded had an error. An import records nothing for an object that has not changed, so an import fails this way only when every object it read had an error; one bad object among unchanged ones completes with a warning.
 - **Cancelled**<br /> Cancelled before completion.
 

@@ -182,7 +182,7 @@ public class LdapUniquenessRejectionClassifierTests
     }
 
     [Test]
-    public async Task ExecuteAsync_ConstraintViolationThatIsNotUniqueness_StaysAGeneralFailureAsync()
+    public async Task ExecuteAsync_ConstraintViolationThatIsNotUniqueness_StaysAnOrdinaryRefusalAsync()
     {
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
@@ -194,7 +194,8 @@ public class LdapUniquenessRejectionClassifierTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
-            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+            // A refusal (#2118), but not a value in use, so no attribute is named.
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
             Assert.That(results[0].RejectedAttributeName, Is.Null);
         }
     }
