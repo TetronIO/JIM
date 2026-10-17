@@ -9,7 +9,6 @@ using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 using JIM.Scim.Serialisation;
-using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Connectors.SCIM;
@@ -69,16 +68,12 @@ public class ScimConnectorSchema
         if (schemas.Count == 0)
             warnings.Add($"The service provider does not publish {ScimEndpoints.Schemas}, so JIM used the core schema definitions from RFC 7643. Any vendor extension attributes will be missing.");
 
-        var schemasByUrn = BuildSchemaIndex(schemas);
-        var schema = new ConnectorSchema();
-        var flattenedAttributes = new Dictionary<string, List<ScimFlattenedAttribute>>(StringComparer.OrdinalIgnoreCase);
+        var composition = ScimResourceTypeComposer.Compose(resourceTypes, schemas);
+        warnings.AddRange(composition.Warnings);
 
+        var schema = new ConnectorSchema();
         foreach (var resourceType in resourceTypes.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
-        {
-            var flattened = BuildFlattenedAttributes(resourceType, schemasByUrn, warnings);
-            flattenedAttributes[resourceType.Name!] = flattened;
-            schema.ObjectTypes.Add(BuildObjectType(resourceType, flattened));
-        }
+            schema.ObjectTypes.Add(BuildObjectType(resourceType, composition.FlattenedAttributes[resourceType.Name!]));
 
         _logger.Debug("SCIM discovery found {ObjectTypeCount} object type(s) and raised {WarningCount} warning(s).",
             schema.ObjectTypes.Count, warnings.Count);
@@ -88,7 +83,7 @@ public class ScimConnectorSchema
             Schema = schema,
             Capabilities = capabilities,
             ResourceTypes = resourceTypes,
-            FlattenedAttributes = flattenedAttributes,
+            FlattenedAttributes = composition.FlattenedAttributes,
             Warnings = warnings
         };
     }
@@ -124,36 +119,6 @@ public class ScimConnectorSchema
     }
 
     /// <summary>
-    /// Flattens everything a resource type is composed of: its base schema, its extensions and the
-    /// common attributes every SCIM resource carries. Names repeat at most once.
-    /// </summary>
-    private static List<ScimFlattenedAttribute> BuildFlattenedAttributes(
-        ScimResourceType resourceType,
-        Dictionary<string, ScimSchema> schemasByUrn,
-        List<string> warnings)
-    {
-        var flattened = ScimCommonAttributes.For(resourceType.Schema ?? string.Empty);
-
-        var baseSchema = ResolveSchema(resourceType.Schema, schemasByUrn);
-        if (baseSchema == null)
-        {
-            // Keep the object type: the provider advertises it, and hiding it would make a provider gap
-            // look like a JIM one. The common attributes still make it importable.
-            warnings.Add($"The service provider advertises the {LogSanitiser.Sanitise(resourceType.Name)} resource type but published no schema for it, " +
-                         "so only the standard SCIM attributes are available. Attributes specific to this resource type cannot be synchronised.");
-        }
-        else
-        {
-            flattened.AddRange(ScimAttributeMapper.FlattenSchema(baseSchema));
-        }
-
-        AddExtensionAttributes(resourceType, schemasByUrn, flattened, warnings);
-
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return flattened.Where(a => seen.Add(a.Name)).ToList();
-    }
-
-    /// <summary>
     /// Builds one Connected System Object Type from a resource type's flattened attributes.
     /// </summary>
     private static ConnectorSchemaObjectType BuildObjectType(ScimResourceType resourceType, List<ScimFlattenedAttribute> flattened)
@@ -167,55 +132,6 @@ public class ScimConnectorSchema
                 .ToConnectorSchemaAttribute(),
             Attributes = flattened.Select(a => a.ToConnectorSchemaAttribute()).ToList()
         };
-    }
-
-    private static void AddExtensionAttributes(
-        ScimResourceType resourceType,
-        Dictionary<string, ScimSchema> schemasByUrn,
-        List<ScimFlattenedAttribute> flattened,
-        List<string> warnings)
-    {
-        var usedPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var extension in resourceType.SchemaExtensions.Where(e => !string.IsNullOrWhiteSpace(e.Schema)))
-        {
-            var extensionSchema = ResolveSchema(extension.Schema, schemasByUrn);
-            if (extensionSchema == null)
-            {
-                warnings.Add($"The {LogSanitiser.Sanitise(resourceType.Name)} resource type declares the schema extension " +
-                             $"{LogSanitiser.Sanitise(extension.Schema)}, but the provider published no definition for it, so its attributes are unavailable.");
-                continue;
-            }
-
-            // Two vendors naming their extension the same must not collapse into one set of attributes,
-            // so the loser of a prefix collision is addressed by its URN instead.
-            var prefix = ScimAttributeMapper.DeriveNamePrefix(extensionSchema);
-            if (!usedPrefixes.Add(prefix))
-                prefix = extension.Schema!;
-
-            flattened.AddRange(ScimAttributeMapper.FlattenSchema(extensionSchema, prefix));
-        }
-    }
-
-    /// <summary>
-    /// Finds a schema in the provider's published set, falling back to the RFC's own definition when the
-    /// provider did not publish one for a schema JIM knows.
-    /// </summary>
-    private static ScimSchema? ResolveSchema(string? urn, Dictionary<string, ScimSchema> schemasByUrn)
-    {
-        if (string.IsNullOrWhiteSpace(urn))
-            return null;
-
-        return schemasByUrn.TryGetValue(urn, out var schema) ? schema : ScimCoreSchemas.ByUrn(urn);
-    }
-
-    private static Dictionary<string, ScimSchema> BuildSchemaIndex(List<ScimSchema> schemas)
-    {
-        var index = new Dictionary<string, ScimSchema>(StringComparer.OrdinalIgnoreCase);
-        foreach (var schema in schemas.Where(s => !string.IsNullOrWhiteSpace(s.Id)))
-            index.TryAdd(schema.Id!, schema);
-
-        return index;
     }
 
     /// <summary>
