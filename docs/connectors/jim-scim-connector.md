@@ -150,7 +150,7 @@ When a synchronisation generates a value that is exported unchanged to an attrib
 | Setting | Required | Description |
 |---|---|---|
 | Authentication Method | Yes | OAuth 2.0 Client Credentials, HTTP Basic, Static Bearer Token, or Custom Header. |
-| Token Endpoint URL | With OAuth 2.0 | The token endpoint used to acquire access tokens. |
+| Token Endpoint URL | With OAuth 2.0 | The token endpoint used to acquire access tokens. HTTPS is required, except for loopback addresses when testing locally, because the Client Secret is sent to this address. If the authorisation server uses a private certificate authority, add its certificate in **Admin > Certificates**. |
 | Client ID | With OAuth 2.0 | The client identifier issued by the provider. |
 | Client Secret | With OAuth 2.0 | The client secret issued with it. Tokens are cached until shortly before they expire and refreshed automatically. |
 | OAuth Scope | No | Optional space-separated scopes to request. |
@@ -221,10 +221,10 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 ## Security Considerations
 
-- **HTTPS is required.** Identity data must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation.
+- **HTTPS is required** for both the Base URL and, with OAuth 2.0, the Token Endpoint URL. Identity data and the Client Secret must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation. JIM refuses any other address when you save the settings, before it tests the connection, and again when a Run Profile starts.
 - **Secrets are encrypted at rest** and never logged, sanitised or otherwise.
 - **Least privilege.** Give the credential only the SCIM permissions the Run Profiles you have configured need: read for import, write for export. A Connected System a generated value is exported to also needs read access with filtering across the resource types it probes, including for a credential that only exports; see [Probing for values already in use](#probing-for-values-already-in-use).
-- **No cloud dependency.** The connector calls only the Base URL you configure, so it works unchanged in an air-gapped deployment against an on-premises provider.
+- **No cloud dependency.** The connector calls only the Base URL you configure and, with OAuth 2.0, the Token Endpoint URL, so it works unchanged in an air-gapped deployment against an on-premises provider.
 
 ## Troubleshooting
 
