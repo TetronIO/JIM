@@ -126,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An export the target system refused, such as access denied, a schema violation or a write outside the selected containers, is now reported as **Access Denied**, **Export Rejected** or **Export Refused** with the remedy, completing the run with a warning rather than as an unanticipated error. (#2118)
+- 🐛 The SCIM 2.0 Client Connector now exports every value of `roles`, `entitlements` and `x509Certificates`, adding or removing one without touching the rest; it sent only the first. `roles.type` and similar become read-only at the next schema refresh. (#2090)
 - 🐛 Rolling back an air-gapped upgrade on Docker's containerd image store no longer tries to download the previous release's PostgreSQL image: the installer keeps it on the host, as `postgres:jim-previous`, when it upgrades. (#2299)
 - 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted; each kept every database session it had opened, so a long-running deployment would eventually run out of memory. (#2115)
 - 🐛 The Pending Deletions page can now be reached from the portal: from the **Administration** page, and from an Object Type's Deletion Rules panel, which opens it filtered to that type. (#2059)

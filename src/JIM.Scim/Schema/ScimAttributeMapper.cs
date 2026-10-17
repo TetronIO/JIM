@@ -26,7 +26,8 @@ namespace JIM.Scim.Schema;
 /// list shape.</item>
 /// <item>Any other complex attribute is flattened per sub-attribute (<c>name.givenName</c>), inheriting
 /// the parent's plurality. Under a multi-valued parent a Boolean sub-attribute (<c>roles.primary</c>) is
-/// not emitted, since a Boolean holds one value.</item>
+/// not emitted, since a Boolean holds one value, and only <c>value</c> is writable, since it alone
+/// identifies an entry (<c>roles.type</c> is import-only).</item>
 /// <item>A simple attribute maps straight across.</item>
 /// </list>
 /// </summary>
@@ -131,7 +132,7 @@ public static class ScimAttributeMapper
                 MapType(sub.Type),
                 PluralityOf(attribute),
                 attribute.Required && sub.Required,
-                MostRestrictive(WritabilityOf(attribute), WritabilityOf(sub)),
+                WritabilityOfSubAttribute(attribute, sub),
                 ScimValueAccess.ComplexSubAttribute,
                 attribute.Name,
                 sub.Name,
@@ -308,6 +309,21 @@ public static class ScimAttributeMapper
         return string.Equals(attribute.Mutability, ScimMutability.ReadOnly, StringComparison.OrdinalIgnoreCase)
             ? AttributeWritability.ReadOnly
             : AttributeWritability.Writable;
+    }
+
+    /// <summary>
+    /// The writability of a sub-attribute flattened per rule 3. Under a multi-valued parent only <c>value</c> can be
+    /// written (#2090): it is what identifies an entry, so a value is added or removed as a whole entry. Every other
+    /// sub-attribute (<c>roles.type</c>) is held as its own value set, unlinked from any particular entry, and with no
+    /// defined order to JIM's multi-valued values the writer could only guess which entry it belongs to. Those are
+    /// import-only, as is every sub-attribute of a multi-valued parent with no <c>value</c> to identify its entries.
+    /// </summary>
+    private static AttributeWritability WritabilityOfSubAttribute(ScimSchemaAttribute parent, ScimSchemaAttribute sub)
+    {
+        if (parent.MultiValued && !string.Equals(sub.Name, ValueSubAttribute, StringComparison.OrdinalIgnoreCase))
+            return AttributeWritability.ReadOnly;
+
+        return MostRestrictive(WritabilityOf(parent), WritabilityOf(sub));
     }
 
     /// <summary>
