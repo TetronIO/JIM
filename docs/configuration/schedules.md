@@ -22,7 +22,7 @@ A schedule is one of two trigger types:
 
 Cron schedules support three authoring modes:
 
-- **Specific times**<br /> Pick days and times of day (e.g. weekdays at 06:00 and 18:00). JIM derives the cron expression from your selection.
+- **Specific times**<br /> Pick days and times of day (e.g. weekdays at 06:00 and 18:00). JIM derives the cron expression from your selection. Every time must be at the same minute past the hour (06:30 and 18:30, not 06:00 and 18:30), because a Schedule holds one cron expression; use a Custom pattern, or a second Schedule, for times that differ.
 - **Interval**<br /> Run every N minutes or hours within a daily window (e.g. every 15 minutes between 08:00 and 18:00 on weekdays).
 - **Custom**<br /> Supply a raw cron expression for full control.
 

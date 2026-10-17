@@ -36,13 +36,20 @@ internal static class ImportOutcomeMessage
     /// <see cref="ThroughputTracker.FormatCompletion"/>, or empty where there was too little work
     /// to average.
     /// </param>
-    internal static string ForImport(int objects, int created, int updated, int unchanged, int connectorReportedDeletions, int detectedDeletions, int errors, string throughput)
+    /// <param name="withheldDeletions">
+    /// Deletes the Connector reported that a Delta Import withheld because they exceeded the Run Profile's deletion limits
+    /// (#2089); among <paramref name="objects"/>, and left as JIM held them.
+    /// </param>
+    internal static string ForImport(int objects, int created, int updated, int unchanged, int connectorReportedDeletions, int detectedDeletions, int errors, string throughput,
+        int withheldDeletions = 0)
     {
         var parts = new List<string> { $"{created:N0} created", $"{updated:N0} updated" };
         if (unchanged > 0)
             parts.Add($"{unchanged:N0} unchanged");
         if (connectorReportedDeletions > 0)
             parts.Add($"{connectorReportedDeletions:N0} deleted");
+        if (withheldDeletions > 0)
+            parts.Add($"{withheldDeletions:N0} deletion{(withheldDeletions == 1 ? "" : "s")} withheld");
         if (errors > 0)
             parts.Add($"{errors:N0} error{(errors == 1 ? "" : "s")}");
 
@@ -66,6 +73,41 @@ internal static class ImportOutcomeMessage
     /// <param name="maxPercent">The Run Profile's <c>MaxDetectedDeletionsPercent</c> limit, or null when unset.</param>
     internal static string ForRefusedDeletionDetection(int count, int baseCount, int? maxCount, int? maxPercent)
     {
+        var (percent, limitDescription) = DescribeDeletionLimits(count, baseCount, maxCount, maxPercent);
+        var objectWord = count == 1 ? "object" : "objects";
+
+        return $"Deletion detection found {count:N0} {objectWord} ({percent}% of {baseCount:N0}) no longer in the Connected System, " +
+               $"above this Run Profile's {limitDescription}; none were marked as deleted. Check the Connected System's scope and " +
+               "the connector's filters, or raise the limit, then run the Full Import again.";
+    }
+
+    /// <summary>
+    /// Run Profile Safeguards on a Delta Import (#2089): the sentence appended to the Activity's warning when the deletes
+    /// the Connector reported would have newly marked more Connected System Objects as deleted than the Run Profile's
+    /// <c>MaxDetectedDeletions</c> and/or <c>MaxDetectedDeletionsPercent</c> limit allows. None was applied, and the run
+    /// kept its starting watermark, so every following Delta Import reports the same deletes until someone acts.
+    /// </summary>
+    /// <param name="count">How many Connected System Objects the reported deletes would have newly marked as deleted.</param>
+    /// <param name="baseCount">How many Connected System Objects were in the run's scope before it saved anything.</param>
+    /// <param name="maxCount">The Run Profile's <c>MaxDetectedDeletions</c> limit, or null when unset.</param>
+    /// <param name="maxPercent">The Run Profile's <c>MaxDetectedDeletionsPercent</c> limit, or null when unset.</param>
+    internal static string ForWithheldConnectorReportedDeletes(int count, int baseCount, int? maxCount, int? maxPercent)
+    {
+        var (percent, limitDescription) = DescribeDeletionLimits(count, baseCount, maxCount, maxPercent);
+        var objectWord = count == 1 ? "object" : "objects";
+
+        return $"The Connected System reported {count:N0} {objectWord} ({percent}% of {baseCount:N0}) as deleted, above this Run Profile's " +
+               $"{limitDescription}; none were marked as deleted. Each Delta Import will report them again until this is resolved. " +
+               "Check what deleted them in the Connected System. If the deletions are intended, raise the limit, or run a Delta Import " +
+               "Run Profile without these limits to let them through.";
+    }
+
+    /// <summary>
+    /// The share of <paramref name="baseCount"/> that <paramref name="count"/> is, rounded to a whole percentage, and the
+    /// words naming whichever of the Run Profile's deletion limits it exceeds.
+    /// </summary>
+    private static (int Percent, string LimitDescription) DescribeDeletionLimits(int count, int baseCount, int? maxCount, int? maxPercent)
+    {
         var percent = baseCount <= 0 ? 0 : (int)Math.Round(count * 100.0 / baseCount, MidpointRounding.AwayFromZero);
 
         var countTripped = maxCount.HasValue && count > maxCount.Value;
@@ -79,16 +121,11 @@ internal static class ImportOutcomeMessage
         else if (percentTripped)
             limitDescription = $"limit of {maxPercent!.Value}%";
         else
-            // Defensive: this method is only called once at least one limit has actually tripped, so
-            // this arm exists to say something sensible rather than throw if that invariant is ever
-            // violated by a future caller.
+            // Defensive: this is only called once at least one limit has actually tripped, so this arm exists to say
+            // something sensible rather than throw if that invariant is ever violated by a future caller.
             limitDescription = "configured limit";
 
-        var objectWord = count == 1 ? "object" : "objects";
-
-        return $"Deletion detection found {count:N0} {objectWord} ({percent}% of {baseCount:N0}) no longer in the Connected System, " +
-               $"above this Run Profile's {limitDescription}; none were marked as deleted. Check the Connected System's scope and " +
-               "the connector's filters, or raise the limit, then run the Full Import again.";
+        return (percent, limitDescription);
     }
 
     /// <summary>

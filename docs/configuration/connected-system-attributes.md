@@ -1,13 +1,13 @@
 ---
 title: Connected System Attributes
-description: "How JIM records whether it can write each attribute, what data type it holds, and why credential attributes are never managed."
+description: "How JIM records whether it can write each attribute, what data type it holds, how finely it holds dates, and why credential attributes are never managed."
 type: object
 audience: administrator
 ---
 
 # Connected System Attributes
 
-Each attribute JIM discovers in a Connected System's schema carries what JIM learned about it: whether the system lets JIM write it, what type of value it holds, and whether it is a credential. This page covers all three.
+Each attribute JIM discovers in a Connected System's schema carries what JIM learned about it: whether the system lets JIM write it, what type of value it holds, how finely it holds a date, and whether it is a credential. This page covers each.
 
 ## Attribute writability
 
@@ -113,6 +113,37 @@ Your answer survives a schema refresh. JIM records that the declaration was set 
 
 !!! note "Existing Connected Systems"
     A Connected System created before JIM recorded case-exactness has every attribute ignoring case until its schema is next refreshed, when the discovered declarations are filled in. Refresh the schema to see them.
+
+## Date resolution
+
+Each DateTime attribute has a **Date Resolution**: the finest step of time the Connected System keeps for it. JIM holds every date to the microsecond, but Active Directory keeps whole seconds, a SQL `datetime2(3)` column keeps milliseconds and a `date` column keeps days. A date sent finer than that would come back changed, and JIM would send it again on every synchronisation.
+
+So JIM exports each date taken down to the attribute's resolution (never rounded up, so a date never moves into the next second or day), and compares at it when deciding whether the Connected System already holds a value, whether an export was confirmed, and whether there is drift. Adding or removing dates of a multi-valued attribute is worked out on the whole set at the resolution: with two dates in the same second, removing one sends nothing, because the other still needs that second.
+
+| Connector | Discovered resolution |
+|---|---|
+| LDAP, Active Directory and Samba AD | Second |
+| LDAP, other directories | Microsecond for GeneralizedTime, Second for UTC Time |
+| SQL | The column's own: `datetime2(n)`, `datetimeoffset(n)` and `TIMESTAMP(n)` by their digits (microsecond at most), SQL Server `datetime` ten milliseconds, `smalldatetime` minute, SQL Server `date` day, Oracle `DATE` second |
+| SCIM | Second, since a service provider's schema cannot say |
+| File | Microsecond |
+
+Two or more dates that are one date at the resolution are sent as one, and the object's execution item reports them as **Dates Merged**, naming the attribute and how many values the Connected System will hold. The attribute and the object's other attributes still export.
+
+The Schema tab shows a **Date Resolution** column for any Object Type with a DateTime attribute, and the tooltip on each says whether it was discovered or set by an administrator.
+
+### Changing the resolution
+
+Where you know the Connected System keeps more, or less, than discovery assumed (a SCIM service provider that keeps milliseconds), open the attribute's **Edit** control on the Schema tab, choose **Dates are held to**, confirm, and save the schema. From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 8 -AttributeId 41 -DateTimeResolution Millisecond
+```
+
+In bulk, give `dateTimeResolution` in an attribute's hashtable; through the REST API, the attribute update and bulk attribute update both take `dateTimeResolution`. A non-date attribute has no resolution, and the request says so. Like a case-exact declaration, your choice survives a schema refresh.
+
+!!! note "Existing Connected Systems"
+    A Connected System created before JIM recorded resolutions holds and sends its dates to the microsecond until its schema is next refreshed, when the discovered resolutions are filled in. Refresh the schema of any Connected System that holds dates less finely, such as Active Directory.
 
 ## Credential attributes are never managed
 

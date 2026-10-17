@@ -140,19 +140,45 @@ public partial class SyncEngine
                         if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
                             continue;
 
+                        // Every type except Reference flows only the rows that hold a value of its type (#2153): a row
+                        // held under another type (#2128) or holding nothing is neither a value to flow nor a value to
+                        // count. The usual case, every row holding the type, reuses the list as it is.
+                        List<ConnectedSystemObjectAttributeValue>? typedValues = null;
+                        if (csotAttribute.Type != AttributeDataType.Reference)
+                        {
+                            typedValues = RowsHoldingValueOfType(csoAttributeValues, csotAttribute.Type);
+                            if (typedValues.Count == 0)
+                            {
+                                // None of the type, but a value held under another one (#2184): a schema refresh
+                                // redefined the attribute and no import has read it since. A value JIM cannot read as
+                                // the attribute's type is not the absence of a value (#2066), so the Metaverse Object
+                                // is left exactly as it is: no removal, no addition, no asserted-null marker and no
+                                // provenance takeover. The next import that reads the attribute replaces the row.
+                                var heldUnderAnotherType = csoAttributeValues.Find(av => av.IsHeldUnderAnotherDataType(csotAttribute.Type));
+                                if (heldUnderAnotherType != null)
+                                {
+                                    Log.Warning(
+                                        "ProcessMapping: Connected System Object {CsoId} holds attribute '{SourceAttr}' only as " +
+                                        "{HeldType}, not as its {AttrType} type, so no value flowed to '{TargetAttr}' and the " +
+                                        "Metaverse Object's value is left as it is until an import reads the attribute again.",
+                                        cso.Id, LogSanitiser.Sanitise(csotAttribute.Name), heldUnderAnotherType.HeldDataType(),
+                                        csotAttribute.Type, LogSanitiser.Sanitise(syncRuleMapping.TargetMetaverseAttribute.Name));
+                                    continue;
+                                }
+
+                                // Rows that hold nothing at all: the ConnectedNoValue state, resolved by "Null is a
+                                // value" and priority (#91) exactly as an attribute with no rows is.
+                                ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                                continue;
+                            }
+                        }
+
                         // For text, apply the mapping's inbound value processing (#843) up front: the processed,
                         // de-duplicated set is both what flows and what the MVA->SVA guard below counts, so two
                         // whitespace/case variants that collapse to the same value count as one value.
                         List<string>? effectiveTextValues = null;
                         if (csotAttribute.Type == AttributeDataType.Text)
-                            effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
-
-                        // Every other type except Reference flows only the rows that hold a value of its type (#2153):
-                        // a row held under another type (#2128) or holding nothing is neither a value to flow nor a
-                        // value to count. The usual case, every row holding the type, reuses the list as it is.
-                        List<ConnectedSystemObjectAttributeValue>? typedValues = null;
-                        if (csotAttribute.Type is not (AttributeDataType.Text or AttributeDataType.Reference))
-                            typedValues = RowsHoldingValueOfType(csoAttributeValues, csotAttribute.Type);
+                            effectiveTextValues = ProcessInboundTextValues(typedValues!.Select(av => av.StringValue), syncRuleMapping);
 
                         // MVA -> SVA guard (#435): flowing more than one value to a single-valued target attribute
                         // is an error. A single-valued attribute can hold only one value, and JIM will not pick one
@@ -182,15 +208,6 @@ public partial class SyncEngine
 
                                 continue;
                             }
-                        }
-
-                        // An empty typed set (rows for the attribute, none of its type) is the ConnectedNoValue state,
-                        // resolved by "Null is a value" and priority (#91) exactly as an empty processed text set is,
-                        // never by removing the attribute's values directly (#2153).
-                        if (typedValues is { Count: 0 })
-                        {
-                            ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
-                            continue;
                         }
 
                         switch (csotAttribute.Type)
@@ -1352,6 +1369,13 @@ public partial class SyncEngine
     /// </summary>
     internal static DateTime? CanonicalDate(DateTime? value) =>
         value.HasValue ? DateTimeAttributeValue.ToCanonical(value.Value) : null;
+
+    /// <summary>
+    /// A date as a Connected System of <paramref name="resolution"/> holds it (#2153, D2): canonical, then floored to the
+    /// resolution; or null for none. Every date export staging sends is written this way.
+    /// </summary>
+    internal static DateTime? DateAtResolution(DateTime? value, DateTimeResolution? resolution) =>
+        value.HasValue ? DateTimeAttributeValue.ToResolution(value.Value, resolution) : null;
 
     /// <summary>
     /// A date's canonical key (#2153), or null for none: what a set or tuple of values compares a date by.

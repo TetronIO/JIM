@@ -1,6 +1,6 @@
 ---
 name: pr-merge
-description: Take a feature branch through to a clean squash-merge — merge origin/main, build/test, open PR, resolve code-quality bot feedback, queue auto-merge, then clean up local + remote refs.
+description: Take a feature branch through to a clean squash-merge: build/test, open PR, resolve code-quality bot feedback, add it to the merge queue, then clean up local + remote refs.
 argument-hint: "[optional PR title — under 70 chars; if omitted, derive one from the commit log]"
 ---
 
@@ -8,11 +8,11 @@ argument-hint: "[optional PR title — under 70 chars; if omitted, derive one fr
 
 This skill drives the full happy-path between "I have committed work on a feature branch" and "the work is on `main` and my workspace is back on a clean main." It encodes the lessons from prior PRs:
 
-- **Strict mode is on for `main`.** A PR opened while the feature branch is behind `origin/main` will sit in `mergeStateStatus: BEHIND` and `--auto` cannot land it. Get the branch up to date *before* the PR exists.
+- **`main` has a merge queue.** `gh pr merge <n> --auto` adds the PR to it once its checks pass; the queue re-runs every required check against current `main` and merges only if they pass. A branch behind `main` merges as it is, so there is no "update before opening" step. A queue entry that fails is **removed**, and nothing re-adds it.
 - **`github-code-quality` runs on every PR.** It almost always finds something. Build that fix loop into the flow rather than treating it as an exception.
-- **Auto-merge is queued, not done.** Unresolved review threads (the documentation review opens one per finding on any customer-docs change), a failed CodeQL analysis, a conflict or an unsigned commit each hold it silently. Wait with `scripts/Watch-PullRequest.ps1`, which reports each of them, never with a loop that only watches for `MERGED`.
+- **Queued is not merged.** Unresolved review threads (the documentation review opens one per finding on any customer-docs change), a failed CodeQL analysis, a conflict, an unsigned commit or a failed queue entry each hold it silently. Wait with `scripts/Watch-PullRequest.ps1`, which reports each of them, never with a loop that only watches for `MERGED`.
 - **`gh pr merge ... --auto`** is the right command; the immediate failure right after `gh pr create` is expected, not a blocker.
-- **Squash-merge means `git branch -D`** is correct for cleanup, not `-d`.
+- **Squash-merge means `git branch -D`** is correct for cleanup, not `-d`. The queue squashes too.
 
 If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 chars). Otherwise derive a title from the commit log.
 
@@ -49,42 +49,30 @@ If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 
 
 Per CLAUDE.md ("Stacked PRs for discovered work"), a branch may be a layer in a GitHub native stack: a sequential chain where each PR targets the branch of the PR below it and the bottom PR targets `main`. Landing a stack differs from the ordinary flow in four ways:
 
-- **Bottom layer merges `main`; layers above rebase onto the layer below.** Linear history is required *between* layers, not between the bottom layer and `main`, so the bottom layer follows this skill's "up to date with origin/main" merge section unchanged (a merge commit there does not break the stack). Each layer above is then moved onto its new base with `git -c rebase.backend=apply rebase --onto <branch-below> <old-base> <layer>` plus `git push --force-with-lease`, never by merging one layer into another. Do NOT use `gh stack rebase`: it rebases the bottom layer onto `main` as well, replaying its whole history and re-resolving every conflict per commit.
+- **Bottom layer merges `main`; layers above rebase onto the layer below.** Linear history is required *between* layers, not between the bottom layer and `main`, so the bottom layer follows this skill's "Merge origin/main only when you need to" section unchanged (a merge commit there does not break the stack). Each layer above is then moved onto its new base with `git -c rebase.backend=apply rebase --onto <branch-below> <old-base> <layer>` plus `git push --force-with-lease`, never by merging one layer into another. Do NOT use `gh stack rebase`: it rebases the bottom layer onto `main` as well, replaying its whole history and re-resolving every conflict per commit.
 - **No auto-merge.** `--auto` is unsupported for stacked PRs. Instead, wait for green with a background waiter on the checks, then merge. Every PR in the stack is evaluated against `main`'s branch protections (every required check), regardless of its direct base.
 - **Land bottom-up, atomically from wherever you merge.** Merging any PR in the stack also merges all unmerged PRs below it in a single operation, ordered bottom-up, each recorded individually. A mid-stack PR cannot merge in isolation. The normal move when the objective is complete is to merge from the **top** of the stack; merge a lower layer earlier only when it is ready and independently valuable. After a partial merge, GitHub automatically rebases the next unmerged PR to target `main`.
-- **Merge mechanics:** try `gh pr merge <n> --squash --delete-branch` once everything below is green. If the CLI refuses because the PR is stacked, merge from the PR's merge box on the web (it shows the stack map) - the stack merge API is distinct from the ordinary merge endpoint.
+- **Merge mechanics:** `gh pr merge` refuses a layer of a linked stack, so once everything below is green use the async merge endpoint, leaving `merge_action` at its default so the stack goes through `main`'s merge queue: `gh api -X PUT repos/TetronIO/JIM/pulls/<n>/merge-async -f merge_method=squash`. The stack joins the queue in order; a result of `pending` or `enqueued` is not a merge, so poll `gh pr view <n> --json state` for `MERGED`. If one layer's queue entry fails, every layer above it leaves the queue too: fix that layer and call `merge-async` again. See the root CLAUDE.md, "Merging a stack layer".
 - **Cleanup:** delete every landed layer's local branch with `git branch -D` in the final cleanup step.
 
-## Get the branch up to date with origin/main (CRITICAL)
+## Merge origin/main only when you need to
 
-This is the step previously missed. Strict mode means it has to happen *before* the PR exists, otherwise the PR is born BEHIND and `--auto` is blocked.
+The merge queue tests every entry against current `main`, so a branch behind `main` merges as it is: do not update it before opening the PR, and do not update it "to be safe" afterwards, since each push spends a full CI run. Merge `origin/main` in only when:
 
-**Merge, don't rebase.** Because the PR lands as a squash, the feature branch's pre-merge history is discarded on merge. Rebasing therefore buys linear history that is immediately thrown away, while costing per-commit conflict resolution (the same conflict re-surfaces once per replayed commit) and a force-push (which the harness gates). A merge resolves each conflict once, needs only a plain `git push`, and satisfies strict-mode "up to date" identically; it is exactly what GitHub's own "Update branch" button does. See CLAUDE.md → "Bringing a feature branch up to date with `main`".
+- the branch conflicts with `main` (the watcher reports `Conflict`, or `RemovedFromQueue` for a queue conflict), or
+- the branch's work needs something that has since landed on `main`.
 
-1. **Update local `main`:**
-   ```
-   git checkout main
-   git pull --ff-only
-   git checkout -
-   ```
+**Merge, don't rebase.** Because the PR lands as a squash, the feature branch's pre-merge history is discarded on merge. Rebasing therefore buys linear history that is immediately thrown away, while costing per-commit conflict resolution and a force-push (which the harness gates). A merge resolves each conflict once and needs only a plain `git push`. See CLAUDE.md → "Bringing a feature branch up to date with `main`".
 
-2. **Decide whether the branch is already up to date:**
-   ```
-   git log --oneline HEAD..origin/main
-   ```
-   - If empty, the branch is already current — skip to the build/test step.
-   - If non-empty, merge `origin/main` into the branch:
-     ```
-     git merge origin/main
-     ```
-   - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After the merge, eyeball the `[Unreleased]` section for duplicated `###` headers or bullets and tidy if needed.
-   - **If the merge produces other (non-CHANGELOG) conflicts**, stop and surface them to the user. Do NOT auto-resolve; the user has to decide.
-   - Push normally (no force needed):
-     ```
-     git push
-     ```
+```
+git fetch origin --prune
+git merge origin/main
+git push
+```
 
-   Opt-in rebase: only if the user explicitly wants linear pre-squash history. Then `git rebase origin/main` followed by `git push --force-with-lease`. Note the merge backend can report a misleading "local changes would be overwritten" on a clean tree; `git -c rebase.backend=apply rebase origin/main` gets past it.
+- `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After the merge, eyeball the `[Unreleased]` section for duplicated `###` headers or bullets and tidy if needed.
+- **If the merge produces other (non-CHANGELOG) conflicts**, stop and surface them to the user. Do NOT auto-resolve; the user has to decide.
+- Opt-in rebase: only if the user explicitly wants linear pre-squash history. Then `git -c rebase.backend=apply rebase origin/main` (the apply backend gets past a misleading "local changes would be overwritten" on a clean tree) followed by `git push --force-with-lease`.
 
 ## Build and test
 
@@ -132,11 +120,12 @@ Skip if a PR already exists for this branch.
 ## Queue auto-merge
 
 ```
-gh pr merge <n> --squash --delete-branch --auto
+gh pr merge <n> --auto
 ```
 
-- An immediate failure right after `gh pr create` is **expected, not a blocker** (checks haven't started). The `--auto` flag queues the merge for when checks pass.
-- **NEVER use `--admin` to bypass.** The harness will refuse it, correctly.
+- This adds the PR to `main`'s merge queue if its checks have passed, and otherwise arms auto-merge so it joins the queue when they do. The queue sets the method (squash) and the repository deletes the head branch on merge, so `--squash` and `--delete-branch` add nothing.
+- An immediate failure right after `gh pr create` is **expected, not a blocker** (checks haven't started). Use `--auto`.
+- **NEVER use `--admin` to bypass.** It skips the required checks and the queue; the harness will refuse it, correctly.
 - In the Claude desktop app, `mcp__ccd_pr__set_auto_merge` (`enabled: true`, `merge_method: squash`) is the equivalent. It has no `--delete-branch` option and needs none: the repository deletes a PR's head branch when it merges.
 
 ## Resolve code-quality bot issues
@@ -163,7 +152,7 @@ gh pr merge <n> --squash --delete-branch --auto
    - Make the edits with `Edit`.
    - Re-run `dotnet build JIM.sln` and `dotnet test JIM.sln`.
    - Commit as a separate `fix(code-quality): ...` commit (the squash-merge collapses it away). Use a HEREDOC commit message ending with the `Co-Authored-By:` trailer from the session's attribution reminder. Never copy the model name from an older commit or from this file; it goes stale with every model change.
-   - `git push` — the auto-merge stays queued and re-evaluates against the new HEAD.
+   - `git push`; auto-merge stays armed and re-evaluates against the new HEAD. If the watcher later reports `RemovedFromQueue`, run `gh pr merge <n> --auto` again once fixed.
 
 4. **Repeat until the bot has nothing left to say** and `gh pr checks <n>` shows all required checks passing or pending merge.
 
@@ -199,7 +188,7 @@ When you push a fix, reply naming the commit, then resolve. To ask for a fresh d
 
 ## Wait for the merge to land
 
-Enabling auto-merge is not the end: a failed check, an unresolved thread, a conflict, a branch behind `main` or an unsigned commit each hold the merge, and nothing tells you unless you wait on the right thing. Use the watcher, in a Bash background command (not ScheduleWakeup or sleep-polling):
+Enabling auto-merge is not the end: a failed check, an unresolved thread, a conflict, an unsigned commit or a failed queue entry each hold the merge, and nothing tells you unless you wait on the right thing. Use the watcher, in a Bash background command (not ScheduleWakeup or sleep-polling):
 
 ```
 pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>
@@ -211,10 +200,11 @@ Run with `run_in_background: true`. It exits on the first thing that needs you, 
 - `Closed`: someone closed the PR without merging it. Stop and tell the user rather than cleaning up.
 - `ChecksFailed`: read the failed check's log, fix, push (back to "Resolve code-quality bot issues" for bot findings).
 - `UnresolvedThreads`: "Resolve review threads" above.
-- `Conflict` or `Behind`: merge `origin/main` in and push, or `gh pr update-branch <n>`.
+- `RemovedFromQueue`: the merge queue dropped the PR, and nothing re-adds it. For failed `merge_group` checks (it lists them), read their logs; they ran against current `main` plus the entries ahead, so a failure the PR's own run did not show is a real interaction with `main`. Fix and push. For a queue conflict, merge `origin/main` in ("Merge origin/main only when you need to"). Then `gh pr merge <n> --auto` again. If someone removed it by hand, ask the user before re-adding.
+- `Conflict`: merge `origin/main` in and push.
 - `Blocked`: every check passed and no thread is open; usually an unsigned commit (re-sign and force-push, per the root CLAUDE.md) or a required check that never ran.
 
-After acting, run it again, until `Merged`. A transient `gh` failure is retried, never reported. A thread deliberately left open for the user goes in `-AcknowledgedThreadIds <id>` so it stops ending the wait. Arm it even with the desktop app's Auto-fix on: the app reports failures, conflicts and comments, not the merge itself.
+A PR waiting in the queue, or merely behind `main`, needs nothing and does not end the wait. After acting, run it again, until `Merged`. A transient `gh` failure is retried, never reported. A thread deliberately left open for the user goes in `-AcknowledgedThreadIds <id>` so it stops ending the wait. Arm it even with the desktop app's Auto-fix on: the app reports failures, conflicts and comments, not the merge itself.
 
 ## Clean up
 

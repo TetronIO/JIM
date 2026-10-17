@@ -270,6 +270,8 @@ On Oracle, JIM also sets the database session's time zone to the same value, whi
 
 A date and time attribute value is held to the microsecond (six fractional digits), so the seventh digit of a `datetime2(7)` value is dropped when it is imported, and the same value imported again is not a change.
 
+Schema discovery gives each date column a [Date resolution](../configuration/connected-system-attributes.md#date-resolution) from its type: a `datetime2(3)` column holds milliseconds, a legacy `datetime` ten milliseconds, a SQL Server `date` whole days. JIM exports each date at that resolution and compares at it, so a fraction the column cannot hold is not exported again on every run. Removing a date from a related table removes the rows that fall within that step of the column's resolution, so a legacy `datetime` row stored as `.003` goes when JIM removes the date it sent as `.000`.
+
 The Connector's own Delta Import watermarks and anchors are held more finely, to a ten-millionth of a second (seven fractional digits). An Oracle `TIMESTAMP(9)` column is fine as a Delta Import watermark, change-log sequence or anchor so long as its values carry no more digits than that, which is always the case for values from `SYSTIMESTAMP` (microseconds). A value with genuine nanoseconds is read back shortened, so the row a page or a run stopped on is read again.
 
 ## Worked examples

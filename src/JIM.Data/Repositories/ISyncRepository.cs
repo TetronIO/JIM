@@ -52,6 +52,13 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
+    /// Gets the number of CSOs for a Connected System that are not already marked Obsolete: the objects the Connected
+    /// System still holds as far as JIM knows. The base for the Run Profile Safeguards' deletion share limit
+    /// (<c>MaxDetectedDeletionsPercent</c>), which an Obsolete object awaiting synchronisation must not inflate.
+    /// </summary>
+    Task<int> GetNonObsoleteConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
+
+    /// <summary>
     /// Gets the count of CSOs created or modified since the specified date, or marked
     /// <c>DerivedInputChangePending</c> (#1750). Used by delta sync to calculate page count.
     /// </summary>

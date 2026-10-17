@@ -54,9 +54,15 @@ name: changelog-lint
 # be a required check: a path-filtered required check never reports on PRs that
 # do not match, which blocks the merge indefinitely. Linting an empty or clean
 # [Unreleased] is cheap and passes.
+#
+# Also runs on merge_group, so a merge queue on main gets the required check for
+# each queued entry. There the diff-based lints compare the queue entry's base
+# (main, or the entry ahead of it) with the entry's merge commit, which is the
+# same change the PR made, now applied to the code it will actually land on.
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -67,18 +73,26 @@ jobs:
     # "changelog-lint" rather than the bare job id "lint".
     name: changelog-lint
     runs-on: ubuntu-latest
+    # The range every diff-based step reads, from whichever event started the run;
+    # exactly one of each pair is set.
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0  # need base..head history to compute the PR's changed files
       - name: Lint the [Unreleased] changelog section
         run: pwsh -File ./scripts/Lint-Changelog.ps1
+      # Pull requests only. The opt-out lives in the PR body or a label, and a
+      # merge_group payload carries neither, so in the queue every opted-out PR
+      # would fail here. The check adds nothing there anyway: it already passed on
+      # the PR, and the PR's set of changed files is the same in the queue.
       - name: Enforce public docs coupling for user-facing changes
+        if: github.event_name == 'pull_request'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Three-dot diff: the PR's own changes since the merge-base, not
           # unrelated commits that landed on the base branch in the meantime.
@@ -88,9 +102,6 @@ jobs:
       - name: Lint PowerShell doc examples for parameter alias misuse
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
       - name: Check docs conformance with the documentation standard
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Warnings are listed (and annotated) only for the pages this PR changed;
           # errors always are. BASE_SHA is what an over-budget page's size is
@@ -103,9 +114,6 @@ jobs:
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
       - name: Check concept diagrams (label cuts and lightbox framing)
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # A label cut can only be invalidated by a diagram source or the diagram
           # tokens; the lightbox framing can also be invalidated by the overlay
@@ -133,9 +141,6 @@ jobs:
           pwsh -File ./scripts/Test-DiagramLightbox.ps1
       - name: Detect docs source changes
         id: docs-sources
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # The site includes CHANGELOG.md and files under test/integration/docker/
           # by snippet, so a change to either can break the docs build too.

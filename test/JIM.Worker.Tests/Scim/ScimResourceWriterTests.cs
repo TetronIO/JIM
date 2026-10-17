@@ -325,6 +325,41 @@ public class ScimResourceWriterTests
         Assert.That(resource[urn]!["badges"]!.ToJsonString(), Is.EqualTo("""["silver","platinum"]"""));
     }
 
+    [TestCase("2026-03-15T10:30:45Z")]
+    [TestCase("2026-03-15T10:30:45.000Z")]
+    [TestCase("2026-03-15T11:30:45+01:00")]
+    public void ApplyChanges_RemovingADateTheProviderSpellsDifferently_TakesThatDate(string providerSpelling)
+    {
+        // A provider may write an instant with a fraction of zeros or an offset; the date JIM removes is the instant, not
+        // the text, so it must still be found (#2153, S6).
+        const string urn = "urn:example:params:scim:schemas:extension:custom:2.0:User";
+        var schema = ScimAttributeMapper.FlattenSchema(new ScimSchema
+        {
+            Id = urn,
+            Name = "Custom",
+            Attributes = [new ScimSchemaAttribute { Name = "reviewDates", Type = ScimAttributeTypes.DateTime, MultiValued = true }]
+        }, "custom");
+        var resource = Resource($$"""{ "id": "alice", "{{urn}}": { "reviewDates": [ "{{providerSpelling}}", "2026-04-01T09:00:00Z" ] } }""");
+
+        ScimResourceWriter.ApplyChanges(resource,
+            [new ScimAttributeChange("custom.reviewDates", ScimPatchOperations.Remove, new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc))], schema);
+
+        Assert.That(resource[urn]!["reviewDates"]!.ToJsonString(), Is.EqualTo("""["2026-04-01T09:00:00Z"]"""));
+    }
+
+    [Test]
+    public void ToText_DateWithAFraction_KeepsTheFractionTrimmed()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc)), Is.EqualTo("2026-03-15T10:30:45Z"),
+                "A whole second is written exactly as before.");
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc).AddMilliseconds(500)), Is.EqualTo("2026-03-15T10:30:45.5Z"));
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc).AddTicks(1_234_567)), Is.EqualTo("2026-03-15T10:30:45.123456Z"),
+                "To the microsecond JIM holds.");
+        }
+    }
+
     [Test]
     public void ApplyChanges_RemovingAMultiValuedAttributeNamingNoValue_TakesEveryValue()
     {
@@ -368,6 +403,111 @@ public class ScimResourceWriterTests
 
         Assert.That(resource["name"]!.ToJsonString(), Is.EqualTo("{\"familyName\":\"Jensen\"}"));
     }
+
+    #region multi-valued complex attributes without canonical types (#2090)
+    /// <summary>
+    /// What the provider holds before JIM's change: entries carrying sub-attributes JIM does not manage, which an
+    /// add or remove of one value must leave exactly as they were.
+    /// </summary>
+    private const string HeldEntries = """[ { "value": "A", "type": "finance", "display": "Auditor" }, { "value": "B", "primary": true } ]""";
+
+    private static JsonObject Holding(string attribute) => Resource($$"""{ "id": "alice", "{{attribute}}": {{HeldEntries}} }""");
+
+    [TestCase("roles")]
+    [TestCase("entitlements")]
+    public void BuildResource_MultiValuedComplexValue_WritesOneEntryPerValue(string attribute)
+    {
+        var result = WriteUser(Write($"{attribute}.value", "A", "B"));
+
+        Assert.That(result.Resource[attribute]!.ToJsonString(), Is.EqualTo("""[{"value":"A"},{"value":"B"}]"""));
+    }
+
+    [TestCase("roles")]
+    [TestCase("entitlements")]
+    public void ApplyChanges_AddingAMultiValuedComplexValue_AppendsOneEntryAndLeavesTheOthersWhole(string attribute)
+    {
+        var resource = Holding(attribute);
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange($"{attribute}.value", ScimPatchOperations.Add, "C")], UserSchema());
+
+        Assert.That(resource[attribute]!.ToJsonString(),
+            Is.EqualTo("""[{"value":"A","type":"finance","display":"Auditor"},{"value":"B","primary":true},{"value":"C"}]"""));
+    }
+
+    [TestCase("roles")]
+    [TestCase("entitlements")]
+    public void ApplyChanges_RemovingAMultiValuedComplexValue_TakesOnlyThatEntry(string attribute)
+    {
+        var resource = Holding(attribute);
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange($"{attribute}.value", ScimPatchOperations.Remove, "A")], UserSchema());
+
+        Assert.That(resource[attribute]!.ToJsonString(), Is.EqualTo("""[{"value":"B","primary":true}]"""));
+    }
+
+    [Test]
+    public void ApplyChanges_AddingAndRemovingABinaryComplexValue_ComparesByItsWireForm()
+    {
+        var held = Convert.ToBase64String(new byte[] { 1, 2 });
+        var resource = Resource($$"""{ "id": "alice", "x509Certificates": [ { "value": "{{held}}", "display": "Old" } ] }""");
+
+        ScimResourceWriter.ApplyChanges(resource,
+        [
+            new ScimAttributeChange("x509Certificates.value", ScimPatchOperations.Add, new byte[] { 3, 4 }),
+            new ScimAttributeChange("x509Certificates.value", ScimPatchOperations.Remove, new byte[] { 1, 2 })
+        ], UserSchema());
+
+        Assert.That(resource["x509Certificates"]!.ToJsonString(), Is.EqualTo($$"""[{"value":"{{Convert.ToBase64String(new byte[] { 3, 4 })}}"}]"""));
+    }
+
+    [Test]
+    public void ApplyChanges_AddingAMultiValuedComplexValueWhereTheProviderSentABareObject_KeepsThatEntry()
+    {
+        // Providers do send one bare object where the schema says multi-valued, and the reader accepts it.
+        var resource = Resource("""{ "id": "alice", "roles": { "value": "A", "type": "finance" } }""");
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("roles.value", ScimPatchOperations.Add, "C")], UserSchema());
+
+        Assert.That(resource["roles"]!.ToJsonString(), Is.EqualTo("""[{"value":"A","type":"finance"},{"value":"C"}]"""));
+    }
+
+    [Test]
+    public void ApplyChanges_AddingAMultiValuedComplexValueAlreadyHeld_DoesNotDuplicateIt()
+    {
+        // An export not yet confirmed by import is sent again on the next run, so an add has to be safe to repeat.
+        var resource = Holding("roles");
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("roles.value", ScimPatchOperations.Add, "A")], UserSchema());
+
+        Assert.That(resource["roles"]!.ToJsonString(), Is.EqualTo("""[{"value":"A","type":"finance","display":"Auditor"},{"value":"B","primary":true}]"""));
+    }
+
+    [Test]
+    public void ApplyChanges_ClearingAMultiValuedComplexValue_TakesEveryEntry()
+    {
+        var resource = Holding("roles");
+
+        ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("roles.value", ScimPatchOperations.Remove, null)], UserSchema());
+
+        Assert.That(resource.ContainsKey("roles"), Is.False);
+    }
+
+    [Test]
+    public void ApplyChanges_ChangingTheTypeOfAMultiValuedComplexEntry_IsRefused()
+    {
+        // JIM cannot tell which entry a flattened "type" belongs to, so it is import-only and a change to it is
+        // reported rather than guessed at.
+        var resource = Holding("roles");
+
+        var result = ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("roles.type", ScimPatchOperations.Add, "hr")], UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.UnknownAttributes, Is.EqualTo(new[] { "roles.type" }));
+            Assert.That(resource["roles"]!.ToJsonString(), Is.EqualTo(JsonNode.Parse(HeldEntries)!.ToJsonString()));
+        }
+    }
+    #endregion
 
     [Test]
     public void ApplyChanges_AttributeTheSchemaDoesNotHave_IsReportedRatherThanDropped()

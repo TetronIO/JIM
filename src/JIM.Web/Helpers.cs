@@ -391,6 +391,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = "Synchronisation Failed",
+            // The attribute still exports; only the merging of dates the Connected System cannot hold apart is reported.
+            [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = "Dates Merged",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
@@ -405,6 +407,15 @@ public static class Helpers
             // Active Directory will not enable an account with no password (#2039); the heading names what the
             // account is missing, since that is what the message's remedies supply.
             [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
+            // #2118: JIM declined to write where it could not read the object back; "Refused", as for #492.
+            [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = "Export Refused",
+            // The Connected System said no. Each heading names what an administrator has to put right, rather than
+            // "Operation Failed", which these used to read as and which says JIM is at fault.
+            [ActivityRunProfileExecutionItemErrorType.AccessDenied] = "Access Denied",
+            [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = "Export Rejected",
+            [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = "Placeholder Member Rejected",
+            [ActivityRunProfileExecutionItemErrorType.MissingDependency] = "Dependency Not Yet Exported",
+            [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = "Changed Since Last Import",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened

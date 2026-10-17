@@ -607,6 +607,38 @@ check_database_image() {
     success "Checked the PostgreSQL image against the bundle; JIM runs it by its ID, ${id}"
 }
 
+# Docker only, bundled database only, before an upgrade loads or downloads the release's images. Names the PostgreSQL
+# image JIM runs now <repository>:jim-previous, so that a rollback, which puts the previous compose file and .env back,
+# finds it without a download. Docker's containerd image store removes an image no name refers to, and a release
+# whose PostgreSQL image has the previous one's tag takes that name over (#2299). A digest pin resolves only through a
+# name in its own repository, so the name stays in the pinned image's repository. Each upgrade moves it on, as it does
+# the .previous files.
+PREVIOUS_DATABASE_TAG="jim-previous"
+keep_previous_database_image() {
+    local install_dir="$1"
+    local pinned
+    pinned=$(pinned_database_image "${install_dir}/docker-compose.yml")
+    [ -n "$pinned" ] || { warn "Could not find the PostgreSQL image in ${install_dir}/docker-compose.yml to keep it for rolling back"; return 0; }
+
+    # On Docker's classic image store, .env runs it by its ID.
+    local current
+    current=$(env_value JIM_DB_IMAGE "$CONFIG_FILE")
+    [ -n "$current" ] || current="$pinned"
+
+    local name="${pinned%@*}"
+    local repository="$name"
+    case "${name##*/}" in
+        *:*) repository="${name%:*}" ;;
+    esac
+
+    if docker image inspect "$current" >/dev/null 2>&1 \
+        && docker tag "$current" "${repository}:${PREVIOUS_DATABASE_TAG}" >/dev/null 2>&1; then
+        success "Kept the PostgreSQL image JIM runs now as ${repository}:${PREVIOUS_DATABASE_TAG}, for rolling back"
+    else
+        warn "Could not find the PostgreSQL image JIM runs now (${current}) to keep it for rolling back. Rolling back will need it again: ${DOCS_BASE}/administration/upgrading/#rolling-back"
+    fi
+}
+
 # Confirms every image the installation runs is present, so that a gap shows here rather than as Compose trying
 # to download it.
 verify_bundle_images() {
@@ -2690,7 +2722,7 @@ upgrade_installation() {
         || fatal "No JIM installation at ${install_dir}. Set JIM_INSTALL_DIR to the folder JIM is installed in."
     load_installation "$install_dir"
     [ "$RUNTIME" = "docker" ] \
-        || fatal "--upgrade upgrades JIM on Docker. To upgrade JIM on Podman, see ${DOCS_BASE}/administration/upgrading/"
+        || fatal "--upgrade upgrades JIM on Docker. To upgrade JIM on Podman, see ${DOCS_BASE}/administration/upgrading-podman/"
     check_prerequisites
 
     local current target
@@ -2739,6 +2771,11 @@ upgrade_installation() {
         # Published as default.env.example: GitHub renames an asset whose name starts with a dot.
         curl -fsSL -o "${UPGRADE_STAGE}/.env.example" "${RELEASE_DOWNLOAD_BASE}/default.env.example" \
             || fatal "Failed to download default.env.example"
+    fi
+
+    # The previous PostgreSQL image stays on the host, for going back, named while the compose file still pins it.
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        keep_previous_database_image "$install_dir"
     fi
 
     # The previous files stay beside the new ones, for going back.

@@ -410,6 +410,26 @@ Describe 'ConvertTo-LabMegabytes' {
     }
 }
 
+Describe 'Get-LabImageNameToDrop' {
+    It 'returns every name but the one the installer keeps for rolling back, as a tag takeover leaves the image' {
+        Get-LabImageNameToDrop -Name @('postgres:18.6', 'postgres:jim-previous', 'postgres@sha256:' + ('a' * 64)) |
+            Should -Be @('postgres:18.6', 'postgres@sha256:' + ('a' * 64))
+    }
+
+    It 'keeps the name however Docker spells its registry' {
+        Get-LabImageNameToDrop -Name @('docker.io/library/postgres:18.6', 'docker.io/library/postgres:jim-previous') |
+            Should -Be @('docker.io/library/postgres:18.6')
+    }
+
+    It 'returns nothing when the kept name is the only one' {
+        @(Get-LabImageNameToDrop -Name @('postgres:jim-previous')).Count | Should -Be 0
+    }
+
+    It 'returns nothing when the image was not kept, rather than strip it of every name' {
+        @(Get-LabImageNameToDrop -Name @('postgres:18.6')).Count | Should -Be 0
+    }
+}
+
 Describe 'Get-LabSetupMessage' {
     BeforeAll {
         $script:output = @(

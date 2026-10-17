@@ -251,5 +251,58 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// message names the attribute and the pattern; the object is retried on the next synchronisation. Configuration
     /// to act on, not a JIM defect, so it does not count as an unhandled error.
     /// </summary>
-    ScopingCriterionFailed
+    ScopingCriterionFailed,
+
+    /// <summary>
+    /// Two or more of the dates exported to a multi-valued attribute are the same date at the step of time the
+    /// Connected System holds that attribute to (#2153): for example two times within one second, for a directory that
+    /// holds whole seconds. The Connected System can only hold them as one value, so the export sends them as one; the
+    /// rest of the attribute, and the object's other attributes, still export. Reported so the merging is never silent.
+    /// The message names the attribute, the resolution and how many values the Connected System will hold.
+    /// </summary>
+    DatesCollapseAtTargetResolution,
+
+    /// <summary>
+    /// JIM refused an export because it would write the object outside the containers selected for the Connected System
+    /// (#2118). Writing there would succeed, and then JIM could not import the object back, would treat it as deleted on
+    /// the next Full Import, and would disconnect it. The message names the target and the remedies: select the
+    /// container, or change the Attribute Flow that produced the target. Configuration to act on, not a JIM defect.
+    /// </summary>
+    OutsideManagedScope,
+
+    /// <summary>
+    /// The Connected System refused the export because the account JIM connects as is not permitted to make the change,
+    /// or did not accept JIM's credentials (#2118). Grant the account the rights the change needs, or correct the
+    /// Connected System's credentials. Configuration to act on in the Connected System, not a JIM defect.
+    /// </summary>
+    AccessDenied,
+
+    /// <summary>
+    /// The Connected System answered the export and refused it (#2118): a schema or constraint violation, a missing
+    /// mandatory attribute, an object that is not there, a request it will not perform. The message carries the
+    /// Connected System's own words, which say what to correct in the data or the Attribute Flows. A refusal, not a JIM
+    /// defect, so it does not count as an unhandled error.
+    /// </summary>
+    RejectedByConnectedSystem,
+
+    /// <summary>
+    /// The directory refused a change to a group's placeholder member (#2118), which usually means it enforces
+    /// referential integrity and the Connected System's Group Placeholder Member DN setting names no existing entry.
+    /// Point the setting at an entry that exists. Configuration to act on, not a JIM defect.
+    /// </summary>
+    PlaceholderMemberConstraintViolation,
+
+    /// <summary>
+    /// The Connected System refused the export because something it references does not exist there yet (#2118). The
+    /// referenced object needs exporting first; this is ordering, not bad data, and the export is retried once its
+    /// dependency has landed.
+    /// </summary>
+    MissingDependency,
+
+    /// <summary>
+    /// The Connected System refused the export because the object changed there after JIM last read it (#2118).
+    /// Applying it anyway would overwrite whoever got there first, so it is reported and left for the next import to
+    /// reconcile.
+    /// </summary>
+    ConcurrencyConflict
 }

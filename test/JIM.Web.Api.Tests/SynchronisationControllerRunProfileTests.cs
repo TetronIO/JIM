@@ -513,14 +513,47 @@ public class SynchronisationControllerRunProfileTests
     }
 
     [Test]
-    public async Task CreateRunProfileAsync_DeletionDetectionSafeguardsOnNonFullImportRunProfile_ReturnsBadRequest()
+    public async Task CreateRunProfileAsync_DeletionDetectionSafeguardsOnDeltaImportRunProfile_PersistsAndRoundTrips()
+    {
+        // A Delta Import's limits guard the deletes its Connector reports (#2089).
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = connectedSystemId,
+            Name = "Test System",
+            ConnectorDefinition = new ConnectorDefinition { Name = "Test Connector", SupportsFullImport = true, SupportsDeltaImport = true }
+        };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Delta Import",
+            RunType = ConnectedSystemRunType.DeltaImport,
+            Safeguards = new RunProfileSafeguardsDto { MaxDetectedDeletions = 50, MaxDetectedDeletionsPercent = 5 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()))
+            .Callback<ConnectedSystemRunProfile>(rp => rp.Id = 42)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = ((CreatedAtRouteResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Safeguards.MaxDetectedDeletions, Is.EqualTo(50));
+        Assert.That(dto.Safeguards.MaxDetectedDeletionsPercent, Is.EqualTo(5));
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_DeletionDetectionSafeguardsOnNonImportRunProfile_ReturnsBadRequest()
     {
         var connectedSystemId = 1;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
         var request = new CreateRunProfileRequest
         {
-            Name = "Delta Import",
-            RunType = ConnectedSystemRunType.DeltaImport,
+            Name = "Full Synchronisation",
+            RunType = ConnectedSystemRunType.FullSynchronisation,
             Safeguards = new RunProfileSafeguardsDto { MaxDetectedDeletions = 500 }
         };
 
@@ -946,7 +979,7 @@ public class SynchronisationControllerRunProfileTests
     }
 
     [Test]
-    public async Task UpdateRunProfileAsync_DeletionDetectionSafeguardsOnNonFullImportRunProfile_ReturnsBadRequest()
+    public async Task UpdateRunProfileAsync_DeletionDetectionSafeguardsOnNonImportRunProfile_ReturnsBadRequest()
     {
         var connectedSystemId = 1;
         var runProfileId = 10;

@@ -244,6 +244,19 @@ public class UpdateConnectedSystemAttributeRequest
     /// the Connected System's schema (#2051). Accepted on every Connector.
     /// </remarks>
     public bool? CaseExact { get; set; }
+
+    /// <summary>
+    /// Sets the finest step of time the Connected System holds this DateTime attribute's values to: Microsecond,
+    /// TenMicroseconds, HundredMicroseconds, Millisecond, TenMilliseconds, HundredMilliseconds, Second, Minute or Day.
+    /// JIM sends each date floored to it and compares at it, so a difference the Connected System cannot hold is never
+    /// exported again and again. Omitted or null leaves it unchanged. Only DateTime attributes have a resolution.
+    /// </summary>
+    /// <remarks>
+    /// Setting it records the resolution as the administrator's, so a schema refresh no longer restates it from the
+    /// Connected System's schema (#2153, decision D2). Accepted on every Connector; most useful for SCIM, whose
+    /// discovery assumes whole seconds because a service provider's schema cannot state its precision.
+    /// </remarks>
+    public DateTimeResolution? DateTimeResolution { get; set; }
 }
 
 /// <summary>

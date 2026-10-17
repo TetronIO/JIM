@@ -386,6 +386,36 @@ Describe 'New-JIMRunProfile' {
             }
         }
 
+        It 'Sends MaxDetectedDeletions on a Delta Import Run Profile' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Delta Import' -RunType DeltaImport -MaxDetectedDeletions 50 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.runType -eq 'DeltaImport' -and
+                    $Body.safeguards.maxDetectedDeletions -eq 50 -and
+                    $null -eq $Body.safeguards.maxDetectedDeletionsPercent
+                }
+            }
+        }
+
+        It 'Sends MaxDetectedDeletionsPercent on a Delta Import Run Profile' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Delta Import' -RunType DeltaImport -MaxDetectedDeletionsPercent 5 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.runType -eq 'DeltaImport' -and
+                    $Body.safeguards.maxDetectedDeletionsPercent -eq 5 -and
+                    $null -eq $Body.safeguards.maxDetectedDeletions
+                }
+            }
+        }
+
         It 'Writes an error and sends no request for a negative MaxDetectedDeletions' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

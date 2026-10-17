@@ -687,6 +687,15 @@ public class SyncExportTaskProcessor
             // Active Directory will not enable an account with no password (#2039): the message names the
             // configuration to change, so it is not a JIM defect and must not fail the Activity as one.
             ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount => ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount,
+            // #2118: the Connected System said no (or JIM declined a write it could not read back), each for a reason an
+            // administrator can act on. Left to the default arm they read as JIM defects and failed the Activity.
+            ConnectedSystemExportErrorType.OutsideManagedScope => ActivityRunProfileExecutionItemErrorType.OutsideManagedScope,
+            ConnectedSystemExportErrorType.AccessDenied => ActivityRunProfileExecutionItemErrorType.AccessDenied,
+            ConnectedSystemExportErrorType.RejectedByConnectedSystem => ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem,
+            ConnectedSystemExportErrorType.PlaceholderMemberConstraintViolation => ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation,
+            ConnectedSystemExportErrorType.MissingDependency => ActivityRunProfileExecutionItemErrorType.MissingDependency,
+            ConnectedSystemExportErrorType.ConcurrencyConflict => ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict,
+            // Only General (a failure the Connector could not classify) and no classification at all remain.
             _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
         };
 }

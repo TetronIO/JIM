@@ -196,6 +196,22 @@ public class ScimHttpClientFactoryTests
     }
 
     [Test]
+    public void Create_HttpNonLoopbackBaseUrl_ThrowsNamingTheSetting()
+    {
+        // The runtime backstop for a Connected System saved before configuration validation refused this.
+        var settings = new List<ConnectedSystemSettingValue>
+        {
+            Setting(ScimConnectorConstants.SettingBaseUrl, "http://provider.example.com/scim/v2"),
+            Setting(ScimConnectorConstants.SettingAuthenticationMethod, ScimConnectorConstants.AuthMethodStaticBearerToken)
+        };
+
+        var exception = Assert.Throws<JIM.Connectors.SCIM.Authentication.ScimAuthenticationException>(
+            () => ScimHttpClientFactory.Create(settings, [], credentialProtection: null, _logger));
+
+        Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingBaseUrl));
+    }
+
+    [Test]
     public void CreateRetryPolicy_NoRetrySettingsConfigured_UsesConnectorDefaults()
     {
         var policy = ScimHttpClientFactory.CreateRetryPolicy([]);

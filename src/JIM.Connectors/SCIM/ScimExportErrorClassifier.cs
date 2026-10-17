@@ -57,9 +57,19 @@ internal static class ScimExportErrorClassifier
 
         // RFC 7644 makes the client responsible for creating dependencies first, so this says the
         // referenced object has not been exported yet rather than that the data is wrong.
-        return statusCode == (int)HttpStatusCode.BadRequest
-               && string.Equals(scimType, ScimErrorTypes.InvalidValue, StringComparison.OrdinalIgnoreCase)
-            ? ConnectedSystemExportErrorType.MissingDependency
+        if (statusCode == (int)HttpStatusCode.BadRequest
+            && string.Equals(scimType, ScimErrorTypes.InvalidValue, StringComparison.OrdinalIgnoreCase))
+            return ConnectedSystemExportErrorType.MissingDependency;
+
+        // #2118: the provider did not accept JIM's credentials (401), or accepted them and will not let them make this
+        // change (403). Either way the remedy is in the Connected System's configuration or the provider's, not in JIM.
+        if (statusCode is (int)HttpStatusCode.Unauthorized or (int)HttpStatusCode.Forbidden)
+            return ConnectedSystemExportErrorType.AccessDenied;
+
+        // Any other client error is the provider considering the change and refusing it. A server error, or no answer at
+        // all, is not a refusal: nothing is known to be wrong with the change, so it stays unclassified.
+        return statusCode is >= 400 and < 500
+            ? ConnectedSystemExportErrorType.RejectedByConnectedSystem
             : ConnectedSystemExportErrorType.General;
     }
 
@@ -70,10 +80,26 @@ internal static class ScimExportErrorClassifier
     /// <param name="message">The failure as JIM reports it, the provider's detail included.</param>
     /// <param name="statusCode">The HTTP status the provider gave the change, or null where it gave none.</param>
     /// <param name="error">The provider's SCIM error body, where it sent one.</param>
-    public static ConnectedSystemExportResult Failure(string message, int? statusCode, ScimError? error) =>
-        TryClassifyUniqueness(statusCode, error?.ScimType, error?.Detail, out var rejectedAttributeName)
-            ? ConnectedSystemExportResult.ValueAlreadyInUse(message, rejectedAttributeName)
-            : ConnectedSystemExportResult.Failed(message, Classify(statusCode, error?.ScimType));
+    public static ConnectedSystemExportResult Failure(string message, int? statusCode, ScimError? error)
+    {
+        if (TryClassifyUniqueness(statusCode, error?.ScimType, error?.Detail, out var rejectedAttributeName))
+            return ConnectedSystemExportResult.ValueAlreadyInUse(message, rejectedAttributeName);
+
+        return statusCode switch
+        {
+            // #2118: name the remedy ahead of the provider's own words, which seldom do.
+            (int)HttpStatusCode.Unauthorized => ConnectedSystemExportResult.Failed(
+                "The service provider did not accept JIM's credentials (401). Check the Connected System's authentication " +
+                $"settings, and that the token or client secret has not expired or been revoked. The provider said: {message}",
+                ConnectedSystemExportErrorType.AccessDenied),
+            (int)HttpStatusCode.Forbidden => ConnectedSystemExportResult.Failed(
+                "The service provider refused the change because the credentials JIM uses do not have permission to make it " +
+                "(403). Grant them the permissions or scopes this change needs at the service provider. " +
+                $"The provider said: {message}",
+                ConnectedSystemExportErrorType.AccessDenied),
+            _ => ConnectedSystemExportResult.Failed(message, Classify(statusCode, error?.ScimType))
+        };
+    }
 
     /// <summary>
     /// Whether the rejection means a value is already in use (409 with <c>scimType</c> <c>uniqueness</c>), and
