@@ -36,7 +36,11 @@ public class CredentialAttributesTests
         // The password policy history attributes of OpenLDAP and 389 Directory Server: operational, so offered by
         // schema discovery since #2153 (D8), and they hold hashes of previous passwords.
         "pwdHistory",
-        "passwordHistory"
+        "passwordHistory",
+
+        // SCIM's write-only User attribute (RFC 7643 section 4.1.1), and any column or attribute of the same name on
+        // another Connector (#2091). A password reaches a Connected System only through Password Synchronisation.
+        "password"
     ];
 
     /// <summary>

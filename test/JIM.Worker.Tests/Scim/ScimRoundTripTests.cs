@@ -38,7 +38,8 @@ public class ScimRoundTripTests
     {
         foreach (var (baseUrn, schema) in new[] { (ScimUrns.User, UserSchema()), (ScimUrns.Group, GroupSchema()) })
         {
-            foreach (var attribute in schema.Where(a => a.Writability != AttributeWritability.ReadOnly))
+            // A write-only attribute (password) is never written and never returned, so it has no round trip (#2091).
+            foreach (var attribute in schema.Where(a => a.Writability != AttributeWritability.ReadOnly && !a.IsWriteOnly))
                 yield return new TestCaseData(baseUrn, attribute.Name).SetName($"RoundTrip_{baseUrn.Split(':').Last()}_{attribute.Name}");
         }
     }

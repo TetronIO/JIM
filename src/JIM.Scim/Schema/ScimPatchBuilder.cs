@@ -34,6 +34,7 @@ public static class ScimPatchBuilder
 
         var operations = new List<ScimPatchOperation>();
         var unknown = new List<string>();
+        var writeOnly = new List<string>();
 
         var lookup = new Dictionary<string, ScimFlattenedAttribute>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributes)
@@ -41,6 +42,14 @@ public static class ScimPatchBuilder
 
         foreach (var change in changes)
         {
+            if (lookup.TryGetValue(change.AttributeName, out var writeOnlyAttribute) && writeOnlyAttribute.IsWriteOnly)
+            {
+                // Never sent, a removal included: a password reaches the provider only through Password
+                // Synchronisation (#2091).
+                writeOnly.Add(change.AttributeName);
+                continue;
+            }
+
             if (!lookup.TryGetValue(change.AttributeName, out var attribute) || attribute.Writability == AttributeWritability.ReadOnly)
             {
                 // Both cases are the same problem from the administrator's side: a change JIM holds that
@@ -53,7 +62,7 @@ public static class ScimPatchBuilder
             operations.Add(BuildOperation(change, attribute));
         }
 
-        return new ScimPatchBuildResult { Operations = operations, UnknownAttributes = unknown };
+        return new ScimPatchBuildResult { Operations = operations, UnknownAttributes = unknown, WriteOnlyAttributes = writeOnly };
     }
 
     private static ScimPatchOperation BuildOperation(ScimAttributeChange change, ScimFlattenedAttribute attribute)

@@ -149,7 +149,9 @@ In bulk, give `dateTimeResolution` in an attribute's hashtable; through the REST
 
 Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:
 
-`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`, `pwdHistory`, `passwordHistory`
+`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`, `pwdHistory`, `passwordHistory`, `password`
+
+Names are matched ignoring case, on every Connector. `password` is SCIM's User password, but a SQL column or file field called `password` is blocked too: whatever system it belongs to, a password reaches it through Password Synchronisation, never as an attribute value.
 
 There are two reasons. Most of these cannot be read back meaningfully (a directory returns nothing at all for `unicodePwd`, and opaque blobs for the history attributes), so anything imported would be empty or meaningless and every subsequent synchronisation would see a spurious change. The rest hold live credential material, and anything that reaches the Metaverse is replicated onward to every other Connected System in scope, written into change history, and rendered in the portal.
 
@@ -160,7 +162,9 @@ What you will see:
 - **Schema refresh**<br /> Credential attributes found in the Connected System are reported as blocked. They are counted as neither added nor removed, because neither is true.
 - **Attribute selection**<br /> The Selected switch is disabled, with a tooltip explaining why. Selecting one through the REST API or PowerShell is rejected.
 - **Attribute Flow**<br /> Credential attributes do not appear in the source or target attribute lists, and naming one through the REST API or PowerShell is rejected.
-- **Upgrades**<br /> If a credential attribute was selected on an existing deployment, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule that references it stays intact. Remove those Attribute Flows and use the password channel instead.
+- **Exports**<br /> An Attribute Flow that still targets a credential attribute exports nothing to it. The object's other attributes export as usual, and every run reports the skipped flow on the object's execution item as **Credential Not Exported**.
+- **Synchronisation Rules**<br /> A Synchronisation Rule with an Attribute Flow that uses a credential attribute, as its source or its target, shows an error naming the attribute and cannot be saved until that Attribute Flow is removed.
+- **Credential attributes already in use**<br /> A credential attribute persisted in a Connected System's schema is deselected and locked by the next schema refresh rather than deleted, so a Synchronisation Rule that references it stays intact until you remove the Attribute Flow. JIM holds no credential value for it in a Pending Export or on a Connected System Object. Remove the Attribute Flow and the Metaverse Attribute that feeds it; [Credential errors after upgrading](../administration/upgrading.md#credential-errors-after-upgrading) has the steps.
 
 Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdCount` and `pwdProperties`, are unaffected and remain fully selectable; they carry no credential material.
 

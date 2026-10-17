@@ -42,6 +42,9 @@ public static class ScimAttributeMapper
     /// <summary>The sub-attribute holding a multi-valued entry's value, where the entry has a single one.</summary>
     private const string ValueSubAttribute = "value";
 
+    /// <summary>The <c>returned</c> characteristic of an attribute a provider never sends back (RFC 7643 section 7).</summary>
+    private const string ReturnedNever = "never";
+
     /// <summary>The sub-attribute holding the URI of a referenced resource (RFC 7643 section 2.4).</summary>
     private const string RefSubAttribute = "$ref";
 
@@ -138,7 +141,8 @@ public static class ScimAttributeMapper
                 sub.Name,
                 canonicalType: null,
                 selectsPrimary: false,
-                extensionUrn))
+                extensionUrn,
+                parent: attribute))
             .ToList();
     }
 
@@ -240,7 +244,8 @@ public static class ScimAttributeMapper
                     value.Name,
                     canonicalType,
                     selectsPrimary,
-                    extensionUrn));
+                    extensionUrn,
+                    parent: attribute));
                 continue;
             }
 
@@ -258,7 +263,8 @@ public static class ScimAttributeMapper
                 sub.Name,
                 canonicalType,
                 selectsPrimary,
-                extensionUrn)));
+                extensionUrn,
+                parent: attribute)));
         }
 
         return flattened;
@@ -278,11 +284,22 @@ public static class ScimAttributeMapper
         string? subAttributeName,
         string? canonicalType,
         bool selectsPrimary,
-        string? extensionUrn)
+        string? extensionUrn,
+        ScimSchemaAttribute? parent = null)
     {
         return new ScimFlattenedAttribute(name, path, type, plurality, required, writability, schemaUrn, source.Description,
-            access, sourceAttributeName, subAttributeName, canonicalType, selectsPrimary, extensionUrn, source.CaseExact);
+            access, sourceAttributeName, subAttributeName, canonicalType, selectsPrimary, extensionUrn, source.CaseExact,
+            isWriteOnly: IsWriteOnly(source) || (parent != null && IsWriteOnly(parent)));
     }
+
+    /// <summary>
+    /// Whether an attribute is write-only (RFC 7643 section 7): <c>mutability</c> <c>writeOnly</c>, or <c>returned</c>
+    /// <c>never</c>. Kept in the schema, so the credential denylist and the service provider's intake can see and refuse
+    /// it, rather than dropped here where its absence would go unreported (#2091).
+    /// </summary>
+    private static bool IsWriteOnly(ScimSchemaAttribute attribute) =>
+        string.Equals(attribute.Mutability, ScimMutability.WriteOnly, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(attribute.Returned, ReturnedNever, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsComplex(ScimSchemaAttribute attribute)
     {

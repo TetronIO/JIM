@@ -224,6 +224,14 @@ Most database upgrades are near-instant; one that rewrites a large table scales 
 !!! danger "An upgrade is not finished until the Schedules are back on"
     Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises until someone reports stale data days later.
 
+### Credential errors after upgrading {#credential-errors-after-upgrading}
+
+JIM never moves a password through an Attribute Flow: attributes holding credentials, such as `unicodePwd`, `userPassword` and `password`, are [never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed). When an upgrade adds a name to that list, any value JIM was holding for such an attribute in a Pending Export or on a Connected System Object is deleted as the database is upgraded. An Attribute Flow that uses one shows an error on its Synchronisation Rule, and every export run reports it as **Credential Not Exported**. To clear it:
+
+1. **Remove the Attribute Flow.** Open each Synchronisation Rule that shows the credential error and delete the Attribute Flow it names. Until you do, the rule cannot be saved.
+2. **Remove the source of the value.** The password came from somewhere, usually an import Attribute Flow into a Metaverse Attribute. Remove that flow and clear the Metaverse Attribute, or the password stays in the Metaverse. To deliver passwords to the system, set up [Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) instead, where its Connector supports it (the SCIM Connector does not yet).
+3. **Clear the change history.** Change history recorded before the upgrade can still show the value. It is removed once it passes the `History.RetentionPeriod` [Service Setting](../configuration/service-settings.md) (90 days by default); shorten that setting for a pass if it must go sooner, then restore it.
+
 ## 🧩 Upgrading the PowerShell module
 
 The JIM PowerShell module versions in step with the product. Upgrade it wherever it is installed so that automation matches the API it is calling.

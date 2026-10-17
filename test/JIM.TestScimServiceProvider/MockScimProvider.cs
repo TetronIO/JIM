@@ -64,8 +64,19 @@ public sealed class MockScimProvider
     private int _cursorsIssued;
     private int _resourcesCreated;
     private int _resourceRequests;
+    private int _passwordWritesReceived;
 
     public MockScimProviderOptions Options { get; } = new();
+
+    /// <summary>
+    /// How many writes (a create, replace or PATCH, each bulk operation counted on its own) carried a
+    /// <c>password</c> attribute. JIM never exports one (#2091), so anything above zero is a credential leaving JIM
+    /// through Attribute Flow. Read by the unit suite directly, and by Scenario 15 from the host's log.
+    /// </summary>
+    public int PasswordWritesReceived => Volatile.Read(ref _passwordWritesReceived);
+
+    /// <summary>The word the containerised host logs for each such write, which Scenario 15 searches for.</summary>
+    public const string PasswordReceivedLogMarker = "PASSWORD-RECEIVED";
 
     public List<MockScimResource> Resources { get; } = [];
 
@@ -142,6 +153,10 @@ public sealed class MockScimProvider
 
         if (path.EndsWith("/Bulk", StringComparison.Ordinal))
             return Bulk(request);
+
+        // After the bulk dispatch, so a bulk request is counted once per operation as it is replayed here.
+        if (request.Method != HttpMethod.Get && CarriesPassword(request))
+            Interlocked.Increment(ref _passwordWritesReceived);
 
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var collection = segments.Length > 0 ? ResourceTypeOf(segments[^1]) : null;
@@ -793,6 +808,43 @@ public sealed class MockScimProvider
             && heldValue.TryGetValue<string>(out var heldText) && selectedValue.TryGetValue<string>(out var selectedText)
                 ? string.Equals(heldText, selectedText, StringComparison.OrdinalIgnoreCase)
                 : JsonNode.DeepEquals(held, selected);
+    }
+
+    /// <summary>
+    /// Whether a write names the <c>password</c> attribute anywhere: as a member of the resource or of a PATCH value,
+    /// or as a PATCH path, bare or schema-qualified. Names compare ignoring case, as SCIM's do; values are not read.
+    /// </summary>
+    private static bool CarriesPassword(HttpRequestMessage request)
+    {
+        var json = request.Content?.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            return NamesPassword(JsonNode.Parse(json));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        static bool NamesPassword(JsonNode? node) => node switch
+        {
+            JsonObject member => member.Any(m =>
+                IsPassword(m.Key) ||
+                (string.Equals(m.Key, "path", StringComparison.OrdinalIgnoreCase) && m.Value is JsonValue path &&
+                 path.TryGetValue<string>(out var pathText) && IsPassword(pathText)) ||
+                NamesPassword(m.Value)),
+            JsonArray items => items.Any(NamesPassword),
+            _ => false
+        };
+
+        static bool IsPassword(string name)
+        {
+            var attribute = name[(name.LastIndexOf(':') + 1)..];
+            return string.Equals(attribute, "password", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static Dictionary<string, JsonNode?>? ReadBody(HttpRequestMessage request)

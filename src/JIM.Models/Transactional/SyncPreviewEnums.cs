@@ -69,7 +69,10 @@ public enum SyncPreviewMessageCode
     /// <summary>Dates an export would send to a multi-valued attribute are one date at the step of time the Connected
     /// System holds it to (#2153); the real sync would send them as one and record a DatesCollapseAtTargetResolution
     /// item. Not a failure: the attribute still exports.</summary>
-    DatesCollapseAtTargetResolution
+    DatesCollapseAtTargetResolution,
+    /// <summary>An export Attribute Flow targets a credential attribute such as <c>password</c> (#2091); the real sync
+    /// would stage nothing for it and record a CredentialAttributeNotExported item. The detail names the attribute.</summary>
+    CredentialAttributeNotExported
 }
 
 /// <summary>
