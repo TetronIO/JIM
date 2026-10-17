@@ -7,6 +7,7 @@ using JIM.Connectors.SCIM;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Scim.Filtering;
 using JIM.Scim.Schema;
 using JIM.TestScimServiceProvider;
 using Serilog;
@@ -46,7 +47,7 @@ public class ScimConnectorUniquenessProbeTests
     [Test]
     public void BuildFilter_SeveralValues_OneEqualityAssertionEachJoinedByOr()
     {
-        var filter = ScimConnectorUniquenessProbe.BuildFilter("userName", ["joe.bloggs", "joe.bloggs1", "asmith"]);
+        var filter = ScimConnectorUniquenessProbe.BuildFilter(new ScimAttributePath(null, "userName", null), ["joe.bloggs", "joe.bloggs1", "asmith"]);
 
         Assert.That(filter, Is.EqualTo("userName eq \"joe.bloggs\" or userName eq \"joe.bloggs1\" or userName eq \"asmith\""));
     }
@@ -58,7 +59,7 @@ public class ScimConnectorUniquenessProbeTests
     [Test]
     public void BuildFilter_InjectionAttempt_StaysInsideOneComparisonValue()
     {
-        var filter = ScimConnectorUniquenessProbe.BuildFilter("userName", ["x\" or userName pr or userName eq \"y"]);
+        var filter = ScimConnectorUniquenessProbe.BuildFilter(new ScimAttributePath(null, "userName", null), ["x\" or userName pr or userName eq \"y"]);
 
         Assert.That(filter, Is.EqualTo("userName eq \"x\\\" or userName pr or userName eq \\\"y\""));
     }
@@ -68,7 +69,7 @@ public class ScimConnectorUniquenessProbeTests
     {
         var attribute = new ScimFlattenedAttribute("userName", "userName", AttributeDataType.Text, AttributePlurality.SingleValued, true, AttributeWritability.Writable, "urn:ietf:params:scim:schemas:core:2.0:User");
 
-        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo("userName"));
+        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo(new ScimAttributePath(null, "userName", null)));
     }
 
     [Test]
@@ -78,7 +79,7 @@ public class ScimConnectorUniquenessProbeTests
         var attribute = new ScimFlattenedAttribute("enterpriseUser.employeeNumber", $"{urn}:employeeNumber", AttributeDataType.Text, AttributePlurality.SingleValued, false,
             AttributeWritability.Writable, urn, sourceAttributeName: "employeeNumber", extensionUrn: urn);
 
-        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo($"{urn}:employeeNumber"));
+        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo(new ScimAttributePath(urn, "employeeNumber", null)));
     }
 
     [Test]
@@ -87,7 +88,7 @@ public class ScimConnectorUniquenessProbeTests
         var attribute = new ScimFlattenedAttribute("name.familyName", "name.familyName", AttributeDataType.Text, AttributePlurality.SingleValued, false, AttributeWritability.Writable,
             "urn:ietf:params:scim:schemas:core:2.0:User", access: ScimValueAccess.ComplexSubAttribute, sourceAttributeName: "name", subAttributeName: "familyName");
 
-        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo("name.familyName"));
+        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo(new ScimAttributePath(null, "name", "familyName")));
     }
 
     /// <summary>
@@ -102,7 +103,7 @@ public class ScimConnectorUniquenessProbeTests
             AttributeWritability.Writable, "urn:ietf:params:scim:schemas:core:2.0:User", access: ScimValueAccess.CanonicalSlot, sourceAttributeName: "emails",
             subAttributeName: "value", canonicalType: "work");
 
-        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo("emails.value"));
+        Assert.That(ScimConnectorUniquenessProbe.GetFilterAttributePath(attribute), Is.EqualTo(new ScimAttributePath(null, "emails", "value")));
     }
 
     [Test]

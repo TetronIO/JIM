@@ -9,9 +9,10 @@ namespace JIM.Worker.Tests.Workflows;
 
 /// <summary>
 /// Returns caller-supplied pages one call at a time, as a Connector reading a directory by calls does. One instance
-/// serves one import: it hands back each page once, in order.
+/// serves one import: it hands back each page once, in order. A <paramref name="firstPageWatermark"/> is returned with
+/// the first page, as a Connector's new Delta Import watermark is.
 /// </summary>
-internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject>> pages) : IConnector, IConnectorImportUsingCalls
+internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject>> pages, string? firstPageWatermark = null) : IConnector, IConnectorImportUsingCalls
 {
     private int _nextPage;
 
@@ -33,7 +34,11 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
         IConnectorProgress progress)
     {
         var page = pages[_nextPage++];
-        var result = new ConnectedSystemImportResult { ImportObjects = page };
+        var result = new ConnectedSystemImportResult
+        {
+            ImportObjects = page,
+            PersistedConnectorData = _nextPage == 1 ? firstPageWatermark : null
+        };
         if (_nextPage < pages.Count)
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken("page", _nextPage.ToString()));
         return Task.FromResult(result);
